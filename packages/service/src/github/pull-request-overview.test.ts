@@ -21,25 +21,30 @@ import {
   type RepositoryScript,
 } from "../testing/github-app-fake.js";
 import { GITHUB_PROVIDER_ID } from "./github-app.js";
-import { namedOverview } from "./github-people.js";
-import { pullRequestOverview } from "./pull-requests.js";
+import { namedOverviewConversation, namedOverviewPullRequest } from "./github-people.js";
+import {
+  pullRequestChecks,
+  pullRequestConversation,
+  pullRequestOverview,
+} from "./pull-requests.js";
 
 /**
  * An agent's pull request as its Pull request tab draws it, read off a
- * scripted GitHub over a real dialect: its description, branches, and
- * mergeability; every check on its head, a check run or a commit status,
- * by where it stands; and its comments and reviews as one conversation in
- * time order, its people named as an agent's changes name them. Synthetic
- * accounts throughout.
+ * scripted GitHub over a real dialect in its three reads: the pull request
+ * itself, its description, branches, and mergeability; every check on its
+ * head, a check run or a commit status, by where it stands; and its
+ * comments and reviews as one conversation in time order, its people named
+ * as an agent's changes name them. Each read stands without the others.
+ * Synthetic accounts throughout.
  */
 
 const REPOSITORY = "acme/relay";
 const NUMBER = 7;
-const HEAD_SHA = "a1b2c3d";
 const TOKEN = Redacted.make("ghs_fixture_installation_token");
 const PULL = `/repos/acme/relay/pulls/${NUMBER}`;
 const COMMENTS = `/repos/acme/relay/issues/${NUMBER}/comments`;
-const COMMIT = `/repos/acme/relay/commits/${HEAD_SHA}`;
+/** The pull request's head as its checks are asked for: the ref GitHub keeps on it, one segment. */
+const COMMIT = `/repos/acme/relay/commits/refs%2Fpull%2F${NUMBER}%2Fhead`;
 const PAGE = `https://github.com/acme/relay/pull/${NUMBER}`;
 
 /** GitHub's record of an account. */
@@ -82,7 +87,7 @@ function pull(overrides: PullOverrides = {}) {
     body: "Sends the invite **once**.",
     body_html: '<p dir="auto">Sends the invite <strong>once</strong>.</p>',
     base: { ref: "main" },
-    head: { ref: "luke/invite-once", sha: HEAD_SHA },
+    head: { ref: "luke/invite-once", sha: "a1b2c3d" },
     created_at: "2026-10-15T09:00:00Z",
     mergeable_state: "clean",
     user: LUKE,
@@ -158,16 +163,41 @@ const linkedAccount = (githubId: number) =>
     return userId;
   });
 
-/** The overview read off the repository given and named for an agent of the workspace given; none where GitHub holds no such pull request. */
+/** The pull request itself read off the repository given and named for an agent of the workspace given; none where GitHub holds no such pull request. */
+const pullRequestPartOf = (organizationId: string) =>
+  Effect.flatMap(pullRequestOverview(TOKEN, REPOSITORY, NUMBER), (read) =>
+    Option.isNone(read)
+      ? Effect.succeed(undefined)
+      : namedOverviewPullRequest(
+          { organizationId, author: CODING_AGENT_AUTHOR.DEVELOPER },
+          read.value,
+        ),
+  );
+
+/** The conversation read off the repository given and named for an agent of the workspace given. */
+const conversationPartOf = (organizationId: string) =>
+  Effect.flatMap(
+    pullRequestConversation(TOKEN, REPOSITORY, { number: NUMBER, url: PAGE }),
+    (read) => namedOverviewConversation({ organizationId }, NUMBER, read),
+  );
+
+/** GitHub as the script given answers it. */
+const answering = (script: RepositoryScript) =>
+  Effect.provide(githubReaching([], undefined, undefined, script).layer);
+
+/** The overview's three reads off the repository given, at once, as the tab draws them together; none where GitHub holds no such pull request. */
 const overviewOf = (organizationId: string, script: RepositoryScript) =>
   Effect.gen(function* () {
-    const read = yield* pullRequestOverview(TOKEN, REPOSITORY, NUMBER);
-    if (Option.isNone(read)) return undefined;
-    return yield* namedOverview(
-      { organizationId, author: CODING_AGENT_AUTHOR.DEVELOPER },
-      read.value,
+    const [pullRequest, checks, conversation] = yield* Effect.all(
+      [
+        pullRequestPartOf(organizationId),
+        pullRequestChecks(TOKEN, REPOSITORY, NUMBER),
+        conversationPartOf(organizationId),
+      ],
+      { concurrency: "unbounded" },
     );
-  }).pipe(Effect.provide(githubReaching([], undefined, undefined, script).layer));
+    return pullRequest === undefined ? undefined : { ...pullRequest, checks, ...conversation };
+  }).pipe(answering(script));
 
 it.layer(getTestDB())("a pull request's overview", (it) => {
   it.effect(
@@ -270,10 +300,15 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         );
         assert.equal(overview.checks[2]?.url, "https://vercel.example/deploy");
         assert.equal(overview.checks[2]?.completedAt, null);
-        assert.deepEqual(overview.reviewers, [
-          { by: asPriya, state: REVIEW_STATE.REQUESTED },
-          { by: asCharles, state: REVIEW_STATE.APPROVED },
-        ]);
+        assert.deepEqual(overview.requested, [asPriya], "the pull request names who it still asks");
+        assert.deepEqual(
+          overview.reviewers,
+          [
+            { by: asPriya, state: REVIEW_STATE.CHANGES_REQUESTED },
+            { by: asCharles, state: REVIEW_STATE.APPROVED },
+          ],
+          "the conversation names where each stands by their reviews",
+        );
         assert.deepEqual(overview.conversation, [
           {
             kind: CONVERSATION_ENTRY.REVIEW,
@@ -681,6 +716,46 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         );
       }
     }),
+  );
+
+  it.effect(
+    "each read stands on its own: the pull request's read failing leaves its checks, asked by its head ref, and its conversation read",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const script = repository({
+          checkRuns: [checkRun("lint", "completed", "failure")],
+          comments: [
+            {
+              user: CHARLES,
+              body: "Looks right.",
+              body_html: '<p dir="auto">Looks right.</p>',
+              created_at: "2026-10-15T10:00:00Z",
+              html_url: `${PAGE}#issuecomment-1`,
+            },
+          ],
+        });
+        const failing: RepositoryScript = (sent) =>
+          new URL(sent.url).pathname === PULL
+            ? Response.json({ message: "Service Unavailable" }, { status: 503 })
+            : script(sent);
+
+        const pullRequest = yield* Effect.exit(
+          pullRequestPartOf(workspace).pipe(answering(failing)),
+        );
+        const checks = yield* pullRequestChecks(TOKEN, REPOSITORY, NUMBER).pipe(answering(failing));
+        const conversation = yield* conversationPartOf(workspace).pipe(answering(failing));
+
+        assert.equal(pullRequest._tag, "Failure", "the pull request's own read fails");
+        assert.deepEqual(
+          checks.map(({ name, state }) => ({ name, state })),
+          [{ name: "lint", state: CHECK_STATE.FAILED }],
+        );
+        assert.deepEqual(
+          conversation.conversation.map((entry) => entry.url),
+          [`${PAGE}#issuecomment-1`],
+        );
+      }),
   );
 
   it.effect("none where the repository no longer holds the pull request", () =>

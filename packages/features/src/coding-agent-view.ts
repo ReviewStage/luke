@@ -7,7 +7,9 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
-  codingAgentOverviewAnswerSchema,
+  codingAgentOverviewChecksAnswerSchema,
+  codingAgentOverviewConversationAnswerSchema,
+  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
@@ -337,13 +339,32 @@ export const codingAgentChangesAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentChangesAnswerView = typeof codingAgentChangesAnswerViewSchema.Type;
 
-/** One agent's pull request as its Pull request tab draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
-export const codingAgentOverviewAnswerViewSchema = EffectSchema.Union([
-  codingAgentOverviewAnswerSchema,
+/** One agent's pull request itself as its overview draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
+export const codingAgentOverviewPullRequestAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewPullRequestAnswerSchema,
   failed,
 ]);
 
-export type CodingAgentOverviewAnswerView = typeof codingAgentOverviewAnswerViewSchema.Type;
+export type CodingAgentOverviewPullRequestAnswerView =
+  typeof codingAgentOverviewPullRequestAnswerViewSchema.Type;
+
+/** The checks on one agent's pull request's head, as the window hears them: the checks, why there are none yet, or why there is no answer. */
+export const codingAgentOverviewChecksAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewChecksAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOverviewChecksAnswerView =
+  typeof codingAgentOverviewChecksAnswerViewSchema.Type;
+
+/** One agent's pull request's conversation, as the window hears it: the conversation, why there is none yet, or why there is no answer. */
+export const codingAgentOverviewConversationAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewConversationAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOverviewConversationAnswerView =
+  typeof codingAgentOverviewConversationAnswerViewSchema.Type;
 
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;

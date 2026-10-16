@@ -1,20 +1,25 @@
 import {
   CODING_AGENT_CALL_FAILURE,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentCallFailure,
 } from "@luke/features/coding-agent-view";
 import {
+  CHANGES_BOUNDS,
   CHECK_STATE,
   CHECK_SUMMARY,
   type CheckState,
   type CheckSummary,
   CODING_AGENT_STATUS,
-  type CodingAgentOverview,
+  type CodingAgentOverviewChecks,
+  type CodingAgentOverviewConversation,
+  type CodingAgentOverviewPullRequest,
   type CodingAgentPullRequest,
   type ConversationEntry,
   MERGE_STATE,
   type MergeState,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
+  type PullRequestReviewer,
+  REVIEW_STATE,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
@@ -39,6 +44,7 @@ import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-me
 import { EmptyState } from "../empty-state";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
+import { Skeleton, SkeletonRegion } from "../skeleton";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
@@ -67,9 +73,14 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
  * nothing here reads on a clock: the tab asks as it first comes on screen,
  * when the developer presses Retry or Refresh, and the moment the agent
  * ends, since that is when what it published settles (`useAgentRead`, as
- * the Changes tab reads). A refresh leaves the page drawn standing until its
- * answer lands; a read that failed says so with a retry; an agent with no
- * pull request yet says that.
+ * the Changes tab reads). It is read in three reads asked at once, each
+ * landing on its own: the pull request itself (its description, branches,
+ * mergeability, and people), its checks, and its conversation. What Luke
+ * already holds of the pull request, what the agent published, draws the
+ * bar and the title at once; each section stands as a skeleton until its
+ * read lands, and says so with its own Retry where its read failed. Refresh
+ * reads all three again, each section drawn standing until its answer
+ * lands; an agent with no pull request yet says that.
  *
  * Under a bar like a File tab's, which wears the pull request's mark and the
  * word for where it stands, the switch between its overview and its files
@@ -98,7 +109,12 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 /** The tab's own words. */
 const PULL_REQUEST_WORDS = {
   READING: "Reading pull request",
+  READING_CHECKS: "Reading checks",
+  READING_DESCRIPTION: "Reading description",
+  READING_CONVERSATION: "Reading conversation",
   FAILED: "The pull request could not be read.",
+  CHECKS_FAILED: "The checks could not be read.",
+  CONVERSATION_FAILED: "The conversation could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
   NO_DESCRIPTION: "No description provided.",
   NO_CHECKS: "No checks have run on this pull request.",
@@ -120,7 +136,46 @@ function threadLines(thread: ReviewThread): string | undefined {
 }
 
 /** A read that threw rather than answered, drawn as any other failed read. */
-const UNANSWERED: CodingAgentOverviewAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** Where one of the overview's reads stands, as its section draws it: on its way, failed, answering that there is no pull request, or landed. */
+const PART = {
+  PENDING: "pending",
+  FAILED: "failed",
+  NONE: "none",
+  LANDED: "landed",
+} as const;
+
+type Part<A> =
+  | { readonly kind: typeof PART.PENDING }
+  | { readonly kind: typeof PART.FAILED }
+  | { readonly kind: typeof PART.NONE }
+  | { readonly kind: typeof PART.LANDED; readonly value: A };
+
+/** One of the overview's reads as `useAgentRead` holds it. */
+interface PartRead<A> {
+  readonly answer:
+    | { readonly pullRequest: A | null }
+    | { readonly failure: CodingAgentCallFailure }
+    | undefined;
+  readonly out: boolean;
+  readonly ask: () => void;
+}
+
+/** Where one read stands. Note that a failure gives way to the wait as soon as it is asked again, while a part drawn stands until its answer lands. */
+function partOf<A>(read: PartRead<A>): Part<A> {
+  const { answer, out } = read;
+  if (answer === undefined || (out && "failure" in answer)) return { kind: PART.PENDING };
+  if ("failure" in answer) return { kind: PART.FAILED };
+  return answer.pullRequest === null
+    ? { kind: PART.NONE }
+    : { kind: PART.LANDED, value: answer.pullRequest };
+}
+
+/** What a landed part holds; none while it is on its way or failed. */
+function landed<A>(part: Part<A>): A | undefined {
+  return part.kind === PART.LANDED ? part.value : undefined;
+}
 
 /** The word for where the pull request stands, which its bar's pill says. */
 const STATE_WORDS = {
@@ -251,20 +306,39 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
 }
 
 /**
- * The pull request the bar draws: the overview's, once a read of it has
- * landed, since it is the newest and the page under the bar says the same;
- * else what the agent published, as last read for the plan, while the
- * overview is unread or its read failed.
+ * The pull request the bar draws: what the agent published, as last read
+ * for the plan, from the first frame, each of its words replaced by the
+ * overview's own as its read lands, since that is the newest and the page
+ * under the bar says the same: where it stands by the pull request's read,
+ * and its checks by theirs. None while neither has been read.
  */
 function barPullRequestOf(
-  overview: CodingAgentOverviewAnswerView | undefined,
+  pullRequest: CodingAgentOverviewPullRequest | undefined,
+  checks: CodingAgentOverviewChecks | undefined,
   published: CodingAgentPullRequest | undefined,
 ): BarPullRequest | undefined {
-  if (overview === undefined || "failure" in overview || overview.pullRequest === null) {
-    return published;
-  }
-  const { number, state, url, checks } = overview.pullRequest;
-  return { number, state, url, checks: checksSummaryOf(checks) };
+  const held = pullRequest ?? published;
+  if (held === undefined) return undefined;
+  const { number, state, url } = held;
+  const summary = checks === undefined ? published?.checks : checksSummaryOf(checks.checks);
+  return { number, state, url, checks: summary ?? CHECK_SUMMARY.NONE };
+}
+
+/**
+ * Who the pull request names as its reviewers: where each stands by their
+ * reviews, as its conversation's read says, with those it still asks for a
+ * review, as its own read says, standing asked whatever they said before,
+ * as GitHub shows a re-requested reviewer; up to the bound.
+ */
+function reviewersOf(
+  requested: readonly CodingAgentOverviewPullRequest["requested"][number][],
+  standings: readonly PullRequestReviewer[],
+): readonly PullRequestReviewer[] {
+  const by = new Map<string, PullRequestReviewer>();
+  for (const reviewer of standings) by.set(reviewer.by.login, reviewer);
+  for (const person of requested)
+    by.set(person.login, { by: person, state: REVIEW_STATE.REQUESTED });
+  return [...by.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
 /** The words the bar's switch says for each view. */
@@ -403,7 +477,11 @@ function Checks({ checks }: { checks: readonly PullRequestCheck[] }): React.JSX.
 }
 
 /** Whether the pull request would merge as it stands, in its tone's colour; drawn only while it is open. */
-function MergeLine({ pullRequest }: { pullRequest: CodingAgentOverview }): React.JSX.Element {
+function MergeLine({
+  pullRequest,
+}: {
+  pullRequest: CodingAgentOverviewPullRequest;
+}): React.JSX.Element {
   const { line, tone } = mergeWords(pullRequest.merge, pullRequest.base);
   return (
     <p className="pull-request-merge" data-merge-tone={tone}>
@@ -412,6 +490,38 @@ function MergeLine({ pullRequest }: { pullRequest: CodingAgentOverview }): React
       {tone === MERGE_TONE.WAITING ? <CircleDotIcon aria-hidden="true" /> : null}
       {line}
     </p>
+  );
+}
+
+/** Quiet blocks where a part's words will stand, one per width given, which `label` names to a reader. */
+function PartSkeleton({
+  label,
+  widths,
+  className,
+}: {
+  label: string;
+  widths: readonly string[];
+  className?: string;
+}): React.JSX.Element {
+  return (
+    <SkeletonRegion
+      label={label}
+      className={className ? `pull-request-skeleton ${className}` : "pull-request-skeleton"}
+    >
+      {widths.map((width, at) => (
+        // oxlint-disable-next-line react/no-array-index-key -- a skeleton's blocks never move.
+        <Skeleton key={at} width={width} />
+      ))}
+    </SkeletonRegion>
+  );
+}
+
+/** A part whose read failed: its sentence and its own Retry, where the part would have stood. */
+function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
+  return (
+    <div className="pull-request-failure">
+      <ReadFailure line={line} onRetry={onRetry} />
+    </div>
   );
 }
 
@@ -594,26 +704,40 @@ function EntryCard({
   );
 }
 
-/** The page under the bar: the title, who opened it and its reviewers, whether it merges, its checks, its description, and its conversation. */
-function PullRequestPage({
-  agentId,
-  pullRequest,
-}: {
-  agentId: string;
-  pullRequest: CodingAgentOverview;
-}): React.JSX.Element {
-  const now = useMinute();
-  const openLink = useOpenLink();
-  const picture = usePictureDrawer(agentId);
-  const { author, reviewers, conversation, earlier, mergedAt } = pullRequest;
+/** The overview's three reads, each as it stands, with the door that asks each again. */
+interface OverviewParts {
+  readonly pullRequest: Part<CodingAgentOverviewPullRequest>;
+  readonly checks: Part<CodingAgentOverviewChecks>;
+  readonly conversation: Part<CodingAgentOverviewConversation>;
+  readonly ask: {
+    readonly pullRequest: () => void;
+    readonly checks: () => void;
+    readonly conversation: () => void;
+  };
+}
+
+/** Under the title: the branches, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
+function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }): React.JSX.Element {
+  const { pullRequest: part, conversation } = parts;
+  if (part.kind === PART.PENDING) {
+    return (
+      <PartSkeleton
+        label={PULL_REQUEST_WORDS.READING}
+        widths={["40%", "65%"]}
+        className="pull-request-head-skeleton"
+      />
+    );
+  }
+  if (part.kind !== PART.LANDED) {
+    return <PartFailure line={PULL_REQUEST_WORDS.FAILED} onRetry={parts.ask.pullRequest} />;
+  }
+  const pullRequest = part.value;
+  const { author, mergedAt } = pullRequest;
+  const reviewers = reviewersOf(pullRequest.requested, landed(conversation)?.reviewers ?? []);
   const open =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
-    <div className="pull-request-page">
-      <h2 className="pull-request-title">
-        {pullRequest.title}{" "}
-        <span className="pull-request-number">{pullRequestNumberLabel(pullRequest)}</span>
-      </h2>
+    <>
       <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
         <p className="pull-request-branches">
           <bdi>{pullRequest.base}</bdi>
@@ -631,84 +755,200 @@ function PullRequestPage({
         {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} />}
       </div>
       {open ? <MergeLine pullRequest={pullRequest} /> : null}
-      <Checks checks={pullRequest.checks} />
-      <Section title="Description">
-        {pullRequest.html === "" ? (
+    </>
+  );
+}
+
+/** The checks section as its read stands: every check once landed, a skeleton of rows while out, its failure with Retry. */
+function ChecksPart({ parts }: { parts: OverviewParts }): React.JSX.Element {
+  const part = parts.checks;
+  if (part.kind === PART.LANDED) return <Checks checks={part.value.checks} />;
+  return (
+    <Section title="Checks">
+      {part.kind === PART.PENDING ? (
+        <PartSkeleton
+          label={PULL_REQUEST_WORDS.READING_CHECKS}
+          widths={["55%", "45%", "50%"]}
+          className="pull-request-checks-skeleton"
+        />
+      ) : (
+        <PartFailure line={PULL_REQUEST_WORDS.CHECKS_FAILED} onRetry={parts.ask.checks} />
+      )}
+    </Section>
+  );
+}
+
+/** The description, as the pull request's read carries it; a skeleton while that read is out, and nothing where it failed, whose failure stands under the title. */
+function DescriptionPart({
+  part,
+  picture,
+}: {
+  part: Part<CodingAgentOverviewPullRequest>;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element | null {
+  if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
+  return (
+    <Section title="Description">
+      {part.kind === PART.PENDING ? (
+        <PartSkeleton
+          label={PULL_REQUEST_WORDS.READING_DESCRIPTION}
+          widths={["90%", "75%", "82%", "40%"]}
+        />
+      ) : part.value.html === "" ? (
+        <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_DESCRIPTION}</p>
+      ) : (
+        <div className="pull-request-words">
+          <GitHubWords html={part.value.html} picture={picture} />
+        </div>
+      )}
+    </Section>
+  );
+}
+
+/** The conversation as its read stands: its entries once landed, the earlier ones counted first; a skeleton while out, its failure with Retry. */
+function ConversationPart({
+  parts,
+  url,
+  now,
+  picture,
+}: {
+  parts: OverviewParts;
+  /** The pull request's page, which the earlier entries left on GitHub open. */
+  url: string | undefined;
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  const openLink = useOpenLink();
+  const part = parts.conversation;
+  if (part.kind !== PART.LANDED) {
+    return (
+      <Section title="Conversation">
+        {part.kind === PART.PENDING ? (
+          <PartSkeleton
+            label={PULL_REQUEST_WORDS.READING_CONVERSATION}
+            widths={["35%", "85%", "70%"]}
+          />
+        ) : (
+          <PartFailure
+            line={PULL_REQUEST_WORDS.CONVERSATION_FAILED}
+            onRetry={parts.ask.conversation}
+          />
+        )}
+      </Section>
+    );
+  }
+  const { conversation, earlier } = part.value;
+  return (
+    <Section
+      title="Conversation"
+      count={earlier + conversation.length === 0 ? undefined : earlier + conversation.length}
+    >
+      {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
+      {earlier === 0 || url === undefined ? null : (
+        <button
+          type="button"
+          className="pull-request-more pull-request-earlier"
+          onClick={() => openLink(url)}
+        >
+          {PULL_REQUEST_WORDS.earlier(earlier)}
+        </button>
+      )}
+      {conversation.length === 0 ? (
+        earlier === 0 ? (
           <p className="pull-request-quiet pull-request-none">
-            {PULL_REQUEST_WORDS.NO_DESCRIPTION}
+            {PULL_REQUEST_WORDS.NO_CONVERSATION}
           </p>
-        ) : (
-          <div className="pull-request-words">
-            <GitHubWords html={pullRequest.html} picture={picture} />
-          </div>
-        )}
-      </Section>
-      <Section
-        title="Conversation"
-        count={earlier + conversation.length === 0 ? undefined : earlier + conversation.length}
-      >
-        {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
-        {earlier === 0 ? null : (
-          <button
-            type="button"
-            className="pull-request-more pull-request-earlier"
-            onClick={() => openLink(pullRequest.url)}
-          >
-            {PULL_REQUEST_WORDS.earlier(earlier)}
-          </button>
-        )}
-        {conversation.length === 0 ? (
-          earlier === 0 ? (
-            <p className="pull-request-quiet pull-request-none">
-              {PULL_REQUEST_WORDS.NO_CONVERSATION}
-            </p>
-          ) : null
-        ) : (
-          <ol className="pull-request-conversation">
-            {conversation.map((entry) => (
-              <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
-            ))}
-          </ol>
-        )}
-      </Section>
+        ) : null
+      ) : (
+        <ol className="pull-request-conversation">
+          {conversation.map((entry) => (
+            <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
+          ))}
+        </ol>
+      )}
+    </Section>
+  );
+}
+
+/** The page under the bar: the title, as read or as held, then each part as its read stands: the head, the checks, the description, and the conversation. */
+function PullRequestPage({
+  agentId,
+  title,
+  parts,
+}: {
+  agentId: string;
+  /** The title and number, as the pull request's read says or, until it lands, as Luke held them; none where neither has. */
+  title: Pick<CodingAgentPullRequest, "title" | "number" | "url"> | undefined;
+  parts: OverviewParts;
+}): React.JSX.Element {
+  const now = useMinute();
+  const picture = usePictureDrawer(agentId);
+  return (
+    <div className="pull-request-page">
+      {title === undefined ? (
+        <PartSkeleton
+          label={PULL_REQUEST_WORDS.READING}
+          widths={["60%"]}
+          className="pull-request-title"
+        />
+      ) : (
+        <h2 className="pull-request-title">
+          {title.title} <span className="pull-request-number">{pullRequestNumberLabel(title)}</span>
+        </h2>
+      )}
+      <PullRequestHead parts={parts} now={now} />
+      <ChecksPart parts={parts} />
+      <DescriptionPart part={parts.pullRequest} picture={picture} />
+      <ConversationPart parts={parts} url={title?.url} now={now} picture={picture} />
     </div>
   );
 }
 
-/** The overview read and drawn: a wait, a failure with its retry, no pull request yet, or the page. */
+/**
+ * The overview as its reads stand: no pull request yet where a read says
+ * so; while nothing is held or read of the pull request, a wait, or, where
+ * every read failed, one failure whose Retry reads all three; else the
+ * page, each part as its read stands.
+ */
 function OverviewView({
   agentId,
-  read,
+  parts,
+  published,
+  onRetry,
 }: {
   agentId: string;
-  read: {
-    readonly answer: CodingAgentOverviewAnswerView | undefined;
-    readonly out: boolean;
-    readonly ask: () => void;
-  };
+  parts: OverviewParts;
+  published: CodingAgentPullRequest | undefined;
+  onRetry: () => void;
 }): React.JSX.Element {
-  const { answer, out, ask } = read;
-  // A failure gives way to the wait as soon as it is asked again; a page drawn stands until the answer lands.
-  if (answer === undefined || (out && "failure" in answer)) {
-    return <SpinnerRegion label={PULL_REQUEST_WORDS.READING} />;
+  const all = [parts.pullRequest, parts.checks, parts.conversation];
+  if (all.some((part) => part.kind === PART.NONE)) {
+    return (
+      <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
+    );
   }
-  if ("failure" in answer) {
+  // Note that with nothing held, only a part landing says there is a pull request to draw.
+  if (published === undefined && !all.some((part) => part.kind === PART.LANDED)) {
+    if (all.some((part) => part.kind === PART.PENDING)) {
+      return <SpinnerRegion label={PULL_REQUEST_WORDS.READING} />;
+    }
     return (
       <div className="side-panel-empty">
         <ReadFailure
           line={PULL_REQUEST_WORDS.FAILED}
-          onRetry={ask}
+          onRetry={onRetry}
           place={READ_FAILURE_PLACE.CENTRED}
         />
       </div>
     );
   }
-  if (answer.pullRequest === null) {
-    return (
-      <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
-    );
-  }
-  return <PullRequestPage agentId={agentId} pullRequest={answer.pullRequest} />;
+  return (
+    <PullRequestPage
+      agentId={agentId}
+      title={landed(parts.pullRequest) ?? published}
+      parts={parts}
+    />
+  );
 }
 
 /**
@@ -740,17 +980,51 @@ export function AgentPullRequestTab({
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const onOverview = view === PULL_REQUEST_VIEW.OVERVIEW;
-  const read = useAgentRead(agentId, shown && onOverview, ended, control.readOverview, UNANSWERED);
+  const reads = shown && onOverview;
+  // The three are asked at once as the overview is first shown, each landing on its own.
+  const pullRequestRead = useAgentRead(
+    agentId,
+    reads,
+    ended,
+    control.readOverviewPullRequest,
+    UNANSWERED,
+  );
+  const checksRead = useAgentRead(agentId, reads, ended, control.readOverviewChecks, UNANSWERED);
+  const conversationRead = useAgentRead(
+    agentId,
+    reads,
+    ended,
+    control.readOverviewConversation,
+    UNANSWERED,
+  );
+  const ask = {
+    pullRequest: pullRequestRead.ask,
+    checks: checksRead.ask,
+    conversation: conversationRead.ask,
+  };
+  const refresh = () => {
+    ask.pullRequest();
+    ask.checks();
+    ask.conversation();
+  };
+  const parts: OverviewParts = {
+    pullRequest: partOf(pullRequestRead),
+    checks: partOf(checksRead),
+    conversation: partOf(conversationRead),
+    ask,
+  };
+  const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
+  const published = control.pullRequests.get(agentId);
   return (
     <div className="file-view pull-request-tab ph-no-capture">
       <PullRequestBar
-        published={barPullRequestOf(read.answer, control.pullRequests.get(agentId))}
+        published={barPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published)}
         view={view}
         onView={onView}
-        overview={onOverview ? { reading: read.out, onRefresh: read.ask } : undefined}
+        overview={onOverview ? { reading, onRefresh: refresh } : undefined}
       />
       <div className="pull-request-view" hidden={!onOverview}>
-        <OverviewView agentId={agentId} read={read} />
+        <OverviewView agentId={agentId} parts={parts} published={published} onRetry={refresh} />
       </div>
       <div className="pull-request-view" hidden={onOverview}>
         <AgentChangesTab

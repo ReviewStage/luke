@@ -203,9 +203,19 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`changes:${agentId}`);
           return { pullRequest: null };
         }),
-      codingAgentOverview: ({ agentId }) =>
+      codingAgentOverviewPullRequest: ({ agentId }) =>
         Effect.sync(() => {
-          asked.push(`overview:${agentId}`);
+          asked.push(`overview-pull-request:${agentId}`);
+          return { pullRequest: null };
+        }),
+      codingAgentOverviewChecks: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`overview-checks:${agentId}`);
+          return { pullRequest: null };
+        }),
+      codingAgentOverviewConversation: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`overview-conversation:${agentId}`);
           return { pullRequest: null };
         }),
       codingAgentGitHubImage: ({ agentId }) =>

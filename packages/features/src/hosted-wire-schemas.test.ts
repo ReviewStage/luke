@@ -121,7 +121,11 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestSchema: codingAgentWire.codingAgentPullRequestSchema,
     codingAgentPullRequestAnswerSchema: codingAgentWire.codingAgentPullRequestAnswerSchema,
     codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
-    codingAgentOverviewAnswerSchema: codingAgentWire.codingAgentOverviewAnswerSchema,
+    codingAgentOverviewPullRequestAnswerSchema:
+      codingAgentWire.codingAgentOverviewPullRequestAnswerSchema,
+    codingAgentOverviewChecksAnswerSchema: codingAgentWire.codingAgentOverviewChecksAnswerSchema,
+    codingAgentOverviewConversationAnswerSchema:
+      codingAgentWire.codingAgentOverviewConversationAnswerSchema,
     codingAgentCallIdSchema: codingAgentWire.codingAgentCallIdSchema,
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
@@ -188,7 +192,12 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
-    codingAgentOverviewAnswerViewSchema: codingAgentView.codingAgentOverviewAnswerViewSchema,
+    codingAgentOverviewPullRequestAnswerViewSchema:
+      codingAgentView.codingAgentOverviewPullRequestAnswerViewSchema,
+    codingAgentOverviewChecksAnswerViewSchema:
+      codingAgentView.codingAgentOverviewChecksAnswerViewSchema,
+    codingAgentOverviewConversationAnswerViewSchema:
+      codingAgentView.codingAgentOverviewConversationAnswerViewSchema,
     codingAgentGitHubImageParamsSchema: codingAgentView.codingAgentGitHubImageParamsSchema,
     githubImageTypeSchema: codingAgentView.githubImageTypeSchema,
     codingAgentGitHubImageViewSchema: codingAgentView.codingAgentGitHubImageViewSchema,
