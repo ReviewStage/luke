@@ -1823,7 +1823,7 @@ export type LineSent =
     };
 
 /** The coding agent that sent a line, as it stands now: its id, and the task it works on, none for one on no task. */
-export interface SendingAgent {
+interface SendingAgent {
   readonly id: string;
   readonly taskId: string | undefined;
 }
