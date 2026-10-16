@@ -26,11 +26,12 @@ export const AGENT_TOOL = {
   LOOK_AT_BOARD: LOOK_AT_BOARD_TOOL_NAME,
   // A look at one of the plan's pictures, the planning model's and a coding agent's.
   LOOK_AT_PICTURE: "look_at_picture",
-  LIST_CODING_AGENTS: "list_coding_agents",
-  READ_CODING_AGENT: "read_coding_agent",
-  MESSAGE_CODING_AGENT: "message_coding_agent",
-  START_CODING_AGENT: "start_coding_agent",
   END_CALL: "end_call",
+  // The tools about the workspace's coding agents, named for any agent offered them.
+  LIST_AGENTS: "list_agents",
+  READ_AGENT: "read_agent",
+  MESSAGE_AGENT: "message_agent",
+  START_AGENT: "start_agent",
   // The public reads, every role's.
   SEARCH_WEB: "search_web",
   READ_WEB_PAGE: "read_web_page",
@@ -88,11 +89,16 @@ export const CONNECTION_TOOL = {
 } as const;
 
 /**
- * eve's provider-run web reads, which coding agents ran before they had the
- * public reads: no agent is offered them now, but a transcript written then
- * names them.
+ * Tools no agent is offered now whose calls a transcript written then still
+ * names: eve's provider-run web reads, which coding agents ran before they
+ * had the public reads, and the planning model's four tools about the
+ * task's coding agents, since named as `AGENT_TOOL`'s agent tools.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  LIST_CODING_AGENTS: "list_coding_agents",
+  READ_CODING_AGENT: "read_coding_agent",
+  MESSAGE_CODING_AGENT: "message_coding_agent",
+  START_CODING_AGENT: "start_coding_agent",
 } as const;

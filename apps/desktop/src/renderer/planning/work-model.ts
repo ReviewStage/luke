@@ -1,4 +1,4 @@
-import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -156,11 +156,17 @@ const UNANSWERED: ReadonlySet<string> = new Set([
  * where the plan has had no turn or its work is unread.
  */
 export function startedAgentCallIds(conversation: PlanConversation): readonly string[] {
-  const start = `${TOOL_PART_TYPE_PREFIX}${AGENT_TOOL.START_CODING_AGENT}`;
+  // A start is read under the tool's name and the one it had before every agent was offered it.
+  const starts = new Set(
+    [AGENT_TOOL.START_AGENT, RETIRED_TOOL.START_CODING_AGENT].map(
+      (tool) => `${TOOL_PART_TYPE_PREFIX}${tool}`,
+    ),
+  );
   return (conversation?.messages ?? []).flatMap((message) =>
     message.parts.flatMap((part) =>
       isRecord(part) &&
-      part.type === start &&
+      isWireString(part.type) &&
+      starts.has(part.type) &&
       isWireString(part.toolCallId) &&
       isWireString(part.state) &&
       !UNANSWERED.has(part.state)

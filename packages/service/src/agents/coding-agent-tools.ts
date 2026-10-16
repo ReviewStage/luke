@@ -91,7 +91,7 @@ const CODING_AGENT_TOOL_BOUNDS = {
 /** Why a call ran nothing, or sent nothing, in words the model can act on. */
 export const CODING_AGENT_TOOL_REFUSAL = {
   UNREADABLE:
-    "Not run: name the agent by the id list_coding_agents answered, and a message as text of at " +
+    "Not run: name the agent by the id list_agents answered, and a message as text of at " +
     `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
   NO_AGENT: "Not run: this task has no coding agent with that id.",
   STORE: "Not run: the agents could not be read just now. The call may be made again.",
@@ -151,11 +151,11 @@ export interface CodingAgentCall {
 /** What a message or a start reaches: the store, GitHub through the App on the developer's standing, the network to eve, and the catalog a start's choice is checked against. */
 type CodingAgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
-const AGENT_ID = describeWire(wireUuidSchema, "The agent's id, as list_coding_agents answered it.");
+const AGENT_ID = describeWire(wireUuidSchema, "The agent's id, as list_agents answered it.");
 
-const READ_CODING_AGENT_INPUT = Schema.Struct({ agentId: AGENT_ID });
+const READ_AGENT_INPUT = Schema.Struct({ agentId: AGENT_ID });
 
-const MESSAGE_CODING_AGENT_INPUT = Schema.Struct({
+const MESSAGE_AGENT_INPUT = Schema.Struct({
   agentId: AGENT_ID,
   text: describeWire(
     Schema.Trim.check(
@@ -179,7 +179,7 @@ const START_PROMPT = Schema.Trim.check(
  * start on the plan had no room for what the developer said beyond the plan,
  * so the planning model started the agent and then messaged it the rest.
  */
-const START_CODING_AGENT_INPUT = Schema.Struct({
+const START_AGENT_INPUT = Schema.Struct({
   prompt: Schema.optionalKey(
     describeWire(
       START_PROMPT,
@@ -210,19 +210,19 @@ const START_CODING_AGENT_INPUT = Schema.Struct({
   ),
 });
 
-const readAgentRef = Schema.decodeUnknownResult(READ_CODING_AGENT_INPUT);
-const readMessage = Schema.decodeUnknownResult(MESSAGE_CODING_AGENT_INPUT);
+const readAgentRef = Schema.decodeUnknownResult(READ_AGENT_INPUT);
+const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
 /** A start as a call carries it: one the model made under the tool's earlier words names its prompt `task`. */
-const START_CODING_AGENT_CALL = Schema.Struct({
-  ...START_CODING_AGENT_INPUT.fields,
+const START_AGENT_CALL = Schema.Struct({
+  ...START_AGENT_INPUT.fields,
   task: Schema.optionalKey(START_PROMPT),
 });
 
-const readStart = Schema.decodeUnknownResult(START_CODING_AGENT_CALL);
+const readStart = Schema.decodeUnknownResult(START_AGENT_CALL);
 
 /** The tools as a planning model is offered them: each its name, its words, and its input schema. */
-export const LIST_CODING_AGENTS_TOOL = {
-  name: AGENT_TOOL.LIST_CODING_AGENTS,
+export const LIST_AGENTS_TOOL = {
+  name: AGENT_TOOL.LIST_AGENTS,
   description:
     "List the coding agents working on this task: each with its id, its title (how the " +
     "developer sees it named), the model and effort it runs on with the model's name to say it " +
@@ -233,28 +233,28 @@ export const LIST_CODING_AGENTS_TOOL = {
   inputSchema: Schema.Struct({}),
 } as const;
 
-export const READ_CODING_AGENT_TOOL = {
-  name: AGENT_TOOL.READ_CODING_AGENT,
+export const READ_AGENT_TOOL = {
+  name: AGENT_TOOL.READ_AGENT,
   description:
     "Read one coding agent's recent progress: its status, the branch it pushed and the pull " +
     "request from it as GitHub holds them, and a short tail " +
     "of what it last said and did, newest last. Summarise it for the developer in a sentence or " +
     "two; never read it out.",
-  inputSchema: READ_CODING_AGENT_INPUT,
+  inputSchema: READ_AGENT_INPUT,
 } as const;
 
-export const MESSAGE_CODING_AGENT_TOOL = {
-  name: AGENT_TOOL.MESSAGE_CODING_AGENT,
+export const MESSAGE_AGENT_TOOL = {
+  name: AGENT_TOOL.MESSAGE_AGENT,
   description:
     "Send one coding agent a message, exactly as the developer would type it to the agent. It " +
     "steers the turn under way, so the agent sees it at its next step, or starts a turn when " +
     "the agent is idle. Answers `accepted` once the agent's session has taken it, or " +
     "`rejected` and why nothing was sent.",
-  inputSchema: MESSAGE_CODING_AGENT_INPUT,
+  inputSchema: MESSAGE_AGENT_INPUT,
 } as const;
 
-export const START_CODING_AGENT_TOOL = {
-  name: AGENT_TOOL.START_CODING_AGENT,
+export const START_AGENT_TOOL = {
+  name: AGENT_TOOL.START_AGENT,
   description:
     "Start a new coding agent on this task, exactly as the developer's Start button would: " +
     "on the plan itself with no prompt, or on the prompt given in the plan's place, with the " +
@@ -265,7 +265,7 @@ export const START_CODING_AGENT_TOOL = {
     "with the agent's id, model, the model's name to say it by, effort, and status once its " +
     "session is open, or `rejected` " +
     "and why nothing was started; a rejected model or effort lists the choices.",
-  inputSchema: START_CODING_AGENT_INPUT,
+  inputSchema: START_AGENT_INPUT,
 } as const;
 
 /** How a call of one coding tool is said: its verb, and the one input field that names its subject. */
@@ -491,8 +491,8 @@ function readingsRecord(readings: readonly AgentReading[]): WireRecord[] {
   return readings.map((reading) => ({ ...reading }));
 }
 
-/** One call of `list_coding_agents`: every agent of the plan, in the order started. */
-export function runListCodingAgents(
+/** One call of `list_agents`: every agent of the plan, in the order started. */
+export function runListAgents(
   call: CodingAgentCall,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
   return orStoreRefusal(
@@ -509,8 +509,8 @@ export function runListCodingAgents(
   );
 }
 
-/** One call of `read_coding_agent`: the agent as the list reads it, and the tail of its newest turns. */
-export function runReadCodingAgent(
+/** One call of `read_agent`: the agent as the list reads it, and the tail of its newest turns. */
+export function runReadAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
@@ -543,8 +543,8 @@ export function runReadCodingAgent(
   );
 }
 
-/** One call of `message_coding_agent`: the words handed to the plan's agent, or why nothing was sent. */
-export function runMessageCodingAgent(
+/** One call of `message_agent`: the words handed to the plan's agent, or why nothing was sent. */
+export function runMessageAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
@@ -574,8 +574,8 @@ export function runMessageCodingAgent(
   );
 }
 
-/** One call of `start_coding_agent`: an agent started on the call's plan under the call's own key, or why nothing was started. */
-export function runStartCodingAgent(
+/** One call of `start_agent`: an agent started on the call's plan under the call's own key, or why nothing was started. */
+export function runStartAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {

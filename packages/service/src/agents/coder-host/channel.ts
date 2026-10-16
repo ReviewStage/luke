@@ -67,7 +67,7 @@ const UPLOAD_POLICY = {
  * message the voice brain sends an agent, delivered exactly as one the
  * developer typed in the message box, on a session the named account's
  * agent recorded. The opening is the start of an agent the voice brain
- * makes for the developer (`coding-agent-tools.ts`'s `start_coding_agent`),
+ * makes for the developer (`coding-agent-tools.ts`'s `start_agent`),
  * on the one path a Start takes (`coder-host/start.ts`): the row the Start
  * made stands before eve is asked, so the door's ownership check bounds the
  * opening to a conversation the named account owns, as it bounds every
