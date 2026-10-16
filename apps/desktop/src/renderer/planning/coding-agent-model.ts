@@ -5,12 +5,14 @@ import {
   type CodingAgentCallFailure,
 } from "@luke/features/coding-agent-view";
 import {
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
   CONTEXT_WINDOW,
+  type CodingAgentArchivedBy,
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
@@ -173,6 +175,41 @@ const ACTOR_STATE_OF_GLYPH = {
   [GLYPH_STATE.FAILED]: ACTOR_STATE.FAILED,
   [GLYPH_STATE.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<GlyphState, ActorState>;
+
+/** Who archived an agent, and why, as its card and its archived banner say it. */
+export interface ArchivedByReading {
+  /** "Archived by Dean", "Archived by Luke for you", "Archived by Bill by seat for Dean". */
+  readonly words: string;
+  readonly reason: string | undefined;
+}
+
+/** What names an agent that archived another whose title the service kept empty. */
+const UNNAMED_ARCHIVER = "another agent";
+
+/**
+ * Who archived an agent, as the reader reads it: the member who did, or
+ * Luke or the archiving agent and the member they acted for, "you" for the
+ * reader's own account, the member left out once their account is gone;
+ * and the reason they gave.
+ */
+export function archivedByReading(
+  by: CodingAgentArchivedBy,
+  readerId: string | undefined,
+): ArchivedByReading {
+  const member =
+    by.member === undefined ? undefined : by.member.userId === readerId ? "you" : by.member.name;
+  const forMember = member === undefined ? "" : ` for ${member}`;
+  const archiver =
+    by.by === CODING_AGENT_ARCHIVER.MEMBER
+      ? member
+      : by.by === CODING_AGENT_ARCHIVER.LUKE
+        ? `Luke${forMember}`
+        : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
+  return {
+    words: archiver === undefined ? "Archived" : `Archived by ${archiver}`,
+    reason: by.reason,
+  };
+}
 
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
 export function agentActor(

@@ -59,6 +59,7 @@ import {
   agentStillWriting,
   agentTabLabel,
   agentWorkingPhase,
+  archivedByReading,
   delegates,
   dockedTodos,
   endLine,
@@ -1196,6 +1197,11 @@ function AgentTabView({
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
             stop={agent.status === CODING_AGENT_STATUS.RUNNING ? onStop : undefined}
+            archivedBy={
+              agent.archivedAt === undefined || agent.archivedBy === undefined
+                ? undefined
+                : archivedByReading(agent.archivedBy, readerId)
+            }
           />
         ) : (
           <AgentComposer

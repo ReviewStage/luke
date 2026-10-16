@@ -18,6 +18,7 @@ import { useAutomation } from "../automation-directory";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { usePerson } from "../member-directory";
 import {
+  type ArchivedByReading,
   agentParts,
   agentStillWriting,
   isDelegation,
@@ -55,7 +56,8 @@ import { WorkingTime } from "./working-time";
  * "Started by" and who did: the automation whose run started it, by its
  * clock and name, where the window knows it, or else, for a teammate's
  * agent, the teammate's disc and name; either hangs its own card over this
- * one. The card has no way to the tab of its own: wherever it hangs, the
+ * one. An archived agent's says who archived it, Luke or another agent on a
+ * member's behalf among them, and the reason given. The card has no way to the tab of its own: wherever it hangs, the
  * name it hangs from is what a press opens, so the card only says.
  *
  * The step is read from what a tab already holds, never fetched on hover:
@@ -113,6 +115,8 @@ export interface CardReading {
   readonly tile?: Actor | undefined;
   /** The pull request the agent opened, where the place holds it, at the head's corner. */
   readonly pullRequest?: Pick<CodingAgentPullRequest, "number" | "state" | "checks"> | undefined;
+  /** Who archived the agent and why, on an archived agent's card where the service said. */
+  readonly archivedBy?: ArchivedByReading | undefined;
 }
 
 function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
@@ -188,6 +192,16 @@ function StartedBy({
         )}
       </ActorLine>
     </CardNote>
+  );
+}
+
+/** Who archived the agent, on one line, and the reason they gave under it. */
+function ArchivedByNote({ archivedBy }: { archivedBy: ArchivedByReading }): React.JSX.Element {
+  return (
+    <>
+      <CardNote oneLine>{archivedBy.words}</CardNote>
+      {archivedBy.reason === undefined ? null : <CardNote>{archivedBy.reason}</CardNote>}
+    </>
   );
 }
 
@@ -294,7 +308,8 @@ export function AgentTabCard({
   /** One line under a rule, said by a tab of the agent's other than its own. */
   foot?: React.ReactNode;
 }): React.JSX.Element {
-  const { corner, choice, transcript, startedBy, automationId, tile, pullRequest } = read();
+  const { corner, choice, transcript, startedBy, automationId, tile, pullRequest, archivedBy } =
+    read();
   const head = (
     <CardHead
       name={name}
@@ -314,6 +329,7 @@ export function AgentTabCard({
         </div>
       )}
       <StartedBy by={startedBy} automationId={automationId} />
+      {archivedBy === undefined ? null : <ArchivedByNote archivedBy={archivedBy} />}
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
       {foot === undefined ? null : (
         <>

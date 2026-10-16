@@ -2746,6 +2746,21 @@ button.attached-file-face:hover img {
   font-size: 12.5px;
 }
 
+/* Who archived an agent, and why, over the note's own line: the reason is
+   the archiver's sentence, so it wraps rather than being cut. */
+.archived-composer-words {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.archived-composer-by {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
    bar naming the agent and where the connection stands in words, over the
    terminal's screen on the terminal's own ground. A state with an action

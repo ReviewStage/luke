@@ -22,6 +22,8 @@ import type { Actor } from "@luke/ui/actor-model";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   AppWindowIcon,
+  ArchiveIcon,
+  ArchiveRestoreIcon,
   BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
@@ -461,6 +463,8 @@ const CALL_ICON = {
   [CALL_KIND.READ_AGENT]: WorkflowIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
+  [CALL_KIND.ARCHIVE_AGENT]: ArchiveIcon,
+  [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
