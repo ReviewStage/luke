@@ -761,7 +761,8 @@ its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
-skills and MCP servers, and the files you attach there; code drawn in a
+skills and MCP servers, and the files you attach there; a Browser tab, with
+the still of its page drawn while something covers it; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's
 webhook secret, the one time it is shown; and the cards
 that open over a row on hover. The whiteboard and a Terminal tab's shell draw
@@ -770,6 +771,16 @@ their only line, and recording what a canvas draws is switched off. A mention dr
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked.
+
+**Browser tabs.** With the Browser tab experiment on, a Browser tab opens a
+web page you choose, your own `localhost` included, in a view of its own on
+your Mac. Luke does not see, store, log, or count the page, its address, or
+its title; they reach only the panel that opened the tab, and none of it
+reaches a trace, a counted event, our service, or the screen recording, which
+cannot see into the view. The pages keep their own cookies and storage on your
+Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
+launches. Every permission a page asks for, such as the camera, microphone, or
+location, is refused, and downloads are cancelled.
 
 Recording starts just after the panel first draws when Luke opens, before
 you sign in, so it covers the signed-out panel and the sign-in. A recording

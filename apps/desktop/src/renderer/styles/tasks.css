@@ -1428,6 +1428,59 @@ button.file-ref:hover .file-ref-path {
 
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
+/* A Browser tab (browser-pane.tsx): the page's bar, its address field
+   filling what the steps leave, and the body main lays the page's view
+   over, which draws a still of the page while something covers it. */
+.browser-view-address {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+}
+
+.browser-view-address input {
+  width: 100%;
+  min-width: 0;
+  height: calc(var(--control-height) - 2 * var(--space-2));
+  padding: 0 var(--space-6);
+  border: 1px solid var(--hairline);
+  border-radius: calc(var(--control-radius) - var(--space-2));
+  background: var(--desktop-well);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.browser-view-address input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.browser-view-address input:focus {
+  border-color: var(--text-tertiary);
+  outline: none; /* no ring: its border lights */
+}
+
+.browser-view-body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: clip;
+}
+
+/* The still stands where the page stood, at its own size and never
+   stretched, since the page it stands in for was drawn at the body's. */
+.browser-view-still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: none;
+  object-position: top left;
+}
+
 .page-view-find {
   display: flex;
   min-height: 0;

@@ -23,7 +23,7 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
  * version history, Inbox, and coding agents' tabs and their Terminal tabs,
- * among others. The whiteboard and a Terminal tab are the surfaces that draw
+ * and Browser tabs with the still of a page they draw, among others. The whiteboard and a Terminal tab are the surfaces that draw
  * their words on a canvas, which the text masking cannot reach, so their
  * block is their only line, and canvas recording is held off by name rather
  * than by the library's default.

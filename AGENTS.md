@@ -63,6 +63,11 @@ the check names. A component is placed by review under the same rule.
   on 2026-10-13: the Keyframe session token for a call's own avatar may reach
   the panel window, which runs that session, and never the voice window,
   a Gateway answer or event, app state, a counted event, a trace, or a fixture.
+  And, approved by Dean on 2026-10-16, a Browser tab's page, its address,
+  title, and a still of it go only to the panel that opened the tab, from its
+  view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
+  trace, a counted event, a fixture, app state, the service, or the voice
+  window, and the still is left out of the screen recording.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

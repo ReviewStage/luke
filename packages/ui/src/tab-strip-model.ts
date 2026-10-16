@@ -7,7 +7,7 @@
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
  * started, one subagent, one file, one agent's changes, one agent's
- * terminal, or one page. Two tabs are the
+ * terminal, one page, or one Browser tab's web page. Two tabs are the
  * same where they name the same thing, so a tab rebuilt on every render is
  * still the tab it was.
  *
@@ -35,6 +35,7 @@ export const TAB_WORDS = {
   CODING_AGENT: "Coding agent",
   CHANGES: "Changes",
   TERMINAL: "Terminal",
+  BROWSER: "Browser",
 } as const;
 
 /** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
@@ -85,6 +86,11 @@ export interface PageStripTab {
   readonly page: string;
 }
 
+/** One Browser tab, named by the id it was opened under, which names its page's view to main. */
+export interface BrowserStripTab {
+  readonly browser: string;
+}
+
 /** A tab of either strip: a word of its column's own, or one naming what it shows. */
 export type StripTab =
   | string
@@ -94,7 +100,8 @@ export type StripTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
-  | PageStripTab;
+  | PageStripTab
+  | BrowserStripTab;
 
 /**
  * Whether a tab is one agent's. Note that each kind is told by the field
@@ -132,6 +139,11 @@ export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
 /** Whether a tab is one page's. */
 export function isPageTab(tab: StripTab): tab is PageStripTab {
   return tab instanceof Object && "page" in tab;
+}
+
+/** Whether a tab is a Browser tab. */
+export function isBrowserTab(tab: StripTab): tab is BrowserStripTab {
+  return tab instanceof Object && "browser" in tab;
 }
 
 /**
@@ -172,6 +184,7 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
+  if (isBrowserTab(a)) return isBrowserTab(b) && a.browser === b.browser;
   return a === b;
 }
 
@@ -195,8 +208,8 @@ function terminalKey(agentId: string): string {
  * the agent's, call's, or draft's own id, which no word spells, or the
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
  * of the side panel, the one strip it stands in, is keyed by, a Terminal tab
- * by a key made for its agent (`terminalKey`), and a page's by the page's
- * own id.
+ * by a key made for its agent (`terminalKey`), a page's by the page's
+ * own id, and a Browser tab's by the id it was opened under.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
@@ -205,6 +218,7 @@ export function tabKey(tab: StripTab): string {
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) return tab.changes;
   if (isPageTab(tab)) return tab.page;
+  if (isBrowserTab(tab)) return tab.browser;
   return isSubagentTab(tab) ? tab.subagent : tab;
 }
 

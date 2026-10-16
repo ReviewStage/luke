@@ -24,6 +24,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settin
 import { callCard } from "@luke/ui/call-card-model";
 import {
   isAgentTab,
+  isBrowserTab,
   isChangesTab,
   isDraftTab,
   isFileTab,
@@ -2183,6 +2184,8 @@ export function useTasksTab(input: {
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agentIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
+    // A Browser tab's page went with it, so there is nothing to open again.
+    if (isBrowserTab(tab)) return false;
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);

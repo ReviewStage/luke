@@ -1,4 +1,5 @@
 import type { Board } from "@luke/features/board-wire";
+import type { BrowserPage } from "@luke/features/browser-acts";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -12,11 +13,13 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
 import {
   agentOfTab,
   type ChangesStripTab,
   inTaskOrder,
+  isBrowserTab,
   isChangesTab,
   isFileTab,
   isPageTab,
@@ -64,6 +67,7 @@ import {
   heldLatest,
   lastFinished,
 } from "../tasks/agent-tab-card";
+import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane";
 import { CodePane, centreWithin } from "../tasks/code-pane";
 import {
   agentGlyphState,
@@ -98,6 +102,7 @@ import {
   type FileHistoryStep,
   type FixedSidePanelTab,
   isPinnable,
+  type OpenBrowser,
   type OpenFile,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -117,6 +122,7 @@ import {
   workRowsOf,
 } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
+import { useExperiment } from "../use-app-state";
 import { paneTiming } from "./pane-motion";
 import {
   type AddEntry,
@@ -284,6 +290,7 @@ export const ADD_SECTION = {
   CHANGES: "Changes",
   PAGES: "Pages",
   TERMINAL: "Terminal",
+  BROWSER: "Browser",
 } as const;
 
 /** An agent's terminal as the "+" offers it: the agent, and whether ⌘J would open its Terminal tab from here. */
@@ -300,6 +307,12 @@ export interface ChangesOffer {
   readonly label: string;
   readonly pullRequest: CodingAgentPullRequest;
 }
+
+/** What the "+" calls the row that opens a Browser tab. */
+const NEW_BROWSER_TAB = "New Browser tab";
+
+/** No Browser tab on the plan, the same array every render. */
+const NO_BROWSERS: readonly OpenBrowser[] = [];
 
 /** No Changes tab open on the plan, the same array every render. */
 const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
@@ -403,6 +416,8 @@ export function panelEntries(input: {
     readonly offers: readonly TerminalOffer[];
     readonly onNew: (agentId: string) => void;
   };
+  /** The door a new Browser tab opens through, while the Browser tab experiment is on; none where the caller offers none. */
+  onNewBrowser?: (() => void) | undefined;
 }): AddEntry[] {
   const { panel, workers, files, changes = [], pages = [] } = input;
   const kinds = input.kinds.map((kind) => ({
@@ -470,7 +485,31 @@ export function panelEntries(input: {
     },
     onPick: () => input.terminals?.onNew(agent.id),
   }));
-  return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows, ...terminalRows];
+  // A Browser tab is opened afresh each time, as a browser's new tab is, so
+  // its row names no tab and opens one more.
+  const onNewBrowser = input.onNewBrowser;
+  const browserRows =
+    onNewBrowser === undefined
+      ? []
+      : [
+          {
+            row: {
+              id: ADD_SECTION.BROWSER,
+              ...tabLook({ kind: TAB_KIND.BROWSER, title: NEW_BROWSER_TAB }),
+              section: ADD_SECTION.BROWSER,
+            },
+            onPick: onNewBrowser,
+          },
+        ];
+  return [
+    ...kinds,
+    ...subagentRows,
+    ...fileRows,
+    ...changesRows,
+    ...pageRows,
+    ...terminalRows,
+    ...browserRows,
+  ];
 }
 
 /** Every subagent the plan's work holds, with where its session stands, in the order started. */
@@ -542,6 +581,10 @@ function stripTabs(input: {
   changes: readonly ChangesStripTab[];
   pages: readonly DrawnPage[];
   terminals: readonly TerminalStripTab[];
+  /** The plan's Browser tabs, in the order opened. */
+  browsers: readonly OpenBrowser[];
+  /** How each Browser tab's page stands, which names its tab. */
+  browserPages: ReadonlyMap<string, BrowserPage>;
   /** Every code Luke showed on the plan, whose newest note on a file its tab's card says. */
   shown: readonly TaskCodeShowing[];
   /** The plan's repository, whose showings alone a file tab's card reads its note from. */
@@ -559,6 +602,7 @@ function stripTabs(input: {
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
   const { repository, copied, readWorker, onOpenAgent, shownAgent, taskId } = input;
+  const { browsers, browserPages } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -669,7 +713,27 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs, ...terminalTabs];
+  // A Browser tab is named by its page's title, its address beside it on hover.
+  const browserTabs = browsers.map(({ tab }) => {
+    const page = browserPages.get(tab.browser);
+    return {
+      tab,
+      look: look(tab, {
+        ...tabLook({ kind: TAB_KIND.BROWSER, title: browserTitleOf(page) }),
+        tooltip: page?.address,
+      }),
+      close: () => panel.onClose(tab),
+    };
+  });
+  return [
+    ...fixed,
+    ...subagentTabs,
+    ...fileTabs,
+    ...changesTabs,
+    ...pageTabs,
+    ...terminalTabs,
+    ...browserTabs,
+  ];
 }
 
 /**
@@ -707,6 +771,8 @@ function PanelTabs({
   changes,
   pages,
   terminals,
+  browsers,
+  browserPages,
   shown,
   repository,
   offers,
@@ -734,6 +800,10 @@ function PanelTabs({
   pages: readonly DrawnPage[];
   /** The open Terminal tabs of the plan's agents, in the order opened. */
   terminals: readonly TerminalStripTab[];
+  /** The plan's Browser tabs, in the order opened. */
+  browsers: readonly OpenBrowser[];
+  /** How each Browser tab's page stands, which names its tab. */
+  browserPages: ReadonlyMap<string, BrowserPage>;
   /** Every code Luke showed on the plan, whose notes the file tabs' cards say. */
   shown: readonly TaskCodeShowing[];
   /** The plan's repository, whose showings alone the file tabs' cards read. */
@@ -761,6 +831,8 @@ function PanelTabs({
     changes,
     pages,
     terminals,
+    browsers,
+    browserPages,
     shown,
     repository,
     held,
@@ -1187,6 +1259,8 @@ function TabContent({
   onRevealed,
   onCloseTab,
   shellsList,
+  browsers,
+  onBrowserOpened,
 }: {
   tab: SidePanelTab;
   taskId: string;
@@ -1238,8 +1312,26 @@ function TabContent({
   onCloseTab: (tab: SidePanelTab) => void;
   /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
+  /** The plan's Browser tabs, which a Browser tab reads the address it was opened at from. */
+  browsers: readonly OpenBrowser[];
+  /** Says a Browser tab's page was opened at an address (`SidePanelControl.onBrowserOpened`). */
+  onBrowserOpened: (browserId: string, address: string) => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isBrowserTab(tab)) {
+    const open = browsers.find((each) => sameTab(each.tab, tab));
+    // The tab stands for one no longer open only until the panel moves on, a render away.
+    return open === undefined ? (
+      <SpinnerRegion label="Loading page" />
+    ) : (
+      <BrowserPane
+        key={tab.browser}
+        open={open}
+        shown={shown}
+        onOpened={(address) => onBrowserOpened(tab.browser, address)}
+      />
+    );
+  }
   if (isTerminalTab(tab)) {
     return (
       <TerminalTab
@@ -1703,6 +1795,10 @@ export function SidePanel({
   const terminals = panel.terminals.filter((each) =>
     drawsTerminal(each, { taskAgents: agents.agentIds }),
   );
+  // A Browser tab stands while the experiment is on; turned off, it closes (below).
+  const browsing = useExperiment(EXPERIMENT.BROWSER);
+  const browsers = browsing ? panel.browsers : NO_BROWSERS;
+  const browserPages = useBrowserPages();
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {
@@ -1722,7 +1818,9 @@ export function SidePanel({
               ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
               : isTerminalTab(tab)
                 ? TAB_WORDS.TERMINAL
-                : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+                : isBrowserTab(tab)
+                  ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
+                  : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1751,9 +1849,17 @@ export function SidePanel({
       offers: terminalOffers(agents, panel),
       onNew: (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW),
     },
+    onNewBrowser: browsing ? () => panel.onOpenBrowser() : undefined,
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
+
+  // A Browser tab left open as its experiment went off closes, its page with it.
+  const { onClose } = panel;
+  const strayBrowsers = browsing ? NO_BROWSERS : panel.browsers;
+  useEffect(() => {
+    for (const each of strayBrowsers) onClose(each.tab);
+  }, [strayBrowsers, onClose]);
 
   useLayoutEffect(() => {
     if (leaving === PANEL_LEAVING.NONE || aside.current === null) return;
@@ -1791,6 +1897,8 @@ export function SidePanel({
             changes={changes}
             pages={pageTabs}
             terminals={terminals}
+            browsers={browsers}
+            browserPages={browserPages}
             shown={shownCode ?? []}
             repository={repository}
             offers={offers}
@@ -1818,12 +1926,20 @@ export function SidePanel({
         ) : (
           // The Board is drawn on a canvas, which keeps a find of its own, and
           // a page's words stand in a sandboxed frame no find of the window
-          // reaches, so a page's tab finds in its source alone, itself.
+          // reaches, so a page's tab finds in its source alone, itself; a
+          // Browser tab's page stands in a view of main's, which no find of
+          // the window reaches either.
           <FindScope
             className="side-panel-content"
             role="tabpanel"
             aria-label={label}
-            active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD && !isPageTab(tab)}
+            active={
+              keys &&
+              focused &&
+              tab !== SIDE_PANEL_TAB.BOARD &&
+              !isPageTab(tab) &&
+              !isBrowserTab(tab)
+            }
             subject={{ task: planId, tab }}
           >
             <TabContent
@@ -1856,6 +1972,8 @@ export function SidePanel({
               onRevealed={revealed}
               onCloseTab={panel.onClose}
               shellsList={shellsList}
+              browsers={browsers}
+              onBrowserOpened={panel.onBrowserOpened}
             />
           </FindScope>
         )}

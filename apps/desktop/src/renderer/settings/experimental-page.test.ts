@@ -130,6 +130,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.BROWSER,
     EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
     EXPERIMENT.AUTOMATIONS,
