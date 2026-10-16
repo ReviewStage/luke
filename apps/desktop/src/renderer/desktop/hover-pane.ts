@@ -10,7 +10,7 @@
  */
 
 import type React from "react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 /** How a pane stands over the work. */
 export const PANE_FLOAT = {
@@ -23,6 +23,9 @@ export const PANE_FLOAT = {
 } as const;
 
 export type PaneFloat = (typeof PANE_FLOAT)[keyof typeof PANE_FLOAT];
+
+/** A pane that floats for as long as its state says, as the main sidebar does. */
+const alwaysFloats = () => true;
 
 /** The layers that answer their own Escape before a floating pane is put away. */
 const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
@@ -40,6 +43,8 @@ export interface HoverPane {
   readonly floating: boolean;
   /** A choice made in the pane, which puts a floating pane away once made. */
   readonly chosen: <A extends unknown[]>(go: (...args: A) => void) => (...args: A) => void;
+  /** Puts the pane away at once, before it is drawn away, so a focus moved next is not held in it. */
+  readonly close: () => void;
   readonly onPress: () => void;
   readonly onPointerLeave: (event: { readonly relatedTarget: EventTarget | null }) => void;
   readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
@@ -74,6 +79,8 @@ export function useHoverPane(
     readonly ref?: React.RefObject<HTMLElement | null>;
     /** Whether the keyboard, once the pane opened from away took it, is held in it until the pane is put away. */
     readonly holdsKeyboard?: boolean;
+    /** Whether the pane still floats, where its owner may dock it without putting it away; one docked again is put away. */
+    readonly floatsNow?: (pane: HTMLElement) => boolean;
   },
 ): HoverPane {
   const own = useRef<HTMLElement | null>(null);
@@ -82,10 +89,14 @@ export function useHoverPane(
   const { state, onState } = float;
   const was = useRef(state);
   const floating = state !== PANE_FLOAT.CLOSED;
-  const { focusAt, stays, holdsKeyboard = false } = look;
+  const { focusAt, stays, holdsKeyboard = false, floatsNow = alwaysFloats } = look;
   // The state as last drawn, which a focus moving after a press outside reads.
   const drawn = useRef(state);
   drawn.current = state;
+  const close = useCallback(() => {
+    drawn.current = PANE_FLOAT.CLOSED;
+    onState(PANE_FLOAT.CLOSED);
+  }, [onState]);
   useEffect(() => {
     const from = was.current;
     was.current = state;
@@ -107,11 +118,12 @@ export function useHoverPane(
       const to = event.target;
       if (drawn.current !== PANE_FLOAT.OPEN || !(to instanceof Element)) return;
       if (held.contains(to) || to.closest(KEY_LAYERS) !== null) return;
-      focusAt(held)?.focus();
+      if (floatsNow(held)) focusAt(held)?.focus();
+      else close();
     };
     document.addEventListener("focusin", hold);
     return () => document.removeEventListener("focusin", hold);
-  }, [holdsKeyboard, state, focusAt, ref]);
+  }, [holdsKeyboard, state, focusAt, floatsNow, close, ref]);
   // Note that a floating pane need not hold the keyboard, a peek or one a
   // bare press opened leaving it in the work under it, so Escape is heard at
   // the window before the work's layers hear it. A key aimed into the pane
@@ -126,21 +138,27 @@ export function useHoverPane(
       if (target !== null && (held?.contains(target) || target.closest(KEY_LAYERS) !== null)) {
         return;
       }
+      // A pane docked again takes no Escape of the window's.
+      if (held !== null && !floatsNow(held)) {
+        close();
+        return;
+      }
       event.preventDefault();
-      onState(PANE_FLOAT.CLOSED);
+      close();
     };
     window.addEventListener("keydown", putAway, true);
     return () => window.removeEventListener("keydown", putAway, true);
-  }, [floating, onState]);
+  }, [floating, floatsNow, close, ref]);
   return {
     ref,
     floating,
     chosen:
       (go) =>
       (...args) => {
+        if (floating) close();
         go(...args);
-        if (floating) onState(PANE_FLOAT.CLOSED);
       },
+    close,
     onPress: () => {
       if (state === PANE_FLOAT.PEEK) onState(PANE_FLOAT.OPEN);
     },
@@ -155,9 +173,7 @@ export function useHoverPane(
       if (event.key !== "Escape" || event.defaultPrevented || !floating) return;
       // Note that the window's layered Escape stands down for a key already taken.
       event.preventDefault();
-      onState(PANE_FLOAT.CLOSED);
-      // The pane is away before it is drawn so, which the keyboard's hold reads.
-      drawn.current = PANE_FLOAT.CLOSED;
+      close();
       handBack.current?.focus();
       handBack.current = null;
     },

@@ -215,6 +215,11 @@ function floats(view: Element | null): boolean {
   return toggle !== null && toggle !== undefined && getComputedStyle(toggle).display !== "none";
 }
 
+/** Whether the pane's own view floats it now, a panel widened past its line having docked it. */
+function floatsAround(pane: HTMLElement): boolean {
+  return floats(pane.closest(".file-view"));
+}
+
 /**
  * The pane's room. Beside the tab it is open or shut as the panel holds it
  * (`usePaneSlide`); where the panel is too narrow for the tab and the pane
@@ -242,8 +247,9 @@ export function usePaneRoom(shown: {
     stays: OVER_TOGGLE,
     ref: beside.pane,
     holdsKeyboard: true,
+    floatsNow: floatsAround,
   });
-  const closeOver = useCallback(() => setOver(PANE_FLOAT.CLOSED), []);
+  const closeOver = pane.close;
   const peek = () => setOver((was) => (was === PANE_FLOAT.CLOSED ? PANE_FLOAT.PEEK : was));
   const unpeek = () => setOver((was) => (was === PANE_FLOAT.PEEK ? PANE_FLOAT.CLOSED : was));
   return {

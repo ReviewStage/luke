@@ -872,6 +872,41 @@ test("in a side panel too narrow for the list beside the screen, the list stands
 
   await tab.choose("dev server");
   assert.equal(drawn(), false, "a shell chosen takes the list down");
+  // Note that the elements are compared as a yes or no, because a failing comparison of two elements prints them whole.
+  assert.ok(
+    document.activeElement === tab.container.querySelector("textarea"),
+    "the screen holds the keyboard, the list's hold on it gone with the list",
+  );
+});
+
+// Note that the test is given longer than most, for the reason the one above is.
+test("a list opened over the screen and then given room beside it by a widened panel holds the keyboard no more, nor takes the window's Escape", {
+  timeout: 30_000,
+}, async () => {
+  const tab = await mount(true, true);
+  const narrow = layContainersAt({ "side-panel": 280 });
+  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
+  const toggle =
+    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
+    assert.fail("a toggle is drawn");
+  toggle.focus();
+  await act(async () => toggle.click());
+  await settle();
+  const list = tab.container.querySelector(".terminal-shells") ?? assert.fail("the list is drawn");
+  assert.ok(list.contains(document.activeElement), "the keyboard lands in the list");
+
+  narrow.remove();
+  layContainersAt({ "side-panel": 520 });
+  const screen =
+    tab.container.querySelector<HTMLTextAreaElement>("textarea") ??
+    assert.fail("the screen is drawn");
+  act(() => screen.focus());
+  assert.ok(document.activeElement === screen, "the keyboard stays where it was taken");
+  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    window.dispatchEvent(press);
+  });
+  assert.equal(press.defaultPrevented, false, "the window's own Escape is left to it");
 });
 
 // Note that the test is given longer than most, for the reason the one above is.
