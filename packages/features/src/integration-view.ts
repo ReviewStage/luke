@@ -55,12 +55,16 @@ export const integrationAccountParamsSchema = EffectSchema.Struct({
   connection: integrationConnectionNameSchema,
 });
 
+export type IntegrationAccountParams = typeof integrationAccountParamsSchema.Type;
+
 /** One account a rename names, and the label it is to carry, as the window names it to the host. */
 export const integrationRenameParamsSchema = EffectSchema.Struct({
   provider: integrationProviderSchema,
   connection: integrationConnectionNameSchema,
   label: EffectSchema.String.check(EffectSchema.isMaxLength(INTEGRATION_LABEL_MAX)),
 });
+
+export type IntegrationRenameParams = typeof integrationRenameParamsSchema.Type;
 
 /** Where every provider's connection stands, as the window hears it. */
 export const integrationStatusesViewSchema = EffectSchema.Union([

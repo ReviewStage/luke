@@ -168,14 +168,18 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
-  /** A browser sign-in to one provider begun on the service and opened on this Mac; whether it was opened, never the address. */
+  /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
   INTEGRATIONS_CONNECT: "integrations.connect",
-  /** The tools one provider's server offers the account's agents, read from the service now. */
+  /** The tools one account's server offers the account's agents, read from the service now. */
   INTEGRATIONS_TOOLS: "integrations.tools",
-  /** The account's sign-in to one provider under way ended on the service, revoking nothing; where it then stands. */
+  /** The account's sign-in to one account at a provider under way ended on the service, revoking nothing; where it then stands. */
   INTEGRATIONS_CANCEL: "integrations.cancel",
-  /** The account's connection to one provider ended on the service; where it then stands. */
+  /** The account's connection to one account at a provider ended on the service; where it then stands. */
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
+  /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
+  INTEGRATIONS_RENAME: "integrations.rename",
+  /** One account made its provider's primary on the service; the account as it then stands. */
+  INTEGRATIONS_PRIMARY: "integrations.primary",
   /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */

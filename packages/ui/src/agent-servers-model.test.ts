@@ -9,6 +9,7 @@ import {
   INTEGRATION_STATUS,
   INTEGRATION_TOOLS_PROBLEM,
   type IntegrationProvider,
+  integrationProviderFromWire,
 } from "@luke/features/integration-wire";
 import { test } from "vitest";
 import {
@@ -31,12 +32,15 @@ import {
 /** Slack's row, connected, with its server's tools read answering `read`. */
 function slackRow(read: IntegrationToolsView | undefined) {
   const rows = serverRows({
-    statusOf: (provider: IntegrationProvider) =>
-      provider === INTEGRATION_PROVIDER.SLACK
+    statusOf: (server: string) =>
+      server === INTEGRATION_PROVIDER.SLACK
         ? INTEGRATION_STATUS.CONNECTED
         : INTEGRATION_STATUS.DISCONNECTED,
-    healthOf: (provider) =>
-      connectionHealth(provider, provider === INTEGRATION_PROVIDER.SLACK ? read : undefined),
+    healthOf: (server) =>
+      connectionHealth(
+        integrationProviderFromWire(server) ?? INTEGRATION_PROVIDER.GITHUB,
+        server === INTEGRATION_PROVIDER.SLACK ? read : undefined,
+      ),
     signInOf: () => undefined,
     readFailed: false,
     disabled: [],
@@ -103,9 +107,17 @@ function rowsWhere(
   tools: IntegrationToolsView = { tools: [] },
 ) {
   return serverRows({
-    statusOf: (provider) => standing[provider] ?? INTEGRATION_STATUS.UNAVAILABLE,
-    healthOf: (provider) =>
-      connectionHealth(provider, provider === INTEGRATION_PROVIDER.LINEAR ? tools : { tools: [] }),
+    statusOf: (server) => {
+      const provider = integrationProviderFromWire(server);
+      return provider === undefined
+        ? undefined
+        : (standing[provider] ?? INTEGRATION_STATUS.UNAVAILABLE);
+    },
+    healthOf: (server) =>
+      connectionHealth(
+        integrationProviderFromWire(server) ?? INTEGRATION_PROVIDER.GITHUB,
+        server === INTEGRATION_PROVIDER.LINEAR ? tools : { tools: [] },
+      ),
     signInOf: () => undefined,
     readFailed: false,
     disabled: [],
