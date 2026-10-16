@@ -140,16 +140,25 @@ const PKCE_METHOD = "S256";
 const CI_READ_PERMISSIONS = { checks: "read", statuses: "read", actions: "read" } as const;
 
 /**
+ * What reads an issue. The App asks for issues write, but an installation
+ * made before it asked grants it only once its owner accepts, so an issue is
+ * read only on an installation that grants it, for the same reason as CI.
+ */
+const ISSUES_PERMISSION = "issues";
+
+/**
  * What the App asks of an installation token, by what the token is for:
  * metadata alone, which lists the installation's repositories; contents read
- * alone, which is what a checkout needs; contents and pull requests read,
- * which reads what a coding agent published; or contents and pull requests
- * write, which is what its push and pull request need. CI read stands beside
- * the last two where the installation grants it.
+ * alone, which is what a checkout needs; issues read alone, which reads an
+ * issue a link names; contents and pull requests read, which reads what a
+ * coding agent published; or contents and pull requests write, which is what
+ * its push and pull request need. CI read stands beside the last two where
+ * the installation grants it.
  */
 const INSTALLATION_TOKEN_PERMISSIONS = {
   LIST: { metadata: "read" },
   READ: { contents: "read" },
+  ISSUES: { issues: "read" },
   PULL_REQUESTS: { contents: "read", pull_requests: "read" },
   PULL_REQUESTS_READING_CI: { contents: "read", pull_requests: "read", ...CI_READ_PERMISSIONS },
   WRITE: { contents: "write", pull_requests: "write" },
@@ -170,6 +179,8 @@ export const GITHUB_HTTP_STATUS = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
+  /** What a repository with its issues turned off answers on its issues path. */
+  GONE: 410,
   UNPROCESSABLE: 422,
 } as const;
 
@@ -217,6 +228,8 @@ interface GitHubInstallation {
   readonly repositorySelection: GitHubRepositorySelection;
   /** Whether the installation grants the App every permission that reads a pull request's CI (`CI_READ_PERMISSIONS`). */
   readonly ciReadable: boolean;
+  /** Whether the installation grants the App issues, at read or write, which an issue's read is minted with. */
+  readonly issuesReadable: boolean;
   /** Whether the account it is on suspended it, which leaves it minting nothing until it is brought back. */
   readonly suspended: boolean;
 }
@@ -426,6 +439,19 @@ export interface GitHubAppService {
   >;
   /** The same mint with contents and pull requests read, and CI read where the installation grants it: what reads a coding agent's pull request. */
   readonly repositoryPullRequestToken: (
+    organizationId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubRepositoryToken>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * The same mint with issues read alone, which reads an issue a link names;
+   * none where the installation does not reach the repository, or does not
+   * grant the App issues.
+   */
+  readonly repositoryIssueToken: (
     organizationId: string,
     fullName: string,
   ) => Effect.Effect<
@@ -708,6 +734,7 @@ function installationOf(record: InstallationRecord): GitHubInstallation {
     accountType: ACCOUNT_TYPES.find((type) => type === record.account?.type),
     repositorySelection: record.repository_selection,
     ciReadable: Object.keys(CI_READ_PERMISSIONS).every((permission) => permission in granted),
+    issuesReadable: ISSUES_PERMISSION in granted,
     suspended: record.suspended_at !== undefined && record.suspended_at !== null,
   };
 }
@@ -1203,20 +1230,24 @@ function githubAppService(
   const reachableRepository = (organizationId: string, fullName: string) =>
     Effect.map(reach(organizationId, fullName), Result.getSuccess);
 
-  /** A token minted as the App for the one repository the workspace reaches, cut to the permissions chosen for its installation; none where it does not reach it. */
+  /**
+   * A token minted as the App for the one repository the workspace reaches,
+   * cut to the permissions chosen for its installation; none where it does
+   * not reach it, or where its installation grants none of what the token is
+   * for, since GitHub refuses a mint naming a permission not granted.
+   */
   const repositoryToken = (
     organizationId: string,
     fullName: string,
-    permissionsOn: (installation: GitHubInstallation) => InstallationTokenPermissions,
+    permissionsOn: (installation: GitHubInstallation) => InstallationTokenPermissions | undefined,
   ) =>
     Effect.gen(function* () {
       const reached = yield* reachableRepository(organizationId, fullName);
       if (Option.isNone(reached)) return Option.none();
       const { installation: on, repository } = reached.value;
-      const token = yield* mint(on.id, {
-        repositories: [repository.name],
-        permissions: permissionsOn(on),
-      });
+      const permissions = permissionsOn(on);
+      if (permissions === undefined) return Option.none();
+      const token = yield* mint(on.id, { repositories: [repository.name], permissions });
       return Option.some({ repository, token });
     });
 
@@ -1308,6 +1339,10 @@ function githubAppService(
         on.ciReadable
           ? INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS_READING_CI
           : INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS,
+      ),
+    repositoryIssueToken: (organizationId, fullName) =>
+      repositoryToken(organizationId, fullName, (on) =>
+        on.issuesReadable ? INSTALLATION_TOKEN_PERMISSIONS.ISSUES : undefined,
       ),
     repositoryCiReadable: (organizationId, fullName) =>
       Effect.map(

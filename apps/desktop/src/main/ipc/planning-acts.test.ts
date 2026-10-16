@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
@@ -79,6 +80,14 @@ const PULL_REQUEST = {
   state: PULL_REQUEST_STATE.OPEN,
 };
 const PULL_REQUEST_NONE = 43;
+/** The one issue the fake host's service holds; it holds none numbered `ISSUE_NONE`, and answers nothing for any other number. */
+const ISSUE = {
+  number: 7,
+  title: "Invitations expire too soon",
+  url: "https://github.com/acme/relay/issues/7",
+  state: ISSUE_STATE.CLOSED,
+};
+const ISSUE_NONE = 8;
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -217,6 +226,13 @@ function fixture() {
           asked.push(`pullRequest:${params.repository}:${params.number}`);
           if (params.number === PULL_REQUEST.number) return { pullRequest: PULL_REQUEST };
           if (params.number === PULL_REQUEST_NONE) return { pullRequest: null };
+          return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+        }),
+      tasksIssue: (params) =>
+        Effect.sync(() => {
+          asked.push(`issue:${params.repository}:${params.number}`);
+          if (params.number === ISSUE.number) return { issue: ISSUE };
+          if (params.number === ISSUE_NONE) return { issue: null };
           return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
         }),
       tasksRevisions: (params) =>
@@ -873,6 +889,38 @@ it.effect(
         `pullRequest:acme/relay:${PULL_REQUEST.number}`,
         `pullRequest:acme/relay:${PULL_REQUEST_NONE}`,
         "pullRequest:acme/relay:44",
+      ]);
+    }),
+);
+
+it.effect(
+  "an issue is answered to a panel as the host read it, or as none, a service that did not answer is refused in its kind's own words, and the voice window is refused before the host is asked",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const ask = (number: number) =>
+        ({
+          kind: ACT_KIND.TASKS_ISSUE,
+          payload: { workspaceId: ACME.id, repository: "acme/relay", number },
+        }) as const;
+
+      const fromVoice = yield* f.router.performAct(ask(ISSUE.number), VOICE);
+      const read = yield* f.router.performAct(ask(ISSUE.number), PANEL);
+      const none = yield* f.router.performAct(ask(ISSUE_NONE), PANEL);
+      const unanswered = yield* f.router.performAct(ask(9), PANEL);
+
+      const refused = {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.TASKS_ISSUE].refusal,
+      };
+      assert.deepEqual(fromVoice, refused);
+      assert.deepEqual(read, { status: ACT_OUTCOME_STATUS.DONE, value: ISSUE });
+      assert.deepEqual(none, { status: ACT_OUTCOME_STATUS.DONE, value: null });
+      assert.deepEqual(unanswered, refused);
+      assert.deepEqual(f.asked, [
+        `issue:acme/relay:${ISSUE.number}`,
+        `issue:acme/relay:${ISSUE_NONE}`,
+        "issue:acme/relay:9",
       ]);
     }),
 );

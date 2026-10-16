@@ -953,8 +953,9 @@ only when you press Send.
   command's output. Our service also reads from GitHub, through
   the workspace's installation and storing none of it, a file or folder you
   open, a pull request's changed files for the Changes tab, a repository's
-  skills, and the number, title, link, and state of a pull request a plan, a
-  reply, or an Inbox item links to, which the app shows on the link.
+  skills, and the number, title, link, and state of a pull request or an
+  issue a plan, a reply, or an Inbox item links to, which the app shows on
+  the link; an issue is read on a token cut to reading issues alone.
 - Vercel Connect and Linear, if you connect Linear: Vercel Connect keeps
   Linear's token, and our service sends each Linear call, with its input, to
   Linear's MCP server, which keeps it under Linear's own policy.

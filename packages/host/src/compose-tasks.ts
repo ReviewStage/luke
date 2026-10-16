@@ -37,6 +37,7 @@ import {
   type TasksFileAnswer,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
+  type TasksIssueAnswer,
   type TasksLinearIssuesAnswer,
   type TasksMoveAnswer,
   type TasksPageAnswer,
@@ -63,6 +64,7 @@ import {
   tasksBoardSaveParamsSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
+  tasksIssueParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksMessagesParamsSchema,
   tasksMoveParamsSchema,
@@ -291,6 +293,7 @@ export type TasksClient = Pick<
   | "readRepositoryTree"
   | "readRepositorySkills"
   | "readRepositoryPullRequest"
+  | "readRepositoryIssue"
   | "readRevisions"
   | "readRevision"
   | "readPages"
@@ -1239,6 +1242,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           FetchHttpClient.layer,
         );
         return carried<TasksPullRequestAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
+      }),
+    // An issue is answered as a pull request is: to the link that asked, and held nowhere.
+    [GATEWAY_METHOD.TASKS_ISSUE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksIssueParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid(
+            "reading an issue names a workspace, its repository, and the issue's number",
+          );
+        }
+        if (!gate()) {
+          return carried<TasksIssueAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        const { number, ...place } = read.success;
+        const answer = yield* Effect.provide(
+          client.readRepositoryIssue(place, number),
+          FetchHttpClient.layer,
+        );
+        return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps

@@ -46,6 +46,7 @@ import { Tooltip } from "../tooltip";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
+import { IssueMark } from "./issue-mark";
 import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
@@ -67,9 +68,10 @@ import { useOpenLink } from "./use-open-link";
  * place can open none. An MCP server or one of its tools opens nothing
  * either, wearing its server's mark; a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
- * browser, its card saying its address. A Linear issue's chip and a pull
- * request's say the state it stands in after their name, a pull request's
- * wearing its mark for it, and a bare one is called by its key and title, as
+ * browser, its card saying its address. A Linear issue's chip, a pull
+ * request's, and a GitHub issue's say the state it stands in after their
+ * name, a pull request's and a GitHub issue's wearing GitHub's mark for it,
+ * and a bare one is called by its key and title, as
  * the workspace's own Linear or GitHub App answers them on the service
  * (`use-link-standing.ts`). A page an agent showed on a plan
  * wears its tab's glyph, and one of a plan's coding agents its harness's
@@ -221,6 +223,8 @@ function MentionGlyph({
       <PullRequestMark pullRequest={{ ...standing.pullRequest, checks: CHECK_SUMMARY.NONE }} />
     );
   }
+  // And a GitHub issue its own, as GitHub draws it.
+  if (standing?.issue !== undefined) return <IssueMark issue={standing.issue} />;
   switch (mention.kind) {
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
