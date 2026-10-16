@@ -1,5 +1,6 @@
 {
   "name": "luke",
+  "version": "0.16.0",
   "private": true,
   "description": "Luke is a macOS app for planning a feature by voice before you hand it to a coding agent",
   "packageManager": "pnpm@10.34.5",

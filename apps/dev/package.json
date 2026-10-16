@@ -1,5 +1,6 @@
 {
   "name": "@luke/coder",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The coding agent: a coding agent's run in a sandbox, as an eve app on the web deployment",
