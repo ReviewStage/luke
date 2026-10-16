@@ -54,9 +54,9 @@ import {
   workspaceChat,
 } from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
-import { plan } from "../schemas/plan.js";
+import { task as plan } from "../schemas/plan.js";
 import { InstantColumnSchema } from "./columns.js";
-import { isWorkspaceMember, planReachableBy } from "./workspace-store.js";
+import { isWorkspaceMember, taskReachableBy } from "./workspace-store.js";
 
 /**
  * chat-store.ts -- a workspace's chat as the store keeps it: its members and its channels.
@@ -435,7 +435,7 @@ const findReachablePlan = SqlSchema.findOneOption({
       db
         .select({ organizationId: plan.organizationId, name: plan.name })
         .from(plan)
-        .where(and(eq(plan.id, planId), planReachableBy(userId))),
+        .where(and(eq(plan.id, planId), taskReachableBy(userId))),
     ),
 });
 
@@ -720,7 +720,7 @@ const findAgentPlan = SqlSchema.findOneOption({
   execute: (agentId) =>
     Database.use((db) =>
       db
-        .select({ planId: codingAgent.planId })
+        .select({ planId: codingAgent.taskId })
         .from(codingAgent)
         .where(eq(codingAgent.id, agentId)),
     ),
@@ -2562,7 +2562,7 @@ const findPlanMembers = SqlSchema.findAll({
                 queryBuilder
                   .select({ id: codingAgent.id })
                   .from(codingAgent)
-                  .where(eq(codingAgent.planId, planId)),
+                  .where(eq(codingAgent.taskId, planId)),
               ),
             ),
           ),

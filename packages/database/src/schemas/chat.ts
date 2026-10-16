@@ -27,7 +27,7 @@ import {
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { plan } from "./plan.js";
+import { task as plan } from "./plan.js";
 
 /** A fixed value spelled into a constraint or an index's condition, which take no parameter. */
 const literal = (value: string) => sql.raw(`'${value}'`);

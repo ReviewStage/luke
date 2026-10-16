@@ -17,7 +17,8 @@ import {
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { chatNoticeKey } from "@luke/database/models/ids";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
-import type { StoreWriter } from "@luke/database/models/writer";
+import type { LineSender, StoreWriter } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   CHANNEL_KIND,
   CHAT_BLOCK,
@@ -156,7 +157,7 @@ interface ChatAddress {
 /** The refusals of a steer that mean the agent is away for now: archived, or on an archived plan, either of which can be undone. */
 const GONE_REFUSALS: ReadonlySet<string> = new Set([
   HOSTED_REFUSAL.NOT_FOUND.error,
-  HOSTED_REFUSAL.PLAN_ARCHIVED.error,
+  HOSTED_REFUSAL.TASK_ARCHIVED.error,
 ]);
 
 /** The message author each kind of member speaks as, on the notice's row. */
@@ -165,6 +166,15 @@ const AUTHOR_OF_KIND = {
   [MEMBER_KIND.PLANNER]: MESSAGE_AUTHOR.PLANNER,
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
+
+/** What the row says sent a notice's line: the poster, as the agent, Luke, or the member they are. */
+function senderOf(from: ChatMemberRow): LineSender {
+  if (from.kind === MEMBER_KIND.PLANNER) return { kind: MESSAGE_SENDER.LUKE };
+  if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
+    return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId };
+  }
+  return { kind: MESSAGE_SENDER.AGENT, name: from.handle };
+}
 
 /** One block as a notice's line reads it: words as written, anything else named by what it is. */
 function blockWords(block: ChatReadBlock): string {
@@ -267,6 +277,7 @@ function tellAgent(
       {
         text: notice.text,
         clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
+        sender: senderOf(notice.from),
         metadata: {
           author: AUTHOR_OF_KIND[notice.from.kind],
           channel: MESSAGE_CHANNEL.CHAT,
@@ -357,7 +368,7 @@ const HOSTED_OF_CHAT_REFUSAL = {
   [CHAT_REFUSAL.NAME_TAKEN]: HOSTED_REFUSAL.INVALID_REQUEST,
   [CHAT_REFUSAL.TOO_MANY_TOPICS]: HOSTED_REFUSAL.INVALID_REQUEST,
   [CHAT_REFUSAL.AUTHOR_LEFT]: HOSTED_REFUSAL.AGENT_RETIRED,
-  [CHAT_REFUSAL.CHANNEL_ARCHIVED]: HOSTED_REFUSAL.PLAN_ARCHIVED,
+  [CHAT_REFUSAL.CHANNEL_ARCHIVED]: HOSTED_REFUSAL.TASK_ARCHIVED,
   [CHAT_REFUSAL.KEY_TAKEN]: HOSTED_REFUSAL.INVALID_REQUEST,
   [CHAT_REFUSAL.ASK_ELSEWHERE]: HOSTED_REFUSAL.INVALID_REQUEST,
 } as const satisfies Record<ChatRefusal, HostedRefusal>;

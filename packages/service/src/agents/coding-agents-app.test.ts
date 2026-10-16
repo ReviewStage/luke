@@ -2397,13 +2397,13 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
    */
   const openChat = (eve = fakeEve(), secondByTeammate = false) =>
     Effect.gen(function* () {
-      const opened = yield* openPlan({ eve });
-      const workspace = opened.plan.workspaceId;
+      const opened = yield* openTask({ eve });
+      const workspace = opened.task.workspaceId;
       if (secondByTeammate) yield* joinWorkspace(workspace, opened.other);
       const agents = [];
       for (const at of [0, 1]) {
         const starter = at === 1 && secondByTeammate ? opened.other : opened.owner;
-        const started = yield* startedAgent(starter, opened.plan.id, opened.ask);
+        const started = yield* startedAgent(starter, opened.task.id, opened.ask);
         const sessionId = eve.opened[at]?.sessionId ?? "";
         assert.equal(
           yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
@@ -2425,7 +2425,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           userId: opened.owner,
         }),
       );
-      const channel = Option.getOrThrow(yield* ensurePlanChannel(opened.owner, opened.plan.id));
+      const channel = Option.getOrThrow(yield* ensurePlanChannel(opened.owner, opened.task.id));
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
       const telling: ChatTelling = {
         eveFor: (starter) => eve.eve(`Bearer ${starter}`),

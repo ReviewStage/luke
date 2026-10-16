@@ -54,7 +54,7 @@ import {
   withdrawAnswer,
 } from "../chat-store.js";
 import { createCodingAgent } from "../coding-agent-store.js";
-import { createPlan, updatePlan } from "../plan-store.js";
+import { createTask, updateTask } from "../task-store.js";
 
 /**
  * A workspace's chat members and channels, over a real dialect: a member
@@ -98,21 +98,21 @@ const joinWorkspace = (organizationId: string, userId: string, role = "member") 
       .values({ id: randomUUID(), organizationId, userId, role, createdAt: now });
   });
 
-const openPlan = (userId: string, organizationId: string, name = "Billing export") =>
+const openTask = (userId: string, organizationId: string, name = "Billing export") =>
   Effect.map(
-    createPlan(userId, { organizationId, name, repository: "acme/api" }),
+    createTask(userId, { organizationId, name, repository: "acme/api" }),
     (made) => made.id,
   );
 
 const openAgent = (userId: string, planId: string) =>
   Effect.gen(function* () {
     const started = yield* createCodingAgent(userId, {
-      planId,
+      taskId: planId,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       planSnapshot: "# Billing export\n",
-      task: null,
+      prompt: null,
       repository: "acme/api",
     });
     return Option.getOrThrow(started).agent.id;
@@ -132,8 +132,8 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         for (const teammate of [namesake, luke, numbered, nameless]) {
           yield* joinWorkspace(workspace, teammate);
         }
-        const plan = yield* openPlan(owner, workspace);
-        const otherPlan = yield* openPlan(owner, workspace, "Invites");
+        const plan = yield* openTask(owner, workspace);
+        const otherPlan = yield* openTask(owner, workspace, "Invites");
         const first = yield* openAgent(owner, plan);
         const second = yield* openAgent(owner, plan);
         const mint = (subject: Parameters<typeof ensureMember>[2]) =>
@@ -183,10 +183,10 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount();
         const workspace = yield* openWorkspace(owner);
-        const billing = yield* openPlan(owner, workspace, "Billing export");
-        const again = yield* openPlan(owner, workspace, "Billing  Export");
-        const general = yield* openPlan(owner, workspace, "General");
-        const unnamed = yield* openPlan(owner, workspace, "✨");
+        const billing = yield* openTask(owner, workspace, "Billing export");
+        const again = yield* openTask(owner, workspace, "Billing  Export");
+        const general = yield* openTask(owner, workspace, "General");
+        const unnamed = yield* openTask(owner, workspace, "✨");
 
         const channel = (planId: string) =>
           Effect.map(ensurePlanChannel(owner, planId), Option.getOrThrow);
@@ -218,7 +218,7 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         const workspace = yield* openWorkspace(owner);
         const elsewhere = yield* openWorkspace(owner);
         yield* joinWorkspace(workspace, teammate);
-        const plan = yield* openPlan(owner, workspace);
+        const plan = yield* openTask(owner, workspace);
         const agent = Option.getOrThrow(
           yield* ensureMember(owner, workspace, {
             kind: MEMBER_KIND.AGENT,
@@ -279,7 +279,7 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         const stranger = yield* openAccount();
         const workspace = yield* openWorkspace(owner);
         const second = yield* openWorkspace(stranger);
-        const plan = yield* openPlan(owner, workspace);
+        const plan = yield* openTask(owner, workspace);
         const agentId = yield* openAgent(owner, plan);
         const person = Option.getOrThrow(
           yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId: owner }),
@@ -316,7 +316,7 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
     Effect.gen(function* () {
       const owner = yield* openAccount();
       const workspace = yield* openWorkspace(owner);
-      const plan = yield* openPlan(owner, workspace);
+      const plan = yield* openTask(owner, workspace);
       const agent = Option.getOrThrow(
         yield* ensureMember(owner, workspace, {
           kind: MEMBER_KIND.AGENT,
@@ -389,7 +389,7 @@ const openRoom = Effect.gen(function* () {
   const teammate = yield* openAccount("Grace Hopper");
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
-  const plan = yield* openPlan(owner, workspace);
+  const plan = yield* openTask(owner, workspace);
   const mint = (subject: Parameters<typeof ensureMember>[2]) =>
     Effect.map(ensureMember(owner, workspace, subject), Option.getOrThrow);
   const ada = yield* mint({ kind: MEMBER_KIND.HUMAN, userId: owner });
@@ -747,7 +747,7 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
         const room = yield* openRoom;
         const db = yield* Database;
         const agentId = room.first.agentId ?? "";
-        yield* db.update(codingAgent).set({ planId: null }).where(eq(codingAgent.id, agentId));
+        yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, agentId));
         const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
         const sent = Result.getOrThrow(
           yield* room.post(room.first, "@luke, anyone?", { channelId: general.id }),
@@ -1036,7 +1036,7 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
           waiting.map((each) => each.message.id),
         );
 
-        yield* updatePlan(room.owner, room.plan, { archived: true });
+        yield* updateTask(room.owner, room.plan, { archived: true });
         assert.deepEqual(
           (yield* waitingOn(room.owner)).map((each) => each.message.id),
           [dmAsk.message.id],
@@ -1406,7 +1406,7 @@ it.layer(getTestDB())("a plan's chat moving with the plan", (it) => {
         const stays = yield* room.posted(room.first, "Between us.", { channelId: dm.id });
         const destination = yield* openWorkspace(room.owner);
 
-        yield* updatePlan(room.owner, room.plan, { organizationId: destination });
+        yield* updateTask(room.owner, room.plan, { organizationId: destination });
 
         const there = Option.getOrThrow(
           yield* ensureMember(room.owner, destination, {
@@ -1579,7 +1579,7 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         const elsewhere = Option.getOrThrow(
           yield* ensureMember(room.owner, room.workspace, {
             kind: MEMBER_KIND.AGENT,
-            agentId: yield* openAgent(room.owner, yield* openPlan(room.owner, room.workspace)),
+            agentId: yield* openAgent(room.owner, yield* openTask(room.owner, room.workspace)),
           }),
         );
         const notice = (channelId: string, seq: number) =>
@@ -1587,7 +1587,7 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         const told = yield* room.posted(room.first, `@${elsewhere.handle} a look?`);
         assert.equal(yield* notice(room.channel.id, told.seq), true);
 
-        yield* updatePlan(room.owner, room.plan, {
+        yield* updateTask(room.owner, room.plan, {
           organizationId: yield* openWorkspace(room.owner),
         });
 

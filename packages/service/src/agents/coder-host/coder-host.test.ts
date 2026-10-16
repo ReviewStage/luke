@@ -14,7 +14,7 @@ import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { conversations, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -766,7 +766,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         } as const;
         const written = yield* writer.writeAwaitingLine(
           target,
-          { text: CHAT_NOTICE, clientKey: "chat-notice-41", metadata: notice },
+          {
+            text: CHAT_NOTICE,
+            clientKey: "chat-notice-41",
+            sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+            metadata: notice,
+          },
           Effect.succeed(true),
         );
         assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
