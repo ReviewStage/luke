@@ -1,11 +1,13 @@
 import { Database } from "@luke/database/core/query";
 import { roleOf, type WorkspaceStoreEffect } from "@luke/database/models/workspace-store";
 import { member, user } from "@luke/database/schemas/auth";
+import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { plan } from "@luke/database/schemas/plan";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
+import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import type { FormerMember, WorkspaceMember, WorkspaceRole } from "@luke/features/workspace-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { and, asc, eq, inArray, isNotNull, notInArray, or } from "drizzle-orm";
@@ -99,6 +101,19 @@ const findFormer = SqlSchema.findAll({
                   .select({ id: codingAgent.userId })
                   .from(codingAgent)
                   .where(eq(codingAgent.organizationId, organizationId)),
+              ),
+              // Note that only the workspace's own automations count, since a personal one is read by its maker alone.
+              inArray(
+                user.id,
+                db
+                  .select({ id: automation.userId })
+                  .from(automation)
+                  .where(
+                    and(
+                      eq(automation.organizationId, organizationId),
+                      eq(automation.scope, AUTOMATION_SCOPE.WORKSPACE),
+                    ),
+                  ),
               ),
               inArray(
                 user.id,
