@@ -121,8 +121,9 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     }
     // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row.
     if (shown === INBOX_COLUMNS.ITEM) return;
-    const rows = held.querySelectorAll<HTMLElement>(".inbox-plans [data-item-id]");
-    [...rows].find((row) => row.dataset.itemId === chosen)?.focus();
+    // An item chosen that the list holds no row for, as a link's missing item, hands the keyboard to the first row instead.
+    const rows = [...held.querySelectorAll<HTMLElement>(".inbox-plans [data-item-id]")];
+    (rows.find((row) => row.dataset.itemId === chosen) ?? rows[0])?.focus();
   }, [shown, chosen]);
 
   const back =

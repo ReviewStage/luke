@@ -152,6 +152,8 @@ let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 let setPlanless: (planless: readonly AppInboxPlanlessItem[]) => void = () => undefined;
 /** Whether an agent's own inbox read answers that it could not be read. */
 let agentReadFails = false;
+/** Whether a read of a plan's agents is held open, never answering. */
+let agentListHeld = false;
 /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
 let holdAgentRead: ((respond: () => void) => void) | undefined;
 /** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
@@ -171,6 +173,10 @@ let agentReads: string[] = [];
 /** The workspace the Inbox lists, and its automations as a read of them answers. */
 let listedWorkspace: Workspace | undefined;
 let automations: readonly AutomationSummary[] = [];
+/** What the window copied, in order. */
+let copied: string[] = [];
+/** Each agent with no plan as a read of its own page answers it. */
+let pageAgents = new Map<string, CodingAgentSummary>();
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -184,9 +190,12 @@ beforeEach(() => {
   agentInboxes = new Map();
   agentReads = [];
   agentReadFails = false;
+  agentListHeld = false;
   holdAgentRead = undefined;
   listedWorkspace = undefined;
   automations = [];
+  copied = [];
+  pageAgents = new Map();
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -195,7 +204,37 @@ beforeEach(() => {
       act: (request: Act) => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: listedAgents });
+        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+          return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+          const agent = pageAgents.get(request.payload.agentId);
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value:
+              agent === undefined
+                ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
+                : {
+                    agent: {
+                      id: agent.id,
+                      planId: null,
+                      model: agent.model,
+                      effort: agent.effort,
+                      title: agent.title,
+                      createdAt: agent.createdAt,
+                      status: agent.status,
+                      turnId: null,
+                      automationId: null,
+                      workspaceId: "workspace-acme",
+                      repository: "acme/relay",
+                    },
+                  },
+          });
+        }
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
+          copied.push(request.payload.words);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
         }
@@ -1625,4 +1664,209 @@ test("an untitled agent an automation started goes by its automation's name in t
   const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
   assert.ok(mark, "the planless agent's row hangs its card");
   assert.match(hoveredCard(mark, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
+});
+
+test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
+  listedWorkspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const { page } = mount();
+  await settle();
+  act(() => {
+    rowNamed(page, "Alert at 80%?").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  });
+  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === "Copy link",
+  );
+  assert.ok(item, "the row's menu offers Copy link");
+  await act(async () => item.click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${BILLING.id}/inbox/${THRESHOLD.id}`]);
+});
+
+test("an item a link names that no read holds, of a task the reader cannot read, is not found in its pane, and no other item is chosen in its place", async () => {
+  const { page } = mount();
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      planId: "0f0e0d0c-0000-4000-8000-00000000dead",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(
+    page.querySelector(".inbox-view-items")?.textContent ?? "",
+    /Not foundThis Inbox item doesn't exist, or you don't have access to it\./u,
+  );
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("a link to a settled item of an agent with no plan, none of whose items waits any more, lists the agent by its own read and shows the item", async () => {
+  const settled = { ...BUMP, status: INBOX_STATUS.ANSWERED };
+  agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
+  pageAgents = new Map([[STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }]]);
+  const { page } = mount();
+  await settle();
+  act(() => chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /Not found/u);
+  assert.equal(
+    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    "Bump the Node image?",
+  );
+});
+
+test("an item a link names is not found though another task's read failed, and in a narrow Inbox the notice stands alone, not the list, with a way back to it", async () => {
+  startRead = (planId) =>
+    planId === BILLING.id
+      ? Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        })
+      : undefined;
+  const { page } = mount();
+  await settle();
+  layOut(page, 600);
+  act(() =>
+    chooseFromOutside({
+      planId: "0f0e0d0c-0000-4000-8000-00000000dead",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items");
+
+  assert.match(pane?.textContent ?? "", /Not found/u);
+  assert.equal(pane?.hidden, false);
+  const back = [...(pane?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Back to Inbox",
+  );
+  assert.ok(back, "the notice leads back to the list");
+  act(() => back.click());
+  assert.equal(page.querySelector<HTMLElement>(".inbox-view-items")?.hidden, true);
+  assert.ok(
+    document.activeElement instanceof HTMLElement &&
+      document.activeElement.closest(".inbox-plans") !== null,
+    "the keyboard lands on the list, not the hidden notice",
+  );
+});
+
+test("an item a link names under an agent that is not there, deleted or another's, is not found once its page's read says so, and no other item is chosen", async () => {
+  const { page } = mount();
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      agentId: "0f0e0d0c-0000-4000-8000-0000000a9e47",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("an item a link names under a task with no agent and nothing in its Inbox is not found, and no other task's item is chosen", async () => {
+  const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11e", name: "Quiet task" };
+  listedAgents = [];
+  const { page } = mount();
+  await settle();
+  act(() => setPlans([BILLING, INVITES, quiet]));
+  act(() =>
+    chooseFromOutside({
+      planId: quiet.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("an item a link names that its task's Inbox read does not hold is not found, though the task's agents are still being read", async () => {
+  agentListHeld = true;
+  const { page } = mount();
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      planId: BILLING.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("a link to an item newer than its task's last read waits for the read of it, saying no Not found, and then shows it", async () => {
+  const { page } = mount();
+  await settle();
+  const posted = item("a1b2c3d4-0000-4000-8000-000000000005", "Page on-call too?", 7_000);
+  let land: () => void = () => undefined;
+  startRead = (planId) =>
+    planId === INVITES.id
+      ? new Promise((resolve) => {
+          land = () =>
+            resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { items: [EXPIRY, posted], cursor: "2" },
+            });
+        })
+      : undefined;
+  act(() =>
+    setHolding([
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { planId: INVITES.id, items: 2, updatedAt: 7_000 },
+    ]),
+  );
+  act(() => chooseFromOutside({ planId: INVITES.id, itemId: posted.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  land();
+  await settle();
+
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.equal(
+    page.querySelector('.inbox-plans [aria-current="page"] .sidebar-plan-name')?.textContent,
+    "Page on-call too?",
+  );
+});
+
+test("an item a link names under a task whose own read fails is kept asked for, and no other task's item is chosen in its place", async () => {
+  const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11f", name: "Quiet task" };
+  startRead = (planId) =>
+    planId === quiet.id
+      ? Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        })
+      : undefined;
+  const { page } = mount();
+  await settle();
+  act(() => setPlans([BILLING, INVITES, quiet]));
+  act(() =>
+    chooseFromOutside({
+      planId: quiet.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
 });
