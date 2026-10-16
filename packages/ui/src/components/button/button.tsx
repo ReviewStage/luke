@@ -1,0 +1,136 @@
+import type { MouseEvent, ReactNode, Ref } from "react";
+
+/**
+ * button.tsx -- the one button every app presses: a labelled Button and a glyph-alone IconButton, in one of five looks.
+ *
+ * A look says what a press does, not where the button stands: `quiet` for
+ * an ordinary act among others (a toolbar's), `outline` for the act a row or
+ * a card offers at rest, `primary` for the act a place exists for, `danger`
+ * for one that destroys, and `danger-outline` for a destructive act that is
+ * not the place's own. Each is one control's height, corner, and glyph in
+ * the profile it is drawn at, and owns its insides: it takes no class or
+ * style, and its outer spacing is its container's.
+ *
+ * A button unavailable is out of the tab order, unless it is
+ * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
+ * why, and refuses its press instead. A busy button keeps its width, its
+ * words standing hidden under a turning ring, refuses its press, and is
+ * named by `busyLabel` ("Saving") for as long as the ring stands. The ring
+ * holds still on `--loop-motion`, as every endless loop does under reduced
+ * motion and a capture run. The keyboard's ring is the app's own, drawn by
+ * its reset for every control alike.
+ */
+
+/** What a press does, which is what a button looks like. */
+export const BUTTON_VARIANT = {
+  QUIET: "quiet",
+  OUTLINE: "outline",
+  PRIMARY: "primary",
+  DANGER: "danger",
+  DANGER_OUTLINE: "danger-outline",
+} as const;
+
+export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];
+
+/** What a press of a button in a form does: act on its own, or submit the form. */
+export const BUTTON_TYPE = {
+  BUTTON: "button",
+  SUBMIT: "submit",
+} as const;
+
+export type ButtonType = (typeof BUTTON_TYPE)[keyof typeof BUTTON_TYPE];
+
+/** What every button takes, labelled or not. */
+interface ButtonBase {
+  variant?: ButtonVariant;
+  type?: ButtonType;
+  onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  disabled?: boolean | undefined;
+  /** Whether an unavailable button stays in the tab order, so a hint can say why it is unavailable. */
+  focusableWhenDisabled?: boolean | undefined;
+  /** Whether its press is out: it refuses another and shows a ring in place of its words. */
+  busy?: boolean | undefined;
+  /** What it is named while busy, the act in progress ("Saving"). */
+  busyLabel?: string | undefined;
+  id?: string | undefined;
+  ref?: Ref<HTMLButtonElement> | undefined;
+  /** The id of the words that say more of what it does. */
+  "aria-describedby"?: string | undefined;
+  /** The menu or popover it opens, and whether that stands open. */
+  "aria-haspopup"?: "menu" | "listbox" | "dialog" | undefined;
+  "aria-expanded"?: boolean | undefined;
+  "aria-controls"?: string | undefined;
+}
+
+/** The attributes and handler a button carries for its state, shared by both kinds. */
+function stateProps(props: ButtonBase, name: string | undefined) {
+  const refusing =
+    props.busy === true || (props.disabled === true && props.focusableWhenDisabled === true);
+  const busyName = props.busy === true ? props.busyLabel : undefined;
+  return {
+    type: props.type ?? BUTTON_TYPE.BUTTON,
+    id: props.id,
+    ref: props.ref,
+    disabled: props.disabled === true && props.focusableWhenDisabled !== true,
+    "aria-disabled": refusing ? true : undefined,
+    "aria-busy": props.busy === true ? true : undefined,
+    "aria-label": busyName ?? name,
+    "aria-describedby": props["aria-describedby"],
+    "aria-haspopup": props["aria-haspopup"],
+    "aria-expanded": props["aria-expanded"],
+    "aria-controls": props["aria-controls"],
+    "data-variant": props.variant ?? BUTTON_VARIANT.QUIET,
+    onClick: (event: MouseEvent<HTMLButtonElement>) => {
+      if (refusing) {
+        event.preventDefault();
+        return;
+      }
+      props.onClick?.(event);
+    },
+  };
+}
+
+/** A labelled button: its words, after its glyph where it has one. */
+export function Button({
+  icon,
+  children,
+  ...props
+}: ButtonBase & {
+  /** The glyph before its words. */
+  icon?: ReactNode;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <button className="luke-button" {...stateProps(props, undefined)}>
+      <span className="luke-button-face">
+        {icon}
+        <span className="luke-button-words">{children}</span>
+      </span>
+    </button>
+  );
+}
+
+/** A glyph alone in a square, named by `label` since it shows no words; `pressed` makes it a toggle. */
+export function IconButton({
+  icon,
+  label,
+  pressed,
+  ...props
+}: ButtonBase & {
+  icon: ReactNode;
+  /** Its accessible name, which a sighted reader has from the glyph. */
+  label: string;
+  /** Whether a toggle stands on, which it is drawn and announced as. */
+  pressed?: boolean | undefined;
+}): React.JSX.Element {
+  return (
+    <button
+      className="luke-button"
+      data-icon-only="true"
+      aria-pressed={pressed}
+      {...stateProps(props, label)}
+    >
+      <span className="luke-button-face">{icon}</span>
+    </button>
+  );
+}
