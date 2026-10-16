@@ -99,6 +99,10 @@
                     "enum": [
                       true
                     ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "maxLength": 200
                   }
                 },
                 "required": [
