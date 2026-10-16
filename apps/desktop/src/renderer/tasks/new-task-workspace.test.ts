@@ -145,7 +145,7 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
   assert.match(title() ?? "", /Acme$/u, "the title says the workspace chosen");
 
   const repositoryChip =
-    document.querySelector<HTMLButtonElement>(".repository-chip .chip") ??
+    document.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
     assert.fail("the repository chip stands");
   act(() => repositoryChip.click());
   await settle();
@@ -208,7 +208,7 @@ async function openNewTask(workspaceId: string, preset?: string) {
   );
   await settle();
   const repositoryChip = () =>
-    document.querySelector<HTMLButtonElement>(".repository-chip .chip") ??
+    document.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
     assert.fail("the repository chip stands");
   const create = async (words: string) => {
     const name = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
@@ -263,7 +263,7 @@ test("New task's workspace and repository chips are the app's bordered picker, e
   const chips = [
     document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
       assert.fail("the title's workspace is a chip"),
-    document.querySelector<HTMLButtonElement>(".repository-chip .chip") ??
+    document.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
       assert.fail("the repository chip stands"),
   ];
 

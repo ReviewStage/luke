@@ -1711,7 +1711,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     ),
   );
   await settle();
-  act(() => chip.querySelector<HTMLButtonElement>(".chip")?.click());
+  act(() => chip.querySelector<HTMLButtonElement>(".luke-chip")?.click());
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
