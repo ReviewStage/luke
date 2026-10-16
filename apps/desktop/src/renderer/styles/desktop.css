@@ -2878,11 +2878,10 @@ ul.actor-stack {
 
 /* The press gives way too while it shares the line, its words cut short at
    the end rather than the press pushed out of the column, and never takes
-   more than half the line; the whole of them stays its text, which a
-   reader hears. */
+   more than half the line, which its presses' box holds it to; the whole of
+   them stays its text, which a reader hears. */
 .plan-banner-action {
   min-width: 0;
-  max-width: 50%;
   flex: 0 1 auto;
   height: 22px;
   overflow: hidden;
