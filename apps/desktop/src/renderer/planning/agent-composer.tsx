@@ -45,6 +45,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { useMentionBox, usePlanMentions } from "./plan-mentions";
+import { ComposerReply } from "./reply-to-selection";
 import { useRepositoryRemedy } from "./repository-remedy";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
@@ -101,6 +102,12 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * cannot come says why under the card while the rest still come
  * (`attached-files.ts`). A message is words, files, or both, as the wire
  * takes it (`hasWordsOrFiles`), so files alone send too.
+ *
+ * Words selected in one of the agent's messages and answered with Reply
+ * stand quoted at the card's top, over the files, with their way off, and
+ * the box takes the caret to write the answer under them; the message sent
+ * opens on them as a quote (`reply-to-selection.tsx`). A reply is no
+ * message of its own, so it goes only with words or files.
  *
  * Words can be spoken into the box as well: the microphone left of the
  * round button records in place of the foot's controls until ✓ or Enter sends the clip
@@ -362,6 +369,14 @@ export function AgentComposer({
           });
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
+  // A reply laid over the box hands it the caret, for the answer written under it.
+  const replied = useRef(composer.reply);
+  useEffect(() => {
+    if (composer.reply === replied.current) return;
+    replied.current = composer.reply;
+    if (composer.reply !== "") editor.current?.focus();
+  }, [composer.reply]);
+
   const dictation = useDictation({ editor, keywords, onNote: setRefusal });
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
   const openSkill = useSkillOpener();
@@ -514,6 +529,10 @@ export function AgentComposer({
           composer.send();
         }}
       >
+        <ComposerReply
+          reply={composer.reply}
+          onRemove={held ? undefined : () => composer.setReply("")}
+        />
         <AttachedFileChips
           files={attachmentChips(composer.attachments)}
           onRemove={

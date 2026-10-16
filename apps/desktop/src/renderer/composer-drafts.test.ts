@@ -827,3 +827,34 @@ test("files attached in this window stay as its draft when another window lets t
   await settle();
   assert.deepEqual([box().draft, box().attachments], ["", [notes]]);
 });
+
+test("a reply waiting over an agent's box outlasts a reload, alone or with the words under it", async () => {
+  let composer: AgentComposerControl | undefined;
+  function Box(): null {
+    useDraftsOwner(DEAN);
+    composer = useAgentComposer({
+      agentId: INVITES.agent.id,
+      planId: INVITES.plan.id,
+      messages: [],
+      send: NEVER_ANSWERED,
+      onStatus: () => undefined,
+    });
+    return null;
+  }
+  const open = async () => {
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    const root = createRoot(document.body.appendChild(document.createElement("div")));
+    roots.push(root);
+    await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Box))));
+    return () => composer ?? assert.fail("the box is drawn");
+  };
+
+  let box = await open();
+  act(() => box().setReply("Invites expire after a week."));
+  box = await open();
+  assert.deepEqual([box().reply, box().draft], ["Invites expire after a week.", ""]);
+
+  act(() => box().setDraft("Make it a month"));
+  box = await open();
+  assert.deepEqual([box().reply, box().draft], ["Invites expire after a week.", "Make it a month"]);
+});

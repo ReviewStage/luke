@@ -28,7 +28,8 @@ import { readKept, writeKept } from "./desktop/folded-groups";
  * Mac meets nothing of another's unsent words, which wait for their writer
  * to sign in again. A window reads what another panel's window wrote as it
  * is written, so two boxes for one place show the words written last. A mention or a skill is part of the words, written
- * as its link or its `/name`, so it comes back as the chip it was. The files
+ * as its link or its `/name`, so it comes back as the chip it was, and the
+ * words an agent's message was replied to by are kept beside them. The files
  * attached are kept in this window alone, for as long as it stands, because
  * a message's files may run to megabytes and storage holds a few: a relaunch
  * brings the words back without them. The store keeps the latest
@@ -85,6 +86,7 @@ const storedDrafts = Schema.fromJsonString(
       accountId: Schema.NullOr(Schema.String),
       place: draftPlaceSchema,
       text: Schema.String,
+      reply: Schema.optionalKey(Schema.String),
       choices: Schema.optionalKey(Schema.Array(Schema.String)),
       values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
     }),
@@ -96,9 +98,11 @@ type StoredDraft = (typeof storedDrafts.Type)[number];
 /** The account a window's drafts are written by: the one signed in, none before its state is read, as in a test. */
 type Owner = string | null;
 
-/** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled. */
+/** What a box holds unsent: its words, the words of the agent's it answers, the files attached to them, and an inbox card's options picked and fields filled. */
 export interface Draft {
   readonly text: string;
+  /** The words picked out of an agent's message that the message replies to (`@luke/ui/reply-quote`); empty for none. */
+  readonly reply: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choices: readonly string[];
   readonly values: readonly InboxFormValue[];
@@ -116,11 +120,19 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
 
 /** A box holding nothing. */
-export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], values: [] };
+export const EMPTY_DRAFT: Draft = {
+  text: "",
+  reply: "",
+  attachments: [],
+  choices: [],
+  values: [],
+};
 
 /** Whether a draft holds anything storage keeps: everything but its files. */
 function stored(draft: Draft): boolean {
-  return draft.text !== "" || draft.choices.length > 0 || draft.values.length > 0;
+  return (
+    draft.text !== "" || draft.reply !== "" || draft.choices.length > 0 || draft.values.length > 0
+  );
 }
 
 /** Whether a draft holds anything to keep. */
@@ -137,9 +149,10 @@ function readStored(): readonly StoredDraft[] {
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
     .filter((kept) => kept.accountId === owner)
-    .map(({ place, text, choices = [], values = [] }) => ({
+    .map(({ place, text, reply = "", choices = [], values = [] }) => ({
       place,
       text,
+      reply,
       attachments: [],
       choices,
       values,
@@ -153,6 +166,7 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     entry.accountId === owner &&
     Equal.equals(entry.place, kept.place) &&
     entry.text === kept.text &&
+    (entry.reply ?? "") === kept.reply &&
     Equal.equals(entry.choices ?? [], kept.choices) &&
     Equal.equals(entry.values ?? [], kept.values)
   );
@@ -173,10 +187,11 @@ function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptD
   );
   const written = kept
     .filter((draft) => !standing.some((entry) => storedAs(owner, draft, entry)))
-    .map(({ place, text, choices, values }) => ({
+    .map(({ place, text, reply, choices, values }) => ({
       accountId: owner,
       place,
       text,
+      ...(reply === "" ? undefined : { reply }),
       ...(choices.length === 0 ? undefined : { choices }),
       ...(values.length === 0 ? undefined : { values }),
     }));

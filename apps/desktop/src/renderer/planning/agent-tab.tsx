@@ -82,6 +82,7 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
+import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
@@ -856,7 +857,7 @@ export function AgentMessage({
   return (
     <Message from={message.role} data-message-id={message.id}>
       {named}
-      <MessageContent>
+      <MessageContent {...{ [REPLY_SCOPE]: "" }}>
         <TranscriptRows
           rows={agentRows(message, moving, {
             newestTodos: todos.kept,
@@ -1091,6 +1092,7 @@ function AgentTabView({
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
   const { members, former } = useMemberDirectory();
+  const tab = useRef<HTMLElement>(null);
   const origin = agentOrigin({
     agent,
     run,
@@ -1100,7 +1102,11 @@ function AgentTabView({
     openGitHub,
   });
   return (
-    <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
+    <section
+      ref={tab}
+      className="agent-tab ph-no-capture"
+      aria-label={agentTabLabel(agent, models)}
+    >
       <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId, former)}>
         <AgentPicturesProvider value={pictures}>
           <AgentTranscriptView
@@ -1165,6 +1171,9 @@ function AgentTabView({
           />
         )}
       </footer>
+      {onUnarchive !== undefined || composer.closed !== undefined ? null : (
+        <ReplyToSelection scope={tab} onReply={composer.setReply} />
+      )}
     </section>
   );
 }

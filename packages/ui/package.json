@@ -17,6 +17,7 @@
     "./chart": "./src/chart/chart.js",
     "./theme.css": "./src/theme.css",
     "./search-tokens": "./src/search-tokens.js",
+    "./reply-quote": "./src/reply-quote.js",
     "./skill-mention": "./src/skill-mention.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
     "./task-list-model": "./src/task-list-model.js",
