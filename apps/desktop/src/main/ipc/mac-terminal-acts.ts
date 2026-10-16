@@ -213,7 +213,11 @@ export function macTerminalActRows(
     [ACT_KIND.MAC_TERMINAL_OPEN]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.MAC_TERMINAL_OPEN, sender);
       // A tab drawn again over its running terminal needs nothing read.
-      if (reattached(sender.sender, params)) return Effect.void;
+      if (reattached(sender.sender, params)) {
+        // An earlier open of another branch still reading the settings is let go.
+        panelOf(sender.sender).asking.delete(params.agentId);
+        return Effect.void;
+      }
       const panel = panelOf(sender.sender);
       const ask = ++asks;
       panel.asking.set(params.agentId, ask);
