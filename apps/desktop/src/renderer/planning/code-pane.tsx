@@ -154,8 +154,11 @@ export function CodeLineRows({
   );
 }
 
-/** How far below the feed's top a card revealed stands, in pixels: clear of the call's checkpoint, which sticks there. */
-const REVEAL_TOP_PX = 44;
+/** How far below the feed's top a card revealed stands, in pixels: the feed's scroll padding, which clears the call's checkpoint stuck there and the fade beneath it. */
+function revealTop(list: HTMLElement): number {
+  const padding = Number.parseFloat(getComputedStyle(list).scrollPaddingTop);
+  return Number.isNaN(padding) ? 0 : padding;
+}
 
 /** A card's lines. */
 export function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
@@ -333,7 +336,7 @@ export function CodePane({
     const card = pane.current?.querySelector<HTMLElement>(`[data-call-id="${CSS.escape(reveal)}"]`);
     if (list != null && card != null) {
       const top = card.getBoundingClientRect().top - list.getBoundingClientRect().top;
-      list.scrollTop += top - REVEAL_TOP_PX;
+      list.scrollTop += top - revealTop(list);
       list.dispatchEvent(new Event("scroll"));
     }
     onRevealed?.();
@@ -341,8 +344,8 @@ export function CodePane({
   return (
     <section ref={pane} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
-        {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
-        <ConversationContent className="pt-0">
+        {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; cards fade beneath it. */}
+        <ConversationContent className="checkpoint-log scroll-fade pt-0">
           {codeFeedCalls(shown, calls).map((call) => (
             <CodeFeedRun key={call.key} call={call} now={now} onOpenFile={onOpenFile} />
           ))}

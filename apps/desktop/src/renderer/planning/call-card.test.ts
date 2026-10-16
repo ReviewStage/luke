@@ -6,6 +6,7 @@ import { TRANSCRIPT_REGION, type TranscriptCallRow } from "@luke/voice/transcrip
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { FADE_SHEET, fadedEdges, fadeInsetTop, layFades } from "#testing/scroll-fade";
 import { CodePane } from "./code-pane";
 import { PlanCall } from "./plan-call";
 import { RUN_CARD } from "./turn-card";
@@ -163,4 +164,49 @@ test("code a turn showed after a call ended stands after that call's closing lin
     true,
     "the later code has a divider of its own",
   );
+});
+
+test("the Call and Code tabs' lines fade beneath the call's sticky time, which stands whole, rather than being sliced under it", () => {
+  const callTab = mounted(
+    createElement(PlanCall, {
+      region: { kind: TRANSCRIPT_REGION.READY, earlierOmitted: false, calls: CALLS },
+      onRetry: () => undefined,
+      conversation: undefined,
+      callLive: true,
+      onLoadEarlier: () => Promise.resolve(),
+      onOpenSubagent: () => undefined,
+      shown: true,
+    }),
+  );
+  const codeTab = mounted(
+    createElement(CodePane, {
+      shown: [shownOn(ENDED_CALL, "show-1")],
+      calls: CALLS,
+      onOpenFile: () => undefined,
+    }),
+  );
+  const sheets = layFades([FADE_SHEET.FADE, FADE_SHEET.LOGS]);
+  try {
+    for (const [name, tab] of [
+      ["Call", callTab],
+      ["Code", codeTab],
+    ] as const) {
+      const log = tab.querySelector('[role="log"]');
+      const time = tab.querySelector("[data-checkpoint]");
+      assert.ok(log !== null && time !== null, `the ${name} tab draws a log with a call's time`);
+      assert.equal(fadedEdges(log).top, true, `the ${name} tab's log fades at its top`);
+      assert.equal(
+        fadeInsetTop(log),
+        getComputedStyle(time).height,
+        `the ${name} tab's fade starts where the time's band ends`,
+      );
+      assert.equal(
+        getComputedStyle(time).whiteSpace,
+        "nowrap",
+        `the ${name} tab's time keeps to one line, so it cannot outgrow its band`,
+      );
+    }
+  } finally {
+    sheets.remove();
+  }
 });

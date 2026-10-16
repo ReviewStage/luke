@@ -1380,7 +1380,7 @@ function SidebarColumn({
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
-      <div className="sidebar-section">
+      <div className="sidebar-section scroll-fade">
         {plans.signedIn && pinnedSection.length > 0 && !archive.shown ? (
           <PinnedSection
             rows={pinnedSection}

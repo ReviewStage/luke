@@ -549,7 +549,7 @@ function VersionPage({
           </div>
         </header>
         <div className="desktop-document">
-          <div className="plan-document-scroll">
+          <div className="plan-document-scroll scroll-fade">
             <VersionSkeleton />
           </div>
         </div>
@@ -726,7 +726,7 @@ export function DesktopVersionHistory({
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             <h1 className="version-log-title">Version history</h1>
-            <div ref={log} className="sidebar-section">
+            <div ref={log} className="sidebar-section scroll-fade">
               {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
               <ol className="version-list">
                 {revisions.map((line) => {
@@ -775,7 +775,7 @@ export function DesktopVersionHistory({
             </div>
           </div>
           <section
-            className="sidebar-section version-log-pane"
+            className="sidebar-section version-log-pane scroll-fade"
             aria-label="Sections changed"
             inert={opened === undefined}
           >

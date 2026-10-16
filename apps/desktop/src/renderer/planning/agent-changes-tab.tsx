@@ -237,7 +237,7 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
       {hunks === undefined ? (
         <p className="side-panel-empty">{notice ?? CHANGES_WORDS.UNREADABLE}</p>
       ) : (
-        <div className="code-lines file-tab-lines" {...look}>
+        <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
           {hunks.map((hunk, index) => (
             // oxlint-disable-next-line react/no-array-index-key -- a file's hunks are drawn once per patch, in order.
             <Fragment key={index}>

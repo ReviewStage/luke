@@ -5365,15 +5365,9 @@ button.automation-run:hover {
 
 /* The plan template laid out as every Settings page is (`PlanBody`'s
    `page`): at their measure, its name at a page title's place and size, the
-   Edited line and the note under it. Its words dissolve at the scroller's
-   top edge, through the shared top fade, once the page has left its top. */
+   Edited line and the note under it. */
 .template-document .plan-document-scroll {
   padding-top: 0;
-  /* A control the keyboard reaches is scrolled in past the fade at the top. */
-  scroll-padding-top: var(--scroll-fade);
-  animation: scroll-top-fade linear both;
-  animation-timeline: scroll(self block);
-  animation-range: 0 var(--scroll-fade);
 }
 
 .template-document :is(.plan-body, .plan-edit-note) {
@@ -5421,18 +5415,16 @@ button.automation-run:hover {
 
 /* A Settings page has no top bar: the page names itself at the head of its
    column, so the title-bar row above it is only the window's drag strip, and
-   the column scrolls beneath it. The page's top margin is wider than the
-   fade, so nothing at rest is faded; a row scrolled up dissolves into the
-   strip rather than being sliced off at its edge. */
+   the column scrolls beneath it, its top edge fading (`scroll-fade-top`) so
+   a row scrolled up dissolves into the strip rather than being sliced off. */
 .settings-page-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--page-inset) var(--page-inset);
   /* A landed search result scrolls to the top of this column with the
-     column's own top margin above it. */
+     column's own top margin above it, which is wider than the fade. */
   scroll-padding-top: var(--page-inset);
-  mask-image: linear-gradient(to bottom, transparent, #000 var(--scroll-fade));
   /* A bar that takes room takes it on every page, so the column never slides. */
   scrollbar-gutter: stable;
 }
@@ -5468,7 +5460,6 @@ button.automation-run:hover {
   gap: var(--space-32);
   margin: 0 auto;
   overflow: visible;
-  animation: none;
 }
 
 /* Version history ------------------------------------------------------------ */
@@ -5969,6 +5960,20 @@ button.automation-run:hover {
   position: absolute;
   top: calc(var(--column-inset) - var(--card-edge));
   right: calc(var(--column-inset) - var(--card-edge));
+}
+
+/* While the chevron is drawn, the summary's fade keeps the chevron's own
+   spot whole, a second mask layer over the fade's, because a mask fades
+   every box inside the scroller and the chevron stands at its faded top. */
+.plan-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) {
+  mask-image: var(--scroll-fade-mask), linear-gradient(#000, #000);
+  mask-position:
+    0 0,
+    right var(--column-inset) top var(--focus-ring-reach);
+  mask-size:
+    100% 100%,
+    var(--control-height) var(--control-height);
+  mask-repeat: no-repeat;
 }
 
 .plan-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .plan-summary-chevron,

@@ -242,7 +242,7 @@ function ListPage({
           </button>
         </div>
       </header>
-      <div className="automations-scroll">
+      <div className="automations-scroll scroll-fade-top">
         {read === undefined ? null : "failure" in read ? (
           <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
         ) : groups.length === 0 ? (
@@ -285,7 +285,7 @@ function UnreadPage({
           </button>
         </div>
       </header>
-      <div className="automations-scroll">
+      <div className="automations-scroll scroll-fade-top">
         <ReadFailure line={UNREAD_LINE} onRetry={onRetry} place={READ_FAILURE_PLACE.CENTRED} />
       </div>
     </section>
@@ -305,7 +305,7 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
           </button>
         </div>
       </header>
-      <div className="automations-scroll">
+      <div className="automations-scroll scroll-fade-top">
         <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
       </div>
     </section>

@@ -142,7 +142,7 @@ export function TerminalPicker({
         <SearchIcon />
         <Command.Input placeholder={PICKER_QUESTION} value={query} onValueChange={setQuery} />
       </div>
-      <Command.List className="command-palette-list" label="Coding agents">
+      <Command.List className="command-palette-list scroll-fade" label="Coding agents">
         {read ? (
           <Command.Empty className="command-palette-empty">No agents match.</Command.Empty>
         ) : null}

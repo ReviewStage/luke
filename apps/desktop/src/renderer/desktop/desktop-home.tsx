@@ -208,7 +208,7 @@ export function DesktopHome({
     // The Inbox's agent cards name who started each agent, and Recent's rows
     // who created each teammate's task, read against the listed workspace's members.
     <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-      <div className="home-scroll">
+      <div className="home-scroll scroll-fade-top">
         <div className="home-column" ref={setColumn}>
           <header className="home-head">
             <h1 className="home-title">{greeting(accountName)}</h1>

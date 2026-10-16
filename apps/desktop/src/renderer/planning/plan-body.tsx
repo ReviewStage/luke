@@ -125,6 +125,12 @@ const TITLE_MENU_LABEL = "Title actions";
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
 
+/** The room left above a section the scroller reveals: its scroll padding where that is wider, which clears its faded top edge (`scroll-fade`). */
+function revealMargin(scroller: HTMLElement): number {
+  const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingTop);
+  return Number.isNaN(padding) ? REVEAL_MARGIN : Math.max(padding, REVEAL_MARGIN);
+}
+
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
 interface Chase {
   readonly planId: string;
@@ -750,7 +756,7 @@ export function PlanBody({
         : element.scrollTop +
           unit.getBoundingClientRect().top -
           element.getBoundingClientRect().top -
-          REVEAL_MARGIN;
+          revealMargin(element);
     sectionLinks?.onRevealed?.(reveal.ask);
   });
 
@@ -832,7 +838,7 @@ export function PlanBody({
     );
   return (
     <PlanPictures planId={plan.id} text={plan.document.body}>
-      <div ref={scroller} className="plan-document-scroll">
+      <div ref={scroller} className="plan-document-scroll scroll-fade">
         {page === undefined ? crumb : null}
         {page === undefined ? editedNote : null}
         <ChangedLine looks={looks} marks={marks} />

@@ -540,7 +540,7 @@ export function InboxList({
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} />
-      <div className="inbox-plans-scroll">
+      <div className="inbox-plans-scroll scroll-fade-top">
         {view.grouping === INBOX_GROUPING.NEWEST ? (
           <ul className="sidebar-plans">{view.items.map(row)}</ul>
         ) : (

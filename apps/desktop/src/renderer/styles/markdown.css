@@ -168,60 +168,28 @@ blockquote.markdown-quote > * + * {
 
 /* A table that scrolls sideways fades each edge it hides columns past, as the
    tab strip does, so a column cut at the edge reads as more to scroll to
-   rather than as words cut short. The fades ride the table's own scroll
-   timeline, which stands only while the table overflows: one that fits is
-   left whole without asking JavaScript. Each edge's fade rises over the first
-   `--scroll-fade` of scrolling toward it and falls over the last. */
+   rather than as words cut short. It is the window's one scroll fade
+   (base.css's `scroll-fade`), its two depths eased on the table's own
+   inline timeline, which stands only while the table overflows: one that
+   fits is left whole without asking JavaScript. Its mask multiplies with the
+   faded scroller it stands in, a document's or a log's, and neither reads
+   the other's depths, which do not inherit. */
 .markdown table,
 .transcript-table {
   mask-image: linear-gradient(
     to right,
     transparent,
-    #000 var(--table-fade-start),
-    #000 calc(100% - var(--table-fade-end)),
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
     transparent
   );
-  animation:
-    table-fade-start linear both,
-    table-fade-end linear both;
+  animation-name: scroll-fade-start, scroll-fade-end;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
   animation-timeline: scroll(self inline), scroll(self inline);
   animation-range:
     0 var(--scroll-fade),
     calc(100% - var(--scroll-fade)) 100%;
-}
-
-@keyframes table-fade-start {
-  from {
-    --table-fade-start: 0px;
-  }
-
-  to {
-    --table-fade-start: var(--scroll-fade);
-  }
-}
-
-@keyframes table-fade-end {
-  from {
-    --table-fade-end: var(--scroll-fade);
-  }
-
-  to {
-    --table-fade-end: 0px;
-  }
-}
-
-/* Registered so a fade eases as a length, and stands at none on an edge
-   that hides nothing. */
-@property --table-fade-start {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --table-fade-end {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
 }
 
 .markdown th {

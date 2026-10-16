@@ -13,6 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
+import { layWindowStyles } from "#testing/focus-ring";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
@@ -176,6 +177,42 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
   assert.equal(shown, 600 - 16);
   assert.equal(scroller.scrollTop, 0);
   assert.deepEqual(revealed, [1, 2], "each ask is said shown once, so it can be let go");
+});
+
+test("a section shown stands clear of the document's faded top edge, its heading whole", async () => {
+  const { container } = drawn();
+  const scroller = container.querySelector<HTMLElement>(".plan-document-scroll");
+  assert.ok(scroller);
+  const rollout = container.querySelectorAll<HTMLElement>(".plan-unit")[1];
+  assert.ok(rollout);
+  // The layout jsdom has none of: the document's top at 100, the Rollout section's at 700.
+  vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 100 }));
+  vi.spyOn(rollout, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 700 }));
+  const root = roots[0];
+  assert.ok(root);
+  const sheets = await layWindowStyles();
+  try {
+    const fade = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--scroll-fade"),
+    );
+    act(() =>
+      root.render(
+        createElement(PlanBody, {
+          plan: PLAN,
+          live: false,
+          sectionLinks: {
+            workspace: WORKSPACE,
+            onOpen: () => undefined,
+            reveal: { anchor: "rollout", ask: 1 },
+          },
+        }),
+      ),
+    );
+    assert.ok(fade > 16, "the fade runs deeper than the room a section was shown with");
+    assert.equal(scroller.scrollTop, 600 - fade);
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("no attribute of the plan's page carries what a mention names", () => {

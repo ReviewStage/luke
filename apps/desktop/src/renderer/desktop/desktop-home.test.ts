@@ -30,6 +30,7 @@ import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
 import { commandKeyshortcuts } from "../tooltip";
 import { DesktopHome } from "./desktop-home";
@@ -285,6 +286,18 @@ test("the home page greets the account, lists what needs it with each item's pla
     "Usage alerts · acme/relay",
     "Onboarding checklist · No repository",
   ]);
+});
+
+test("Home's rows fade into the window's drag strip as they scroll up under it, rather than vanishing at an unseen line", async () => {
+  const { page } = mount();
+  await settle();
+  const sheets = layFades();
+  try {
+    const scroller = page.querySelector(".home-scroll") ?? assert.fail("the page scrolls");
+    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("Home offers no line to search every task, though Recent lists fewer than the workspace holds", async () => {

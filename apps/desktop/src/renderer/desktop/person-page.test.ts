@@ -30,6 +30,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
+import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { OpenSettingsProvider } from "../open-settings";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
 import { PersonPage } from "./person-page";
@@ -345,6 +346,18 @@ test("a teammate's page names them as the members read does and lists their work
     Created: ["Relay retries on 502", "Retry budget dashboard"],
     Agents: ["Tenant cache keys"],
   });
+});
+
+test("a teammate's page fades into the window's drag strip as it scrolls up under it, as Home does", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+  const sheets = layFades();
+  try {
+    const scroller = page.querySelector(".home-scroll") ?? assert.fail("the page scrolls");
+    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
+  } finally {
+    sheets.remove();
+  }
 });
 
 test("the reader's own page says You and what waits on them", async () => {

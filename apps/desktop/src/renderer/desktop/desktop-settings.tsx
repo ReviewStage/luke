@@ -267,7 +267,7 @@ export function DesktopSettings({
           }}
         />
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
-          <div className="sidebar-section">
+          <div className="sidebar-section scroll-fade">
             {search ? (
               <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
             ) : (
@@ -307,7 +307,7 @@ export function DesktopSettings({
         <section className="settings-page" aria-label={title}>
           <div className="desktop-drag-strip" />
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          <div key={settings.view} className="settings-page-scroll">
+          <div key={settings.view} className="settings-page-scroll scroll-fade-top">
             <header className="settings-page-head">
               <h1 className="settings-page-title">{title}</h1>
               {reset}

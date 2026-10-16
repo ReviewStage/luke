@@ -794,6 +794,27 @@ button.plan-crumb-person-row:is(:hover, :focus-visible) {
   flex-direction: column;
 }
 
+/* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
+   to the log's top (../ai-elements/checkpoint.tsx): the fade starts beneath
+   the checkpoint's band, so the time stands whole and what scrolls under it
+   dissolves just below it. The band is held at one height whatever it
+   holds, because a band taller than the inset would slice what passes under
+   its foot, and one shorter would fade its own foot. What the keys reach,
+   and a card a File tab's note reveals (code-pane.tsx), scrolls in past
+   both. */
+.checkpoint-log {
+  --checkpoint-height: 32px;
+  --fade-inset-top: var(--checkpoint-height);
+  scroll-padding-top: calc(var(--checkpoint-height) + var(--scroll-fade));
+}
+
+/* One line, as a teammate's heading already keeps (`.call-caller`), so a
+   time that would wrap in a narrow panel cannot outgrow the band. */
+.checkpoint-log [data-checkpoint] {
+  height: var(--checkpoint-height);
+  white-space: nowrap;
+}
+
 .code-card {
   overflow: hidden;
   border: 1px solid var(--hairline);
@@ -1956,15 +1977,13 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* An agent's log runs right up to the card's top edge and its words
-   dissolve over `--scroll-fade` just above it, rather than being sliced
-   short of the card: a mask, so they fade into whatever ground the panel
-   stands on in either appearance. Its foot pads past the fade, so the
+   dissolve over `--scroll-fade` just above it (`scroll-fade`), rather than
+   being sliced short of the card. Its foot pads past the fade, so the
    newest line, scrolled to or followed, stands whole above it, and a
    control focused from below is scrolled in past the fade as well. */
 .agent-log-over-composer {
   padding-bottom: calc(var(--scroll-fade) + var(--space-4));
   scroll-padding-bottom: calc(var(--scroll-fade) + var(--space-4));
-  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent);
 }
 
 /* The to-do list the agent is working through, docked over the composer

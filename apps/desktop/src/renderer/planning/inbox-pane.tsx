@@ -1105,7 +1105,7 @@ export function InboxPane({
       <div className="desktop-inbox">
         <div
           // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
-          className={`inbox-board ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
+          className={`inbox-board scroll-fade ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
           data-item-id={item.id}
           ref={board}
         >
