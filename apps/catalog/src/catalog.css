@@ -300,8 +300,10 @@ body {
   width: 320px;
 }
 
-/* A screen as tall as a window's content, so a collection page scrolls in it. */
-.catalog-screen-collection {
+/* A screen as tall as a window's content, so a collection or detail page
+   scrolls in it. */
+.catalog-screen-collection,
+.catalog-screen-detail {
   display: flex;
   height: 480px;
 }

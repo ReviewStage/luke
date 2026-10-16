@@ -4,6 +4,7 @@ import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
+import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
@@ -45,4 +46,5 @@ export const EXAMPLES: readonly Example[] = [
   AUTH_PAGE_EXAMPLE,
   LIST_ROW_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
+  DETAIL_PAGE_EXAMPLE,
 ];

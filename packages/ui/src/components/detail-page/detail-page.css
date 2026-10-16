@@ -1,0 +1,174 @@
+/* detail-page.css -- one thing's page: a still header over a main column
+   and an optional secondary column, each its own scroll, at one measure
+   centred in the room. The measure is a collection page's, a plan's
+   reading width in the window and the admin's wider column on the web,
+   and the secondary column takes its share from the measure's end. The
+   page queries its own width rather than the viewport's, so a page in a
+   narrow pane narrows as it would in a narrow window; a container query
+   cannot read a custom property, so the widths it narrows under are
+   literals here. */
+
+@layer components {
+  .luke-detail-page {
+    --luke-detail-page-width: 720px;
+    --luke-detail-page-secondary-width: 240px;
+    --luke-detail-page-inset: var(--luke-page-inset);
+    container-type: inline-size;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+  }
+
+  [data-luke-profile="web"] .luke-detail-page {
+    --luke-detail-page-width: 1040px;
+    --luke-detail-page-secondary-width: 320px;
+  }
+
+  /* What stands either side of the measure: the inset, or more in a room
+     wider than the measure and its insets. It is worked out on the page's
+     children, where the room is the page's own width and the inset is the
+     one the narrow rule below may change. */
+  .luke-detail-page > * {
+    --luke-detail-page-side: max(
+      var(--luke-detail-page-inset),
+      (100cqi - var(--luke-detail-page-width)) /
+      2
+    );
+  }
+
+  /* Under 480px of room a desktop page gives back half its inset. */
+  @container (max-width: 479px) {
+    .luke-detail-page > * {
+      --luke-detail-page-inset: var(--luke-page-inset-narrow);
+    }
+  }
+
+  /* The header stands still above the scrolls, and reserves a scrollbar's
+     gutter as they do, so its acts end on the secondary column's edge. Its
+     end gap is the content's room under it, which keeps a focus ring on an
+     act inside what it clips. In a pane too short for it, it takes half its
+     height at most and scrolls itself, so the content keeps the rest. */
+  .luke-detail-page-top {
+    flex: none;
+    box-sizing: border-box;
+    max-height: 50%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    padding-bottom: var(--luke-section-gap);
+  }
+
+  /* The title's acts are centred on its first line, whatever a control's
+     height is beside the title's leading, and wrap under it when they would
+     leave a long title too little room, and wrap among themselves past the
+     line's width, so no act stands outside the page. */
+  .luke-detail-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--luke-control-gap);
+    padding: var(--luke-detail-page-inset) var(--luke-detail-page-side) 0;
+  }
+
+  .luke-detail-page-heading {
+    flex: 1 1 240px;
+    min-width: min(100%, 120px);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-detail-page-title {
+    margin: 0;
+    font-size: var(--luke-type-title-size);
+    line-height: var(--luke-type-title-leading);
+    font-weight: var(--luke-weight-bold);
+  }
+
+  .luke-detail-page-description {
+    margin: var(--luke-space-4) 0 0;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-detail-page-actions {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    gap: var(--luke-control-gap);
+    margin-top: calc((var(--luke-type-title-leading) - var(--luke-control-height)) / 2);
+  }
+
+  /* The columns under the header: the main one takes what the secondary
+     leaves, and each reaches the page's edge on its own side, so the wheel
+     moves it from anywhere over it. */
+  .luke-detail-page-body {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .luke-detail-page-body:has(> .luke-detail-page-secondary) {
+    grid-template-columns:
+      minmax(0, 1fr)
+      calc(var(--luke-detail-page-secondary-width) + var(--luke-detail-page-side));
+  }
+
+  .luke-detail-page-main,
+  .luke-detail-page-secondary {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    /* Note that a column draws the keyboard's ring inside itself, because
+       the page clips anything drawn past its edge. */
+    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+  }
+
+  .luke-detail-page-main {
+    padding-inline: var(--luke-detail-page-side);
+  }
+
+  /* Beside a secondary column the main one ends a section's gap short of
+     it. */
+  .luke-detail-page-main:has(+ .luke-detail-page-secondary) {
+    padding-inline-end: var(--luke-space-32);
+  }
+
+  .luke-detail-page-secondary {
+    padding-inline-end: var(--luke-detail-page-side);
+  }
+
+  .luke-detail-page-content {
+    padding-bottom: var(--luke-detail-page-inset);
+    overflow-wrap: anywhere;
+  }
+
+  /* In a pane too narrow for two columns, the secondary one follows the
+     main in the one scroll, both at the page's inset. */
+  @container (max-width: 719px) {
+    .luke-detail-page-body,
+    .luke-detail-page-body:has(> .luke-detail-page-secondary) {
+      display: block;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    .luke-detail-page-main,
+    .luke-detail-page-main:has(+ .luke-detail-page-secondary),
+    .luke-detail-page-secondary {
+      overflow: visible;
+      padding-inline: var(--luke-detail-page-side);
+    }
+  }
+}
