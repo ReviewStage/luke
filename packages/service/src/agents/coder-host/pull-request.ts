@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   recordCodingAgentAuthor,
+  updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
@@ -42,7 +43,11 @@ import { agentRepositoryToken, type CheckoutServices } from "./checkout.js";
  * the agent is told, so it can tell the developer. A refusal of the pull
  * request itself, such as one already open from the branch, is the agent's
  * to read and opens nothing. Every description ends on the line saying Luke
- * made it, since its author may be a person.
+ * made it, since its author may be a person. The branch the pull request is
+ * opened from is written on the agent's row before GitHub is asked, rather
+ * than only as the turn ends, so GitHub's delivery about the opening finds
+ * the agent and reads its pull request onto the row, where a comment on it
+ * is looked up by (`github/agent-wakes.ts`).
  */
 
 /** GitHub's own bounds on what a pull request carries. */
@@ -319,6 +324,14 @@ export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(
   if (Result.isFailure(minted)) return pullRequestRejected(`Not opened: ${minted.failure.reason}`);
   const { token: appToken, fullName, defaultBranch } = minted.success;
   const pullRequest = pullRequestOf(read.success, defaultBranch);
+  // The branch stands on the row before GitHub is asked, so its delivery about the opening finds the agent mid-turn.
+  yield* updateCodingAgentBranch(target.userId, agent.id, pullRequest.head).pipe(
+    Effect.catch((failure) =>
+      Effect.logWarning(
+        `The branch of conversation ${target.conversationId}'s pull request was not recorded: ${failure._tag}`,
+      ),
+    ),
+  );
   const asDeveloper = yield* attemptAsDeveloper(target, agent, fullName, pullRequest);
   if (asDeveloper !== undefined && asDeveloper.kind !== ATTEMPT.TOKEN_REFUSED) {
     return answerOf(asDeveloper, OPENED_AS.DEVELOPER);

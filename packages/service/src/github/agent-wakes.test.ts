@@ -166,7 +166,7 @@ const endedTurn = (owner: string, conversationId: string, settledAt: number) =>
     }),
   );
 
-test("a review submitted, a comment on a pull request, and a failed check on an agent's branch are read, each by who caused it and when, and nothing else is", () => {
+test("a review submitted, a comment on a pull request, and a failed check suite or commit status on an agent's branch are read, each by who caused it and when, and nothing else is", () => {
   const ref = "luke/invites";
   assert.deepEqual(
     agentWakeOf("pull_request_review", unparsedWire(reviewDelivery(ref, "octocat")), 0),
@@ -223,6 +223,25 @@ test("a review submitted, a comment on a pull request, and a failed check on an 
     at: MADE_AT,
   });
 
+  const status = (branch: string, state: string) => ({
+    state,
+    sha: "4567cdef",
+    updated_at: new Date(MADE_AT).toISOString(),
+    repository,
+    sender: { login: "buildkite[bot]", type: "Bot" },
+    branches: [{ name: "main" }, { name: branch }],
+    description: "Never read.",
+  });
+  assert.deepEqual(agentWakeOf("status", unparsedWire(status(ref, "failure")), 0), {
+    kind: AGENT_WAKE.CHECK_FAILED,
+    repository: RELAY_FULL_NAME,
+    branch: ref,
+    pullRequest: undefined,
+    url: `https://github.com/${RELAY_FULL_NAME}/commit/4567cdef/checks`,
+    by: "buildkite[bot]",
+    at: MADE_AT,
+  });
+
   for (const [event, payload] of [
     ["pull_request_review", reviewDelivery(ref, "octocat", "edited")],
     ["pull_request_review_comment", reviewDelivery(ref, "octocat", "created")],
@@ -230,12 +249,14 @@ test("a review submitted, a comment on a pull request, and a failed check on an 
     ["issue_comment", comment(true, "edited")],
     ["check_suite", suite(ref, "success")],
     ["check_suite", suite("main", "failure")],
+    ["status", status(ref, "pending")],
+    ["status", status("release", "error")],
   ] as const) {
     assert.equal(agentWakeOf(event, unparsedWire(payload), 0), undefined, event);
   }
 });
 
-test("a person's review reaches an agent at work or not, Luke's App's only an agent idle since before it was made, a failed check only an agent not at work, and an archived agent nothing", () => {
+test("a person's review reaches an agent at work or not, Luke's App's only an agent idle since before it was made, a failed check only an agent idle since before it failed, and an archived agent nothing", () => {
   const review = (by: string): AgentWake => ({
     kind: AGENT_WAKE.REVIEW,
     repository: RELAY_FULL_NAME,
@@ -265,7 +286,8 @@ test("a person's review reaches an agent at work or not, Luke's App's only an ag
   );
   assert.deepEqual(
     [idleBefore, endedSince, atWork].map((at) => woken(failed, at)),
-    [true, true, false],
+    [true, false, false],
+    "a failed check reaches only an agent that was not watching when it failed",
   );
   assert.equal(
     agentIsWoken(

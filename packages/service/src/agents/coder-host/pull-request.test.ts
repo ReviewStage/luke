@@ -111,18 +111,18 @@ const open = (
     const result = yield* openPullRequest(target, opened.agent, unparsedWire(input)).pipe(
       Effect.provide(githubReaching([opened.installation], undefined, {}, github.script).layer),
     );
-    const author = Option.getOrThrow(yield* readCodingAgent(target.userId, opened.agent.id)).author;
-    return { result, openings: github.openings, author };
+    const row = Option.getOrThrow(yield* readCodingAgent(target.userId, opened.agent.id));
+    return { result, openings: github.openings, author: row.author, branch: row.branch };
   });
 
 it.layer(getTestDB())("a coding agent's pull request", (it) => {
   it.effect(
-    "an agent writing as its developer has its pull request opened on their token, once, against the default branch, ending on Luke's line",
+    "an agent writing as its developer has its pull request opened on their token, once, against the default branch, ending on Luke's line, its branch recorded on the agent as it opens",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent(21, CODING_AGENT_AUTHOR.DEVELOPER);
 
-        const { result, openings, author } = yield* open(agent, agent.target, opened);
+        const { result, openings, author, branch } = yield* open(agent, agent.target, opened);
 
         assert.deepEqual(result, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -142,6 +142,8 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
           draft: false,
         });
         assert.equal(author, CODING_AGENT_AUTHOR.DEVELOPER);
+        // The branch stands on the row at once, so GitHub's delivery about the opening finds the agent mid-turn.
+        assert.equal(branch, INPUT.head);
       }),
   );
 

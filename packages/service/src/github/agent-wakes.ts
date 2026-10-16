@@ -37,7 +37,9 @@ import type { GitHubApp } from "./github-app.js";
  * read off a delivery: the repository, the pull request's number and branch,
  * the address of the review, comment, or failed commit, the login of who
  * caused it, a review's verdict, and when; never a body, which the agent
- * reads itself with `gh`.
+ * reads itself with `gh`. A commit status that failed on a `luke/` branch
+ * is told as a failed check is, since the pull request's checks count it
+ * beside the check runs.
  *
  * The agents told are those standing on the pull request's branch, or, for
  * a comment, whose pull request GitHub last answered is the one commented
@@ -51,8 +53,8 @@ import type { GitHubApp } from "./github-app.js";
  * an agent comments only inside a turn, so one idle since before is not its
  * author. That is what keeps an agent's own replies from waking it, while
  * the code-review agent's findings on another agent's pull request do. A
- * failed check reaches only an agent not at work, since one at work watches
- * its own checks. An archived agent is told nothing.
+ * failed check reaches only an agent idle since before it failed, since an
+ * agent at work watches its own checks. An archived agent is told nothing.
  */
 
 /** What a delivery tells an agent of. */
@@ -86,6 +88,8 @@ const WAKE_EVENT = {
   PULL_REQUEST_REVIEW: "pull_request_review",
   ISSUE_COMMENT: "issue_comment",
   CHECK_SUITE: "check_suite",
+  /** A commit status, which a pull request's checks count beside the check runs. */
+  STATUS: "status",
 } as const;
 
 const WAKE_ACTION = {
@@ -96,6 +100,9 @@ const WAKE_ACTION = {
 
 /** The conclusions of a check suite that read as failed. */
 const FAILED_CONCLUSIONS: ReadonlySet<string> = new Set(["failure", "timed_out"]);
+
+/** The states of a commit status that read as failed. */
+const FAILED_STATES: ReadonlySet<string> = new Set(["failure", "error"]);
 
 /** The branch prefix a coding agent works on (`coder-host/bounds.ts`), the only branches a failed check is told on. */
 const AGENT_BRANCH_PREFIX = "luke/";
@@ -156,6 +163,15 @@ const CheckSuiteDeliverySchema = Schema.Struct({
     app: Schema.optionalKey(Schema.NullOr(Schema.Struct({ slug: Schema.String }))),
     pull_requests: Schema.Array(Schema.Struct({ number: Schema.Int })),
   }),
+});
+
+const StatusDeliverySchema = Schema.Struct({
+  state: Schema.String,
+  sha: Schema.String,
+  updated_at: Schema.String,
+  repository: Schema.Struct({ full_name: Schema.String, html_url: Schema.String }),
+  sender: SenderSchema,
+  branches: Schema.Array(Schema.Struct({ name: Schema.String })),
 });
 
 /** A delivery read against the few fields it is read for; every other key GitHub sends is dropped unread. */
@@ -237,7 +253,25 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
   };
 }
 
-/** What a delivery tells the agents on its pull request, where it is one of the three read; nothing otherwise. */
+/** A commit status that failed on an agent's branch, told as a failed check is: by who set it, on the failed commit's checks. */
+function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | undefined {
+  const read = readDelivery(StatusDeliverySchema, payload);
+  if (Result.isFailure(read) || !FAILED_STATES.has(read.success.state)) return undefined;
+  const { repository, sender, sha, branches } = read.success;
+  const branch = branches.find((each) => each.name.startsWith(AGENT_BRANCH_PREFIX))?.name;
+  if (branch === undefined) return undefined;
+  return {
+    kind: AGENT_WAKE.CHECK_FAILED,
+    repository: repository.full_name,
+    branch,
+    pullRequest: undefined,
+    url: `${repository.html_url}/commit/${sha}/checks`,
+    by: sender.login,
+    at: instantOf(read.success.updated_at, now),
+  };
+}
+
+/** What a delivery tells the agents on its pull request, where it is one of those read; nothing otherwise. */
 export function agentWakeOf(
   event: string,
   payload: UnparsedWireValue,
@@ -250,6 +284,8 @@ export function agentWakeOf(
       return commentWake(payload, now);
     case WAKE_EVENT.CHECK_SUITE:
       return checkFailedWake(payload, now);
+    case WAKE_EVENT.STATUS:
+      return statusFailedWake(payload, now);
     default:
       return undefined;
   }
@@ -278,11 +314,12 @@ function agentWakeText(wake: AgentWake): string {
 
 /**
  * Whether an agent is told of a delivery, from its newest turn and the
- * login of Luke's own App: never an archived agent; a failed check only
- * where the agent is not at work; a review or a comment by anyone but
- * Luke's App always; and one by Luke's App only where the agent is not at
- * work and its newest turn ended before GitHub says it was made, so the
- * agent did not make it.
+ * login of Luke's own App: never an archived agent; a review or a comment
+ * by anyone but Luke's App always; and a failed check, or a review or a
+ * comment by Luke's App, only where the agent is not at work and its newest
+ * turn ended before GitHub says it was made: the agent did not make that
+ * comment, and was not watching when that check failed, so a delivery that
+ * arrives after the turn that watched it does not start another.
  */
 export function agentIsWoken(
   wake: AgentWake,
@@ -292,10 +329,9 @@ export function agentIsWoken(
   now: number,
 ): boolean {
   if (agent.archivedAt !== null) return false;
-  const atWork = AT_WORK.has(codingAgentStatusOf(turn, { createdAt: agent.createdAt, now }));
-  if (wake.kind === AGENT_WAKE.CHECK_FAILED) return !atWork;
   const byLuke = lukeLogin !== undefined && wake.by.toLowerCase() === lukeLogin.toLowerCase();
-  if (!byLuke) return true;
+  if (wake.kind !== AGENT_WAKE.CHECK_FAILED && !byLuke) return true;
+  const atWork = AT_WORK.has(codingAgentStatusOf(turn, { createdAt: agent.createdAt, now }));
   const settledAt = turn?.settledAt?.getTime();
   return !atWork && (settledAt === undefined || settledAt < wake.at);
 }

@@ -518,7 +518,7 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan of an accoun
 
 it.layer(getTestDB())("the coding-agent store's agents by their pull request", (it) => {
   it.effect(
-    "a delivery about a repository's pull request finds the agents of any account that published it, newest first, and none that published another or the same number in another repository",
+    "a delivery about a repository's pull request finds the agents of any account that published it, newest first, whatever case it spells the repository in, and none that published another or the same number in another repository",
     () =>
       Effect.gen(function* () {
         const dean = yield* openAccount;
@@ -555,6 +555,8 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
           ],
         );
         assert.equal((yield* listCodingAgentsOnPullRequest("acme/api", 12, 1)).length, 1);
+        // GitHub may spell the repository in another case than the agent's row does.
+        assert.equal((yield* listCodingAgentsOnPullRequest("Acme/API", 12, 10)).length, 2);
         assert.deepEqual(yield* listCodingAgentsOnPullRequest("acme/api", 99, 10), []);
       }),
   );

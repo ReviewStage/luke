@@ -847,7 +847,7 @@ const findAgentsOnPullRequest = SqlSchema.findAll({
         .from(codingAgent)
         .where(
           and(
-            eq(codingAgent.repository, repository),
+            eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
             eq(sql`(${codingAgent.published}->>'number')::int`, number),
           ),
         )
