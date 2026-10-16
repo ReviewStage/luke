@@ -41,7 +41,10 @@ export default defineConfig({
       expect: {
         toMatchScreenshot: {
           comparatorName: "pixelmatch",
-          comparatorOptions: { allowedMismatchedPixels: 0 },
+          // Note that the colour threshold is zero as well as the count,
+          // because pixelmatch's default tolerance passes a faint change
+          // (a skeleton's line, a hairline) as no change at all.
+          comparatorOptions: { threshold: 0, allowedMismatchedPixels: 0 },
         },
       },
     },
