@@ -15,6 +15,8 @@ node_modules/
 dist
 out
 .vite/
+# What a failed browser test leaves for the one reading it: its screenshot.
+.vitest/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
