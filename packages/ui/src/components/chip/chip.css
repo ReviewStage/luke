@@ -115,8 +115,11 @@
     opacity: 0.45;
   }
 
-  .luke-chip[aria-disabled="true"] {
-    color: color-mix(in srgb, currentColor 45%, transparent);
+  /* What it holds fades rather than its ink being restated, so its words,
+     its marks, and its chevron fade alike from whatever ink its look draws
+     them in. */
+  .luke-chip[aria-disabled="true"] > * {
+    opacity: 0.45;
   }
 
   .luke-chip[data-look="pill"][aria-disabled="true"] {
