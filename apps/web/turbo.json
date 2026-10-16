@@ -1,0 +1,13 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // Some of web's tests run a script from the repository's own scripts/
+    // (the Vercel ignore step, the release's CI check) rather than one of
+    // its workspace, so that directory is an input of the task as well, or a
+    // change to a script alone would replay the old pass.
+    "test:vitest": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/**"]
+    }
+  }
+}
