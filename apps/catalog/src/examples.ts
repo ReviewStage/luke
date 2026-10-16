@@ -1,4 +1,5 @@
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
@@ -39,4 +40,5 @@ export const EXAMPLES: readonly Example[] = [
   SEGMENTED_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
+  BADGES_EXAMPLE,
 ];
