@@ -174,7 +174,7 @@ export class AccountSessionManager {
   #cancelSignIn: (() => void) | undefined;
   #sessionRunning: Fiber.Fiber<LoopbackConsentOutcome<AccountSnapshot>> | undefined;
   #cancelSession: (() => void) | undefined;
-  /** The sign-out a refused renewal started, which `refresh` waits on and no renewal does. */
+  /** The sign-out a refused renewal started, which `refresh` and a sign-in wait on and no renewal does. */
   #signingOut: Fiber.Fiber<AccountSnapshot> | undefined;
 
   private constructor(
@@ -355,6 +355,10 @@ export class AccountSessionManager {
     // standing for the developer's own press, exactly as the held promise did.
     return Effect.uninterruptibleMask((restore) =>
       Effect.gen({ self: this }, function* () {
+        // Note that a sign-out a refused renewal started is let finish first,
+        // because its capability stop and cleared account would otherwise
+        // land over the session this sign-in starts.
+        if (this.#signingOut) yield* restore(Fiber.await(this.#signingOut));
         if (this.#account.status === ACCOUNT_STATUS.SIGNED_IN) return this.#account;
         if (this.#signInRunning) return yield* restore(Fiber.join(this.#signInRunning));
         this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };

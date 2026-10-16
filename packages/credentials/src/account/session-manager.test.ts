@@ -27,8 +27,12 @@ function manager(options: {
   client?: AccountClient;
   /** Who the service says a token belongs to; the stored account's person unless given. */
   identity?: { id: string; email: string };
+  /** The capability start a sign-in runs; recording "start" unless given. */
+  startCapabilities?: Effect.Effect<void>;
   /** The capability stop a sign-out runs; recording "stop" unless given. */
   stopCapabilities?: Effect.Effect<void>;
+  /** The refresh grant's answer; new tokens unless given. */
+  refresh?: AccountClient["refresh"];
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
   /** Whose session the hand-off's exchange answers; the stored account's person unless given. */
@@ -65,7 +69,9 @@ function manager(options: {
           ...(options.identity ?? { id: STORED.id, email: STORED.email }),
           provider: STORED.provider,
         }),
-      refresh: () => Effect.succeed({ accessToken: "new-access", refreshToken: "new-refresh" }),
+      refresh:
+        options.refresh ??
+        (() => Effect.succeed({ accessToken: "new-access", refreshToken: "new-refresh" })),
       authorizeUrl: (input: { redirectUri: string; state: string }) => {
         authorizations.push(input);
         return `https://accounts.example/authorize?state=${encodeURIComponent(input.state)}`;
@@ -108,9 +114,11 @@ function manager(options: {
       openExternal: async (url) => {
         opened.push(url);
       },
-      startCapabilities: Effect.sync(() => {
-        events.push("start");
-      }),
+      startCapabilities:
+        options.startCapabilities ??
+        Effect.sync(() => {
+          events.push("start");
+        }),
       stopCapabilities:
         options.stopCapabilities ??
         Effect.sync(() => {
@@ -259,6 +267,55 @@ function grantCode(authorizations: readonly { redirectUri: string; state: string
     return yield* Effect.promise(() => fetch(callback, { redirect: "manual" }));
   });
 }
+
+/** Lets the event loop turn `count` times, long enough for a loopback round trip to land. */
+async function turns(count: number): Promise<void> {
+  for (let turn = 0; turn < count; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+}
+
+it.effect(
+  "a sign-in begun while a refused renewal's sign-out stops capabilities starts only after it",
+  () =>
+    Effect.gen(function* () {
+      const refusing = refreshingClient(() =>
+        Promise.resolve(
+          jsonResponse(
+            { error: "invalid_grant", error_description: "Refresh token was revoked" },
+            400,
+          ),
+        ),
+      );
+      const released = yield* Deferred.make<void>();
+      const order: string[] = [];
+      const subject = yield* manager({
+        stored: STORED,
+        refresh: (token) => refusing.refresh(token),
+        startCapabilities: Effect.sync(() => order.push("start")),
+        stopCapabilities: Deferred.await(released).pipe(
+          Effect.andThen(Effect.sync(() => order.push("stop"))),
+        ),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      yield* subject.instance.renewOnce();
+
+      const signingIn = yield* Effect.forkChild(
+        subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
+      );
+      const granting = yield* Effect.forkChild(grantCode(subject.authorizations));
+      // The stop is held until a sign-in that did not wait would have landed.
+      yield* Effect.race(
+        Fiber.join(signingIn),
+        Effect.promise(() => turns(500)),
+      );
+      yield* Deferred.succeed(released, undefined);
+      yield* Fiber.join(granting);
+      yield* Fiber.join(signingIn);
+
+      assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+      assert.equal(subject.stored()?.refreshToken, "issued-refresh");
+      assert.deepEqual(order, ["stop", "start"]);
+    }),
+);
 
 /** The hand-off page the sign-in sent the browser on to, read off its redirect. */
 function handOffPage(response: Response): URL {
