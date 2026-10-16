@@ -25,7 +25,9 @@
  * page alike, so Back from an automation opened from the list returns to the
  * list. A new automation's page is one step with the automation it makes,
  * which stands in its place once Create lands, so Back from what it made
- * returns to wherever the new page was opened from.
+ * returns to wherever the new page was opened from. An automation's page is
+ * of the workspace it was opened in, so Back passes over it once another is
+ * listed, as it does a person's page.
  */
 
 import { EXPERIMENT } from "@luke/settings";
@@ -83,7 +85,12 @@ type Place =
       readonly workspaceId: string | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.FACTORY }
-  | { readonly kind: typeof PLACE_KIND.AUTOMATIONS; readonly page: AutomationsPlace }
+  | {
+      readonly kind: typeof PLACE_KIND.AUTOMATIONS;
+      readonly page: AutomationsPlace;
+      /** The workspace listed as the page stood, whose automations it read. */
+      readonly workspaceId: string | undefined;
+    }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -112,13 +119,14 @@ function sameAutomationsOpening(one: AutomationsPlace, other: AutomationsPlace):
   return true;
 }
 
-/** Whether `place` is the automation a new automation's page standing made, which takes that page's step rather than being a visit after it. */
+/** Whether `place` is the automation a new automation's page standing made, which takes that page's step rather than being a visit after it; any other automation opened from it is a visit. */
 function madeFromNew(standing: Place, place: Place): boolean {
   return (
     standing.kind === PLACE_KIND.AUTOMATIONS &&
     standing.page.kind === AUTOMATIONS_PAGE.NEW &&
     place.kind === PLACE_KIND.AUTOMATIONS &&
-    place.page.kind === AUTOMATIONS_PAGE.EDIT
+    place.page.kind === AUTOMATIONS_PAGE.EDIT &&
+    place.page.created === true
   );
 }
 
@@ -148,7 +156,7 @@ function sameSpot(one: HistorySpot | undefined, other: HistorySpot | undefined):
 /** Whether a step stands as it stood: Settings on the same page, a version history where it was, a person's page by the name it was last opened with, an Automations page as it was opened. */
 function samePlace(one: Place, other: Place): boolean {
   if (one.kind === PLACE_KIND.AUTOMATIONS && other.kind === PLACE_KIND.AUTOMATIONS) {
-    return sameAutomationsOpening(one.page, other.page);
+    return one.workspaceId === other.workspaceId && sameAutomationsOpening(one.page, other.page);
   }
   if (one.kind === PLACE_KIND.SETTINGS && other.kind === PLACE_KIND.SETTINGS) {
     return one.view === other.view;
@@ -354,7 +362,9 @@ export function useWindowHistory(input: {
       };
     }
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
-    if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS, page: automationsPage };
+    if (automationsOpen) {
+      return { kind: PLACE_KIND.AUTOMATIONS, page: automationsPage, workspaceId: listedWorkspace };
+    }
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot }
@@ -378,7 +388,11 @@ export function useWindowHistory(input: {
   const reachable = (to: Place) => {
     // Factory and the Automations page are experiments, so back and forward pass over each while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
-    if (to.kind === PLACE_KIND.AUTOMATIONS) return automationsOn;
+    // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed.
+    if (to.kind === PLACE_KIND.AUTOMATIONS) {
+      if (!automationsOn) return false;
+      return to.page.kind !== AUTOMATIONS_PAGE.EDIT || to.workspaceId === listedWorkspace;
+    }
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
     if (!("taskId" in to) || to.taskId === boundFor) return true;

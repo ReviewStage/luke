@@ -66,12 +66,14 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The window on the Automations page given, each page it is asked to open recorded in `opened`. */
+/** The window on the Automations page given, of the workspace given, each page it is asked to open recorded in `opened`. */
 function onAutomations(
   page: AutomationsPlace | undefined,
   opened: (AutomationsPlace | undefined)[],
+  workspaceId = "workspace-acme",
 ): TasksControl {
   return tasksControl({
+    workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
     automationsView: {
       open: page !== undefined,
       place: page ?? { kind: AUTOMATIONS_PAGE.LIST },
@@ -235,14 +237,39 @@ test("the automation a new automation's page made takes that page's step, so Bac
   const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
   await settle();
   window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, opened));
-  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+  const made = { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID, created: true } as const;
+  window.stand(onAutomations(made, opened));
 
   act(() => window.history().onBack());
   window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
   act(() => window.history().onForward());
 
-  assert.deepEqual(opened, [
-    { kind: AUTOMATIONS_PAGE.LIST },
-    { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID },
-  ]);
+  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }, made]);
+});
+
+test("another automation opened over a new automation's page, as a notification opens one, is a visit after it, which Back leaves for the new page", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  await settle();
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, opened));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.NEW }]);
+});
+
+test("an automation's page is of the workspace it stood in, so once another is listed Back passes over it", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
+  await settle();
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID }, opened));
+  const linked = { kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-of-platform" } as const;
+  window.stand(onAutomations(linked, opened, "workspace-platform"));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.LIST }]);
 });

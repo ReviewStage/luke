@@ -438,7 +438,7 @@ function AutomationsPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.
         leaveGuard={plans.leaveGuard}
         onCreated={(automationId) => {
           setMade(automationId);
-          view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
+          view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId, created: true });
         }}
       />
     </Fragment>

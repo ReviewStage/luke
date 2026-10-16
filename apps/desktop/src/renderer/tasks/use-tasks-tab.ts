@@ -283,6 +283,8 @@ export type AutomationsPlace =
       readonly automationId: string;
       /** The run a link named, which its runs mark and bring into view. */
       readonly runId?: string;
+      /** Opened by the new automation's page that made it, as its Create landed, so it takes that page's step in the window's history. */
+      readonly created?: true;
     };
 
 /** The list, where the Automations pages open with none asked for. */
