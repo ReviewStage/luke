@@ -62,7 +62,13 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import {
+  ConfirmDialog,
+  EllipsisIcon,
+  ProviderMark,
+  SidePanelIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -76,7 +82,6 @@ import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
-import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
 import { SettingsGroup } from "../settings/settings-group";

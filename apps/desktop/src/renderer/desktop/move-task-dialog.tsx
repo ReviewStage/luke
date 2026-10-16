@@ -1,11 +1,11 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { type DialogConfirm, useConfirmDialog } from "@luke/ui";
 import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
 import { strandedTaskHome, workspaceReaches } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useId, useRef, useState } from "react";
 import { ModalShell } from "../modal-shell";
-import { type DialogConfirm, useConfirmDialog } from "../settings/confirm-dialog";
 import { BusyLabel } from "../spinner";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
@@ -27,7 +27,7 @@ import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
  * does for the one chosen: who in the plan's workspace loses it, who in the
  * other gains it, and that its agents go with it. The dialog is the move's
  * confirmation, so its act is the move itself. The question goes with its
- * plan and its surface (`confirm-dialog.tsx`'s `useConfirmDialog`), a move
+ * plan and its surface (`@luke/ui`'s `useConfirmDialog`), a move
  * landed puts it away, and a refused one keeps it up saying so under the
  * list, the toast the move would raise held back in its favour.
  */

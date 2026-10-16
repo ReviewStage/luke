@@ -16,7 +16,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { ProviderMark, TrashIcon } from "@luke/ui";
+import { ConfirmDialog, ProviderMark, TrashIcon, useConfirmDialog } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -44,7 +44,6 @@ import { useOpenPerson } from "../person-door";
 import { SpinnerRegion } from "../spinner";
 import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 import { OneLine } from "./one-line";

@@ -929,7 +929,7 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   ]);
   await chooseAction(rowNamed(page, "Ola"), "Make owner");
   const askedFirst = roleSent().length === 0;
-  const question = dialog().querySelector(".confirm-dialog-title")?.textContent;
+  const question = dialog().querySelector("h2")?.textContent;
   await confirm("Make owner");
 
   assert.equal(askedFirst, true);

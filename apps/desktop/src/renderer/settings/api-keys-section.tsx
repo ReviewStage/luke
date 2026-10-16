@@ -9,14 +9,13 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
-import { PencilIcon, TrashIcon } from "@luke/ui";
+import { ConfirmDialog, PencilIcon, TrashIcon, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { dayText } from "../tasks/task-time";
-import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 

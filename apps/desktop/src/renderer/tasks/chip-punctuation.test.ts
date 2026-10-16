@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
@@ -11,7 +12,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, test } from "vitest";
 import { layContainersAt } from "#testing/container-width";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { useConfirmDialog } from "../settings/confirm-dialog";
 import { notesBefore } from "./file-note";
 import { PlanBody } from "./plan-body";
 import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
