@@ -1,7 +1,7 @@
 import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import { sniffImageType } from "./image-signature.js";
-import { LINEAR_BOUNDS } from "./linear-wire.js";
+import { LINEAR_BOUNDS, linearIdentifierSchema } from "./linear-wire.js";
 import { workspaceIdSchema } from "./plan-wire.js";
 import { countedNumber } from "./service-wire.js";
 
@@ -313,12 +313,18 @@ export const workspaceLinearConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
 });
 
-/** The Linear issues a member asks for (POST): the workspace, and a search where one is typed. */
+/**
+ * The Linear issues a member asks for (POST): the workspace, and a search
+ * where one is typed, or the one issue an identifier names, as a link to it
+ * drawn in Luke's words asks for its title and state, answered alone or not
+ * at all.
+ */
 export const linearIssuesRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   query: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(LINEAR_BOUNDS.MAX_QUERY_CHARS)),
   ),
+  identifier: EffectSchema.optionalKey(linearIdentifierSchema),
 });
 
 export type LinearIssuesRequest = typeof linearIssuesRequestSchema.Type;

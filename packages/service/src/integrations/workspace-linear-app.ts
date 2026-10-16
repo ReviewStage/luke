@@ -62,7 +62,12 @@ import {
   IntegrationConnect,
   revokeIntegrationGrant,
 } from "./integration-connect.js";
-import { linearOrRefused, listLinearIssues, throughWorkspaceLinear } from "./linear-issues.js";
+import {
+  linearIssueByIdentifier,
+  linearOrRefused,
+  listLinearIssues,
+  throughWorkspaceLinear,
+} from "./linear-issues.js";
 import {
   beginWorkspaceIntegrationSignIn,
   completeWorkspaceIntegrationSignIn,
@@ -270,7 +275,7 @@ const disconnectEndpoint = Effect.fn("web/workspaceLinearDisconnectEndpoint")(fu
   });
 });
 
-/** POST: the issues the workspace's grant reaches, to any member of it. */
+/** POST: the issues the workspace's grant reaches, or the one an identifier names, to any member of it. */
 const issuesEndpoint = Effect.fn("web/workspaceLinearIssuesEndpoint")(function* (
   seams: WorkspaceLinearAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -278,8 +283,13 @@ const issuesEndpoint = Effect.fn("web/workspaceLinearIssuesEndpoint")(function* 
   const userId = yield* accountOf(seams);
   const asked = yield* bodyAs(linearIssuesRequestSchema);
   const workspace = yield* memberWorkspace(userId, asked.workspaceId);
+  const { identifier } = asked;
   const issues = yield* linearOrRefused(
-    throughWorkspaceLinear(workspace.id, (token) => listLinearIssues(token, asked.query)),
+    throughWorkspaceLinear(workspace.id, (token) =>
+      identifier === undefined
+        ? listLinearIssues(token, asked.query)
+        : linearIssueByIdentifier(token, identifier),
+    ),
     "Linear listed no issues",
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { issues });

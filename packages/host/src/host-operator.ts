@@ -1117,6 +1117,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES, {
           workspaceId: params.workspaceId,
           ...("query" in params ? { query: params.query } : undefined),
+          ...("identifier" in params ? { identifier: params.identifier } : undefined),
         }),
         workspaceAnswer(planningLinearIssuesAnswerSchema),
       ),

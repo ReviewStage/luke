@@ -312,6 +312,7 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
   "linear-wire": {
     linearIssueIdSchema: linearWire.linearIssueIdSchema,
+    linearIdentifierSchema: linearWire.linearIdentifierSchema,
     linearIssueSummarySchema: linearWire.linearIssueSummarySchema,
     planLinearIssueSchema: linearWire.planLinearIssueSchema,
     linearIssuesAnswerSchema: linearWire.linearIssuesAnswerSchema,

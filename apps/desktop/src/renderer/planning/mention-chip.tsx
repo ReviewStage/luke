@@ -1,4 +1,5 @@
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
+import { INTEGRATION_NAME, INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { linearIssueIdentifierOf } from "@luke/features/linear-wire";
 import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
 import {
   decodeMention,
@@ -47,6 +48,7 @@ import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
+import { useLinearIssue } from "./use-linear-issue";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -64,7 +66,10 @@ import { useOpenLink } from "./use-open-link";
  * place can open none. An MCP server or one of its tools opens nothing
  * either, wearing its server's mark; a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
- * browser, its card saying its address. A page an agent showed on a plan
+ * browser, its card saying its address. A Linear issue's chip says the
+ * state it stands in after its name, and a bare one is called by its key and
+ * title, as the workspace's own Linear answers them on the service
+ * (`use-linear-issue.ts`). A page an agent showed on a plan
  * wears its tab's glyph, and one of a plan's coding agents its harness's
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
  * opens its tab through the window's opener for a Luke link, as a link
@@ -255,16 +260,40 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
 }
 
 /** The card a chip hangs: a file's own card, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
+/** A page of an integration's as its provider answered for it: its key, `ENG-123`, its title, and the state it stands in. */
+interface LinkStanding {
+  readonly key: string;
+  readonly title: string;
+  readonly state: string | undefined;
+}
+
+/** What the provider answers for the page a link mention names, read through the workspace the words are of; none for any other mention, or while unanswered. */
+function useLinkStanding(mention: Mention, doors: MentionDoors): LinkStanding | undefined {
+  const identifier =
+    mention.kind === MENTION_KIND.LINK && mention.provider === INTEGRATION_PROVIDER.LINEAR
+      ? linearIssueIdentifierOf(mention.url)
+      : undefined;
+  const issue = useLinearIssue(identifier, {
+    planId: doors.planId,
+    workspace: doors.place.workspace,
+  });
+  return issue === undefined
+    ? undefined
+    : { key: issue.identifier, title: issue.title, state: issue.state };
+}
+
 function MentionCard({
   mention,
   name,
   state,
   doors,
+  standing,
 }: {
   mention: Mention;
   name: string;
   state: MentionState;
   doors: MentionDoors;
+  standing: LinkStanding | undefined;
 }): ReactNode {
   if (mention.kind === MENTION_KIND.FILE) {
     return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
@@ -276,21 +305,37 @@ function MentionCard({
   const note = noteOf(mention, state);
   return (
     <HoverCard data-mention-card="">
-      <CardHead glyph={<MentionGlyph mention={mention} doors={doors} />} name={whole} />
+      <CardHead
+        glyph={<MentionGlyph mention={mention} doors={doors} />}
+        name={standing?.title ?? whole}
+      />
+      {standing === undefined ? null : (
+        <CardNote>
+          {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
+        </CardNote>
+      )}
       {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
 }
 
-/** What a chip calls a mention: the name it was written with, unless it was written as its bare address and the window holds the name of the plan, the page, or the agent it names. */
+/**
+ * What a chip calls a mention: the name it was written with, unless it was
+ * written as its bare address and the window holds better, the name of the
+ * plan, the page, or the agent it names, or the key and title a provider
+ * answered for its page.
+ */
 function bareName(
   mention: Mention,
   written: string,
   bare: boolean,
   known: ReturnType<typeof useKnownNames>,
+  standing: LinkStanding | undefined,
 ): string {
   if (!bare) return written;
   switch (mention.kind) {
+    case MENTION_KIND.LINK:
+      return standing === undefined ? written : `${standing.key} ${standing.title}`;
     case MENTION_KIND.PLAN:
       return known.plans.get(mention.planId) ?? written;
     case MENTION_KIND.PAGE:
@@ -316,12 +361,13 @@ function MentionChip({
   /** The name it was written with, without its `@`. */
   name: string;
   doors: MentionDoors;
-  /** Whether it was written as its bare address, so a plan, a page, or an agent is called by its own name where the window holds it. */
+  /** Whether it was written as its bare address, so a plan, a page, an agent, or a provider's page is called by its own name where the window holds it. */
   bare?: boolean;
 }): React.JSX.Element {
   const openLink = useOpenLink();
   const known = useKnownNames();
-  const name = bareName(mention, written, bare, known);
+  const standing = useLinkStanding(mention, doors);
+  const name = bareName(mention, written, bare, known, standing);
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const face = (
@@ -330,13 +376,16 @@ function MentionChip({
         <MentionGlyph mention={mention} doors={doors} />
       </span>
       <span className="mention-chip-label">{name}</span>
+      {standing?.state === undefined ? null : (
+        <span className="mention-chip-state">{standing.state}</span>
+      )}
     </>
   );
+  const card = (
+    <MentionCard mention={mention} name={name} state={state} doors={doors} standing={standing} />
+  );
   return (
-    <Tooltip
-      label={name}
-      card={<MentionCard mention={mention} name={name} state={state} doors={doors} />}
-    >
+    <Tooltip label={name} card={card}>
       {press === undefined ? (
         <span className="mention-chip" data-kind={mention.kind} data-state={state}>
           {face}
