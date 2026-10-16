@@ -266,8 +266,10 @@ body,
    than `hidden`, because `hidden` makes it a scroll container: a panel sliding
    in from past the right edge, or the column's bars drawn on past both sides,
    are room that focus or scrollIntoView would scroll the whole window
-   sideways into and leave it there. */
-.desktop-shell[data-sidebar-collapsed] {
+   sideways into and leave it there. Every shell clips, Settings' and a
+   version history's too, whose toolbars draw their hairline past both
+   sides as the plans' column's do. */
+.desktop-shell {
   overflow: clip;
 }
 
