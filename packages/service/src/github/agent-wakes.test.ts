@@ -439,7 +439,45 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           [],
           "a server a reviewer mentions is not handed to the agent",
         );
+        assert.ok(
+          !Array.isArray(eve.sent[0]?.message.message),
+          "a reviewer's mention hands no note as the developer's",
+        );
       }),
+  );
+
+  it.effect("a review's inline comments are read past GitHub's first page", () =>
+    Effect.gen(function* () {
+      const eve = fakeEve();
+      const { owner, agent, ref } = yield* openAgent;
+      yield* endedTurn(owner, agent.conversationId, MADE_AT - 60_000);
+      const comment = (index: number) => ({
+        path: "src/invite.ts",
+        line: index,
+        body: `Finding ${index}.`,
+        html_url: `https://github.com/${RELAY_FULL_NAME}/pull/41#discussion_r${index}`,
+      });
+      const github = githubReaching(INSTALLATIONS, undefined, {}, (sent) => {
+        const url = new URL(sent.url);
+        if (url.pathname !== REVIEW_COMMENTS_PATH) return undefined;
+        const page = Number(url.searchParams.get("page") ?? "1");
+        const first = (page - 1) * 100 + 1;
+        const count = page === 1 ? 100 : page === 2 ? 1 : 0;
+        return Response.json(Array.from({ length: count }, (_, index) => comment(first + index)));
+      }).layer;
+
+      yield* wakeAgents(eve.eveFor, reviewWakeOf(ref, "octocat"), randomUUID(), LUKE_BOT).pipe(
+        Effect.provide(github),
+      );
+
+      const text = sentText(eve.sent[0]?.message.message);
+      assert.ok(text.includes("On src/invite.ts:100 "));
+      assert.ok(
+        text.includes(
+          "On src/invite.ts:101 (https://github.com/Acme/Relay/pull/41#discussion_r101):\nFinding 101.",
+        ),
+      );
+    }),
   );
 
   it.effect(

@@ -32,7 +32,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import { codingAgentStatusOf } from "./status.js";
 
@@ -147,10 +147,14 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.
-  const reads = yield* hostedStoreOrUnavailable(
-    readMentioned(userId, line.text, { task: task?.task, workspaceId: agent.organizationId }),
-  );
-  const mentioned = mentionedContext(line.text, task?.task, reads);
+  // Note that GitHub's line carries a reviewer's words, which mention nothing on the developer's behalf, so it hands no note of what they mention.
+  const reviewers = line.sender.kind === MESSAGE_SENDER.GITHUB;
+  const reads = reviewers
+    ? NO_MENTIONED_READS
+    : yield* hostedStoreOrUnavailable(
+        readMentioned(userId, line.text, { task: task?.task, workspaceId: agent.organizationId }),
+      );
+  const mentioned = reviewers ? undefined : mentionedContext(line.text, task?.task, reads);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
   const handOver = eve
@@ -180,7 +184,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const services = yield* Effect.context<DatabaseServices>();
   // Note that another coding agent's line, or GitHub's carrying a reviewer's words, hands no server, because which servers an agent is handed is its developer's to switch, never another agent's or a reviewer's.
   const servers =
-    line.sender.kind === MESSAGE_SENDER.AGENT || line.sender.kind === MESSAGE_SENDER.GITHUB
+    line.sender.kind === MESSAGE_SENDER.AGENT || reviewers
       ? []
       : mentionedServers(line.text, task?.task.repository ?? null);
   const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(

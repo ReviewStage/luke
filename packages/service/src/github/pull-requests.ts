@@ -659,30 +659,38 @@ const ReviewLineCommentsSchema = Schema.Array(
   }),
 );
 
-/** GitHub lists a review's comments a hundred to a page; a review with more is read as its first hundred. */
-const REVIEW_COMMENTS_PER_PAGE = "100";
+/**
+ * The most pages of a review's inline comments read, a hundred to a page:
+ * three hundred comments outrun any message they are told in, so a review
+ * longer still is cut there with the note that sends the agent to `gh`.
+ */
+const REVIEW_COMMENTS_MAX_PAGES = 3;
 
 /**
  * The inline comments of one review of a pull request, in the order GitHub
- * lists them, each by its file and line; none where the repository holds no
- * such review.
+ * lists them, each by its file and line, read page by page up to the bound;
+ * none where the repository holds no such review.
  */
-export function reviewLineComments(
+export const reviewLineComments = /* @__PURE__ */ Effect.fn("web/reviewLineComments")(function* (
   token: Redacted.Redacted,
   fullName: string,
   number: number,
   reviewId: number,
-): Read<readonly GitHubReviewLineComment[]> {
-  const request = githubRead(
-    `${repositoryPath(fullName)}/pulls/${number}/reviews/${reviewId}/comments`,
+): Effect.fn.Return<
+  readonly GitHubReviewLineComment[],
+  PullRequestReadFailure,
+  HttpClient.HttpClient
+> {
+  const comments = yield* everyPage(
     token,
-  ).pipe(HttpClientRequest.setUrlParams({ per_page: REVIEW_COMMENTS_PER_PAGE }));
-  return Effect.map(readOptional(request, ReviewLineCommentsSchema), (read) =>
-    Option.getOrElse(read, () => []).map((comment) => ({
-      path: comment.path,
-      line: comment.line ?? comment.original_line ?? undefined,
-      body: comment.body,
-      url: comment.html_url,
-    })),
+    `${repositoryPath(fullName)}/pulls/${number}/reviews/${reviewId}/comments`,
+    ReviewLineCommentsSchema,
+    REVIEW_COMMENTS_MAX_PAGES,
   );
-}
+  return comments.map((comment) => ({
+    path: comment.path,
+    line: comment.line ?? comment.original_line ?? undefined,
+    body: comment.body,
+    url: comment.html_url,
+  }));
+});
