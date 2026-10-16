@@ -486,3 +486,14 @@ test("a page whose HTML holds a long run of backticks is still handed, its fence
   assert.match(part, /\n~~~html\n<pre>`+<\/pre>\n~~~$/u);
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, String(part.length));
 });
+
+test("a page whose cut-off end holds long runs of both fence characters still hands its kept beginning in a short fence", () => {
+  const html = `<h1>Chart</h1>\n${"`".repeat(6_000)}${"~".repeat(6_000)}`;
+  const part =
+    mentionedContext(`See ${page("Chart")}.`, PLAN, {
+      pages: new Map([[PAGE_ID, { id: PAGE_ID, title: "Chart", version: 1, at: 0, html }]]),
+      agents: new Map(),
+    }) ?? "";
+
+  assert.match(part, /\n```html\n<h1>Chart<\/h1>\n… \(\d+ more characters\)\n```$/u);
+});

@@ -191,6 +191,33 @@ function fenceFor(words: string): string {
   return ticks <= tildes ? "`".repeat(Math.max(3, ticks + 1)) : "~".repeat(Math.max(3, tildes + 1));
 }
 
+/** The room `cutOnLine` may spend past its bound, on the line saying how much it left out. */
+const CUT_NOTE_ROOM = 40;
+
+/** A page's HTML as handed, and the fence it stands between. */
+interface FencedHtml {
+  readonly html: string;
+  readonly fence: string;
+}
+
+/**
+ * A page's HTML cut and fenced so the two together stay inside the page's
+ * bound: the fence is read off the HTML kept, never runs the cut left out,
+ * and the room shrinks until the HTML kept and its fence fit, which it
+ * does, since less HTML never needs a longer fence.
+ */
+function fencedHtml(html: string): FencedHtml {
+  let room: number = MENTIONED_BOUNDS.PAGE_CHARS;
+  for (;;) {
+    const kept = cutOnLine(html, Math.max(0, room - CUT_NOTE_ROOM));
+    const fence = fenceFor(kept);
+    if (room <= 0 || kept.length + 2 * fence.length <= MENTIONED_BOUNDS.PAGE_CHARS) {
+      return { html: kept, fence };
+    }
+    room = Math.min(room - 1, MENTIONED_BOUNDS.PAGE_CHARS - 2 * fence.length);
+  }
+}
+
 /**
  * What a mention of a page is handed as: its id, which its next version is
  * written under, and its HTML as it stood, cut so the HTML and both its
@@ -199,9 +226,7 @@ function fenceFor(words: string): string {
 function pageNoteOf(pageId: string, name: string, reads: MentionedReads): string {
   const page = reads.pages.get(pageId);
   if (page === undefined) return `The page "${name}": no longer on this task.`;
-  const room = MENTIONED_BOUNDS.PAGE_CHARS - 2 * fenceFor(page.html).length;
-  const html = cutOnLine(page.html, Math.max(0, room));
-  const fence = fenceFor(html);
+  const { html, fence } = fencedHtml(page.html);
   return `The developer pointed you at the page "${page.title}" (id \`${page.id}\`, version ${page.version}) shown on this task. To change it, show it again with \`${AGENT_TOOL.SHOW_PAGE}\` and \`page: "${page.id}"\`, which writes its next version in its place. Its HTML as it stands:\n\n${fence}html\n${html}\n${fence}`;
 }
 
