@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_STATUS, type PlanlessAgent } from "@luke/features/coding-agent-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
@@ -47,6 +48,7 @@ const TASK_LIST = 'nav:is([aria-label="Tasks"], [aria-label="Archived tasks"])';
 const roots: Root[] = [];
 
 beforeEach(() => {
+  openedAgents = [];
   window.localStorage.clear();
   window.sessionStorage.clear();
   Object.defineProperty(window, "matchMedia", {
@@ -119,11 +121,44 @@ const ARCHIVED = [
   },
 ];
 
-/** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean. */
+/** An agent an automation of `starter`'s started with no task, on `repository`, last moving at `activityAt`. */
+function oneOff(
+  id: string,
+  title: string,
+  repository: string,
+  starter: string,
+  activityAt: number,
+  archivedAt?: number,
+): PlanlessAgent {
+  return {
+    id,
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title,
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    startedBy: { userId: starter, name: starter === DEAN ? "Dean Stratakos" : "Charles Pan" },
+    automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+    automationName: "Morning Sentry triage",
+    workspaceId: ACME.id,
+    repository,
+    activityAt,
+    ...(archivedAt === undefined ? undefined : { archivedAt }),
+  };
+}
+
+/** The agents' pages the sidebar opened, in order. */
+let openedAgents: string[] = [];
+
+/** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
 function mountSidebar(
   workspace: Workspace,
   plans: readonly PlanSummary[] = TASKS,
   archived: readonly PlanSummary[] = ARCHIVED,
+  agents: readonly PlanlessAgent[] = [],
+  agentShown?: string,
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -135,6 +170,15 @@ function mountSidebar(
     workspace,
     workspaces: [workspace],
     me: DEAN,
+    listedAgents: {
+      standing: agents.filter((agent) => agent.archivedAt === undefined),
+      archived: agents.filter((agent) => agent.archivedAt !== undefined),
+    },
+    agentView: {
+      agentId: agentShown,
+      onOpen: (agentId) => openedAgents.push(agentId),
+      onClose: () => undefined,
+    },
   });
   act(() =>
     root.render(
@@ -290,8 +334,9 @@ async function mountRead(
   workspace: Workspace,
   plans?: readonly PlanSummary[],
   archived?: readonly PlanSummary[],
+  agents?: readonly PlanlessAgent[],
 ): Promise<HTMLElement> {
-  const sidebar = mountSidebar(workspace, plans, archived);
+  const sidebar = mountSidebar(workspace, plans, archived, agents);
   await act(async () => undefined);
   return sidebar;
 }
@@ -603,4 +648,73 @@ test("the sidebar stepping aside for Settings and coming back finds the archived
     back.querySelector('nav[aria-label="Archived tasks"]'),
     "the list is named for the archive",
   );
+});
+
+const TRIAGE = oneOff("a-1", "Triage overnight issues", "acme/relay", DEAN, 550);
+const SWEEP = oneOff("a-2", "Sweep flaky tests", "acme/console", CHARLES, 100);
+
+test("a one-off agent stands among its repository's tasks by its last activity, led by its harness mark and ending with its automation's clock, and a press opens its page", () => {
+  const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [TRIAGE, SWEEP]);
+  assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    [
+      "Billing empty states",
+      "Sweep flaky tests",
+      "Triage overnight issues",
+      "Retry webhooks",
+      "Fix flaky deploy",
+    ],
+  );
+  const row = [...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-agent")].find(
+    (each) => each.textContent?.includes("Triage overnight issues") === true,
+  );
+  assert.ok(row, "the agent's row stands");
+  assert.ok(row.querySelector(".sidebar-agent-glyph svg"), "it leads with its harness mark");
+  assert.ok(row.querySelector(".sidebar-plan-time .actor-mark"), "it ends with its starter");
+
+  act(() => row.click());
+  assert.deepEqual(openedAgents, ["a-1"]);
+});
+
+test("grouped by creator a one-off agent stands under whoever started it, and Created by filters it as a task", async () => {
+  const sidebar = await mountRead(ACME, TASKS, ARCHIVED, [TRIAGE, SWEEP]);
+  choose(sidebar, "Group by", "Creator");
+  assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    [
+      "Triage overnight issues",
+      "Retry webhooks",
+      "Billing empty states",
+      "Fix flaky deploy",
+      "Sweep flaky tests",
+    ],
+  );
+
+  choose(sidebar, "Created by", "Me");
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Triage overnight issues", "Retry webhooks"],
+  );
+});
+
+test("an archived one-off agent stands only in the archived view, among the archived tasks", async () => {
+  const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
+  const sidebar = await mountRead(ACME, TASKS, ARCHIVED, [TRIAGE, shelved]);
+  assert.ok(!taskRows(sidebar).some((row) => row.name === "Digest of open pull requests"));
+
+  toggleArchived(sidebar);
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Digest of open pull requests", "Spike: edge caching", "Old dashboard charts"],
+  );
+});
+
+test("the agent whose page stands is the row the sidebar marks", () => {
+  const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [TRIAGE], "a-1");
+  const marked = [...sidebar.querySelectorAll('[aria-current="page"]')].map(
+    (row) => row.querySelector(".sidebar-plan-name")?.textContent,
+  );
+  assert.deepEqual(marked, ["Triage overnight issues"]);
 });

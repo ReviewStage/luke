@@ -174,6 +174,14 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   repository belongs to <workspace> · Move to <workspace>", whose press opens
   Move to workspace on that workspace; nothing moves it without that press,
   since a move shares the task with the other workspace's members.
+- An agent an automation started with no task stands among the tasks, not
+  in a group of its own: under its repository, under whoever started it, or
+  in the one run, ordered with the tasks by its last activity, filtered by
+  Created by, and, archived, under Archived tasks. Its row leads with the
+  agent's harness mark, as its tab does, giving way to the working mark while
+  it works, ends with its automation's clock and its time, and reads in
+  semibold while its end is unseen; a press opens the agent's own page. Pinning
+  one waits for a pin of its own (#2901 pinned tasks only).
 - Clicking a row opens that task on the document page (see "Leaving and
   resuming").
 - `New task` at the head of the list leaves any open task for the new-task

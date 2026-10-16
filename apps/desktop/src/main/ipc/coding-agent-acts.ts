@@ -86,6 +86,8 @@ export interface CodingAgentActsDependencies {
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+    /** The plan list read again, which carries every agent with no plan beside the plans. */
+    planningRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestParams,
@@ -187,10 +189,15 @@ export function codingAgentActRows(
   dependencies: CodingAgentActsDependencies,
 ): Pick<ActRows, CodingAgentActKind> {
   const { host, notices } = dependencies;
+  // Note that an agent with no plan is listed by the plan list, which is read again so its row says what the act changed.
   const notedAgent = (answer: Effect.Effect<CodingAgentAgentAnswer>) =>
-    noted(answer, (value) => {
-      if ("agent" in value) notices.observeAgents([value.agent]);
-    });
+    Effect.tap(
+      noted(answer, (value) => {
+        if ("agent" in value) notices.observeAgents([value.agent]);
+      }),
+      (value) =>
+        "agent" in value && value.agent.planId === null ? host.planningRefresh() : Effect.void,
+    );
   return {
     [ACT_KIND.CODING_AGENTS_MODELS]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MODELS, sender);
