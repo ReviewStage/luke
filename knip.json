@@ -38,7 +38,8 @@
       "project": ["src/**", "scripts/**"]
     },
     "apps/catalog": {
-      "entry": ["src/main.tsx"],
+      "vitest": false,
+      "entry": ["src/main.tsx", "vitest.config.ts", "src/catalog.test.ts", "src/test-setup.ts"],
       "project": ["src/**"]
     },
     "apps/web": {

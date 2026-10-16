@@ -1,6 +1,6 @@
 import { createElement, useState } from "react";
 import { expect, test } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { PlusIcon } from "../../face/glyphs.js";
 import { accessibilityViolations, mount } from "../../testing/browser.js";
 import { PROFILE, surfaceAttributes, THEME } from "../../tokens/surface.js";
@@ -131,3 +131,14 @@ for (const surface of SURFACES) {
     expect(await accessibilityViolations(container)).toEqual([]);
   });
 }
+
+test("a busy button's ring holds still for a visitor to the site who asked for reduced motion", async () => {
+  await mount(
+    createElement(Button, { busy: true, busyLabel: "Saving", children: "Save" }),
+    surfaceAttributes(PROFILE.WEB, THEME.LIGHT),
+  );
+  const button = page.getByRole("button", { name: "Saving" }).element();
+  expect(getComputedStyle(button, "::after").animationPlayState).toBe("running");
+  await commands.emulateReducedMotion(true);
+  expect(getComputedStyle(button, "::after").animationPlayState).toBe("paused");
+});

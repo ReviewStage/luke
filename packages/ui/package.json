@@ -20,6 +20,7 @@
     "./styles.css": "./src/styles.css",
     "./testing/browser": "./src/testing/browser.js",
     "./testing/browser-setup": "./src/testing/browser-setup.js",
+    "./testing/browser-commands": "./src/testing/browser-commands.js",
     "./search-tokens": "./src/search-tokens.js",
     "./reply-quote": "./src/reply-quote.js",
     "./skill-mention": "./src/skill-mention.js",

@@ -1,0 +1,17 @@
+/* motion.css -- the site's answer to reduced motion for an endless loop.
+
+   The motion tokens' durations are `@luke/brand`'s; what holds a loop with
+   no end of its own (a busy button's ring) is `--loop-motion`, its
+   `animation-play-state`. The desktop sets it in its own reset, where a
+   capture run holds it too; the site sets it here, paused for a visitor who
+   asked for reduced motion. */
+
+[data-luke-profile="web"] {
+  --loop-motion: running;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-luke-profile="web"] {
+    --loop-motion: paused;
+  }
+}

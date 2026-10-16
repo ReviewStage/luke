@@ -23,20 +23,21 @@ import { CatalogSection } from "../section";
  */
 
 const STATES = [
-  { name: "At rest", props: {} },
-  { name: "Unavailable", props: { disabled: true } },
+  { id: "buttons-rest", name: "At rest", props: {} },
+  { id: "buttons-unavailable", name: "Unavailable", props: { disabled: true } },
   {
+    id: "buttons-unavailable-focusable",
     name: "Unavailable, keeps the keyboard",
     props: { disabled: true, focusableWhenDisabled: true },
   },
-  { name: "Busy", props: { busy: true, busyLabel: "Saving" } },
+  { id: "buttons-busy", name: "Busy", props: { busy: true, busyLabel: "Saving" } },
 ] as const;
 
 function Buttons(): React.JSX.Element {
   return (
     <>
       {STATES.map((state) => (
-        <CatalogSection key={state.name} id={`buttons-${state.name}`} title={state.name}>
+        <CatalogSection key={state.id} id={state.id} title={state.name}>
           <Inline>
             {Object.values(BUTTON_VARIANT).map((variant) => (
               <Button key={variant} variant={variant} {...state.props}>

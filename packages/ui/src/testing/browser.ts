@@ -25,6 +25,13 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    /** Emulates a system that asked for reduced motion (`browser-commands.ts`). */
+    emulateReducedMotion: (reduced: boolean) => Promise<void>;
+  }
+}
+
 const roots: Root[] = [];
 
 /**

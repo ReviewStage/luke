@@ -40,18 +40,28 @@ export const BUTTON_TYPE = {
 
 export type ButtonType = (typeof BUTTON_TYPE)[keyof typeof BUTTON_TYPE];
 
+/**
+ * A button that can be busy names what it is doing while it is, since its
+ * words stand hidden under the ring and name nothing then; one that never is
+ * names nothing more.
+ */
+type BusyProps =
+  | { busy?: false | undefined; busyLabel?: undefined }
+  | {
+      /** Whether its press is out: it refuses another and shows a ring in place of its words. */
+      busy: boolean;
+      /** What it is named while busy, the act in progress ("Saving"). */
+      busyLabel: string;
+    };
+
 /** What every button takes, labelled or not. */
-interface ButtonBase {
+type ButtonBase = BusyProps & {
   variant?: ButtonVariant;
   type?: ButtonType;
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether an unavailable button stays in the tab order, so a hint can say why it is unavailable. */
   focusableWhenDisabled?: boolean | undefined;
-  /** Whether its press is out: it refuses another and shows a ring in place of its words. */
-  busy?: boolean | undefined;
-  /** What it is named while busy, the act in progress ("Saving"). */
-  busyLabel?: string | undefined;
   id?: string | undefined;
   ref?: Ref<HTMLButtonElement> | undefined;
   /** The id of the words that say more of what it does. */
@@ -60,7 +70,7 @@ interface ButtonBase {
   "aria-haspopup"?: "menu" | "listbox" | "dialog" | undefined;
   "aria-expanded"?: boolean | undefined;
   "aria-controls"?: string | undefined;
-}
+};
 
 /** The attributes and handler a button carries for its state, shared by both kinds. */
 function stateProps(props: ButtonBase, name: string | undefined) {
