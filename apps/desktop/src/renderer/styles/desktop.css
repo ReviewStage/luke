@@ -2291,24 +2291,11 @@ ul.actor-stack {
   gap: var(--space-4) var(--space-8);
 }
 
-/* A failed read alone in the region it would have filled (`read-failure.tsx`):
-   Retry under the sentence, both centred, in the region's own type. */
-.read-failure-centred {
-  flex-direction: column;
-  font-size: inherit;
-  text-align: center;
-}
-
-/* Factory's scroller runs to the toolbar's edge, so its failure stands off it
-   as Automations' does by its scroller's padding. */
-.factory-scroll > .read-failure-centred {
+/* Factory's scroller runs to the toolbar's edge, so its failure (`@luke/ui`'s
+   `ErrorState`, centred) stands off it as Automations' does by its
+   scroller's padding. */
+.factory-scroll > .luke-error-state[data-placement="centred"] {
   margin-top: var(--space-16);
-}
-
-/* Among the rows, Retry is drawn back by its own inset, so its glyph stands
-   a gap after the words, or under their first letter where it wraps. */
-.read-failure:not(.read-failure-centred) > .quiet-button {
-  margin-left: calc(-1 * var(--space-8));
 }
 
 .failure-note-remedy {

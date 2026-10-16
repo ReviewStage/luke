@@ -22,3 +22,4 @@
 @import "./components/badge/badge.css";
 @import "./components/avatar/avatar.css";
 @import "./components/empty-state/empty-state.css";
+@import "./components/error-state/error-state.css";

@@ -124,7 +124,7 @@ function readFailure(page: HTMLElement) {
     .join("");
   return {
     words,
-    red: alert.classList.contains("error-message"),
+    red: alert.classList.contains("luke-error-state"),
     presses: presses.map((each) => each.textContent),
     retry: () => act(() => presses[0]?.click()),
   };

@@ -1,5 +1,5 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { FolderIcon, WingFace } from "@luke/ui";
+import { ErrorState, FolderIcon, WingFace } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -7,7 +7,6 @@ import { useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
 import { Shortcut } from "../shortcut";
@@ -200,7 +199,7 @@ function HomeRecent({
       </h2>
       {plans.listFailed ? (
         <div className="sidebar-note">
-          <ReadFailure line={UNREAD_LINE} onRetry={plans.onRetryList} />
+          <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
         </div>
       ) : null}
       {recent.length === 0 ? null : (

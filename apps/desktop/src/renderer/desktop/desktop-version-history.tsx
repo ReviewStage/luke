@@ -5,7 +5,7 @@ import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { BackIcon, EllipsisIcon } from "@luke/ui";
+import { BackIcon, EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
@@ -17,7 +17,6 @@ import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import type { DialogConfirm } from "../settings/confirm-dialog";
 import { Shortcut } from "../shortcut";
@@ -561,11 +560,9 @@ function VersionPage({
       <div className="desktop-drag-strip" />
       <div className="desktop-empty">
         {list.kind === HISTORY_READ.FAILED ? (
-          <ReadFailure
-            line="The history could not be read."
-            onRetry={versions.onRetry}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
+          <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            The history could not be read.
+          </ErrorState>
         ) : (
           <p>{NO_HISTORY_LINE}</p>
         )}

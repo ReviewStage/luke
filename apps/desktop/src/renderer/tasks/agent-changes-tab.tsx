@@ -10,14 +10,13 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { CopyIcon, DownloadIcon, EmptyState } from "@luke/ui";
+import { CopyIcon, DownloadIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
@@ -388,7 +387,9 @@ export function AgentChangesTab({
   if ("failure" in answer) {
     return (
       <div className="side-panel-empty">
-        <ReadFailure line={CHANGES_WORDS.FAILED} onRetry={ask} place={READ_FAILURE_PLACE.CENTRED} />
+        <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {CHANGES_WORDS.FAILED}
+        </ErrorState>
       </div>
     );
   }

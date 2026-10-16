@@ -20,7 +20,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { BackIcon, ChevronRightIcon } from "@luke/ui";
+import { BackIcon, ChevronRightIcon, ErrorState } from "@luke/ui";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
@@ -40,7 +40,6 @@ import { useAutomation } from "../automation-directory";
 import { TaskRef } from "../desktop/task-card";
 import { usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
-import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
@@ -278,7 +277,7 @@ function CodeBlock({
       ) : (
         <div className="file-tab-notice border-b-0">
           {shown.again ? (
-            <ReadFailure line={shown.line} onRetry={() => setAsked((was) => was + 1)} />
+            <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
           ) : (
             <p className="m-0" role="alert">
               {shown.line}
@@ -324,7 +323,9 @@ function ImageBlock({
   if ("failed" in image) {
     return (
       <div data-inbox-image-failed="">
-        <ReadFailure line={IMAGE_FAILED_LINE} onRetry={() => onRetryImage(block.attachmentId)} />
+        <ErrorState onRetry={() => onRetryImage(block.attachmentId)}>
+          {IMAGE_FAILED_LINE}
+        </ErrorState>
       </div>
     );
   }
@@ -1145,7 +1146,7 @@ export function InboxPane({
             <Withdrawn item={item} by={by} now={now} />
           </WordsWorkspace>
           {control.failed ? (
-            <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
+            <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
           ) : null}
         </div>
         {open ? (

@@ -797,9 +797,9 @@ body,
 }
 
 /* A fault's words, in the danger text colour: a refusal under the row or
-   the dialog it answers, a press that did not land, and a read that did not
-   (`read-failure.tsx`). The one class for them, so a failure reads alike
-   wherever it is said. */
+   the dialog it answers, and a press that did not land. The one class for
+   them, so a failure reads alike wherever it is said, as a read that did not
+   land does in `@luke/ui`'s `ErrorState`. */
 .error-message {
   margin: 0;
   color: var(--danger-text);

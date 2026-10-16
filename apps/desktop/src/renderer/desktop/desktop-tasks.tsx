@@ -4,7 +4,7 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { repositoryGroups, repositoryLabel, taskRow } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -18,7 +18,6 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
@@ -272,7 +271,7 @@ function TaskInboxTab({
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
           ) : inbox.failed && listed.length === 0 ? (
             <div className="sidebar-note">
-              <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
+              <ErrorState onRetry={inbox.onRetry}>The inbox could not be read.</ErrorState>
             </div>
           ) : inbox.read && filteredOut ? (
             <NeedsYouEmpty needsYou={needsYou} onList={columns.onList} />
@@ -455,11 +454,9 @@ function PlanDocument({
             {region.kind === DOCUMENT_REGION.READING ? (
               <Spinner label="Loading task" size={SPINNER_SIZE.REGION} />
             ) : region.kind === DOCUMENT_REGION.FAILED ? (
-              <ReadFailure
-                line={line}
-                onRetry={tasks.onRetryDocument}
-                place={READ_FAILURE_PLACE.CENTRED}
-              />
+              <ErrorState onRetry={tasks.onRetryDocument} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+                {line}
+              </ErrorState>
             ) : (
               <p role="alert">{line}</p>
             )}

@@ -161,6 +161,20 @@ export function ResetIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * An arrow turning round to where it began: tries again what did not land.
+ * Its paths are Lucide's `rotate-cw` (https://lucide.dev, ISC licence,
+ * copyright (c) Lucide Contributors 2022), drawn in our stroke.
+ */
+export function RetryIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+    </Glyph>
+  );
+}
+
 /** Stands down without choosing: the cancel a control becomes mid-action. */
 export function CloseIcon(): React.JSX.Element {
   return (

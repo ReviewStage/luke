@@ -289,3 +289,13 @@ body {
 .catalog-empty-room-narrow {
   width: 200px;
 }
+
+/* A region a failed read would have filled, its failure centred in it. */
+.catalog-error-region {
+  align-items: center;
+  justify-content: center;
+}
+
+.catalog-error-narrow {
+  width: 200px;
+}

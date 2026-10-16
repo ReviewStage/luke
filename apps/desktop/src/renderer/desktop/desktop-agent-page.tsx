@@ -3,7 +3,7 @@ import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { EllipsisIcon } from "@luke/ui";
+import { EllipsisIcon, ErrorState } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -17,7 +17,6 @@ import { FindScope } from "../find-in-tab";
 import { usePageWorkspace } from "../links-at-hand";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import {
@@ -329,7 +328,7 @@ export function DesktopAgentPage({
           <NotFound thing={NOT_FOUND_THING.AGENT} />
         ) : agents.listFailed ? (
           <div className="agent-page-note">
-            <ReadFailure line={NOT_READ} onRetry={agents.onRetryList} />
+            <ErrorState onRetry={agents.onRetryList}>{NOT_READ}</ErrorState>
           </div>
         ) : (
           <Spinner label="Loading agent" size={SPINNER_SIZE.INLINE} />

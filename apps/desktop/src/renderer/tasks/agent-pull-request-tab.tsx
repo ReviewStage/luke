@@ -19,7 +19,7 @@ import {
 import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { CopyIcon, EmptyState, ProviderMark } from "@luke/ui";
+import { CopyIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState, ProviderMark } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   CheckIcon,
@@ -34,7 +34,6 @@ import { type ReactNode, useCallback } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -595,11 +594,9 @@ function OverviewView({
   if ("failure" in answer) {
     return (
       <div className="side-panel-empty">
-        <ReadFailure
-          line={PULL_REQUEST_WORDS.FAILED}
-          onRetry={ask}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
+        <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {PULL_REQUEST_WORDS.FAILED}
+        </ErrorState>
       </div>
     );
   }
