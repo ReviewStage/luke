@@ -13,10 +13,10 @@ import type { ReactNode } from "react";
  * the order they are drawn, title first, so a voice saying what it reads
  * presses it. Its acts are that button's siblings in the row's item, never
  * inside it, because a button holds no button: each is a control of its own,
- * reached by Tab after the row and pressed without pressing the row. A row that opens nothing is no control
- * at all. The leading mark is decoration, hidden from a reader, since the
- * title says what the row is. The row owns every length in it and takes no
- * class or style.
+ * reached by Tab after the row and pressed without pressing the row. A row
+ * that opens nothing is no control at all. The leading mark is decoration,
+ * hidden from a reader, since the title says what the row is. The row owns
+ * every length in it and takes no class or style.
  */
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
