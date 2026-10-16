@@ -66,6 +66,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [{ kind: LINK_PLACE.FACTORY }, `${HOME}/factory`],
   [{ kind: LINK_PLACE.SETTINGS }, `${HOME}/settings`],
   [{ kind: LINK_PLACE.SETTINGS, page: "coding-agents" }, `${HOME}/settings/coding-agents`],
+  [{ kind: LINK_PLACE.PERSON, userId: "user_9Fq2-x" }, `${HOME}/person/user_9Fq2-x`],
 ];
 
 test("every place is shared as its kind's address under its workspace, by its ids alone", () => {
@@ -170,6 +171,10 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/automation/${OTHER}/runs/${AGENT}`,
     `${HOME}/factory/today`,
     `${HOME}/settings/Coding%20agents`,
+    `${HOME}/person`,
+    `${HOME}/people/user_9Fq2-x`,
+    `${HOME}/person/user_9Fq2-x/tasks`,
+    `${HOME}/person/charles%40acme.dev`,
     `${HOME}/agent/%E0%A4%A`,
     `${HOME}/agent/${"a".repeat(201)}`,
     `luke://mcp/linear`,

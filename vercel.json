@@ -429,7 +429,7 @@
           "dest": "/admin.html"
         },
         {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings)(?:/[^/]+)*/?",
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
           "dest": "/open.html"
         }
       ]
