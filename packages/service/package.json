@@ -163,6 +163,7 @@
     "./tasks/child-models": "./src/tasks/child-models.js",
     "./tasks/end-call": "./src/tasks/end-call.js",
     "./tasks/page-tool": "./src/tasks/page-tool.js",
+    "./tasks/plan-comments-app": "./src/tasks/plan-comments-app.js",
     "./tasks/picture-look": "./src/tasks/picture-look.js",
     "./tasks/task-file": "./src/tasks/task-file.js",
     "./tasks/plan-notes": "./src/tasks/plan-notes.js",

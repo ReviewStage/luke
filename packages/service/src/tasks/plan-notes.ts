@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { movePlanCommentAnchors, type ReportedAnchors } from "@luke/database/models/plan-comments";
 import {
   type PlanWriter,
   readRevisionContent,
@@ -152,11 +153,12 @@ function archived(stored: StoredTask): boolean {
   return stored.task.archivedAt !== undefined;
 }
 
-/** What a change made of the plan's text under its lock: the text to save, how many changes it made, and the agents' journal where it moved. */
+/** What a change made of the plan's text under its lock: the text to save, how many changes it made, the agents' journal where it moved, and where the developer's editor reported its comment anchors. */
 interface TextTaken {
   readonly text: string;
   readonly changes: number;
   readonly agentEdits?: readonly PlanAgentEdit[];
+  readonly anchors?: ReportedAnchors;
 }
 
 /** One save under the plan's lock, answered: the plan as saved with what the change took, or why nothing was saved. */
@@ -182,8 +184,12 @@ interface PlanConflict {
  * transaction. A text past the plan's bound is refused. A
  * change that moved the text is kept as a revision under its writer, which
  * names the writer as the last of each section it moved; one that moved
- * nothing saves the text as it stood. A change that refuses the plan as it
- * found it answers its refusal, and nothing is saved.
+ * nothing saves the text as it stood. Every comment thread's anchor is
+ * carried over the change in the same transaction, or set where the
+ * developer's editor reported it, so a thread never stands on words the text
+ * no longer holds there (`@luke/database/models/plan-comments`). A change
+ * that refuses the plan as it found it answers its refusal, and nothing is
+ * saved.
  */
 function savedUnderLock<T extends TextTaken, F>(
   binding: PlanDocumentBinding,
@@ -220,6 +226,9 @@ function savedUnderLock<T extends TextTaken, F>(
           ? Option.some(new Date(stored.value.task.updatedAt))
           : Option.none(),
       });
+    }
+    if (moved || taken.anchors !== undefined) {
+      yield* movePlanCommentAnchors(binding.taskId, before, after, taken.anchors);
     }
     const saved = yield* savePlanText(
       binding.userId,
@@ -315,7 +324,13 @@ function takeDocumentEdit(
   if ("conflict" in outcome) {
     return Result.fail({ status: PLAN_SAVE_STATUS.CONFLICT, current: outcome.conflict.current });
   }
-  return Result.succeed({ text: outcome.applied, changes: 1 });
+  const anchors =
+    edit.comments === undefined ? undefined : { text: edit.document.value, anchors: edit.comments };
+  return Result.succeed({
+    text: outcome.applied,
+    changes: 1,
+    ...(anchors === undefined ? undefined : { anchors }),
+  });
 }
 
 /**

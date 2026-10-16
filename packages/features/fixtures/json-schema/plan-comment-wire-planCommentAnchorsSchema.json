@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "properties": {
+    "anchors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "from": {
+            "type": "number",
+            "minimum": 0
+          },
+          "to": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "thread",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 500
+    },
+    "carried": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 36
+      },
+      "maxItems": 500
+    }
+  },
+  "required": [
+    "anchors",
+    "carried"
+  ],
+  "additionalProperties": false
+}
