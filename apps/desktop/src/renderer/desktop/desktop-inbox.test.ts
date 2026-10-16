@@ -1105,6 +1105,10 @@ test("with only settled items, Needs you pressed on lists no row, the item read 
     ["list"],
     "Show all leaves the rows it brings back standing",
   );
+  assert.ok(
+    document.activeElement === rowNamed(page, "How is a failed email retried?"),
+    "the keyboard lands on the row of the item read, not on the button Show all took away",
+  );
   assert.deepEqual(listed(page), everything);
   assert.equal(needsYouEmpty(page), null);
 });
