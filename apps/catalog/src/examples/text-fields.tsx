@@ -3,6 +3,7 @@ import {
   GAP,
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_FONT,
   TEXT_FIELD_TYPE,
   TextArea,
   TextField,
@@ -13,7 +14,7 @@ import { CatalogSection } from "../section";
 
 /**
  * text-fields.tsx -- a TextField empty with a placeholder, filled, invalid,
- * unavailable, and as a secret; a TextArea, standing and growing with its
+ * unavailable, as a secret, as code in the mono face, and as a time of day; a TextArea, standing and growing with its
  * words; and both in a narrow column.
  */
 
@@ -64,6 +65,35 @@ function TextFields(): React.JSX.Element {
                       field={field}
                       type={TEXT_FIELD_TYPE.PASSWORD}
                       autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                      value={value}
+                      onChange={onChange}
+                    />
+                  )}
+                </FormField>
+              )}
+            </Held>
+            <Held start="0 9 * * 1-5">
+              {(value, onChange) => (
+                <FormField label="Cron">
+                  {(field) => (
+                    <TextField
+                      field={field}
+                      font={TEXT_FIELD_FONT.MONO}
+                      spellCheck={false}
+                      value={value}
+                      onChange={onChange}
+                    />
+                  )}
+                </FormField>
+              )}
+            </Held>
+            <Held start="09:00">
+              {(value, onChange) => (
+                <FormField label="Time">
+                  {(field) => (
+                    <TextField
+                      field={field}
+                      type={TEXT_FIELD_TYPE.TIME}
                       value={value}
                       onChange={onChange}
                     />
