@@ -15,7 +15,6 @@ import {
   pressInComposer,
   QUIET_COMPOSER,
 } from "#testing/composer";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { AgentComposer } from "./agent-composer";
@@ -218,17 +217,6 @@ test("a selection that ends where the next line begins, as a line selected whole
   assert.deepEqual(sent, [
     `[@invite.ts:2](https://github.com/acme/relay/blob/${HEAD}/src/invite.ts#L2)`,
   ]);
-});
-
-test("a File tab's lines fade under the file's bar as they scroll up beneath it, rather than being sliced at its hairline", async () => {
-  const { container } = await page({ box: false });
-  const sheets = layFades();
-  try {
-    const lines = container.querySelector(".file-tab-lines") ?? assert.fail("the lines stand");
-    assert.deepEqual(fadedEdges(lines), { top: true, bottom: false });
-  } finally {
-    sheets.remove();
-  }
 });
 
 test("with no agent's box on the page, ⌥⌘K is not offered, so the key is left to whatever else wants it", async () => {

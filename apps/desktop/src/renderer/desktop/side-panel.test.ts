@@ -92,10 +92,10 @@ test("an agent's chips open the one Pull request tab of its pull request: its pu
     onChoose: (tab: SidePanelTab) => asked.push(["choose", tab]),
     onPullRequestView: (agentId: string, view: string) => asked.push(["view", agentId, view]),
   };
-  showPullRequest(panel, control, SECOND.id, PULL_REQUEST_VIEW.OVERVIEW);
+  showPullRequest(panel, control, SECOND.id, PULL_REQUEST_VIEW.CONVERSATION);
   showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.FILES);
   assert.deepEqual(asked, [
-    ["view", FIRST.id, PULL_REQUEST_VIEW.OVERVIEW],
+    ["view", FIRST.id, PULL_REQUEST_VIEW.CONVERSATION],
     ["choose", { changes: FIRST.id }],
     ["view", THIRD.id, PULL_REQUEST_VIEW.FILES],
     ["choose", { changes: THIRD.id }],

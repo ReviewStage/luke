@@ -154,10 +154,16 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
-  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them now. */
-  CODING_AGENTS_OVERVIEW: "codingAgents.overview",
+  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
+  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  /** The checks on one agent's pull request's head, as its overview draws them. */
+  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
+  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
   /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
+  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */

@@ -50,10 +50,21 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
 }
 
+/**
+ * How a run is told to the sweep's cron monitor: around the eight sweeps once
+ * the call is the cron's own. A call that is not the cron's, or one a
+ * deployment without its secret cannot authenticate, is not a run and tells
+ * it nothing, so a stranger cannot report a run that failed.
+ */
+interface SweepMonitor {
+  readonly run: <A, E, R>(sweep: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+}
+
 export interface MaintenanceSweepOptions extends MaintenanceSweeps {
   request: Request;
   /** CRON_SECRET, sealed; undefined means the env var is absent or blank and the schedule is off. */
   cronSecret: Redacted.Redacted | undefined;
+  monitor: SweepMonitor;
 }
 
 interface MaintenanceSweepAnswer {
@@ -75,6 +86,23 @@ interface MaintenanceSweepAnswer {
   purgedPictures: number;
 }
 
+/** The eight sweeps in turn, each handed the same instant. */
+const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
+  sweeps: MaintenanceSweeps,
+): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
+  const now = yield* Clock.currentTimeMillis;
+  return {
+    purged: yield* sweeps.purgeCleared(now),
+    purgedCalls: yield* sweeps.purgeDeletedTaskCalls(now),
+    abandoned: yield* sweeps.sweepAbandonedTurns(now),
+    voice: yield* sweeps.sweepVoice(now),
+    sandboxes: yield* sweeps.sweepSandboxes(now),
+    terminals: yield* sweeps.sweepTerminalLeases(now),
+    automations: yield* sweeps.sweepAutomations(now),
+    purgedPictures: yield* sweeps.purgeUnsavedPictures(now),
+  };
+});
+
 export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaintenanceSweep")(
   function* (
     options: MaintenanceSweepOptions,
@@ -94,17 +122,7 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
 
-    const now = yield* Clock.currentTimeMillis;
-    const answer: MaintenanceSweepAnswer = {
-      purged: yield* options.purgeCleared(now),
-      purgedCalls: yield* options.purgeDeletedTaskCalls(now),
-      abandoned: yield* options.sweepAbandonedTurns(now),
-      voice: yield* options.sweepVoice(now),
-      sandboxes: yield* options.sweepSandboxes(now),
-      terminals: yield* options.sweepTerminalLeases(now),
-      automations: yield* options.sweepAutomations(now),
-      purgedPictures: yield* options.purgeUnsavedPictures(now),
-    };
+    const answer = yield* options.monitor.run(sweepAll(options));
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },
 );

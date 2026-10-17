@@ -13,7 +13,9 @@
  * names on GitHub is drawn by their GitHub avatar alone (`githubAvatarUrl`),
  * or, for a person GitHub named by id or login alone, the avatar GitHub
  * serves for that id or login (`githubUserAvatarUrl`), each asked for at the
- * size it is drawn (`githubAvatarAt`).
+ * size it is drawn (`githubAvatarAt`). A GitHub App, which runs a pull
+ * request's checks, is drawn by the logo GitHub serves at its App's address
+ * (`githubAppAvatarUrl`).
  */
 
 const GOOGLE_PICTURE_HOST = "googleusercontent.com";
@@ -61,6 +63,14 @@ export function githubUserAvatarUrl(
   const path = "id" in person ? ["u", String(person.id)] : [person.login];
   const url = new URL(`https://${GITHUB_PICTURE_HOST}/`);
   url.pathname = path.map(encodeURIComponent).join("/");
+  url.searchParams.set("v", GITHUB_AVATAR_REVISION);
+  return url.toString();
+}
+
+/** The logo GitHub serves for a GitHub App by its id, as its check runs and its bot are drawn on GitHub's own pages. */
+export function githubAppAvatarUrl(appId: number): string {
+  const url = new URL(`https://${GITHUB_PICTURE_HOST}/`);
+  url.pathname = `/in/${encodeURIComponent(String(appId))}`;
   url.searchParams.set("v", GITHUB_AVATAR_REVISION);
   return url.toString();
 }

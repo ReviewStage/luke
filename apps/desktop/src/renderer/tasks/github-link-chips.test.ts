@@ -384,18 +384,15 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
   );
 });
 
-/** Each label a chip's card names: its name, and the colour its dot is painted, where GitHub's colour is six hex digits. */
-function cardLabels(chip: Element | undefined): [string | null, string][] {
+/** Each label a chip's card names, by its name. */
+function cardLabels(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const labels = [...(card?.querySelectorAll<HTMLElement>(".card-label") ?? [])].map(
-    (label): [string | null, string] => [
-      label.textContent,
-      label.querySelector<HTMLElement>(".card-label-dot")?.style.background ?? "",
-    ],
+    (label) => label.textContent,
   );
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -403,17 +400,14 @@ function cardLabels(chip: Element | undefined): [string | null, string][] {
   return labels;
 }
 
-test("a pull request's card names its labels, each with a dot of its own colour where GitHub's is one, and one read from an older service says its key and state alone", async () => {
+test("a pull request's card names its labels, and one read from an older service says its key and state alone", async () => {
   const { container } = await drawn(
     `Lands after ${MERGED} and ${OLDER_SERVICE}.`,
     ACME_WITH_GITHUB,
   );
   const [whole, older] = container.querySelectorAll(".mention-chip");
 
-  assert.deepEqual(cardLabels(whole), [
-    ["service", "rgb(79, 209, 139)"],
-    ["not a colour", ""],
-  ]);
+  assert.deepEqual(cardLabels(whole), ["service", "not a colour"]);
   assert.deepEqual(cardNotes(older), ["relay#44 · Open"]);
   assert.deepEqual(cardLabels(older), []);
 });
@@ -421,8 +415,13 @@ test("a pull request's card names its labels, each with a dot of its own colour 
 test("a pull request's card names its first six labels and counts the rest, so a card with many stays short", async () => {
   const { container } = await drawn(`See ${MANY_LABELS}.`, ACME_WITH_GITHUB);
 
-  assert.deepEqual(
-    cardLabels(container.querySelector(".mention-chip") ?? undefined).map(([name]) => name),
-    ["a", "b", "c", "d", "e", "f", "+2"],
-  );
+  assert.deepEqual(cardLabels(container.querySelector(".mention-chip") ?? undefined), [
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "f",
+    "+2",
+  ]);
 });

@@ -338,9 +338,15 @@ export function App(): React.JSX.Element {
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const toast = useToast();
   const openLukeLink = (link: ReadLink) => {
-    const route = linkRoute(link, { workspaces: tasks.workspaces, factoryOn, automationsOn });
+    const route = linkRoute(link, {
+      workspaces: tasks.workspaces,
+      factoryOn,
+      automationsOn,
+      issuesOn,
+    });
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {

@@ -137,6 +137,7 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     "/acme/factory",
     "/acme/settings/coding-agents",
     "/acme/person/user_9Fq2-x",
+    "/acme/issue/i1",
   ]) {
     assert.equal(served(path), true, path);
   }

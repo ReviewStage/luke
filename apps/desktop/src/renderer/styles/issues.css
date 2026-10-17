@@ -102,11 +102,59 @@
   font-size: 12px;
 }
 
-/* The board stands in Factory's scroller, which keeps no room above its
-   line for the summary Factory heads it with; the board takes that room
-   back from the toolbar. */
+/* The board scrolls sideways in a scroller of its own, so its columns stand
+   side by side at every width rather than one over the next; it never
+   scrolls down, since each column scrolls its own cards. */
+.issue-board-scroll {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--space-16) var(--content-inset);
+}
+
+/* The columns fill the scroller's height and share its width, each at least
+   a card's width, past which the board scrolls. */
 .issue-board {
-  margin-top: var(--space-16);
+  display: flex;
+  min-width: min-content;
+  flex: 1 0 0;
+  gap: var(--space-8);
+}
+
+/* A column is Factory's station (`.factory-step`) sized for a board: it
+   takes its share of the width but never less than a card's, and holds its
+   height to the board's so its cards scroll inside it. */
+.issue-column {
+  min-width: 240px;
+  min-height: 0;
+  flex: 1 0 240px;
+}
+
+/* A column's + ends its head, after the count or where an idle column's
+   count would be, held to the head's own height so the head does not grow.
+   It reaches past the head's inset by its glyph's margin, so the glyph ends
+   on the edge the cards' times end on. */
+.issue-column-new {
+  --control-height: 24px;
+  margin-left: auto;
+  margin-right: calc((var(--control-glyph) - var(--control-height)) / 2);
+}
+
+.factory-count + .issue-column-new {
+  margin-left: 0;
+}
+
+/* A column's cards scroll under its head. The list pads by the ring's reach
+   and gives it back, so a card's ring is never cut off at the column's
+   edge. */
+.issue-column-cards {
+  min-height: 0;
+  flex: 0 1 auto;
+  margin: 0 calc(-1 * var(--focus-ring-reach)) calc(-1 * var(--focus-ring-reach));
+  padding: var(--focus-ring-reach);
+  overflow-y: auto;
 }
 
 /* A card's title stands whole under its line, wrapping to three lines at
@@ -122,7 +170,19 @@
   overflow-wrap: anywhere;
 }
 
+/* On a card the identifier is followed only by its priority's mark, so it
+   keeps none of the list's column width. */
+.issue-board .issue-row-identifier {
+  min-width: 0;
+}
+
 /* A card's time ends its line, wherever the identifier and mark leave off. */
 .issue-board .sidebar-task-time {
   margin-left: auto;
+}
+
+/* The issue page's Status and Priority chips are sized to their words, as
+   the new issue's card draws them, rather than to a settings row's field. */
+.issue-properties .settings-picker-chip {
+  width: auto;
 }

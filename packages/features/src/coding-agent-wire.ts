@@ -862,6 +862,16 @@ export const CHECK_STATE = {
 
 export type CheckState = (typeof CHECK_STATE)[keyof typeof CHECK_STATE];
 
+/** Where one deployment of a pull request's head stands, by its newest status: ready, still deploying, failed, or no longer serving (inactive, destroyed, or abandoned). */
+export const DEPLOYMENT_STATE = {
+  READY: "ready",
+  PENDING: "pending",
+  FAILED: "failed",
+  INACTIVE: "inactive",
+} as const;
+
+export type DeploymentState = (typeof DEPLOYMENT_STATE)[keyof typeof DEPLOYMENT_STATE];
+
 /** What one entry of a pull request's conversation is: a comment on it, or a review. */
 export const CONVERSATION_ENTRY = {
   COMMENT: "comment",
@@ -871,6 +881,8 @@ export const CONVERSATION_ENTRY = {
 export const OVERVIEW_BOUNDS = {
   /** The most checks one read lists; a head with more lists its first. */
   MAX_CHECKS: 100,
+  /** The most deployments one read lists, one per environment, the newest of each kept. */
+  MAX_DEPLOYMENTS: 10,
   /** The most entries of the conversation one read carries, the newest kept, the rest counted. */
   MAX_ENTRIES: 100,
   /** The most characters of a check's or a branch's name a read carries. */
@@ -898,7 +910,10 @@ const overviewName = EffectSchema.String.check(
  * One check on a pull request's head: a check run, named by its run and the
  * App that runs it, or a commit status, named by its context and by no App;
  * where it stands; its page, where GitHub names one; and when it started and
- * ended, in epoch milliseconds, where it has.
+ * ended, in epoch milliseconds, where it has. Its avatar is the picture of
+ * the App that runs it, or of whoever posted the status, as GitHub's own
+ * avatar host serves it; absent where GitHub names none there, or from a
+ * service before it.
  */
 const pullRequestCheckSchema = EffectSchema.Struct({
   name: overviewName,
@@ -907,9 +922,26 @@ const pullRequestCheckSchema = EffectSchema.Struct({
   url: EffectSchema.NullOr(EffectSchema.String),
   startedAt: EffectSchema.NullOr(countedNumber),
   completedAt: EffectSchema.NullOr(countedNumber),
+  avatarUrl: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type PullRequestCheck = typeof pullRequestCheckSchema.Type;
+
+/**
+ * One deployment of a pull request's head, the newest of its environment:
+ * the environment it deployed to, such as a Vercel Preview; where it stands
+ * by its newest status; the address it serves, an https one GitHub's
+ * status names, null where it names none; and the avatar of the App that
+ * deployed it on GitHub's avatar host, absent where GitHub names none.
+ */
+const pullRequestDeploymentSchema = EffectSchema.Struct({
+  environment: overviewName,
+  state: EffectSchema.Literals(Object.values(DEPLOYMENT_STATE)),
+  url: EffectSchema.NullOr(EffectSchema.String),
+  avatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type PullRequestDeployment = typeof pullRequestDeploymentSchema.Type;
 
 /**
  * One comment of a review thread: who; their words whole, as GitHub renders
@@ -981,18 +1013,16 @@ const conversationEntrySchema = EffectSchema.Struct({
 export type ConversationEntry = typeof conversationEntrySchema.Type;
 
 /**
- * One agent's pull request as its Pull request tab draws it (GET): where it
- * stands, its title, number, and page; its description as GitHub renders
- * it (`body_html`), empty where it has none; the
- * branch it merges into and the one it merges from; when it was opened, and
- * merged where it was; whether it would merge as it stands; every check on
- * its head; who opened it, who the agent writes as on GitHub, and its
- * reviewers and where each stands; and its conversation, oldest first, its
- * newest entries kept up to the bound, with how many earlier ones were left
- * on GitHub (`earlier`), review threads past their bound among them. Null
- * where the agent has opened none yet.
+ * The pull request itself as its Pull request tab's overview draws it (GET),
+ * the first of the overview's three reads, each of which lands on its own:
+ * where it stands, its title, number, and page; its description as GitHub
+ * renders it (`body_html`), empty where it has none; the branch it merges
+ * into and the one it merges from; when it was opened, and merged where it
+ * was; whether it would merge as it stands; who opened it, who the agent
+ * writes as on GitHub, and who it still asks for a review. Null where the
+ * agent has opened none yet, or the repository no longer holds it.
  */
-export const codingAgentOverviewAnswerSchema = EffectSchema.Struct({
+export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       number: countedNumber,
@@ -1005,13 +1035,58 @@ export const codingAgentOverviewAnswerSchema = EffectSchema.Struct({
       createdAt: countedNumber,
       mergedAt: EffectSchema.NullOr(countedNumber),
       merge: EffectSchema.Literals(Object.values(MERGE_STATE)),
-      checks: EffectSchema.Array(pullRequestCheckSchema).check(
-        EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_CHECKS),
-      ),
       author: EffectSchema.optionalKey(githubPersonSchema),
       writtenAs: EffectSchema.optionalKey(
         EffectSchema.Literals(Object.values(CODING_AGENT_AUTHOR)),
       ),
+      requested: EffectSchema.Array(githubPersonSchema).check(
+        EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+      ),
+    }),
+  ),
+});
+
+export type CodingAgentOverviewPullRequest = NonNullable<
+  (typeof codingAgentOverviewPullRequestAnswerSchema.Type)["pullRequest"]
+>;
+
+/**
+ * Every check on an agent's pull request's head, as its overview draws them
+ * (GET): those that failed first, then those still running, up to the
+ * bound; and its head's deployments, the newest of each environment first,
+ * up to theirs, absent from a service before them. Null where the agent has
+ * opened no pull request yet.
+ */
+export const codingAgentOverviewChecksAnswerSchema = EffectSchema.Struct({
+  pullRequest: EffectSchema.NullOr(
+    EffectSchema.Struct({
+      checks: EffectSchema.Array(pullRequestCheckSchema).check(
+        EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_CHECKS),
+      ),
+      deployments: EffectSchema.optionalKey(
+        EffectSchema.Array(pullRequestDeploymentSchema).check(
+          EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_DEPLOYMENTS),
+        ),
+      ),
+    }),
+  ),
+});
+
+export type CodingAgentOverviewChecks = NonNullable<
+  (typeof codingAgentOverviewChecksAnswerSchema.Type)["pullRequest"]
+>;
+
+/**
+ * An agent's pull request's conversation, as its overview draws it (GET):
+ * where each reviewer stands by their reviews, which the pull request's own
+ * read's reviewers still asked for override; and its comments and reviews,
+ * oldest first, its newest entries kept up to the bound, with how many
+ * earlier ones were left on GitHub (`earlier`), review threads past their
+ * bound among them. Null where the agent has opened no pull request yet.
+ */
+export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
+  pullRequest: EffectSchema.NullOr(
+    EffectSchema.Struct({
       reviewers: EffectSchema.Array(pullRequestReviewerSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
       ),
@@ -1023,9 +1098,12 @@ export const codingAgentOverviewAnswerSchema = EffectSchema.Struct({
   ),
 });
 
-export type CodingAgentOverview = NonNullable<
-  (typeof codingAgentOverviewAnswerSchema.Type)["pullRequest"]
+export type CodingAgentOverviewConversation = NonNullable<
+  (typeof codingAgentOverviewConversationAnswerSchema.Type)["pullRequest"]
 >;
+
+/** A reviewer of a pull request, and where they stand on it. */
+export type PullRequestReviewer = typeof pullRequestReviewerSchema.Type;
 
 /**
  * The tool an agent hands a slice of its work to a subagent with, by the

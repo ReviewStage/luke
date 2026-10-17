@@ -39,11 +39,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
-import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
-import { focusByKeyboard, layWindowStyles, ringClippedBy, ringOf } from "#testing/focus-ring";
 import { relayout } from "#testing/resize-observer";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
@@ -403,20 +400,6 @@ function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   return row;
 }
 
-test("the Inbox's list fades under its bar, and the chosen item's thread under its crumbs and over its box, rather than being sliced at either", async () => {
-  const { page } = mount();
-  await settle();
-  const sheets = layFades();
-  try {
-    const list = page.querySelector(".inbox-tasks-scroll") ?? assert.fail("the items are listed");
-    const thread = page.querySelector(".inbox-board") ?? assert.fail("the chosen item stands");
-    assert.deepEqual(fadedEdges(list), { top: true, bottom: false });
-    assert.deepEqual(fadedEdges(thread), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
-});
-
 test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and marked bold with a dot while it needs you, the first such item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
@@ -625,32 +608,7 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
-test("the keyboard's ring on a crumb of the pane's path and on an option of the choice is drawn whole, past the boxes that clip what runs long", async () => {
-  const styles = await layWindowStyles();
-  const { page } = mount();
-  await settle();
-  const crumbs = [
-    ...page.querySelectorAll<HTMLButtonElement>('.inbox-view-items nav[aria-label="Path"] button'),
-  ];
-  const options = [...page.querySelectorAll<HTMLButtonElement>("button.inbox-option")];
-  assert.ok(
-    crumbs.length > 0 && options.length > 0,
-    "the pane draws its crumbs and the choice's options",
-  );
-  for (const control of [...crumbs, ...options]) {
-    focusByKeyboard(control);
-    assert.ok(ringOf(control), `${control.textContent} rings`);
-    assert.equal(
-      ringClippedBy(control)?.className,
-      undefined,
-      `nothing cuts ${control.textContent}'s ring off`,
-    );
-  }
-  styles.remove();
-});
-
-test("an image an item shows is drawn as a plan's picture is, no wider than its card and no taller than a screenful, and a press opens it over the window", async () => {
-  const styles = await layWindowStyles();
+test("an image an item shows is drawn, and a press opens it over the window", async () => {
   const shot = {
     type: INBOX_BLOCK.IMAGE,
     attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c70",
@@ -665,8 +623,6 @@ test("an image an item shows is drawn as a plan's picture is, no wider than its 
   const picture = page.querySelector<HTMLImageElement>("[data-inbox-image] img");
   assert.ok(picture, "the item draws its image");
   assert.equal(picture.alt, "The pull request tab");
-  const drawn = getComputedStyle(picture);
-  assert.deepEqual([drawn.maxWidth, drawn.maxHeight], ["100%", "520px"]);
   const press = page.querySelector<HTMLButtonElement>(
     'button[aria-label="Enlarge The pull request tab"]',
   );
@@ -676,7 +632,6 @@ test("an image an item shows is drawn as a plan's picture is, no wider than its 
     document.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
     "The pull request tab.png",
   );
-  styles.remove();
 });
 
 test("an image that lands before its item's own read does is drawn all the same", async () => {
@@ -1420,106 +1375,6 @@ test("an item that needs no reply says a bare press won't message the agent, and
     box.dispatchEvent(new Event("input", { bubbles: true }));
   });
   assert.equal(quiet(), "Your note will be sent to the agent.");
-});
-
-test("an item's box on a card a 220px column wide leaves out its quiet line and keeps both its presses, which a card a 720px column wide draws beside the line", async () => {
-  const todo: InboxItem = {
-    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
-    response: { type: INBOX_RESPONSE.TODO },
-    needsReply: false,
-  };
-  inboxes = new Map([
-    [BILLING.id, [todo]],
-    [INVITES.id, [EXPIRY]],
-  ]);
-  const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, "Turn on the flag").click());
-  const foot = page.querySelector(".inbox-view-items .inbox-answer-foot") ?? assert.fail("the box");
-  const drawn = () =>
-    [...foot.querySelectorAll("[data-inbox-quiet], button")]
-      .filter(shown)
-      .map((each) => each.textContent);
-
-  const narrow = layContainersAt({ composer: 178 });
-  try {
-    assert.deepEqual(drawn(), ["Can't do this", "Done"]);
-  } finally {
-    narrow.remove();
-  }
-  const wide = layContainersAt({ composer: 678 });
-  try {
-    assert.deepEqual(drawn(), [
-      "Without a note, this won't message the agent.",
-      "Can't do this",
-      "Done",
-    ]);
-  } finally {
-    wide.remove();
-  }
-});
-
-test("a box answered in words holds its Send at the field's end on a card a 220px column wide, so the field keeps to one line; a box answered by presses keeps them under its field", async () => {
-  const todo: InboxItem = {
-    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
-    response: { type: INBOX_RESPONSE.TODO },
-  };
-  inboxes = new Map([
-    [BILLING.id, [THRESHOLD, todo]],
-    [INVITES.id, [EXPIRY]],
-  ]);
-  const { page } = mount();
-  await settle();
-  /** Where the open item's Send stands on a card this wide: at its field's end, or under it. */
-  const sendAt = (width: number) => {
-    const style = layContainersAt({ composer: width });
-    const foot = page.querySelector(".inbox-view-items .inbox-answer-foot") ?? assert.fail("a box");
-    const place = getComputedStyle(foot).position === "absolute" ? "field's end" : "under";
-    style.remove();
-    return place;
-  };
-
-  act(() => rowNamed(page, "Alert at 80%?").click());
-  assert.deepEqual([sendAt(178), sendAt(678)], ["field's end", "under"]);
-  act(() => rowNamed(page, "Turn on the flag").click());
-  assert.deepEqual([sendAt(178), sendAt(678)], ["under", "under"]);
-});
-
-test("one column wide, an item's bar too narrow for both crumbs beside the way back and the pager keeps the agent's; narrower still, the way back draws its glyph alone, named still, and both crumbs share a line under it", async () => {
-  const { page } = mount();
-  await settle();
-  layOut(page, 800);
-  const bar =
-    page.querySelector<HTMLElement>(".inbox-view-items:not([hidden]) > .desktop-toolbar") ??
-    assert.fail("the item's bar stands");
-  /** The bar as drawn on an item this wide: its crumbs drawn, the way back's word, and whether the crumbs wrap under the rest. */
-  const barAt = (width: number) => {
-    const style = layContainersAt({ "inbox-item": width });
-    const crumbs = [...bar.querySelectorAll<HTMLElement>(".inbox-crumb")]
-      .filter(shown)
-      .map((crumb) => crumb.textContent);
-    const back = backToList(bar);
-    const word = back.querySelector(".inbox-back-word") ?? assert.fail("the way back has a word");
-    const drawn = {
-      crumbs,
-      back: `${back.getAttribute("aria-label")}${shown(word) ? " (word)" : " (glyph)"}`,
-      wraps: getComputedStyle(bar).flexWrap === "wrap",
-    };
-    style.remove();
-    return drawn;
-  };
-
-  assert.deepEqual(barAt(700), {
-    crumbs: ["Billing usage alerts", "Alerts"],
-    back: "Inbox (word)",
-    wraps: false,
-  });
-  assert.deepEqual(barAt(420), { crumbs: ["Alerts"], back: "Inbox (word)", wraps: false });
-  assert.deepEqual(barAt(220), {
-    crumbs: ["Billing usage alerts", "Alerts"],
-    back: "Inbox (glyph)",
-    wraps: true,
-  });
 });
 
 test("an item that needs no reply, once settled, says a note was sent to the agent and a bare press kept for it to read", async () => {

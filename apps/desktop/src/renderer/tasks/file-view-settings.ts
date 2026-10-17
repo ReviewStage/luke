@@ -1,107 +1,167 @@
 /**
- * file-view-settings.ts -- how every File tab draws its lines: with or without their numbers, wrapped or scrolling sideways, and a diff's unified or split, its changed words marked or not, kept across launches.
+ * file-view-settings.ts -- how every File tab draws its lines, numbered or not and wrapped or scrolling sideways, and every diff as a review tool's diff settings say: Luke's own app settings, read and written as any other.
  *
- * The choice is the window's own, as the sidebar's fold is
- * (`../desktop/sidebar-collapse.ts`): no other window draws a File tab and
- * main never reads it, so it is kept in the renderer's storage rather than
- * crossing to the settings file. One choice holds for every File tab, and a
- * change in one is drawn at once in every other, as an editor's view
- * settings are.
- *
- * The Files changed view's diff follows two more, as a review tool's diff
- * settings do: whether it is laid out unified or split, the old side beside
- * the new, and whether a changed line marks the words it changed. Each
- * setting is read on its own, so a choice kept before one was offered, or
- * one value that no longer reads, leaves the others as they were kept and
- * that one at its default.
+ * Each is an app setting (`@luke/settings`'s `APP_SETTING_SCHEMA`, under
+ * Settings › Appearance › Diffs), stored in Luke's settings file and carried
+ * to every window on the settings document, so a change in one File tab,
+ * diff, popover, or Settings row is drawn at once in every other, as an
+ * editor's view settings are. A File tab follows the numbers and wrap, and
+ * every diff (`file-diff.tsx`) follows them and the rest of stage-cli's diff
+ * settings: its layout, how a changed line is marked and what of it is,
+ * whether changed lines are tinted, each appearance's syntax theme, its
+ * type, size, line height, and ligatures, and whether review comments on
+ * their lines stand minimized. Until the first document arrives each stands
+ * at its default. A change is written through the one settings write
+ * (`useAct`'s `updateSetting`), whose answer a control reads to say a
+ * refusal, as a Settings row does; while it is out the setting is drawn as
+ * written, so a second press before the document comes back reads the
+ * first rather than undoing nothing, as the zoom keys step from the size
+ * they last asked for.
  */
 
-import { Effect, Option, Schema } from "effect";
-import { useSyncExternalStore } from "react";
-import { DIFF_LAYOUT } from "../diff-view/contract";
+import { APP_SETTING_DEFAULTS, type AppSettingField, type AppSettingValue } from "@luke/settings";
+import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useAct } from "../act";
+import { useAppState } from "../use-app-state";
 
-/** The storage key the choice is kept under. */
-const FILE_VIEW_SETTINGS_KEY = "luke.file-view";
+/** The settings code and diffs are drawn by, by their fields in the settings schema. */
+type FileViewField = Extract<
+  AppSettingField,
+  | "lineNumbers"
+  | "wordWrap"
+  | "diffLayout"
+  | "diffIndicators"
+  | "inlineDiff"
+  | "diffBackgrounds"
+  | "diffDarkTheme"
+  | "diffLightTheme"
+  | "diffFont"
+  | "diffFontSize"
+  | "diffLineHeight"
+  | "diffLigatures"
+  | "diffMinimizeComments"
+>;
 
-/** How a diff may be laid out, as kept. */
-const diffLayoutSchema = Schema.Literals(Object.values(DIFF_LAYOUT));
+export type FileViewSettings = Pick<AppSettingsView, FileViewField>;
 
-/** How a File tab draws until it is told otherwise: numbered and wrapped, as it always has been, a diff unified with its changed words marked. */
-const DEFAULT_SETTINGS = {
-  lineNumbers: true,
-  wordWrap: true,
-  diffLayout: DIFF_LAYOUT.UNIFIED,
-  changedWords: true,
-} as const;
+/** How code and diffs are drawn until told otherwise, each setting's own default. */
+export const DEFAULT_SETTINGS: FileViewSettings = {
+  lineNumbers: APP_SETTING_DEFAULTS.lineNumbers,
+  wordWrap: APP_SETTING_DEFAULTS.wordWrap,
+  diffLayout: APP_SETTING_DEFAULTS.diffLayout,
+  diffIndicators: APP_SETTING_DEFAULTS.diffIndicators,
+  inlineDiff: APP_SETTING_DEFAULTS.inlineDiff,
+  diffBackgrounds: APP_SETTING_DEFAULTS.diffBackgrounds,
+  diffDarkTheme: APP_SETTING_DEFAULTS.diffDarkTheme,
+  diffLightTheme: APP_SETTING_DEFAULTS.diffLightTheme,
+  diffFont: APP_SETTING_DEFAULTS.diffFont,
+  diffFontSize: APP_SETTING_DEFAULTS.diffFontSize,
+  diffLineHeight: APP_SETTING_DEFAULTS.diffLineHeight,
+  diffLigatures: APP_SETTING_DEFAULTS.diffLigatures,
+  diffMinimizeComments: APP_SETTING_DEFAULTS.diffMinimizeComments,
+};
 
-/** A kept setting read on its own: as kept where it reads, its default where it is missing or does not. */
-function keptOr<S extends Schema.Codec<unknown, unknown>>(
-  schema: S,
-  fallback: S["Type"] & S["Encoded"],
-) {
-  return schema.pipe(
-    Schema.catchDecoding(() => Effect.succeed(Option.some(fallback))),
-    Schema.withDecodingDefault(Effect.succeed(fallback)),
-  );
+/** The settings as the document holds them, each at its default before the first document arrives. */
+function settingsOf(view: AppSettingsView | undefined): FileViewSettings {
+  if (view === undefined) return DEFAULT_SETTINGS;
+  return {
+    lineNumbers: view.lineNumbers,
+    wordWrap: view.wordWrap,
+    diffLayout: view.diffLayout,
+    diffIndicators: view.diffIndicators,
+    inlineDiff: view.inlineDiff,
+    diffBackgrounds: view.diffBackgrounds,
+    diffDarkTheme: view.diffDarkTheme,
+    diffLightTheme: view.diffLightTheme,
+    diffFont: view.diffFont,
+    diffFontSize: view.diffFontSize,
+    diffLineHeight: view.diffLineHeight,
+    diffLigatures: view.diffLigatures,
+    diffMinimizeComments: view.diffMinimizeComments,
+  };
 }
 
-const fileViewSettingsSchema = Schema.Struct({
-  lineNumbers: keptOr(Schema.Boolean, DEFAULT_SETTINGS.lineNumbers),
-  wordWrap: keptOr(Schema.Boolean, DEFAULT_SETTINGS.wordWrap),
-  diffLayout: keptOr(diffLayoutSchema, DEFAULT_SETTINGS.diffLayout),
-  changedWords: keptOr(Schema.Boolean, DEFAULT_SETTINGS.changedWords),
-});
-
-type FileViewSettings = typeof fileViewSettingsSchema.Type;
-
-const decodeSettings = Schema.decodeUnknownOption(Schema.fromJsonString(fileViewSettingsSchema));
-
-/**
- * The kept choice, each setting read on its own: one kept and readable as
- * kept, any other at its default, every one at it where nothing is kept,
- * the kept text is no object, or storage refuses the read.
- */
-function readSettings(): FileViewSettings {
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(FILE_VIEW_SETTINGS_KEY);
-  } catch {
-    // The defaults stand.
-  }
-  return Option.getOrElse(decodeSettings(stored), () => DEFAULT_SETTINGS);
-}
-
-let current: FileViewSettings | undefined;
-const listeners = new Set<() => void>();
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function snapshot(): FileViewSettings {
-  current ??= readSettings();
-  return current;
-}
-
-/** Changes one setting for every File tab, kept where storage takes it. */
-function changeSettings(change: Partial<FileViewSettings>): void {
-  current = { ...snapshot(), ...change };
-  try {
-    window.localStorage.setItem(FILE_VIEW_SETTINGS_KEY, JSON.stringify(current));
-  } catch {
-    // The choice holds for this window's life.
-  }
-  for (const listener of listeners) listener();
-}
-
-/** The File tabs' settings, and the door that changes them for all of them. */
+/** The settings code and diffs are drawn by, and the door that writes one for every window, answering the write's own answer. */
 export interface FileViewSettingsControl {
   readonly settings: FileViewSettings;
-  readonly change: (change: Partial<FileViewSettings>) => void;
+  readonly change: <Field extends FileViewField>(
+    field: Field,
+    value: AppSettingValue<Field>,
+  ) => Promise<ActionResult>;
+}
+
+/**
+ * The writes still out, by field, as this window drew them: one run for
+ * every File tab, diff, and menu in the window, so a press in one is drawn
+ * at once in all of them and read by the next press anywhere.
+ */
+let pending: Partial<FileViewSettings> = {};
+const pendingListeners = new Set<() => void>();
+/** Each field's latest write, by the number it was asked under, which alone may clear what is drawn for it. */
+const latestWrite = new Map<FileViewField, number>();
+let writesAsked = 0;
+
+/** What a control is told where a write was refused before it reached the store. */
+const REFUSED = "Could not save that setting on this system.";
+
+function subscribePending(listener: () => void): () => void {
+  pendingListeners.add(listener);
+  return () => pendingListeners.delete(listener);
+}
+
+function pendingNow(): Partial<FileViewSettings> {
+  return pending;
+}
+
+/** Sets the writes still out, telling every reader. */
+function setPending(next: Partial<FileViewSettings>): void {
+  pending = next;
+  for (const listener of pendingListeners) listener();
+}
+
+/** The writes still out, without the one given. */
+function without(
+  writes: Partial<FileViewSettings>,
+  field: FileViewField,
+): Partial<FileViewSettings> {
+  const next = { ...writes };
+  delete next[field];
+  return next;
 }
 
 export function useFileViewSettings(): FileViewSettingsControl {
-  const settings = useSyncExternalStore(subscribe, snapshot);
-  return { settings, change: changeSettings };
+  const stored = useAppState()?.settings;
+  const { updateSetting } = useAct();
+  const out = useSyncExternalStore(subscribePending, pendingNow);
+  const settings = useMemo(
+    () => ({
+      ...settingsOf(stored === undefined ? undefined : appSettingsView(stored)),
+      ...out,
+    }),
+    [stored, out],
+  );
+  const change = useCallback(
+    <Field extends FileViewField>(field: Field, value: AppSettingValue<Field>) => {
+      writesAsked += 1;
+      const asked = writesAsked;
+      latestWrite.set(field, asked);
+      setPending({ ...pending, [field]: value });
+      // The write is drawn as written until the field's latest write is answered, then as the document holds it.
+      const settle = () => {
+        if (latestWrite.get(field) !== asked) return;
+        latestWrite.delete(field);
+        setPending(without(pending, field));
+      };
+      // Note that a refusal is answered as a rejected result, as a control reads one, rather than thrown.
+      const write: Promise<ActionResult> = updateSetting(field, value).then(
+        (result) => result,
+        () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED }),
+      );
+      return write.finally(settle);
+    },
+    [updateSetting],
+  );
+  return { settings, change };
 }
