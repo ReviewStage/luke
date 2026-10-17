@@ -3926,30 +3926,10 @@ button.attached-file-face:hover img {
    why on one quiet row (`banner.tsx`), with Unarchive as the press that
    opens it again. */
 .archived-composer .banner-row > svg {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  color: var(--text-secondary);
-}
-
-.archived-composer-line {
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-/* Who archived an agent, and why, over the note's own line: the reason is
-   the archiver's sentence, so it wraps rather than being cut. */
-.archived-composer-words {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.archived-composer-by {
-  color: var(--text-primary);
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
+  color: var(--luke-color-text-muted);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its

@@ -666,9 +666,12 @@ test("an agent another agent archived says on its page who archived it, for whic
   const page = mount();
   await settle();
 
-  assert.equal(
-    page.querySelector(".archived-composer-by")?.textContent,
-    "Archived by Bill by seat for Dean Stratakos: Its pull request merged.",
+  assert.ok(
+    [...page.querySelectorAll("p")].some(
+      (each) =>
+        each.textContent ===
+        "Archived by Bill by seat for Dean Stratakos: Its pull request merged.",
+    ),
   );
   assert.ok([...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"));
 });

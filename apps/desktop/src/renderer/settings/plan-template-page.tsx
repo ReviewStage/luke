@@ -14,6 +14,9 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   ResetIcon,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   useConfirmDialog,
 } from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
@@ -306,8 +309,8 @@ function TemplateNote(): React.JSX.Element {
         </span>
       }
     >
-      <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
-      <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
+      <Text variant={TEXT_VARIANT.SECTION}>{PAGE_LINE.NOTE}</Text>
+      <Text tone={TEXT_TONE.MUTED}>{PAGE_LINE.NOTE_DETAIL}</Text>
     </Banner>
   );
 }
