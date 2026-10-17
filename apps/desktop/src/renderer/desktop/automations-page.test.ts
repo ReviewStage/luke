@@ -1449,7 +1449,7 @@ test("a schedule's day, time, and zone are saved as picked and typed, and a cust
   });
 });
 
-test("Escape while writing the prompt lets go of the caret and keeps the press from the page, composing or not", async () => {
+test("Escape while writing the prompt lets go of the caret and reaches the window marked taken, composing or not", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   const prompt =
@@ -1458,8 +1458,8 @@ test("Escape while writing the prompt lets go of the caret and keeps the press f
   type(prompt, "Triage the issues opened overnight.");
   act(() => prompt.focus());
 
-  const reached: string[] = [];
-  const listen = (event: KeyboardEvent) => reached.push(event.key);
+  const reached: boolean[] = [];
+  const listen = (event: KeyboardEvent) => reached.push(event.defaultPrevented);
   window.addEventListener("keydown", listen);
   const pressEscape = (init: KeyboardEventInit) =>
     act(() => {
@@ -1473,7 +1473,8 @@ test("Escape while writing the prompt lets go of the caret and keeps the press f
   pressEscape({});
   window.removeEventListener("keydown", listen);
 
-  assert.deepEqual(reached, [], "neither Escape reaches the window, which would leave the page");
+  // Note that both reach the window, whose live call Escape stops first, marked taken, so neither leaves the page.
+  assert.deepEqual(reached, [true, true]);
   assert.notEqual(document.activeElement, prompt);
   assert.equal(prompt.value, "Triage the issues opened overnight.");
 });

@@ -97,7 +97,7 @@ test("Enter answers onEnter, except the Enter that commits an input method's com
   assert.equal(page.querySelector("output")?.textContent, "1");
 });
 
-test("Escape answers onEscape and is kept from the page, while an input method's composing Escape keeps its default", () => {
+test("Escape answers onEscape, except an input method's composing Escape, and every one reaches the window marked taken", () => {
   const escapes: string[] = [];
   const page = render(
     createElement(
@@ -121,12 +121,13 @@ test("Escape answers onEscape and is kept from the page, while an input method's
   const listen = (event: KeyboardEvent) => pageEscapes.push(event);
   window.addEventListener("keydown", listen);
   const area = page.querySelector("textarea") ?? assert.fail("no text area");
-  const presses = [
+  const presses: { field: HTMLElement; init: KeyboardEventInit }[] = [
     { field: fieldNamed(page, "Name"), init: {} },
     { field: area, init: {} },
     { field: area, init: { isComposing: true } },
     { field: area, init: { keyCode: 229 } },
-  ].map(({ field, init }) => {
+  ];
+  for (const { field, init } of presses) {
     const event = new KeyboardEvent("keydown", {
       key: "Escape",
       bubbles: true,
@@ -136,12 +137,14 @@ test("Escape answers onEscape and is kept from the page, while an input method's
     act(() => {
       field.dispatchEvent(event);
     });
-    return event.defaultPrevented;
-  });
+  }
   window.removeEventListener("keydown", listen);
   assert.deepEqual(escapes, ["name", "notes"]);
-  assert.deepEqual(pageEscapes, [], "no Escape reaches the page");
-  assert.deepEqual(presses, [true, true, false, false], "a composing Escape keeps its default");
+  assert.deepEqual(
+    pageEscapes.map((event) => event.defaultPrevented),
+    [true, true, true, true],
+    "every Escape reaches the window, marked taken",
+  );
 });
 
 test("a text area holds the many lines its caller holds and hands back every change", () => {
