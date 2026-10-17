@@ -29,6 +29,35 @@
         "action"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "submit-review"
+          ]
+        },
+        "event": {
+          "type": "string",
+          "enum": [
+            "comment",
+            "approve",
+            "request-changes"
+          ]
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 65536
+        }
+      },
+      "required": [
+        "action",
+        "event",
+        "body"
+      ],
+      "additionalProperties": false
     }
   ]
 }

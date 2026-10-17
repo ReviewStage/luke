@@ -51,7 +51,7 @@ const PRIORITY_GLYPH = {
 } as const satisfies Record<IssuePriority, React.ReactNode>;
 
 /** The priorities as the menu lists them, the most pressing first and the unweighed last. */
-const PRIORITY_ORDER: readonly IssuePriority[] = [
+export const PRIORITY_ORDER: readonly IssuePriority[] = [
   ISSUE_PRIORITY.URGENT,
   ISSUE_PRIORITY.HIGH,
   ISSUE_PRIORITY.MEDIUM,
@@ -82,7 +82,7 @@ export function PriorityMark({ priority }: { priority: IssuePriority }): React.J
 }
 
 /** A priority's mark on its chip and in its menu: a dash where the issue is unweighed. */
-function PriorityGlyph({ priority }: { priority: IssuePriority }): React.JSX.Element {
+export function PriorityGlyph({ priority }: { priority: IssuePriority }): React.JSX.Element {
   return (
     <span className="issue-priority-mark" data-priority={priority}>
       {PRIORITY_GLYPH[priority] ?? <EllipsisIcon />}
