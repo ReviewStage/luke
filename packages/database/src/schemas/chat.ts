@@ -19,6 +19,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   uniqueIndex,
   uuid,
@@ -44,9 +45,11 @@ const literal = (value: string) => sql.raw(`'${value}'`);
  * goes with their account, while an agent or a plan deleted leaves its
  * member standing with no id, so the messages it wrote still name it.
  * `read_seq` is how far through the workspace's chat sequence the member
- * has read, and `notice_seq` the sequence of the one notice it was told and
- * has not read past, null when none is outstanding. `left_at` is when an
- * archived agent or plan stopped hearing.
+ * has read in every channel, the floor each channel's own cursor in
+ * `chat_read` starts from, and `notice_seq` the sequence of the one notice
+ * it was told and has not read past, in the channel `notice_channel_id`
+ * names, null when none is outstanding. `left_at` is when an archived agent
+ * or plan stopped hearing.
  *
  * A channel is the workspace's general one, a plan's own, a topic one a
  * member opened, or a DM, which names its two members in uuid order so one
@@ -55,8 +58,8 @@ const literal = (value: string) => sql.raw(`'${value}'`);
  *
  * A message is a record of its own in a channel, addressed by its place in
  * the workspace's one chat sequence, which `workspace_chat` mints under its
- * row's lock as a conversation mints its rows' places, so a reader's one
- * cursor reads every channel. `touched_seq` is the place the message last
+ * row's lock as a conversation mints its rows' places, so one read past a
+ * place reads every channel. `touched_seq` is the place the message last
  * changed at, its own place until a change moves it on, so a reader past
  * the message reads it again where it changed. A reply names its thread's
  * root as its parent, never another reply, and stands as a message of its
@@ -93,10 +96,14 @@ export const chatMember = pgTable(
     handle: text("handle").notNull(),
     /** The member's place among its workspace's members of its kind, from one: an agent's `N`. */
     ordinal: integer("ordinal").notNull(),
-    /** How far through the workspace's chat sequence the member has read. */
+    /** How far through the workspace's chat sequence the member has read in every channel. */
     readSeq: integer("read_seq").notNull().default(0),
     /** The sequence of the notice the member was told and has not read past; null when none is outstanding. */
     noticeSeq: integer("notice_seq"),
+    /** The channel of the notice outstanding, which a read of that channel past it lets go of. */
+    noticeChannelId: uuid("notice_channel_id").references((): AnyPgColumn => chatChannel.id, {
+      onDelete: "set null",
+    }),
     joinedAt: timestamptz("joined_at").notNull(),
     /** When the member stopped hearing, an archived agent or plan; null while it hears. */
     leftAt: timestamptz("left_at"),
@@ -172,6 +179,32 @@ export const chatChannel = pgTable(
         and (${table.kind} = ${literal(CHANNEL_KIND.DM)}) = (${table.dmAMemberId} is not null and ${table.dmBMemberId} is not null)
         and (${table.dmAMemberId} is null or ${table.dmAMemberId} < ${table.dmBMemberId})`,
     ),
+  ],
+);
+
+/**
+ * How far one member has read one channel, past the member's own floor
+ * (`chat_member.read_seq`): a member's cursor in a channel is the greater
+ * of the two, so reading one channel marks no other read, and a channel
+ * the member never read on its own reads from the floor. The row goes with
+ * its member and its channel.
+ */
+export const chatRead = pgTable(
+  "chat_read",
+  {
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => chatMember.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => chatChannel.id, { onDelete: "cascade" }),
+    /** How far through the workspace's chat sequence the member has read the channel. */
+    readSeq: integer("read_seq").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.memberId, table.channelId] }),
+    // A channel's readers are let go of when the channel moves to another workspace.
+    index("chat_read_channel").on(table.channelId),
   ],
 );
 

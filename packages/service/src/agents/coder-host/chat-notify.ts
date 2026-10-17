@@ -265,7 +265,7 @@ function tellAgent(
     );
     if (!starterStays) return NOTICE_OUTCOME.LEFT;
     const claimed = yield* hostedStoreOrUnavailable(
-      markNoticed(userId, organizationId, member.id, place),
+      markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
     );
     if (!claimed) return NOTICE_OUTCOME.HELD;
     // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
