@@ -11,7 +11,7 @@ import {
   TRANSCRIPT_SPEAKER,
 } from "@luke/live";
 import type { WireRecord } from "@luke/wire";
-import { Deferred, Duration, Effect, Layer, type Scope, type Stream } from "effect";
+import { Deferred, Duration, Effect, Fiber, Layer, type Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
@@ -900,5 +900,66 @@ it.effect(
       yield* settle();
       assert.deepEqual(said(sideband), ["Current reply."]);
       assert.equal(brain.followed, 0);
+    }),
+);
+
+it.effect(
+  "a correction the developer made just before hanging up, which no ask carried, reaches the brain as the call ends and is attached to its lines",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What changed?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      sideband.output("Invites expire after seven days.", 1_000, 5_900);
+      sideband.input("Actually, invites should expire after three days.", 9_000, 10_200);
+      const ending = yield* Effect.forkChild(f.service.endSession(), { startImmediately: true });
+      yield* settle();
+      sideband.closedBy("close_requested", 4);
+      yield* Fiber.join(ending);
+
+      assert.equal(f.brain.asks.length, 2);
+      const last = f.brain.asks[1];
+      assert.ok(last?.question.endsWith("Actually, invites should expire after three days."));
+      assert.equal(last?.sessionId, "sess-1");
+      assert.equal(f.record.attached.at(-1)?.delegationId, last?.submissionId);
+      // Nothing of the earlier ask's span is asked again.
+      assert.ok(!last?.question.includes("Their line: What changed?"));
+    }),
+);
+
+it.effect("a call whose every word an ask carried asks nothing more as it ends", () =>
+  Effect.gen(function* () {
+    const { f, sideband } = yield* askedRun();
+    const ending = yield* Effect.forkChild(f.service.endSession(), { startImmediately: true });
+    yield* settle();
+    sideband.closedBy("close_requested", 4);
+    yield* Fiber.join(ending);
+    assert.equal(f.brain.asks.length, 1);
+  }),
+);
+
+it.effect(
+  "the session closing of its own hands on the developer's undelegated words too, and a session let go of for its peer to attach to again hands on nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Make it three days.", 0, 900);
+      sideband.closedBy("expired", 4);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      assert.ok(f.brain.asks[0]?.question.endsWith("Make it three days."));
+
+      const detached = yield* fixture();
+      const held = yield* detached.open();
+      yield* settle();
+      held.input("Make it five days.", 0, 900);
+      yield* detached.service.release();
+      yield* settle();
+      assert.deepEqual(detached.brain.asks, []);
     }),
 );

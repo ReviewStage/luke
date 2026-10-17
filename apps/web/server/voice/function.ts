@@ -100,7 +100,6 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
     exchange: deploymentExchange({
       deploymentSecret: () => configured(CRON_ENVIRONMENT.CRON_SECRET),
       eveOrigin: deploymentEveOrigin,
-      openAiKey: () => configured(VOICE_FUNCTION_ENVIRONMENT.API_KEY),
       report: (message) =>
         standardOutputLog({ event: LOG_EVENT.EXCHANGE_REPORTED, reason: reportReason(message) }),
     }),
