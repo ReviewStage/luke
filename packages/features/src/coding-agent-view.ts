@@ -14,6 +14,7 @@ import {
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
+  codingAgentReviewOptionsAnswerSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestFields,
   codingAgentSummarySchema,
@@ -369,6 +370,15 @@ export const codingAgentOverviewConversationAnswerViewSchema = EffectSchema.Unio
 
 export type CodingAgentOverviewConversationAnswerView =
   typeof codingAgentOverviewConversationAnswerViewSchema.Type;
+
+/** What the reviewer and label pickers of an agent's Pull request tab offer, as the window hears it: the labels, users, and teams, or why there is no answer. */
+export const codingAgentReviewOptionsAnswerViewSchema = EffectSchema.Union([
+  codingAgentReviewOptionsAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentReviewOptionsAnswerView =
+  typeof codingAgentReviewOptionsAnswerViewSchema.Type;
 
 /** One change to an agent's pull request, as the window asks it made: the agent, and the change (`pull-request-write-wire.ts`). */
 export const codingAgentPullRequestActionParamsSchema = EffectSchema.Struct({

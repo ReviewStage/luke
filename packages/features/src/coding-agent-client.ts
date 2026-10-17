@@ -36,6 +36,7 @@ import {
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
+  type CodingAgentReviewOptionsAnswerView,
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -72,6 +73,7 @@ import {
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
+  codingAgentReviewOptionsAnswerSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
@@ -120,6 +122,7 @@ import {
   agentPicturePath,
   agentPullRequestActionPath,
   agentPullRequestPath,
+  agentReviewOptionsPath,
   agentStopPath,
   agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
@@ -698,6 +701,16 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewPullRequestPath(agentId) }),
       (answer) => readAnswer(answer, codingAgentOverviewPullRequestAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams as GitHub holds them now. */
+  reviewOptions(
+    agentId: string,
+  ): Effect.Effect<CodingAgentReviewOptionsAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentReviewOptionsPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentReviewOptionsAnswerSchema, ROW_REFUSALS),
     );
   }
 

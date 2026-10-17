@@ -19,6 +19,7 @@ import {
   type CodingAgentSummary,
   DEPLOYMENT_STATE,
   DIFF_SIDE,
+  type GitHubPerson,
   MERGE_STATE,
   PULL_REQUEST_STATE,
   type PullRequestState,
@@ -255,6 +256,7 @@ function published(state: PullRequestState) {
 /** The overview's three reads, any of them answering otherwise than the fixtures above. */
 interface OverviewReads {
   readonly pullRequest?: CodingAgentsControl["readOverviewPullRequest"];
+  readonly reviewOptions?: CodingAgentsControl["readReviewOptions"];
   readonly checks?: CodingAgentsControl["readOverviewChecks"];
   readonly conversation?: CodingAgentsControl["readOverviewConversation"];
 }
@@ -277,6 +279,7 @@ function controlAnswering(
     readOverviewConversation:
       reads.conversation ?? (() => Promise.resolve({ pullRequest: CONVERSATION })),
     readChanges,
+    ...(reads.reviewOptions === undefined ? undefined : { readReviewOptions: reads.reviewOptions }),
   });
 }
 
@@ -1769,4 +1772,155 @@ test("a pull request in no stack draws no stack", async () => {
   );
   assert.ok(tab.querySelector(".pull-request-header .pull-request-branches") !== null);
   assert.equal(tab.querySelector(".pull-request-stack"), null);
+});
+
+/** The items of the menu standing open, by their words and whether each is checked. */
+function menuItems(): { readonly label: string; readonly checked: string | null }[] {
+  return [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      ':is([role="menuitem"], [role="menuitemcheckbox"])',
+    ),
+  ].map((item) => ({
+    label: item.querySelector(".task-menu-label")?.textContent ?? "",
+    checked: item.getAttribute("aria-checked"),
+  }));
+}
+
+/** Presses the menu item that begins with the words given. */
+async function pressItem(words: string): Promise<void> {
+  const item =
+    [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        ':is([role="menuitem"], [role="menuitemcheckbox"])',
+      ),
+    ].find((each) => each.textContent?.startsWith(words)) ??
+    assert.fail(`the menu offers ${words}`);
+  act(() => item.click());
+  await settle();
+}
+
+test("the reviewer picker lists the repository's teams then its people, the author left out and those asked checked; choosing one asks a review of them as the member, and the picker waits on the pull request's read before it opens again, then checks them", async () => {
+  let asked: readonly GitHubPerson[] = [CHARLES_ON_GITHUB];
+  const reread = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
+  let reads = 0;
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () => {
+        reads += 1;
+        const answer = {
+          pullRequest: {
+            ...PULL_REQUEST,
+            requested: asked,
+            requestedTeams: [{ slug: "platform", name: "Platform" }],
+          },
+        };
+        return reads === 1 ? Promise.resolve(answer) : reread.read();
+      },
+      reviewOptions: () =>
+        Promise.resolve({
+          labels: [],
+          users: [
+            CHARLES_ON_GITHUB,
+            { login: "priyan", bot: false },
+            PULL_REQUEST.author ?? assert.fail(),
+          ],
+          teams: [
+            { slug: "platform", name: "Platform" },
+            { slug: "design", name: "Design" },
+          ],
+        }),
+    }),
+  );
+  const picker = () =>
+    tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Edit reviewers"]') ??
+    assert.fail("the reviewer picker stands beside the reviewers");
+
+  act(() => picker().click());
+  await settle();
+  assert.deepEqual(menuItems(), [
+    { label: "Platform", checked: "true" },
+    { label: "Design", checked: "false" },
+    { label: "charlespan", checked: "true" },
+    { label: "priyan", checked: "false" },
+  ]);
+  await pressItem("priyan");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      { action: PULL_REQUEST_ACTION.REQUEST_REVIEW, reviewer: { kind: "user", name: "priyan" } },
+    ],
+  ]);
+  assert.equal(picker().disabled, true, "nothing is chosen from what the pull request held before");
+  asked = [CHARLES_ON_GITHUB, { login: "priyan", bot: false }];
+  reread.answer({
+    pullRequest: {
+      ...PULL_REQUEST,
+      requested: asked,
+      requestedTeams: [{ slug: "platform", name: "Platform" }],
+    },
+  });
+  await settle();
+  act(() => picker().click());
+  await settle();
+  assert.deepEqual(
+    menuItems().find((item) => item.label === "priyan"),
+    { label: "priyan", checked: "true" },
+  );
+  await pressItem("Platform");
+  assert.deepEqual(changes.at(-1), [
+    AGENT.id,
+    {
+      action: PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST,
+      reviewer: { kind: "team", name: "platform" },
+    },
+  ]);
+});
+
+test("the label picker lists the repository's labels, those on the pull request checked, and takes one off or puts one on as chosen; a merged pull request is offered no reviewers", async () => {
+  const tab = await draw(
+    controlAnswering(
+      {
+        pullRequest: () =>
+          Promise.resolve({
+            pullRequest: {
+              ...PULL_REQUEST,
+              state: PULL_REQUEST_STATE.MERGED,
+              mergedAt: 2_000,
+              labels: [{ name: "bug", color: "d73a4a" }],
+            },
+          }),
+        reviewOptions: () =>
+          Promise.resolve({
+            labels: [
+              { name: "bug", color: "d73a4a" },
+              { name: "docs", color: "0075ca" },
+            ],
+            users: [],
+            teams: [],
+          }),
+      },
+      PULL_REQUEST_STATE.MERGED,
+    ),
+  );
+  assert.equal(tab.querySelector('[aria-label="Edit reviewers"]'), null);
+  const picker =
+    tab.querySelector<HTMLButtonElement>('.pull-request-label-row [aria-label="Edit labels"]') ??
+    assert.fail("the label picker stands at the labels' end");
+
+  act(() => picker.click());
+  await settle();
+  assert.deepEqual(menuItems(), [
+    { label: "bug", checked: "true" },
+    { label: "docs", checked: "false" },
+  ]);
+  await pressItem("bug");
+  act(() => picker.click());
+  await settle();
+  await pressItem("docs");
+
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.REMOVE_LABEL, label: "bug" }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.ADD_LABEL, label: "docs" }],
+  ]);
 });

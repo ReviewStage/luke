@@ -156,6 +156,7 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_CHANGES: "codingAgents.changes",
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
   /** The checks on one agent's pull request's head, as its overview draws them. */
   CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */

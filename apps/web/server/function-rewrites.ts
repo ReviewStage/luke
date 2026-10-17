@@ -145,6 +145,11 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1",
   },
   { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
+  {
+    src: "/api/agents/([^/]+)/review-options",
+    route: "agents/review-options",
+    query: "id=$1",
+  },
   { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1" },
   {
     src: "/api/agents/([^/]+)/terminals/([^/]+)",

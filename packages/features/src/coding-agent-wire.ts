@@ -895,6 +895,8 @@ export const OVERVIEW_BOUNDS = {
   MAX_LABELS: 100,
   /** The most pull requests of a stack one read names, the pull request itself among them. */
   MAX_STACK: 30,
+  /** The most labels, users, or teams the reviewer and label pickers are offered, each. */
+  MAX_OPTIONS: 300,
 } as const;
 
 /** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
@@ -1024,6 +1026,14 @@ const pullRequestLabelSchema = EffectSchema.Struct({
 
 export type PullRequestLabel = typeof pullRequestLabelSchema.Type;
 
+/** A team of the repository's organization a review may be asked of: its slug, which a request names it by, and its name. */
+const reviewTeamSchema = EffectSchema.Struct({
+  slug: overviewName,
+  name: EffectSchema.String,
+});
+
+export type PullRequestReviewTeam = typeof reviewTeamSchema.Type;
+
 /** The agent whose pull request one of a stack is: its id, and its plan's, null for an agent on none. */
 const stackAgentSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -1052,7 +1062,8 @@ export type PullRequestStackEntry = typeof stackEntrySchema.Type;
  * renders it (`body_html`), empty where it has none; the branch it merges
  * into and the one it merges from; when it was opened, and merged where it
  * was; whether it would merge as it stands; who opened it, who the agent
- * writes as on GitHub, and who it still asks for a review; its labels; and,
+ * writes as on GitHub, and who it still asks for a review, people and
+ * teams; its labels; and,
  * while it is open, the stack it stands in, base first and itself among it,
  * empty where it stands in none. Its labels and its stack are absent from a
  * service before them. Null where the agent has opened none yet, or the
@@ -1078,6 +1089,11 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       requested: EffectSchema.Array(githubPersonSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
       ),
+      requestedTeams: EffectSchema.optionalKey(
+        EffectSchema.Array(reviewTeamSchema).check(
+          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+        ),
+      ),
       labels: EffectSchema.optionalKey(
         EffectSchema.Array(pullRequestLabelSchema).check(
           EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_LABELS),
@@ -1091,6 +1107,27 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
     }),
   ),
 });
+
+/**
+ * What the reviewer and label pickers of an agent's Pull request tab offer
+ * (GET), read of its repository rather than its pull request: the
+ * repository's labels, the users who may be asked for a review (its
+ * collaborators), and its organization's teams that reach it, each up to
+ * the bound; each empty where the Luke GitHub App may not read it.
+ */
+export const codingAgentReviewOptionsAnswerSchema = EffectSchema.Struct({
+  labels: EffectSchema.Array(pullRequestLabelSchema).check(
+    EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_OPTIONS),
+  ),
+  users: EffectSchema.Array(githubPersonSchema).check(
+    EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_OPTIONS),
+  ),
+  teams: EffectSchema.Array(reviewTeamSchema).check(
+    EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_OPTIONS),
+  ),
+});
+
+export type CodingAgentReviewOptions = typeof codingAgentReviewOptionsAnswerSchema.Type;
 
 export type CodingAgentOverviewPullRequest = NonNullable<
   (typeof codingAgentOverviewPullRequestAnswerSchema.Type)["pullRequest"]
