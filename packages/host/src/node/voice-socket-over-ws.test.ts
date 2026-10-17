@@ -6,7 +6,7 @@ import { it } from "@effect/vitest";
 import { socketOpened } from "@luke/voice";
 import { Effect, Stream } from "effect";
 import { WebSocketServer } from "ws";
-import { openSocketOverWs } from "./socket-over-ws.js";
+import { openVoiceSocketOverWs } from "./voice-socket-over-ws.js";
 
 /** Gives the fiber scheduler turns until `condition` holds, or fails the test if it never does. */
 function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
@@ -61,7 +61,7 @@ it.effect(
     Effect.gen(function* () {
       const remote = yield* Effect.promise(() => server({ bearer: "key", refuseWith: 401 }));
       try {
-        const opening = yield* openSocketOverWs(remote.url, { authorization: "Bearer key" });
+        const opening = yield* openVoiceSocketOverWs(remote.url, { authorization: "Bearer key" });
         assert.equal(socketOpened(opening), true);
         if (!socketOpened(opening)) return;
         assert.deepEqual(remote.seen, [
