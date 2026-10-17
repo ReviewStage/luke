@@ -389,10 +389,11 @@ test("the listed workspace's issues stand under a heading for each status, the w
   ];
   const page = mount();
   await settle();
+  showList();
 
   assert.deepEqual(listed, [WORKSPACE.id]);
   assert.deepEqual(groups(page), [
-    ["In Progress1", ["ACME-3 Fix login"]],
+    ["In progress1", ["ACME-3 Fix login"]],
     ["Backlog2", ["ACME-4 Issue 4", "ACME-2 Issue 2"]],
     ["Done1", ["ACME-1 Issue 1"]],
   ]);
@@ -484,7 +485,10 @@ test("C pressed on the page opens the card, and a c typed into the card's title,
 });
 
 test("↓ and Return open the issue reached, read on its own page; Escape comes back to the list with its row holding the keyboard, and Escape again closes the page", async () => {
-  standing = [issue(1), issue(2, { status: ISSUE_STATUS.IN_PROGRESS, title: "Fix login" })];
+  standing = [
+    issue(1, { status: ISSUE_STATUS.DONE }),
+    issue(2, { status: ISSUE_STATUS.IN_PROGRESS, title: "Fix login" }),
+  ];
   const page = mount();
   await settle();
 
@@ -498,7 +502,7 @@ test("↓ and Return open the issue reached, read on its own page; Escape comes 
 
   assert.deepEqual(reads, [issue(2).id]);
   assert.equal(titleOf(page), "Fix login");
-  assert.equal(picked(page, "Status"), "In Progress");
+  assert.equal(picked(page, "Status"), "In progress");
 
   act(() => {
     runAppCommand(APP_COMMAND.EXIT_ISSUES);
@@ -838,7 +842,7 @@ test("a filing answered once another workspace is listed puts away no card of th
   assert.equal(composerField()?.value, "Meant for Initech");
 });
 
-test("the page opens as a board: a column for every status in the list's order, an empty one saying so, each counted and its cards sorted as the list sorts", async () => {
+test("the page opens as a board: a column for every status in the order work moves through them, an empty one saying so uncounted, each other counted and its cards sorted as the list sorts", async () => {
   standing = [
     issue(1, { status: ISSUE_STATUS.DONE }),
     issue(2, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.LOW }),
@@ -848,11 +852,11 @@ test("the page opens as a board: a column for every status in the list's order, 
   await settle();
 
   assert.deepEqual(columns(page), [
-    ["In Progress0", []],
+    ["Backlog", []],
     ["Todo2", ["ACME-3", "ACME-2"]],
-    ["Backlog0", []],
+    ["In progress", []],
     ["Done1", ["ACME-1"]],
-    ["Canceled0", []],
+    ["Canceled", []],
   ]);
   assert.equal(
     page.querySelector("[data-issue-column='in-progress'] .factory-idle")?.textContent,
@@ -923,11 +927,11 @@ test("a workspace with no issue yet still stands the board's columns, each sayin
   await settle();
 
   assert.deepEqual(columns(page), [
-    ["In Progress0", []],
-    ["Todo0", []],
-    ["Backlog0", []],
-    ["Done0", []],
-    ["Canceled0", []],
+    ["Backlog", []],
+    ["Todo", []],
+    ["In progress", []],
+    ["Done", []],
+    ["Canceled", []],
   ]);
   assert.equal(page.querySelectorAll(".factory-idle").length, 5);
 });
