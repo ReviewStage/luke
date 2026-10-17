@@ -14,8 +14,10 @@ import type {
 } from "@luke/host/agent-notices";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
+import { channels } from "@luke/host/bridge";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Effect, Exit, Scope } from "effect";
 import {
@@ -29,8 +31,6 @@ import {
   session,
   type WebContents,
 } from "electron";
-import { channels } from "#shared/bridge";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { type AppStateStore, voiceWindowGone, voiceWindowState } from "../app-state";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";

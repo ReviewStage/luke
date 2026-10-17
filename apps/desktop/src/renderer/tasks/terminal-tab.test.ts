@@ -19,6 +19,7 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -26,7 +27,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { bundleLanded, onSideBundles } from "#testing/side-bundles";

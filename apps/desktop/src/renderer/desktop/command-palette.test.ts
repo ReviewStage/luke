@@ -16,6 +16,7 @@ import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
+import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import { settingsView } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -24,7 +25,6 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";

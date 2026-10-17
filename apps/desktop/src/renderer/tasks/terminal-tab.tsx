@@ -1,6 +1,6 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { useMemo } from "react";
-import { SHORTCUT_KEY } from "#shared/shortcuts";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab";
 import { Shortcut } from "../shortcut";

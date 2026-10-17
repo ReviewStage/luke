@@ -3,8 +3,8 @@ import type { AvatarGrant } from "@luke/features/avatar-grant";
 import { AVATAR_FEED_KIND } from "@luke/voice/avatar";
 import type { UnparsedWireValue } from "@luke/wire";
 import { describe, it } from "vitest";
-import { channels } from "#shared/bridge";
-import { type AvatarPage, PanelAvatarRelay } from "./panel-avatar";
+import { channels } from "./bridge.js";
+import { type AvatarPage, PanelAvatarRelay } from "./panel-avatar.js";
 
 const GRANT: AvatarGrant = {
   serverUrl: "wss://luke-avatar.livekit.cloud",

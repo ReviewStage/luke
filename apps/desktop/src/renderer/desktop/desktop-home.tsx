@@ -1,10 +1,10 @@
 import type { TaskSummary } from "@luke/features/task-wire";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import { ErrorState, FolderIcon, WingFace } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { RepositoryPicture } from "../repository-picture";

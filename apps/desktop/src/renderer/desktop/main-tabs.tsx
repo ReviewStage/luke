@@ -6,9 +6,9 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
 import { RetryButton } from "../retry-button";

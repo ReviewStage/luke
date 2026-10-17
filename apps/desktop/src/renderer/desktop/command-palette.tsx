@@ -49,6 +49,19 @@ import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
+  APP_COMMAND,
+  APP_SHORTCUT_GROUPS,
+  APP_SHORTCUTS,
+  type AppCommand,
+  appCommandLabel,
+  commandForKey,
+  isKeyedCommand,
+  type KeyedCommand,
+  PALETTE_COMMANDS,
+  SHORTCUT_KEY,
+  type ShortcutChord,
+} from "@luke/settings/shortcuts";
+import {
   CHIP_LOOK,
   Chip,
   GearIcon,
@@ -67,19 +80,6 @@ import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  APP_COMMAND,
-  APP_SHORTCUT_GROUPS,
-  APP_SHORTCUTS,
-  type AppCommand,
-  appCommandLabel,
-  commandForKey,
-  isKeyedCommand,
-  type KeyedCommand,
-  PALETTE_COMMANDS,
-  SHORTCUT_KEY,
-  type ShortcutChord,
-} from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";

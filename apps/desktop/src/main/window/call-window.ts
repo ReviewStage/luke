@@ -4,11 +4,11 @@
 
 import fs from "node:fs";
 import type { RunMode } from "@luke/host";
+import { channels } from "@luke/host/bridge";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
-import { channels } from "#shared/bridge";
 import {
   type CallWindowArea,
   CallWindowPlace,

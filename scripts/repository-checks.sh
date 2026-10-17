@@ -219,7 +219,7 @@ if [[ -n "$package_app_imports" ]]; then
 fi
 
 # The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `#shared/bridge`, `#shared/messages/*`,
+# through the preload bridge alone, so `@luke/host/bridge`, `#shared/messages/*`,
 # and the packages' own wire vocabularies are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
 # browser, and a `node:` import does the same — neither is a mistake the type
 # checker or esbuild can report, because both are real modules that simply are
@@ -466,6 +466,12 @@ node --input-type=module -e '
     "apps/web/server/preview-*.ts",
     "apps/desktop/src/renderer/stylesheet.d.ts",
     "apps/desktop/src/testing/**",
+    // The doors the window root installs its platform bridge and platform
+    // services into. Step 16 of the web plan moves them into the panel
+    // package, together with renderer/act.ts and the hooks above them, and
+    // removes these rows.
+    "apps/desktop/src/renderer/app-bridge.ts",
+    "apps/desktop/src/renderer/app-platform.ts",
   ];
   const shell = new Set(edges.runtimeEdges);
   for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));

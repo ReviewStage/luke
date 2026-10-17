@@ -2,7 +2,7 @@
  * app-bridge.ts -- the bridge a test's window reaches main through: a fake answering only the calls its test gives it.
  */
 
-import type { AppBridge } from "#shared/bridge";
+import type { AppBridge } from "@luke/host/bridge";
 import { installAppBridge } from "../renderer/app-bridge";
 
 let answering: Partial<AppBridge> = {};
