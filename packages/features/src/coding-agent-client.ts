@@ -81,9 +81,14 @@ import {
 } from "./inbox-wire.js";
 import {
   type AccountInboxLiveAnswer,
+  type AgentTranscriptLiveAnswer,
   accountInboxLiveAnswerSchema,
+  agentTranscriptLiveAnswerSchema,
   type ScopeInboxLiveAnswer,
   scopeInboxLiveAnswerSchema,
+  TRANSCRIPT_NOW_QUERY,
+  type TranscriptNowAnswer,
+  transcriptNowAnswerSchema,
 } from "./live-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
@@ -518,6 +523,50 @@ export class HostedCodingAgentClient {
         : agentSubagentMessagesPath(agentId, callId, after);
     return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
       readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * One agent's transcript past the cursor, or a worker's, read at once
+   * rather than held, with whether the held read would have held on it: for
+   * a reader following the transcript's live statements, which reads again
+   * once they move.
+   */
+  messagesNow(
+    agentId: string,
+    after: string,
+    callId?: string,
+  ): Effect.Effect<TranscriptNowAnswer | Failed, never, HttpClient.HttpClient> {
+    const path =
+      callId === undefined
+        ? agentMessagesPath(agentId, after)
+        : agentSubagentMessagesPath(agentId, callId, after);
+    const now = new URLSearchParams({ [TRANSCRIPT_NOW_QUERY.WAIT]: TRANSCRIPT_NOW_QUERY.NONE });
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: `${path}&${now}` }),
+      (answer) => readAnswer(answer, transcriptNowAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * One agent's transcript, or a worker's where the delegation call is
+   * named, sealed for following over Neon Realtime, answered at once: not
+   * found where the account reaches no such agent, unanswered where the
+   * deployment has no Realtime and for anything else, which the caller
+   * answers by holding its read open as before.
+   */
+  agentTranscriptLive(
+    agentId: string,
+    callId?: string,
+  ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({ id: agentId });
+    if (callId !== undefined) query.set("call", callId);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT}?${query}`,
+      }),
+      (answer) => readAnswer(answer, agentTranscriptLiveAnswerSchema, ROW_REFUSALS),
     );
   }
 

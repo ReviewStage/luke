@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { fillChildTitle } from "@luke/database/models/child-titles";
 import {
   type CodingAgentBriefText,
   createCodingAgent,
+  fillCodingAgentTitle,
   latestTurnsOf,
   readCodingAgent,
+  writeDelegation,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
@@ -17,6 +20,7 @@ import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { agentTranscriptLiveRowsSchema } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -27,6 +31,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
+import { SqlClient } from "effect/sql";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import {
@@ -56,7 +61,8 @@ import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
-import { CURSOR_START, transcriptPast } from "./transcript.js";
+import { CURSOR_START, transcriptNow, transcriptPast } from "./transcript.js";
+import { transcriptLiveStatements } from "./transcript-live.js";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -379,7 +385,119 @@ const turnRow = (id: string) =>
       rows[0] === undefined ? undefined : Schema.decodeUnknownSync(TurnRowSchema)(rows[0]),
   );
 
+/** A transcript's live statements run as Realtime runs them, their rows decoded as the desktop decodes them, each part in an order of its own since Realtime keeps none. */
+const liveRowsOf = (target: ConversationTarget, parentConversationId: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const statements = Option.getOrThrow(transcriptLiveStatements(target, parentConversationId));
+    const rows = yield* Effect.all({
+      messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
+      turns: sql.unsafe(statements.turns.sql, [...statements.turns.params]),
+      conversation: sql.unsafe(statements.conversation.sql, [...statements.conversation.params]),
+      agent: sql.unsafe(statements.agent.sql, [...statements.agent.params]),
+      workers: sql.unsafe(statements.workers.sql, [...statements.workers.params]),
+    });
+    const decoded = yield* Schema.decodeUnknownEffect(agentTranscriptLiveRowsSchema)(rows);
+    return JSON.stringify(
+      Object.entries(decoded).map(([part, list]) => [
+        part,
+        list.map((row) => JSON.stringify(row)).toSorted(),
+      ]),
+    );
+  });
+
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
+  it.effect(
+    "a transcript's live statements move at every write a page past the reader's cursor says something of, the agent's own and a worker's alike, and hold nothing of another account's",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const parent = target.conversationId;
+        const now = (cursor: typeof CURSOR_START) =>
+          transcriptNow(target, CODER_TOOL_SET, cursor, agent, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
+
+        let cursor = CURSOR_START;
+        let read = yield* now(cursor);
+        let rows = yield* liveRowsOf(target, parent);
+        let said = 0;
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(
+            event,
+            admitted,
+            { id: sessionId, auth, turn: { id: "turn_0" } } as never,
+            state,
+            {
+              hash: prompt.hash,
+            },
+          );
+          const next = yield* now(cursor);
+          const moved = yield* liveRowsOf(target, parent);
+          if (next.page.messages.length > 0 || next.page.status !== read.page.status) {
+            said += 1;
+            assert.notEqual(moved, rows, `the statements move with ${event.type}`);
+          }
+          // Note that a page with nothing past the cursor holds while the turn runs, and not once it ended.
+          if (next.page.messages.length === 0) {
+            assert.equal(next.holds, next.page.status === CODING_AGENT_STATUS.RUNNING);
+          }
+          cursor = next.page.cursor;
+          read = next;
+          rows = moved;
+        }
+        assert.ok(said > 2, "the turn said something more than once");
+        assert.equal(read.page.status, CODING_AGENT_STATUS.COMPLETED);
+
+        // A title landing is heard on the agent's own transcript.
+        assert.equal(yield* fillCodingAgentTitle(userId, agent.id, "Teammate invitations"), true);
+        const titled = yield* liveRowsOf(target, parent);
+        assert.notEqual(titled, rows);
+
+        // A worker's delegation being recorded and its title landing are heard on its transcript and the agent's.
+        const workerCall = "call-worker";
+        const child = childConversationId(parent, workerCall);
+        const db = yield* Database;
+        yield* db.insert(conversations).values({
+          id: child,
+          userId,
+          kind: CONVERSATION_KIND.CHILD,
+          parentConversationId: parent,
+        });
+        const worker = { userId, conversationId: child };
+        const opened = yield* liveRowsOf(worker, parent);
+        yield* writeDelegation(child, workerCall, { model: agent.model, effort: agent.effort });
+        const delegated = yield* liveRowsOf(worker, parent);
+        assert.notEqual(delegated, opened);
+        const ownBefore = yield* liveRowsOf(target, parent);
+        assert.equal(yield* fillChildTitle(target, child, "Invite expiry"), true);
+        assert.notEqual(yield* liveRowsOf(worker, parent), delegated);
+        assert.notEqual(yield* liveRowsOf(target, parent), ownBefore);
+
+        // Another account's statements over the same conversations read nothing of them.
+        const stranger = yield* openGithubUser();
+        const nothing = JSON.stringify([
+          ["messages", [JSON.stringify({ rows: 0, seq: 0 })]],
+          ["turns", []],
+          ["conversation", []],
+          ["agent", []],
+          ["workers", []],
+        ]);
+        assert.equal(
+          yield* liveRowsOf({ userId: stranger, conversationId: parent }, parent),
+          nothing,
+        );
+        assert.equal(
+          yield* liveRowsOf({ userId: stranger, conversationId: child }, parent),
+          nothing,
+        );
+      }),
+  );
+
   it.effect(
     "a conversation that is no agent's is refused a model, an agent, and a prompt alike",
     () =>

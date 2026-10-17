@@ -450,6 +450,20 @@ export type DelegationPast =
   | { readonly delegation: CodingAgentDelegation }
   | { readonly delegation: undefined; readonly agentRuns: boolean };
 
+/** The delegation a call recorded as it stands now: the record, or none with whether the agent it was asked of still runs, which is when it may still land. */
+export function delegationNow(
+  parent: ConversationTarget,
+  childConversationId: string,
+  agent: Pick<AgentStanding, "createdAt">,
+): TranscriptEffect<DelegationPast> {
+  return Effect.gen(function* () {
+    const found = yield* readDelegation(parent, childConversationId);
+    if (Option.isSome(found)) return { delegation: found.value };
+    const { status } = yield* statusNow(parent, agent.createdAt);
+    return { delegation: undefined, agentRuns: WAITING_STATUSES.has(status) };
+  });
+}
+
 /**
  * The delegation a call recorded, waited for. A worker's tab opens from
  * the moment its call is requested, which is a step ahead of the record the
@@ -463,14 +477,10 @@ export function delegationPast(
   childConversationId: string,
   agent: Pick<AgentStanding, "createdAt">,
 ): TranscriptEffect<DelegationPast> {
-  const once: TranscriptEffect<Option.Option<DelegationPast>> = Effect.gen(function* () {
-    const found = yield* readDelegation(parent, childConversationId);
-    if (Option.isSome(found)) return Option.some({ delegation: found.value });
-    const { status } = yield* statusNow(parent, agent.createdAt);
-    return WAITING_STATUSES.has(status)
-      ? Option.none()
-      : Option.some({ delegation: undefined, agentRuns: false });
-  });
+  const once: TranscriptEffect<Option.Option<DelegationPast>> = Effect.map(
+    delegationNow(parent, childConversationId, agent),
+    (read) => (read.delegation === undefined && read.agentRuns ? Option.none() : Option.some(read)),
+  );
   return once.pipe(
     Effect.repeat({ schedule: Schedule.spaced(CODER.MESSAGES_POLL), until: Option.isSome }),
     Effect.timeoutOption(CODER.MESSAGES_HOLD),
@@ -531,6 +541,13 @@ export function titleMayLand(
   });
 }
 
+/** Whether a held read keeps waiting on a page: nothing new on it while the agent may still write, or while a title may still land. */
+const holdsFor = (page: TranscriptPage, titleAwaited: TitleAwaited): TranscriptEffect<boolean> => {
+  if (page.messages.length > 0) return Effect.succeed(false);
+  if (WAITING_STATUSES.has(page.status)) return Effect.succeed(true);
+  return titleAwaited;
+};
+
 /**
  * The transcript past the cursor: the page as it stands, or, while the
  * agent is starting or runs and nothing new stands yet, the first page with
@@ -556,9 +573,7 @@ export function transcriptPast(
 ): TranscriptEffect<TranscriptPage, ModelCatalog> {
   const once = Effect.gen(function* () {
     const read = yield* pagePast(target, tools, after, agent.createdAt);
-    if (read.page.messages.length > 0) return Option.some(read);
-    if (WAITING_STATUSES.has(read.page.status)) return Option.none();
-    return (yield* titleAwaited) ? Option.none() : Option.some(read);
+    return (yield* holdsFor(read.page, titleAwaited)) ? Option.none() : Option.some(read);
   });
   return once.pipe(
     Effect.repeat({ schedule: Schedule.spaced(poll), until: Option.isSome }),
@@ -571,4 +586,31 @@ export function transcriptPast(
     }),
     Effect.flatMap(({ page, turn }) => withUsage(target, tools, page, turn, own)),
   );
+}
+
+/** A page read at once, and whether the held read would have held on it for more. */
+export interface TranscriptNow {
+  readonly page: TranscriptPage;
+  readonly holds: boolean;
+}
+
+/**
+ * The transcript past the cursor as it stands, never held, with whether
+ * `transcriptPast` would have held on it: for a reader that follows the
+ * transcript's live statements (`transcript-live.ts`) and reads again once
+ * they move, rather than having the service look on a clock.
+ */
+export function transcriptNow(
+  target: ConversationTarget,
+  tools: ToolSet,
+  after: MessageCursor,
+  agent: Pick<AgentStanding, "createdAt">,
+  own?: OwnAgent,
+  titleAwaited: TitleAwaited = NO_TITLE_AWAITED,
+): TranscriptEffect<TranscriptNow, ModelCatalog> {
+  return Effect.gen(function* () {
+    const { page, turn } = yield* pagePast(target, tools, after, agent.createdAt);
+    const holds = yield* holdsFor(page, titleAwaited);
+    return { page: yield* withUsage(target, tools, page, turn, own), holds };
+  });
 }

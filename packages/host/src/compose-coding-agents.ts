@@ -65,6 +65,12 @@ import type { HostKernel } from "./host-kernel.js";
 import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import { inboxPast, type ScopeInboxes, scopeInboxes } from "./scope-inbox-follow.js";
+import {
+  type TranscriptFollows,
+  TranscriptKey,
+  transcriptFollows,
+  transcriptPast,
+} from "./transcript-follow.js";
 
 /**
  * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
@@ -73,8 +79,10 @@ import { inboxPast, type ScopeInboxes, scopeInboxes } from "./scope-inbox-follow
  * cursor it reads from, asks when a plan opens, when it starts or stops an
  * agent, and while an agent's tab shows its running transcript, and every
  * ask is one call of the service answered whole. The transcript read is
- * one the service holds open while the agent runs and nothing new stands,
- * and the inbox read another, held while nothing in it changed, so each of
+ * one held open while the agent runs and nothing new stands, here on a
+ * Neon Realtime subscription where the service seals one
+ * (`transcript-follow.ts`) and by the service where it does not, and the
+ * inbox read another, held while nothing in it changed, so each of
  * the window's loops is one held read after another rather than a clock of
  * its own, and a loop ends when the window stops asking. What waits across
  * the account is followed rather than asked: main follows it while an
@@ -124,6 +132,8 @@ export type CodingAgentClient = Pick<
   | "accountInboxLive"
   | "taskInboxLive"
   | "agentInboxLive"
+  | "agentTranscriptLive"
+  | "messagesNow"
   | "inboxAttachment"
   | "agentPicture"
 >;
@@ -137,7 +147,7 @@ export interface CodingAgentsDependencies {
 }
 
 export interface CodingAgentsComposer extends Composer {
-  /** The account inbox let go, and every plan's and agent's inbox subscription, as a sign-out lets them go. */
+  /** The account inbox let go, and every plan's and agent's inbox subscription and every transcript's, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
 
@@ -174,15 +184,26 @@ export function composeCodingAgents(
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });
-    return composed(dependencies, follower, inboxes);
+    const transcripts = yield* transcriptFollows({
+      seal: (key) => asked(client.agentTranscriptLive(key.agentId, key.callId)),
+      openLive: dependencies.openLive ?? openRealtimeClient,
+      now: dependencies.kernel.now,
+    });
+    return composed(dependencies, follower, { inboxes, transcripts });
   });
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything but the account inbox's follower, when main asks for it, and a scope's inbox subscription, while a window reads it. */
+/** The subscriptions the windows' reads share: each plan's and agent's inbox, and each transcript. */
+interface Follows {
+  readonly inboxes: ScopeInboxes;
+  readonly transcripts: TranscriptFollows;
+}
+
+/** The composer's one table, built from its seams; nothing here starts anything but the account inbox's follower, when main asks for it, and a scope's inbox or a transcript's subscription, while a window reads it. */
 function composed(
   dependencies: CodingAgentsDependencies,
   follower: FiberHandle.FiberHandle<never>,
-  inboxes: ScopeInboxes,
+  { inboxes, transcripts }: Follows,
 ): CodingAgentsComposer {
   const { kernel, client } = dependencies;
   const gate = gateOf(dependencies);
@@ -331,7 +352,12 @@ function composed(
           params,
           "reading an agent's transcript names the agent and a cursor",
         );
-        const answer = yield* asked(client.messages(agentId, after, callId));
+        const answer = gate()
+          ? yield* transcriptPast(transcripts, new TranscriptKey({ agentId, callId }), {
+              now: asked(client.messagesNow(agentId, after, callId)),
+              held: asked(client.messages(agentId, after, callId)),
+            })
+          : UNANSWERED;
         return carried<CodingAgentMessagesAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGE]: (params) =>
@@ -534,6 +560,7 @@ function composed(
   const reset = Effect.gen(function* () {
     yield* FiberHandle.clear(follower);
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
+    for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
   });
 
   return { methods, lifetime: Effect.void, reset };

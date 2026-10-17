@@ -4,9 +4,14 @@ import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { childConversationId } from "@luke/database/models/ids";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { accountInboxLiveAnswerSchema, scopeInboxLiveAnswerSchema } from "@luke/features/live-wire";
+import {
+  accountInboxLiveAnswerSchema,
+  agentTranscriptLiveAnswerSchema,
+  scopeInboxLiveAnswerSchema,
+} from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter } from "effect/http";
@@ -183,6 +188,63 @@ it.layer(getTestDB())("the live reads", (it) => {
           for (const query of Object.values(answer.queries)) {
             assert.ok(query.capability.includes(`"${owner}"`), "read for the bearer");
           }
+          assert.deepEqual(yield* ask({ bearer: stranger, path, sealing: Option.some(SCRIPTED) }), {
+            status: HOSTED_HTTP_STATUS.NOT_FOUND,
+            body: { error: HOSTED_API_ERROR.NOT_FOUND },
+          });
+          assert.deepEqual(yield* ask({ bearer: owner, path, sealing: Option.none() }), {
+            status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+            body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+          });
+        }
+      }),
+  );
+
+  it.effect(
+    "an agent's transcript, or a worker's by its call, is sealed as what its pages are read from, for an account that reaches the agent and under the conversation the call opens, and not found otherwise",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(started));
+        const { agent } = started.value;
+        const own = `/api/live/agent-transcript?id=${agent.id}`;
+        const worker = `${own}&call=call-7`;
+
+        const sealedOwn = yield* ask({ bearer: owner, path: own, sealing: Option.some(SCRIPTED) });
+        assert.equal(sealedOwn.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(sealedOwn.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), [
+          "agent",
+          "conversation",
+          "messages",
+          "turns",
+          "workers",
+        ]);
+        for (const query of Object.values(answer.queries)) {
+          assert.ok(query.capability.includes(`"${owner}"`), "read for the agent's owner");
+        }
+        assert.ok(answer.queries.messages.capability.includes(`"${agent.conversationId}"`));
+
+        const sealedWorker = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(
+          (yield* ask({ bearer: owner, path: worker, sealing: Option.some(SCRIPTED) })).body,
+        );
+        const child = childConversationId(agent.conversationId, "call-7");
+        assert.ok(sealedWorker.queries.messages.capability.includes(`"${child}"`));
+        assert.ok(sealedWorker.queries.workers.capability.includes(`"${agent.conversationId}"`));
+
+        for (const path of [own, worker]) {
           assert.deepEqual(yield* ask({ bearer: stranger, path, sealing: Option.some(SCRIPTED) }), {
             status: HOSTED_HTTP_STATUS.NOT_FOUND,
             body: { error: HOSTED_API_ERROR.NOT_FOUND },

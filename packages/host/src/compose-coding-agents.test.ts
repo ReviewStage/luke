@@ -23,7 +23,12 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "@luke/features/live-wire";
+import type {
+  AccountInboxLiveAnswer,
+  AgentTranscriptLiveAnswer,
+  ScopeInboxLiveAnswer,
+  TranscriptNowAnswer,
+} from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -194,6 +199,9 @@ function fakeService() {
   const asked: string[] = [];
   let live: AccountInboxLiveAnswer | undefined;
   let scope: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined;
+  let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
+  // Each page read at once, in turn; the last stands once the others are read.
+  let pagesNow: readonly TranscriptNowAnswer[] = [];
   let cursor = CODING_AGENT_CURSOR_START;
   const client: CodingAgentClient = {
     models: () =>
@@ -240,6 +248,27 @@ function fakeService() {
           status: CODING_AGENT_STATUS.RUNNING,
           title: null,
         };
+      }),
+    messagesNow: (agentId, after, callId) =>
+      Effect.sync(() => {
+        asked.push(
+          callId === undefined
+            ? `messages-now:${agentId}:${after}`
+            : `worker-now:${agentId}:${callId}:${after}`,
+        );
+        const [page, ...rest] = pagesNow;
+        assert.ok(page, "a page read at once was scripted");
+        if (rest.length > 0) pagesNow = rest;
+        return page;
+      }),
+    agentTranscriptLive: (agentId, callId) =>
+      Effect.sync(() => {
+        asked.push(
+          callId === undefined
+            ? `transcript-live:${agentId}`
+            : `transcript-live:${agentId}:${callId}`,
+        );
+        return transcript ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     message: (agentId, request) =>
       Effect.sync(() => {
@@ -425,6 +454,16 @@ function fakeService() {
     sealScope: (next: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined) => {
       scope = next;
     },
+    /** What the service seals for following a transcript, or that the account reaches no such agent; none answers unanswered. */
+    sealTranscript: (
+      next: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined,
+    ) => {
+      transcript = next;
+    },
+    /** The pages the service answers read at once, in turn. */
+    pageNow: (...pages: readonly TranscriptNowAnswer[]) => {
+      pagesNow = pages;
+    },
   };
 }
 
@@ -458,6 +497,8 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       asked: service.asked,
       seal: service.seal,
       sealScope: service.sealScope,
+      sealTranscript: service.sealTranscript,
+      pageNow: service.pageNow,
       realtime,
       inboxes,
       reset: composer.reset,
@@ -710,7 +751,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `list:${TASK_ID}:archived`,
       "workspace:workspace-1:acme/relay",
       `start:${TASK_ID}:press-1:default`,
+      `transcript-live:${AGENT_ID}`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+      `transcript-live:${AGENT_ID}:call-7`,
       `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
@@ -1012,6 +1055,177 @@ it.effect(
         }),
         { items: [ITEM], cursor: "8" },
       );
+      assert.deepEqual(held.realtime.opened, []);
+    }),
+);
+
+const SEALED_TRANSCRIPT: AgentTranscriptLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    messages: sealed("messages"),
+    turns: sealed("turns"),
+    conversation: sealed("conversation"),
+    agent: sealed("agent"),
+    workers: sealed("workers"),
+  },
+};
+
+/** The transcript's statements as they stand: `seq` its newest message, `turns` how many it has opened. */
+function transcriptRows(realtime: ReturnType<typeof fakeRealtime>, seq: number, turns = 1) {
+  realtime.deliver("messages", [{ rows: seq, seq }]);
+  realtime.deliver("turns", [
+    { status: "running", rows: turns, stopped: 0, changedAt: NOW - 1_000 },
+  ]);
+  realtime.deliver("conversation", [{ title: null, revision: seq }]);
+  realtime.deliver("agent", [{ title: "Invites" }]);
+  realtime.deliver("workers", []);
+}
+
+/** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
+function pageNow(
+  cursor: string,
+  options: { holds: boolean; text?: string; status?: typeof CODING_AGENT_STATUS.RUNNING },
+): TranscriptNowAnswer {
+  return {
+    messages:
+      options.text === undefined
+        ? []
+        : [{ id: `m-${cursor}`, role: "assistant", parts: [{ type: "text", text: options.text }] }],
+    cursor,
+    status: options.status ?? CODING_AGENT_STATUS.RUNNING,
+    title: "Invites",
+    holds: options.holds,
+  };
+}
+
+/** A page as the window is answered it: the service's word on whether it would have held left in the host. */
+function windowPage(page: TranscriptNowAnswer) {
+  const { holds: _holds, ...rest } = page;
+  return rest;
+}
+
+it.effect(
+  "a running agent's transcript is held open on its Realtime subscription: the page read at once while it says something, then again only when the statements move, the empty page once the hold ends, and never a sealed statement nor the held read",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealTranscript, pageNow: script, realtime } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      const said = pageNow("1:0", { holds: false, text: "Reading the invites." });
+      script(said);
+      const first = yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+        agentId: AGENT_ID,
+        after: CODING_AGENT_CURSOR_START,
+      });
+      assert.deepEqual(first, windowPage(said));
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED_TRANSCRIPT.url]);
+      transcriptRows(realtime, 1);
+      yield* settled;
+
+      // Nothing stands past the cursor: the read is held, and the service asked nothing more until a statement moves.
+      const nothing = pageNow("1:0", { holds: true });
+      const moved = pageNow("2:0", { holds: false, text: "Writing the expiry." });
+      script(nothing, moved);
+      const next = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, { agentId: AGENT_ID, after: "1:0" }),
+      );
+      yield* settled;
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      assert.deepEqual(asked.filter((ask) => ask.startsWith("messages-now")).length, 2);
+      transcriptRows(realtime, 2);
+      yield* settled;
+      assert.deepEqual(yield* Fiber.join(next), windowPage(moved));
+
+      // Nothing moves within the hold: the page as it stands once the hold ends.
+      script(pageNow("2:0", { holds: true }));
+      const held = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, { agentId: AGENT_ID, after: "2:0" }),
+      );
+      yield* settled;
+      yield* TestClock.adjust("20 seconds");
+      yield* settled;
+      assert.deepEqual(yield* Fiber.join(held), windowPage(pageNow("2:0", { holds: true })));
+
+      assert.deepEqual(asked, [
+        `transcript-live:${AGENT_ID}`,
+        `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+        `messages-now:${AGENT_ID}:1:0`,
+        `messages-now:${AGENT_ID}:1:0`,
+        `messages-now:${AGENT_ID}:2:0`,
+        `messages-now:${AGENT_ID}:2:0`,
+      ]);
+      assert.deepEqual(realtime.opened, [SEALED_TRANSCRIPT.url]);
+      assert.ok(!JSON.stringify([first, moved]).includes("capability"));
+    }),
+);
+
+it.effect(
+  "a worker's transcript is followed under its own seal, a subscription that stops hands the read to the service's held read, and a sign-out lets every subscription go",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealTranscript, pageNow: script, realtime, reset } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      script(pageNow("1:0", { holds: true }));
+      const read = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+          agentId: AGENT_ID,
+          after: CODING_AGENT_CURSOR_START,
+          callId: "call-7",
+        }),
+      );
+      yield* settled;
+      realtime.fail("messages");
+      yield* settled;
+      assert.deepEqual(yield* Fiber.join(read), {
+        messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
+        cursor: "2:1",
+        status: CODING_AGENT_STATUS.RUNNING,
+        title: null,
+      });
+      assert.deepEqual(asked, [
+        `transcript-live:${AGENT_ID}:call-7`,
+        `worker-now:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
+        `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
+      ]);
+
+      yield* reset;
+      yield* settled;
+      assert.deepEqual(realtime.closed, [SEALED_TRANSCRIPT.url]);
+    }),
+);
+
+it.effect(
+  "a transcript the account does not reach is not found, and one the service seals nothing for is the held read, as before",
+  () =>
+    Effect.gen(function* () {
+      const refused = yield* subject();
+      refused.sealTranscript({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(
+        yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+          agentId: AGENT_ID,
+          after: CODING_AGENT_CURSOR_START,
+        }),
+        { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
+      );
+
+      const held = yield* subject();
+      assert.deepEqual(
+        yield* held.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+          agentId: AGENT_ID,
+          after: CODING_AGENT_CURSOR_START,
+        }),
+        {
+          messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
+          cursor: "2:1",
+          status: CODING_AGENT_STATUS.RUNNING,
+          title: null,
+        },
+      );
+      assert.deepEqual(held.asked, [
+        `transcript-live:${AGENT_ID}`,
+        `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+      ]);
       assert.deepEqual(held.realtime.opened, []);
     }),
 );

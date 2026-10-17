@@ -1,0 +1,150 @@
+{
+  "type": "object",
+  "properties": {
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "number",
+            "minimum": 0
+          },
+          "seq": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "rows",
+          "seq"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "turns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "number",
+            "minimum": 0
+          },
+          "stopped": {
+            "type": "number",
+            "minimum": 0
+          },
+          "changedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "status",
+          "rows",
+          "stopped",
+          "changedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "conversation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "title",
+          "revision"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "agent": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "workers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "callId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "callId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "messages",
+    "turns",
+    "conversation",
+    "agent",
+    "workers"
+  ],
+  "additionalProperties": false
+}
