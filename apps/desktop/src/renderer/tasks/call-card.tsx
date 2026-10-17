@@ -141,8 +141,8 @@ export function CallCheckpoint({
     <Checkpoint
       trailing={
         live ? (
-          <span className="flex items-center gap-1.5 text-developer">
-            <AudioLinesIcon className="size-3.5" aria-hidden="true" />
+          <span className="checkpoint-live">
+            <AudioLinesIcon aria-hidden="true" />
             {LIVE_LABEL}
           </span>
         ) : null
