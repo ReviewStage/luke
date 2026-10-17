@@ -5,14 +5,15 @@
  * schema the renderer bundles reads this list, and the barrel would carry
  * every frame of the voice socket into that bundle behind it.
  *
- * Each avatar but the default is one of Keyframe's stock `persona-1.5-live`
- * avatars, named as Keyframe's avatar library names it
+ * Each avatar is one of Keyframe's stock `persona-1.5-live` avatars, named
+ * as Keyframe's avatar library names it
  * (https://docs.keyframelabs.com/guides/resources/avatar-library). The Mac
  * names an avatar by its key alone and never by Keyframe's persona id: the
  * service maps the key to the persona it mints on Luke's key, so a Mac can
- * ask for no persona this list does not hold. The default is the persona the
- * deployment names (`LUKE_KEYFRAME_PERSONA_ID`), which an `avatar.start`
- * naming no avatar asks for, as every start from a build before this list did.
+ * ask for no persona this list does not hold. Every start from this build
+ * names one; the persona the deployment names (`LUKE_KEYFRAME_PERSONA_ID`) is
+ * what an `avatar.start` naming none asks for, as every start from a build
+ * before this list did, and is no longer a choice the Mac offers.
  */
 
 import type { UnparsedWireValue } from "@luke/wire";
@@ -20,8 +21,6 @@ import { Schema } from "effect";
 
 /** Every avatar's key: what the Mac stores its choice under and names on `avatar.start`. */
 export const VIDEO_AVATAR = {
-  /** The deployment's own persona, the one every call opened with before there was a choice. */
-  DEFAULT: "default",
   ATLAS: "atlas",
   CASPIAN: "caspian",
   CASSIDY: "cassidy",
@@ -34,8 +33,15 @@ export const VIDEO_AVATAR = {
 
 export type VideoAvatar = (typeof VIDEO_AVATAR)[keyof typeof VIDEO_AVATAR];
 
-/** Every avatar, in the order the setting offers them: the default first, then Keyframe's library by name. */
+/** Every avatar, in the order the setting offers them: Keyframe's library by name. */
 export const VIDEO_AVATAR_LIST: readonly VideoAvatar[] = Object.values(VIDEO_AVATAR);
+
+/**
+ * The avatar a Mac shows where the developer chose none, and where it holds
+ * a choice this build does not list, such as the `default` an earlier build
+ * stored for the deployment's own persona.
+ */
+export const DEFAULT_VIDEO_AVATAR: VideoAvatar = VIDEO_AVATAR.ATLAS;
 
 /**
  * Where Keyframe serves its stock avatars' cover photos, which the setting's
@@ -58,21 +64,15 @@ const VIDEO_AVATAR_COVER = {
   [VIDEO_AVATAR.LYRA]: "/personas/b6dad089-2dd4-4012-9f6c-53b8aec8d4f5/cover.jpeg",
   [VIDEO_AVATAR.ORION]: "/personas/9b3988bd-8b4e-43ca-aef2-90da70dba2c0/cover.jpg",
   [VIDEO_AVATAR.SELENE]: "/personas/37fc1a9e-144e-4447-8df1-f4cb4dd76914/cover.jpg",
-} as const satisfies Record<Exclude<VideoAvatar, typeof VIDEO_AVATAR.DEFAULT>, string>;
+} as const satisfies Record<VideoAvatar, string>;
 
-/**
- * The address of an avatar's cover photo on Keyframe's storage, or nothing
- * for the default, whose persona is the deployment's to name and so has no
- * cover this build knows.
- */
-export function videoAvatarCover(avatar: VideoAvatar): string | undefined {
-  if (avatar === VIDEO_AVATAR.DEFAULT) return undefined;
+/** The address of an avatar's cover photo on Keyframe's storage. */
+export function videoAvatarCover(avatar: VideoAvatar): string {
   return `${VIDEO_AVATAR_COVER_ORIGIN}${VIDEO_AVATAR_COVER[avatar]}`;
 }
 
 /** Each avatar as the setting's menu words it. */
 export const VIDEO_AVATAR_NAME = {
-  [VIDEO_AVATAR.DEFAULT]: "Default",
   [VIDEO_AVATAR.ATLAS]: "Atlas",
   [VIDEO_AVATAR.CASPIAN]: "Caspian",
   [VIDEO_AVATAR.CASSIDY]: "Cassidy",

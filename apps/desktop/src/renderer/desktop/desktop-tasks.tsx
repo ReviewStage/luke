@@ -4,8 +4,8 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
-import { repositoryGroups, repositoryLabel, taskRow } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -28,6 +28,7 @@ import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
 import {
+  anyNeedsYou,
   firstChoice,
   INBOX_GROUPING,
   type InboxListed,
@@ -47,7 +48,6 @@ import {
 } from "../tasks/plan-mentions";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip";
 import { SkillFiles } from "../tasks/skill-chip";
-import { TaskCrumb } from "../tasks/task-crumb";
 import { taskLinkPlace } from "../tasks/task-menu-items";
 import { useMinute } from "../tasks/task-time";
 import { CallBar } from "../tasks/tasks-parts";
@@ -210,7 +210,11 @@ function TaskInboxTab({
   const needsYou = useTaskInboxWaitingOnly();
   const items = [...inbox.board.open, ...inbox.board.settled];
   const groups = [{ holder: taskHolder(task), items }];
-  const filter = { grouping: INBOX_GROUPING.NEWEST, waitingOnly: needsYou.waitingOnly };
+  const filter = {
+    grouping: INBOX_GROUPING.NEWEST,
+    waitingOnly: needsYou.waitingOnly,
+    readerId: tasks.me,
+  };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
   const list = inboxList(groups, { ...filter, chosen: undefined });
   const steps = inboxList(groups, { ...filter, chosen: asked });
@@ -263,7 +267,7 @@ function TaskInboxTab({
           shown,
           needsYou,
           view: undefined,
-          waiting: inbox.board.open.length > 0,
+          waiting: anyNeedsYou(groups, tasks.me),
         }}
         models={tasks.agents.models}
         readerId={tasks.me}
@@ -480,12 +484,6 @@ function PlanDocument({
   const { workspace } = taskLinkPlace(tasks.workspaces, task);
   const archived = task.archivedAt !== undefined;
   const listed = listedOpen ?? task;
-  // What the crumb opens is the plan's own workspace's, so the window lists
-  // that workspace first where another is listed. Note that the switch
-  // reopens nothing, because the plan open is that workspace's own.
-  const listHome = () => {
-    if (home !== undefined && tasks.workspace?.id !== home.id) tasks.onChooseWorkspace(home.id);
-  };
   const unarchive = () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE);
   const repositoryNote = refusal?.taskId === task.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
@@ -525,9 +523,9 @@ function PlanDocument({
   // tab, in the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its files.
   const openChanges = (agentId: string) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.FILES);
-  // Its pull request's chip opens the same tab on the pull request's overview.
+  // Its pull request's chip opens the same tab on the pull request's conversation.
   const openPullRequest = (agentId: string) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.OVERVIEW);
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION);
   // Run opens the agent's terminal of this Mac in the side panel at once;
   // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
   const { repository } = task;
@@ -568,6 +566,17 @@ function PlanDocument({
       }
     }
   };
+  // A chat notice in an agent's transcript reads its message from the chat
+  // the window holds, and opens the window's Chat on its channel.
+  const chatRead = tasks.chatView.chat;
+  const chat =
+    chatRead === undefined
+      ? undefined
+      : {
+          chat: chatRead.answer,
+          names: chatNames(tasks.tasks, chatRead.agents, undefined),
+          onOpen: tasks.chatView.onShow,
+        };
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const cards = taskCards({
@@ -743,32 +752,6 @@ function PlanDocument({
                           onMark: (unread) => reads.mark(task, unread),
                         }}
                         sectionLinks={sectionLinksOf(task.id, workspace)}
-                        crumb={
-                          home === undefined ? undefined : (
-                            <TaskCrumb
-                              workspace={home}
-                              repository={task.repository}
-                              archived={archived}
-                              created={task}
-                              doors={{
-                                personal: tasks.workspaces[0]?.id === home.id,
-                                onOpenWorkspace: () => {
-                                  listHome();
-                                  tasks.onGoHome();
-                                },
-                                repository: {
-                                  label: (repository) =>
-                                    repositoryLabel(
-                                      repository,
-                                      repositoryGroups(tasks.listed.tasks.map(taskRow)),
-                                    ),
-                                  pictures: tasks.repositories.pictures,
-                                  read: tasks.newTask.repositoriesIn(home.id).read,
-                                },
-                              }}
-                            />
-                          )
-                        }
                       />
                     </section>
                     {tab === MAIN_TAB.INBOX ? (
@@ -800,6 +783,7 @@ function PlanDocument({
                         onOpenPullRequest={openPullRequest}
                         onOpenTarget={openTarget}
                         cards={cards}
+                        chat={chat}
                       />
                     )}
                   </FindScope>

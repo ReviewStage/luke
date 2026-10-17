@@ -1,0 +1,188 @@
+/* The Issues page (`issues-page.tsx`). Its frame, headings, rows, chips, and
+   title are the window's own: the Automations page's view and scroll, Home's
+   sections and rows, a person's page's column, and a task's heading. Only
+   what an issue adds is drawn here: its identifier, its status and priority
+   marks, its properties' row, and its description's editor. Tokens only. */
+
+/* The pages and the new issue's card share one root, which C is read
+   against; it draws no box of its own. */
+.issues-pages {
+  display: contents;
+}
+
+.issue-row-identifier {
+  flex: none;
+  min-width: 7ch;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Each status's glyph wears the state colour the rest of the window gives that standing. */
+.issue-status-glyph {
+  display: inline-flex;
+  color: var(--text-tertiary);
+}
+
+.issue-status-glyph svg {
+  width: 15px;
+  height: 15px;
+}
+
+.issue-status-glyph[data-status="todo"] {
+  color: var(--text-secondary);
+}
+
+.issue-status-glyph[data-status="in-progress"] {
+  color: var(--state-working);
+}
+
+.issue-status-glyph[data-status="done"] {
+  color: var(--state-complete);
+}
+
+.issue-priority-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.issue-priority-mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.issue-priority-mark[data-priority="urgent"] {
+  color: var(--state-attention);
+}
+
+.issue-properties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.issue-description-empty {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* The description at rest is a press away from its field: the Markdown it
+   is, washed on hover so the press is found. */
+.issue-description {
+  margin: 0 calc(var(--space-8) * -1);
+  padding: var(--space-4) var(--space-8);
+  border-radius: 8px;
+  cursor: text;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.issue-description:hover {
+  background: var(--input-fill);
+}
+
+.issue-description-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* The field stands at least a few lines tall and grows by the developer's hand. */
+.issue-description-field {
+  min-height: 160px;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.issue-description-refused {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 12px;
+}
+
+/* The board scrolls sideways in a scroller of its own, so its columns stand
+   side by side at every width rather than one over the next; it never
+   scrolls down, since each column scrolls its own cards. */
+.issue-board-scroll {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--space-16) var(--content-inset);
+}
+
+/* The columns fill the scroller's height and share its width, each at least
+   a card's width, past which the board scrolls. */
+.issue-board {
+  display: flex;
+  min-width: min-content;
+  flex: 1 0 0;
+  gap: var(--space-8);
+}
+
+/* A column is Factory's station (`.factory-step`) sized for a board: it
+   takes its share of the width but never less than a card's, and holds its
+   height to the board's so its cards scroll inside it. */
+.issue-column {
+  min-width: 240px;
+  min-height: 0;
+  flex: 1 0 240px;
+}
+
+/* A column's + ends its head, after the count or where an idle column's
+   count would be, held to the head's own height so the head does not grow.
+   It reaches past the head's inset by its glyph's margin, so the glyph ends
+   on the edge the cards' times end on. */
+.issue-column-new {
+  --control-height: 24px;
+  margin-left: auto;
+  margin-right: calc((var(--control-glyph) - var(--control-height)) / 2);
+}
+
+.factory-count + .issue-column-new {
+  margin-left: 0;
+}
+
+/* A column's cards scroll under its head. The list pads by the ring's reach
+   and gives it back, so a card's ring is never cut off at the column's
+   edge. */
+.issue-column-cards {
+  min-height: 0;
+  flex: 0 1 auto;
+  margin: 0 calc(-1 * var(--focus-ring-reach)) calc(-1 * var(--focus-ring-reach));
+  padding: var(--focus-ring-reach);
+  overflow-y: auto;
+}
+
+/* A card's title stands whole under its line, wrapping to three lines at
+   most, since a column is too narrow for the list's single line. Note that
+   it outranks Home's row, which holds a name to one line. */
+.issue-board .home-row .issue-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  margin-top: var(--space-2);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
+}
+
+/* On a card the identifier is followed only by its priority's mark, so it
+   keeps none of the list's column width. */
+.issue-board .issue-row-identifier {
+  min-width: 0;
+}
+
+/* A card's time ends its line, wherever the identifier and mark leave off. */
+.issue-board .sidebar-task-time {
+  margin-left: auto;
+}
+
+/* The issue page's Status and Priority chips are sized to their words, as
+   the new issue's card draws them, rather than to a settings row's field. */
+.issue-properties .settings-picker-chip {
+  width: auto;
+}

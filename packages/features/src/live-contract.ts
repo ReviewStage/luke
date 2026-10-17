@@ -13,7 +13,7 @@ import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 import { planDocumentSchema, planSectionEditSchema } from "./task-wire.js";
 import { taskActivitySchema, taskShownCodeSchema, taskWorkTurnSchema } from "./tasks-view.js";
-import { VIDEO_AVATAR, VIDEO_AVATAR_LIST, type VideoAvatar } from "./video-avatar.js";
+import { VIDEO_AVATAR_LIST, type VideoAvatar } from "./video-avatar.js";
 
 /**
  * The desktop's contract with the hosted voice service: the Vercel Function
@@ -505,18 +505,18 @@ function answeredReason<const Reason extends string>(
 
 /**
  * The avatar a start asks for. One a newer Mac lists and this service does
- * not reads as the default rather than refusing the start, so the call
- * still shows Luke on video, as the deployment's own persona. Past the
- * bound it is refused, since no avatar's key is that long.
+ * not reads as none rather than refusing the start, so the call still shows
+ * Luke on video, as the deployment's own persona. Past the bound it is
+ * refused, since no avatar's key is that long.
  */
-const askedAvatar: Schema.Codec<VideoAvatar, UnparsedWireValue> = (() => {
+const askedAvatar: Schema.Codec<VideoAvatar | undefined, UnparsedWireValue> = (() => {
   const listed = Schema.Literals(VIDEO_AVATAR_LIST);
   const isListed = Schema.is(listed);
-  return declareReader<VideoAvatar>((value) => {
+  return declareReader<VideoAvatar | undefined>((value) => {
     if (!isWireString(value) || value.length > AVATAR_FRAME_BOUNDS.AVATAR_CHARS) {
       return { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] };
     }
-    return { ok: true, value: isListed(value) ? value : VIDEO_AVATAR.DEFAULT };
+    return { ok: true, value: isListed(value) ? value : undefined };
   }, emitJsonSchema(listed));
 })();
 
@@ -531,7 +531,7 @@ const avatarRequestId = verbatimText(AVATAR_FRAME_BOUNDS.REQUEST_ID_CHARS);
  * The desktop's ask for the avatar: its request id, and the avatar the
  * developer chose by its key, never Keyframe's persona id, since the service
  * maps the key to the persona it mints. A start naming none asks for the
- * deployment's default, as every start from a build before the choice did.
+ * deployment's own persona, as every start from a build before the choice did.
  */
 export const avatarStartFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_START),

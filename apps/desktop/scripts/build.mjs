@@ -67,6 +67,20 @@ const markdownHtmlParserOnDemand = {
   },
 };
 
+// Pierre's diffs writes each diff as HTML with inline styles, which the
+// panel's policy refuses and reports one by one; its import of the writer is
+// answered with the diff bundle's own (`src/renderer/diff-view/inline-styles.ts`),
+// which carries each style where the bundle applies it through the CSSOM.
+const DIFF_MARKUP = path.join(appRoot, "src/renderer/diff-view/inline-styles.ts");
+const diffMarkupInDataAttributes = {
+  name: "diff-markup-in-data-attributes",
+  setup(build) {
+    build.onResolve({ filter: /^hast-util-to-html$/ }, (args) =>
+      args.importer === DIFF_MARKUP ? undefined : { path: DIFF_MARKUP },
+    );
+  },
+};
+
 // Excalidraw's fonts, copied beside the whiteboard bundle so the panel loads
 // nothing from the network. Xiaolai is left out: it is 13 MB of CJK glyphs,
 // and the system's own font draws those characters instead.
@@ -204,9 +218,36 @@ const diagramBuild = build({
   define: { "process.env.NODE_ENV": '"production"' },
 });
 
+// A Files changed diff, Pierre's diffs with Shiki colouring it, its own
+// bundle so the bundle every window parses never carries either; the view
+// loads it the first time a diff is shown (`src/renderer/diff-view/contract.ts`).
+// An ES module split into chunks, as the diagrams' is, because Shiki reaches
+// each language's grammar and each theme through a dynamic import, which a
+// script would inline every one of, where a diff needs its file's alone. Its
+// chunks stand in `diff-view/`, and its metafile is what the bundle budget
+// reads them off. Pierre draws in a shadow root with no React of its own.
+const diffViewBuild = build({
+  entryPoints: { "diff-view": path.join(appRoot, "src/renderer/diff-view/index.ts") },
+  outdir: path.join(outputRoot, "renderer"),
+  chunkNames: "diff-view/[name]-[hash]",
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  splitting: true,
+  metafile: true,
+  target: "chrome140",
+  minify: true,
+  conditions: ["production"],
+  plugins: [diffMarkupInDataAttributes, ...sentryPlugins()],
+  sourcemap: true,
+  logLevel: "info",
+  define: { "process.env.NODE_ENV": '"production"' },
+});
+
 await Promise.all([
   rendererBuild,
   diagramBuild,
+  diffViewBuild,
   build({
     entryPoints: [path.join(appRoot, "src/main/index.ts")],
     outfile: path.join(outputRoot, "main.js"),
@@ -453,7 +494,11 @@ await Promise.all(
 // its own, as each is read on its own.
 const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
 const metafile = {
-  outputs: { ...(await rendererBuild).metafile.outputs, ...(await diagramBuild).metafile.outputs },
+  outputs: {
+    ...(await rendererBuild).metafile.outputs,
+    ...(await diagramBuild).metafile.outputs,
+    ...(await diffViewBuild).metafile.outputs,
+  },
 };
 const measured = Object.fromEntries(
   await Promise.all(

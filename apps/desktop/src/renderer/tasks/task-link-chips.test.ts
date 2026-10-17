@@ -20,8 +20,8 @@ import { VersionView } from "./version-view";
  * plan-link-chips.test.ts -- a link in the plan's words, or in Luke's
  * notes, is drawn as the chip of what it names whoever wrote it, as a
  * transcript draws one: the plan read on its page, a version's diff, and a
- * File tab's note. A link that names nothing stays a link, code stays code,
- * and opening a section to edit it keeps its links in a chip's light look.
+ * File tab's note. A link that names nothing stays a link, and code stays
+ * code.
  * Synthetic plan and repository.
  */
 
@@ -128,37 +128,6 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
   assert.deepEqual(
     [...container.querySelectorAll("code")].map((code) => code.textContent),
     ["https://linear.app/acme/issue/LUKE-9"],
-  );
-});
-
-test("a section opened to edit draws the links that name mentions in a chip's light look, and any other link as a link", async () => {
-  const container = drawn(
-    createElement(PlanBody, {
-      task: TASK,
-      live: false,
-      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-      sectionLinks: {
-        workspace: "acme",
-        onOpen: () => undefined,
-        onOpenFile: () => undefined,
-        reveal: undefined,
-      },
-    }),
-  );
-  const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
-  assert.ok(rollout !== null);
-  act(() => rollout.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
-  await act(async () => undefined);
-
-  const links = [...container.querySelectorAll(".plan-document-text a")];
-  assert.deepEqual(
-    links.map((link) => [link.textContent, link.classList.contains("plan-mention-link")]),
-    [
-      ["the rollout", true],
-      ["the store", true],
-      ["https://linear.app/acme/issue/LUKE-142/fix-the-thing", true],
-      ["the docs", false],
-    ],
   );
 });
 

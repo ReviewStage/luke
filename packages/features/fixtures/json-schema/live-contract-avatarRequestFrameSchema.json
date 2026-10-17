@@ -16,7 +16,6 @@
         "avatar": {
           "type": "string",
           "enum": [
-            "default",
             "atlas",
             "caspian",
             "cassidy",
