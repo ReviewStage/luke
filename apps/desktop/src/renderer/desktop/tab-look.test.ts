@@ -209,7 +209,7 @@ function tabLooks(column: Element): Map<string, Look> {
 
 /** Each row of the "+" menu in `column`, opened, by its name. */
 function rowLooks(column: Element): Map<string, Look> {
-  const add = column.querySelector<HTMLButtonElement>("button.tab-add");
+  const add = column.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {

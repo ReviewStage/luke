@@ -4,7 +4,14 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { ConfirmDialog, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import {
+  ConfirmDialog,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  SKELETON_SHAPE,
+  Skeleton,
+} from "@luke/ui";
 import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -18,7 +25,6 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
@@ -132,6 +138,9 @@ import {
  * no repository is chosen, Start, a new agent, and the call's start are not
  * drawn, and a version viewed is not restored (`../tasks/archived-task.tsx`).
  */
+
+/** How wide the block standing in the plan's tab is while the plan is read: a typical tab's width. */
+const TAB_SKELETON_WIDTH = "120px";
 
 /**
  * The strip across the top of the work column, which is also the window's
@@ -444,7 +453,7 @@ function PlanDocument({
           heading={
             <div className="desktop-toolbar-heading">
               {region.kind === DOCUMENT_REGION.READING ? (
-                <Skeleton className="tab-skeleton" />
+                <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
               ) : null}
             </div>
           }

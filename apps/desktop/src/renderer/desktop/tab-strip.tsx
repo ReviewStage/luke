@@ -295,7 +295,7 @@ export function TabStrip({
   return (
     <>
       {move === undefined ? null : (
-        <span className="visually-hidden" role="status">
+        <span className="luke-visually-hidden" role="status">
           {movedSaid}
         </span>
       )}
