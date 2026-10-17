@@ -8,6 +8,9 @@ import {
   type SettingsRowControl,
   SettingsSection,
   Switch,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -17,8 +20,9 @@ import { CatalogSection } from "../section";
  * settings-row.tsx -- a settings row with a switch, led by an account's face,
  * with a button and no description, with a failed write, and with long
  * words, each at a settings page's measure and in a column narrower than the
- * 380px its controls drop below its words under; and compact rows in a
- * popover narrower than that, whose controls stay beside their words.
+ * 380px its controls drop below its words under; compact rows in a
+ * popover narrower than that, whose controls stay beside their words; and
+ * list rows, a reference list's lines in a card, each a command and its chord.
  */
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
@@ -97,6 +101,28 @@ function CompactRows(): React.JSX.Element {
   );
 }
 
+/** List rows, a reference read down rather than set, as the window's keyboard shortcuts stand. */
+function ListRows(): React.JSX.Element {
+  const commands = [
+    { label: "Command palette", chord: "⌘K" },
+    { label: "Find previous", chord: "⇧⌘G" },
+    { label: "Permanently delete task", chord: "⌥⌘⌫" },
+  ];
+  return (
+    <SettingsSection title="General">
+      {commands.map((command) => (
+        <SettingsRow key={command.label} density={SETTINGS_ROW_DENSITY.LIST} label={command.label}>
+          {() => (
+            <Text variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
+              {command.chord}
+            </Text>
+          )}
+        </SettingsRow>
+      ))}
+    </SettingsSection>
+  );
+}
+
 function SettingsRows(): React.JSX.Element {
   return (
     <>
@@ -112,6 +138,11 @@ function SettingsRows(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="settings-row-compact" title="Compact, in a popover">
         <CompactRows />
+      </CatalogSection>
+      <CatalogSection id="settings-row-list" title="List, a reference in a card">
+        <div className="catalog-settings">
+          <ListRows />
+        </div>
       </CatalogSection>
     </>
   );

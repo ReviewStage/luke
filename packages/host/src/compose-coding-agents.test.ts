@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
@@ -16,6 +17,7 @@ import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
 import {
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -40,6 +42,7 @@ import {
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 
@@ -53,6 +56,18 @@ const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
+const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
+
+/** A workspace's chat as the service answers it: the reader alone, nothing posted yet. */
+const CHAT = {
+  self: MEMBER_ID,
+  readSeq: 0,
+  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, handle: "ada", left: false }],
+  channels: [],
+  messages: [],
+  cursor: "1",
+};
 
 const AGENT: CodingAgentSummary = {
   id: AGENT_ID,
@@ -153,6 +168,7 @@ const KEPT: ProviderKeySummary = {
 
 const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 const PICTURE_ID = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
+const MESSAGE_ID = "5ac28166-d27f-4304-8cb6-8b9cadbecdf6";
 
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
@@ -383,6 +399,24 @@ function fakeService() {
         asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
+    messageInbox: (itemId, request) =>
+      Effect.sync(() => {
+        const files = (request.attachments ?? []).map((file) => file.name).join(",");
+        asked.push(`inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}`);
+        return {
+          item: {
+            ...ITEM,
+            messages: [
+              {
+                id: MESSAGE_ID,
+                author: INBOX_MESSAGE_AUTHOR.MEMBER,
+                text: request.text,
+                createdAt: ITEM.updatedAt,
+              },
+            ],
+          },
+        };
+      }),
     answerInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(
@@ -403,6 +437,16 @@ function fakeService() {
         asked.push(`account-inbox:${after}`);
         return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
       }),
+    chat: (workspaceId, after) =>
+      Effect.sync(() => {
+        asked.push(`chat:${workspaceId}:${after}`);
+        return CHAT;
+      }),
+    chatPost: (workspaceId, write) =>
+      Effect.sync(() => {
+        asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
+        return { readSeq: 4 };
+      }),
   };
   return { client, asked };
 }
@@ -414,7 +458,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-    });
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
@@ -610,10 +654,45 @@ it.effect("each method asks the service once and answers what it said, whole", (
         taken: true,
       },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+        itemId: ITEM.id,
+        text: "Also page on-call.",
+        attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
+        clientKey: "message-1",
+      }),
+      {
+        item: {
+          ...ITEM,
+          messages: [
+            {
+              id: MESSAGE_ID,
+              author: INBOX_MESSAGE_AUTHOR.MEMBER,
+              text: "Also page on-call.",
+              createdAt: ITEM.updatedAt,
+            },
+          ],
+        },
+      },
+    );
 
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
       { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
+        workspaceId: WORKSPACE_ID,
+        after: CHAT_CURSOR_START,
+      }),
+      CHAT,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
+        workspaceId: WORKSPACE_ID,
+        write: { readTo: 4 },
+      }),
+      { readSeq: 4 },
     );
 
     assert.deepEqual(asked, [
@@ -646,7 +725,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
+      `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
       `account-inbox:${INBOX_CURSOR_START}`,
+      `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
+      `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
     ]);
   }),
 );

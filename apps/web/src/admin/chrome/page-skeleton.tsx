@@ -1,12 +1,16 @@
-import { type AdminTab, plainLeftClick, tabHref } from "../routing";
+import { SkeletonRegion } from "@luke/ui";
+import type { AdminTab } from "../routing";
 import { SkeletonBody, type SkeletonShape } from "../skeleton";
-import { PageHeader, type ViewerAccount } from "./page-header";
+import { BackLink } from "./back-link";
+import { AdminPage, type ViewerAccount } from "./page-header";
 
 /**
- * The loading stand-in every view wears: the page's own header and controls,
- * drawn for real, over the bones its own sections name. The header is the
+ * The loading stand-in every view wears: the page's own frame and controls,
+ * drawn for real, over the bones its own sections name. The frame is the
  * loaded page's own component, so the two cannot drift apart — which is what
- * four page-shaped copies of it could not promise.
+ * four page-shaped copies of it could not promise. The bones stand in one
+ * region that says the page is loading; the way back stays outside it, a link
+ * to press rather than part of what is being read.
  */
 export function PageSkeleton({
   title,
@@ -24,32 +28,19 @@ export function PageSkeleton({
   shapes: readonly SkeletonShape[];
 }): React.JSX.Element {
   return (
-    <main
-      className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10"
-      aria-busy="true"
+    <AdminPage
+      title={title}
+      account={account}
+      accountSkeleton
+      onSignOut={onSignOut}
+      controls={controls}
     >
-      <PageHeader
-        title={title}
-        account={account}
-        accountSkeleton
-        onSignOut={onSignOut}
-        controls={controls}
-      />
-      <p className="sr-only">Loading…</p>
       {back === undefined ? null : (
-        <a
-          href={tabHref(back.tab)}
-          className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
-          onClick={(event) => {
-            if (!plainLeftClick(event)) return;
-            event.preventDefault();
-            back.onBack();
-          }}
-        >
-          <span aria-hidden="true">←</span> {back.label}
-        </a>
+        <BackLink tab={back.tab} label={back.label} onBack={back.onBack} />
       )}
-      <SkeletonBody shapes={shapes} />
-    </main>
+      <SkeletonRegion label="Loading…">
+        <SkeletonBody shapes={shapes} />
+      </SkeletonRegion>
+    </AdminPage>
   );
 }

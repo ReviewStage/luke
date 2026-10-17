@@ -17,8 +17,8 @@ import {
   type LoopbackConsent,
   type LoopbackConsentOutcome,
   type LoopbackExchange,
-  loopbackConsent,
-} from "../loopback-consent.js";
+  type OpenConsent,
+} from "../consent.js";
 import { LOOPBACK_CONNECTION_SOURCE, type LoopbackConnectionSource } from "../loopback-page.js";
 import {
   ACCOUNT_FAILURE_ACTION,
@@ -111,14 +111,18 @@ export class NoStoredAccount extends Data.TaggedError("NoStoredAccount")<{
  * the sign-out itself: an account that could not tell the service it was
  * leaving still leaves this machine.
  */
-function reportingFailure<A, E>(effect: Effect.Effect<A, E>, what: string): Effect.Effect<void> {
+function reportingFailure<A, E>(
+  effect: Effect.Effect<A, E>,
+  what: string,
+  report: (line: string) => void,
+): Effect.Effect<void> {
   return Effect.catchCause(effect, (cause) =>
     // An interruption is not a failure of the step and is never written down
     // as one: it is the caller ending this fiber, and it stands.
     Cause.hasInterruptsOnly(cause)
       ? Effect.interrupt
       : Effect.sync(() => {
-          process.stderr.write(`${what}: ${Cause.pretty(cause)}\n`);
+          report(`${what}: ${Cause.pretty(cause)}`);
         }),
   ).pipe(Effect.asVoid);
 }
@@ -129,6 +133,13 @@ interface AccountSessionManagerOptions {
   hostedServiceBaseUrl: string;
   requiresAccount: boolean;
   openExternal: (url: string) => Promise<void>;
+  /**
+   * Stands up each consent trip: the desktop's loopback
+   * (`@luke/credentials/node`), handed in so this manager reaches no Node.
+   */
+  openConsent: OpenConsent;
+  /** Where a step's failure that is never held against the sign-out is written down. */
+  report: (line: string) => void;
   startCapabilities: Effect.Effect<void>;
   stopCapabilities: Effect.Effect<void>;
 }
@@ -220,12 +231,14 @@ export class AccountSessionManager {
         yield* reportingFailure(
           this.#options.client.revoke(stored.refreshToken),
           "Account token revocation failed",
+          this.#options.report,
         );
       }
       if (options.revokeRemote && stored?.sessionToken) {
         yield* reportingFailure(
           this.#options.client.endSession(stored.sessionToken),
           "Account session sign-out failed",
+          this.#options.report,
         );
       }
       return this.#account;
@@ -336,6 +349,7 @@ export class AccountSessionManager {
           yield* this.#publishChange();
         }),
         "Renewed account identity read failed",
+        this.#options.report,
       );
     });
   }
@@ -550,7 +564,7 @@ export class AccountSessionManager {
     generation: number,
     openExternal: (url: string) => void | Promise<void>,
   ): LoopbackConsent<AccountSnapshot> {
-    return loopbackConsent<AccountSnapshot>({
+    return this.#options.openConsent<AccountSnapshot>({
       callbackPath: SESSION_CALLBACK_PATH,
       pages: SESSION_PAGES,
       reasons: {
@@ -606,6 +620,7 @@ export class AccountSessionManager {
       yield* reportingFailure(
         this.#options.client.endSession(session.sessionToken),
         "Refused account session sign-out failed",
+        this.#options.report,
       );
       return { reason: ours ? LOOPBACK_CONSENT_CANCELLED : OTHER_BROWSER_ACCOUNT };
     }).pipe(Effect.catch((error) => Effect.succeed({ reason: error.message })));
@@ -616,7 +631,7 @@ export class AccountSessionManager {
     generation: number,
     options: { again: boolean } = { again: false },
   ): LoopbackConsent<AccountSnapshot> {
-    return loopbackConsent<AccountSnapshot>({
+    return this.#options.openConsent<AccountSnapshot>({
       callbackPath: CALLBACK_PATH,
       // The hosted authorize route reads which provider was chosen back off
       // the state it issued, so the choice rides in front of the entropy.
@@ -678,6 +693,7 @@ export class AccountSessionManager {
             yield* reportingFailure(
               this.#options.client.revoke(replaced.refreshToken),
               "Replaced account token revocation failed",
+              this.#options.report,
             );
           }
           yield* this.#options.startCapabilities;
@@ -686,7 +702,7 @@ export class AccountSessionManager {
         }),
       revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
       onRevokeFailure: (error) => {
-        process.stderr.write(`Rejected account token revocation failed: ${error.message}\n`);
+        this.#options.report(`Rejected account token revocation failed: ${error.message}`);
       },
     }).pipe(
       Effect.catchTag("SignInCancelled", () =>
