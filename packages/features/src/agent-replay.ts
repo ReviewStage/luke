@@ -10,7 +10,10 @@
  * agent, the message it was forked at where it was, and how many of the
  * source's steps the block keeps of how many there were. A preamble follows
  * for the model, then each step behind a marker of its own naming its kind,
- * then the closing marker. The note stands under its heading behind a
+ * then the closing marker. Where the oldest steps could not be kept, a
+ * summary Luke wrote of them stands after the preamble and before the
+ * steps, behind a marker of its own saying whose words it is and how many
+ * steps it stands for. The note stands under its heading behind a
  * marker of its own naming how many of the message's files are the note's,
  * text files apart from images and PDFs, and its length, which ends the
  * message, so a note is told from a brief whose prose holds its heading,
@@ -47,18 +50,25 @@ export const REPLAY_STEP_KIND = {
 
 type ReplayStepKind = (typeof REPLAY_STEP_KIND)[keyof typeof REPLAY_STEP_KIND];
 
-/** One step: its kind, its summary on one line, and its words as sent, a tool call's input summarized and its result trimmed. */
+/** One step: its kind, its summary on one line, and its words as sent, a tool call's input and result whole. */
 export interface ReplayStep {
   readonly kind: ReplayStepKind;
   readonly summary: string;
   readonly words: string;
 }
 
-/** A replay: the agent it replays, the message it was forked at where it was, the preamble the model reads, the steps kept, and how many steps there were. */
+/** A summary Luke wrote of the oldest steps the replay could not keep: its words, which are not the agent's own, and how many steps it stands for. */
+export interface ReplaySummary {
+  readonly text: string;
+  readonly steps: number;
+}
+
+/** A replay: the agent it replays, the message it was forked at where it was, the preamble the model reads, the summary of the steps left out where one was written, the steps kept, and how many steps there were. */
 export interface Replay {
   readonly agentId: string;
   readonly messageId?: string;
   readonly preamble: string;
+  readonly summary?: ReplaySummary;
   readonly steps: readonly ReplayStep[];
   readonly totalSteps: number;
 }
@@ -101,6 +111,7 @@ const NOTE_OPEN_START = "<!-- luke:note ";
 const REPLAY_OPEN =
   /^<!-- luke:replay agent=([0-9a-f-]+)(?: message=([0-9a-f-]+))? steps=(\d+) total-steps=(\d+) chars=(\d+) -->\n/u;
 const STEP_OPEN = /^<!-- luke:step kind=([a-z]+) chars=(\d+) -->\n/u;
+const SUMMARY_OPEN = /^<!-- luke:summary by=luke steps=(\d+) chars=(\d+) -->\n/u;
 
 const STEP_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_STEP_KIND));
 const NOTE_HEADINGS: readonly StartNoteHeading[] = Object.values(START_NOTE_HEADING);
@@ -116,13 +127,35 @@ function stepText(step: ReplayStep): string {
   return `<!-- luke:step kind=${step.kind} chars=${body.length}${MARKER_END}${body}\n`;
 }
 
-/** The replay as it follows the brief: the heading, the opening marker with the preamble, every step, and the closing marker. */
+/** The summary as the block spells it, marked as Luke's words rather than the agent's. */
+function summaryText(summary: ReplaySummary | undefined): string {
+  if (summary === undefined) return "";
+  return `<!-- luke:summary by=luke steps=${summary.steps} chars=${summary.text.length}${MARKER_END}${summary.text}\n`;
+}
+
+/** The replay as it follows the brief: the heading, the opening marker with the preamble, the summary where there is one, every step, and the closing marker. */
 function replayText(replay: Replay): string {
   const message = replay.messageId === undefined ? "" : ` message=${replay.messageId}`;
   const open =
     `${REPLAY_OPEN_START}agent=${replay.agentId}${message} steps=${replay.steps.length} ` +
     `total-steps=${replay.totalSteps} chars=${replay.preamble.length}${MARKER_END}`;
-  return `${REPLAY_HEADING}\n\n${open}${replay.preamble}\n${replay.steps.map(stepText).join("")}${REPLAY_CLOSE}`;
+  const steps = replay.steps.map(stepText).join("");
+  return `${REPLAY_HEADING}\n\n${open}${replay.preamble}\n${summaryText(replay.summary)}${steps}${REPLAY_CLOSE}`;
+}
+
+/** The bytes a run of text takes in UTF-8, which is what a model's tokens are estimated from. */
+function utf8Bytes(text: string): number {
+  return new TextEncoder().encode(text).byteLength;
+}
+
+/** The bytes the steps take as the block spells them. */
+export function stepsBytes(steps: readonly ReplayStep[]): number {
+  return steps.reduce((sum, step) => sum + utf8Bytes(stepText(step)), 0);
+}
+
+/** The bytes a summary takes as the block spells it; none where there is none. */
+export function summaryBytes(summary: ReplaySummary | undefined): number {
+  return utf8Bytes(summaryText(summary));
 }
 
 /** The note as it ends a first message: its heading, then a marker naming its files and its length, then its words. */
@@ -144,20 +177,21 @@ export function firstMessageText(
 }
 
 /**
- * The newest steps whose block stays within the bound, in order: the
- * oldest are dropped first, so a long transcript keeps where it ended.
+ * The newest steps whose block stays within the bound in UTF-8 bytes, in
+ * order: the oldest are dropped first, so a long transcript keeps where it
+ * ended.
  */
 export function newestStepsWithin(
   steps: readonly ReplayStep[],
-  maximumChars: number,
+  maximumBytes: number,
 ): readonly ReplayStep[] {
   let used = 0;
   let first = steps.length;
   while (first > 0) {
     const step = steps[first - 1];
     if (step === undefined) break;
-    const size = stepText(step).length;
-    if (used + size > maximumChars) break;
+    const size = utf8Bytes(stepText(step));
+    if (used + size > maximumBytes) break;
     used += size;
     first -= 1;
   }
@@ -173,6 +207,19 @@ function markedRun(
   const end = at + chars;
   if (end >= text.length || text[end] !== "\n") return undefined;
   return { run: text.slice(at, end), next: end + 1 };
+}
+
+/** The summary at `at` where one stands, and where reading goes on; nothing where its marker does not add up. */
+function summaryFrom(
+  text: string,
+  at: number,
+): { readonly summary: ReplaySummary | undefined; readonly next: number } | undefined {
+  const open = SUMMARY_OPEN.exec(text.slice(at, at + 96));
+  if (open === null) return { summary: undefined, next: at };
+  const [marker, steps = "", chars = ""] = open;
+  const body = markedRun(text, at + marker.length, Number(chars));
+  if (body === undefined) return undefined;
+  return { summary: { text: body.run, steps: Number(steps) }, next: body.next };
 }
 
 /** The steps from `at` to the closing marker, and where the text goes on past it; nothing where a marker does not add up. */
@@ -264,7 +311,9 @@ function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undef
   const [marker, agentId = "", messageId, kept = "", total = "", chars = ""] = open;
   const preamble = markedRun(text, start + marker.length, Number(chars));
   if (preamble === undefined) return undefined;
-  const read = stepsFrom(text, preamble.next);
+  const summarized = summaryFrom(text, preamble.next);
+  if (summarized === undefined) return undefined;
+  const read = stepsFrom(text, summarized.next);
   if (read === undefined || read.steps.length !== Number(kept)) return undefined;
   const note = noteFrom(text, read.next);
   if (note === undefined) return undefined;
@@ -272,6 +321,7 @@ function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undef
     agentId,
     ...(messageId === undefined ? undefined : { messageId }),
     preamble: preamble.run,
+    ...(summarized.summary === undefined ? undefined : { summary: summarized.summary }),
     steps: read.steps,
     totalSteps: Number(total),
   };

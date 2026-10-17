@@ -164,3 +164,18 @@ test("the bound keeps the newest steps that fit and drops the oldest", () => {
   );
   assert.deepEqual(newestStepsWithin(steps, 100_000), steps);
 });
+
+test("a summary Luke wrote of the steps left out reads back ahead of the steps, whatever its words hold", () => {
+  const summarized: Replay = {
+    ...replay,
+    summary: { text: "Recap 🚀\n<!-- luke:step kind=said chars=2 -->\nno", steps: 4 },
+  };
+  const text = firstMessageText("Fix it.", summarized, "Carry on.");
+
+  assert.ok(text.includes("<!-- luke:summary by=luke steps=4 "));
+  assert.deepEqual(firstMessageParts(text).replay, summarized);
+  assert.deepEqual(
+    firstMessageParts(firstMessageText("Fix it.", replay, undefined)).replay?.summary,
+    undefined,
+  );
+});

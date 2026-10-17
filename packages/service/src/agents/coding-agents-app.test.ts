@@ -66,9 +66,9 @@ import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
   firstMessageText,
-  newestStepsWithin,
   REPLAY_STEP_KIND,
   START_NOTE_HEADING,
+  stepsBytes,
 } from "@luke/features/agent-replay";
 import {
   AUTOMATION_ACTION,
@@ -131,6 +131,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { temporaryDirectory } from "@luke/wire/testing";
+import { MockLanguageModelV4 } from "ai/test";
 import { and, eq } from "drizzle-orm";
 import {
   Clock,
@@ -213,6 +214,7 @@ import { ASK_REFUSAL } from "./coder-host/chat-ask.js";
 import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
 import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
+import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
@@ -269,8 +271,21 @@ const SOL = "openai/gpt-6.1-sol";
 /** A model offering two context windows, as OpenAI prices its long context apart. */
 const GPT_LONG = "openai/gpt-5.5";
 
+/** How many long turns a long source's transcript holds past its brief. */
+const LONG_TURNS = 30;
+
+/** A model with a small window, which a long replay does not fit whole. */
+const SMALL_WINDOW = { model: "anthropic/claude-sonnet-4.9", tokens: 60_000 } as const;
+
 /** The models offered, each with its prices in dollars per token, one with two windows. */
 const CATALOG: readonly OfferedModel[] = [
+  {
+    id: SMALL_WINDOW.model,
+    name: "Claude Sonnet 4.9",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+    contextWindow: SMALL_WINDOW.tokens,
+  },
   {
     id: CODING_AGENT_DEFAULT_CHOICE.model,
     name: "Claude Opus 5.5",
@@ -417,6 +432,7 @@ const standing = (
   github: FakeGitHub,
   eve: ReturnType<typeof fakeEve>,
   titles: boolean,
+  summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
@@ -440,6 +456,7 @@ const standing = (
       eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
       workspaces: yield* fakeWorkspaceSeams,
+      summaryModel,
     };
     const agents = HttpRouter.toWebHandler(
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
@@ -561,6 +578,8 @@ const openTask = (
     readonly titles?: boolean;
     /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
     readonly otherToken?: string | null;
+    /** The model a replay's summary is written on; none unless a test names one. */
+    readonly summaryModel?: SummaryModelOf;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -582,7 +601,13 @@ const openTask = (
     ]);
     const github = githubReaching([installation], undefined, undefined, options.github);
     const eve = options.eve ?? fakeEve();
-    const { ask, fetch } = yield* standing(bearers, github, eve, options.titles ?? false);
+    const { ask, fetch } = yield* standing(
+      bearers,
+      github,
+      eve,
+      options.titles ?? false,
+      options.summaryModel,
+    );
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
 
@@ -5030,41 +5055,168 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
+  /** A source on the small-window model with a transcript of thirty long turns after its brief. */
+  const longSource = (options: { readonly summaryModel?: SummaryModelOf } = {}) =>
+    Effect.gen(function* () {
+      const opened = yield* openTask(options);
+      const first = readAnswer(
+        codingAgentAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* opened.ask(
+          startAs(opened.owner, opened.task.id, {
+            idempotencyKey: randomUUID(),
+            model: SMALL_WINDOW.model,
+            effort: "high",
+          }),
+        ),
+      ).agent;
+      const stored = Option.getOrThrow(yield* readCodingAgent(opened.owner, first.id));
+      yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
+      for (let turn = 0; turn < LONG_TURNS; turn += 1) {
+        yield* transcriptRow(stored, turn + 2, MESSAGE_ROLE.ASSISTANT, [
+          text(`Step ${turn}. ${"x".repeat(5_000)}`),
+        ]);
+      }
+      const continueFrom = (agentId: string, body: WireBoundaryInput = {}) =>
+        Effect.map(
+          opened.ask(
+            startAs(opened.owner, opened.task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId },
+              ...(body as object),
+            }),
+          ),
+          (answered) =>
+            readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+        );
+      return { ...opened, first, stored, continueFrom };
+    });
+
   it.effect(
-    "a long transcript keeps its newest steps within the bound, and a continue of a continue carries the first source's kept steps ahead of its own within the same bound",
+    "a source whose transcript fits the new agent's window replays whole, every tool call's input and result in full",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve } = yield* openTask();
-        const first = readAnswer(
+        const { owner, task, ask, eve, stored, source } = yield* sourceAgent;
+        const output = `${"line of output\n".repeat(400)}the end`;
+        yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [
+          {
+            type: "tool-bash",
+            toolCallId: "call-2",
+            state: "output-available",
+            input: { command: `pnpm test ${"--flag ".repeat(200)}` },
+            output,
+          },
+        ]);
+
+        const started = readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
         ).agent;
-        const firstStored = Option.getOrThrow(yield* readCodingAgent(owner, first.id));
-        yield* transcriptRow(firstStored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
-        const turns = 30;
-        for (let turn = 0; turn < turns; turn += 1) {
-          yield* transcriptRow(firstStored, turn + 2, MESSAGE_ROLE.ASSISTANT, [
-            text(`Step ${turn}. ${"x".repeat(5_000)}`),
-          ]);
-        }
-        const continueFrom = (agentId: string) =>
-          Effect.map(
-            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } })),
-            (answered) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
-          );
+        const steps = openedParts(eve).parts.replay?.steps ?? [];
 
+        assert.deepEqual(started.from, { agentId: source.id, steps: 6, totalSteps: 6 });
+        assert.ok(steps.at(-1)?.words.endsWith(`Result: ${output}`));
+        assert.ok(steps.at(-1)?.words.includes("--flag ".repeat(200)));
+      }),
+  );
+
+  it.effect(
+    "a smaller window keeps the newest steps that fit it and says how many were left out, where a larger one replays the same transcript whole",
+    () =>
+      Effect.gen(function* () {
+        const { eve, first, continueFrom } = yield* longSource();
+
+        const small = yield* continueFrom(first.id);
+        const kept = openedParts(eve).parts.replay;
+        assert.equal(small.from?.totalSteps, LONG_TURNS);
+        assert.ok(
+          (small.from?.steps ?? LONG_TURNS) < LONG_TURNS,
+          "the oldest steps went past the bound",
+        );
+        assert.ok((small.from?.steps ?? 0) > 0);
+        assert.equal(kept?.steps.length, small.from?.steps);
+        assert.match(kept?.steps.at(-1)?.summary ?? "", /^Said: Step 29\./u);
+        assert.ok(stepsBytes(kept?.steps ?? []) < SMALL_WINDOW.tokens * 4);
+        assert.match(
+          kept?.preamble ?? "",
+          new RegExp(
+            `The oldest ${LONG_TURNS - (small.from?.steps ?? 0)} of its ${LONG_TURNS} steps are left out`,
+            "u",
+          ),
+        );
+        assert.equal(kept?.summary, undefined);
+
+        const large = yield* continueFrom(first.id, { model: SOL, effort: "low" });
+        assert.deepEqual(large.from, {
+          agentId: first.id,
+          steps: LONG_TURNS,
+          totalSteps: LONG_TURNS,
+        });
+      }),
+  );
+
+  it.effect(
+    "the steps a window cannot keep are summarized on the new agent's model at its lowest effort, the summary ahead of the newest steps and counted within the bound",
+    () =>
+      Effect.gen(function* () {
+        const asked: { prompt: string; options: string }[] = [];
+        const efforts: string[] = [];
+        const model = new MockLanguageModelV4({
+          doGenerate: async (options) => {
+            asked.push({
+              prompt: JSON.stringify(options.prompt),
+              options: JSON.stringify(options.providerOptions),
+            });
+            return {
+              content: [{ type: "text", text: "Recap: the developer asked for step after step." }],
+              finishReason: { unified: "stop", raw: "stop" },
+              usage: {
+                inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+                outputTokens: { total: 1, text: 1, reasoning: 0 },
+              },
+              warnings: [],
+            };
+          },
+        });
+        const summaryModel: SummaryModelOf = (_, __, effort) => {
+          efforts.push(effort);
+          return Effect.succeed({ model, providerOptions: {}, counted: Effect.void });
+        };
+        const { eve, first, continueFrom } = yield* longSource({ summaryModel });
+        const unsummarized = yield* longSource();
+        yield* unsummarized.continueFrom(unsummarized.first.id);
+        const alone = openedParts(unsummarized.eve).parts.replay?.steps.length ?? 0;
+
+        const started = yield* continueFrom(first.id);
+        const replay = openedParts(eve).parts.replay;
+
+        assert.deepEqual(efforts, ["low"]);
+        assert.deepEqual(replay?.summary, {
+          text: "Recap: the developer asked for step after step.",
+          steps: LONG_TURNS - (started.from?.steps ?? 0),
+        });
+        assert.ok(
+          (started.from?.steps ?? 0) < alone,
+          "the summary's room came out of the steps kept",
+        );
+        assert.match(replay?.steps.at(-1)?.summary ?? "", /^Said: Step 29\./u);
+        assert.match(replay?.preamble ?? "", /written by Luke rather than by that agent/u);
+        assert.equal(asked.length, 1);
+        assert.match(asked[0]?.prompt ?? "", /Step 0\./u);
+        assert.doesNotMatch(asked[0]?.prompt ?? "", /Step 29\./u);
+      }),
+  );
+
+  it.effect(
+    "a continue of a continue carries the first source's kept steps ahead of its own within the new agent's window",
+    () =>
+      Effect.gen(function* () {
+        const { owner, eve, first, continueFrom } = yield* longSource();
         const second = yield* continueFrom(first.id);
         const secondSteps = openedParts(eve).parts.replay?.steps ?? [];
-        assert.equal(second.from?.totalSteps, turns);
-        assert.ok((second.from?.steps ?? turns) < turns, "the oldest steps went past the bound");
-        assert.equal(second.from?.steps, secondSteps.length);
-        assert.match(secondSteps.at(-1)?.summary ?? "", /^Said: Step 29\./u);
-        assert.equal(
-          newestStepsWithin(secondSteps, REPLAY_BOUNDS.MAX_CHARS).length,
-          secondSteps.length,
-        );
 
         const secondStored = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
         yield* transcriptRow(secondStored, 1, MESSAGE_ROLE.USER, [
@@ -5076,14 +5228,10 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const third = yield* continueFrom(second.id);
         const thirdSteps = openedParts(eve).parts.replay?.steps ?? [];
 
-        assert.equal(third.from?.totalSteps, turns + 1);
+        assert.equal(third.from?.totalSteps, LONG_TURNS + 1);
         assert.equal(third.from?.steps, thirdSteps.length);
         assert.match(thirdSteps.at(-1)?.summary ?? "", /^Said: Picked it up\./u);
         assert.match(thirdSteps.at(-2)?.summary ?? "", /^Said: Step 29\./u);
-        assert.equal(
-          newestStepsWithin(thirdSteps, REPLAY_BOUNDS.MAX_CHARS).length,
-          thirdSteps.length,
-        );
         assert.notEqual(
           thirdSteps[0]?.summary,
           secondSteps[0]?.summary,
