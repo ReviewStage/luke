@@ -103,25 +103,35 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The sidebar listing both tasks, Launch kept as given, each write it asks heard by `writes`. */
-async function mountSidebar(writes: TaskSectionWrite[]): Promise<HTMLElement> {
+/** The sidebar listing both tasks over `sections`, each write it asks heard by `writes`. */
+function sidebarOver(sections: TaskSections, writes: TaskSectionWrite[]) {
   const tasks = tasksControl({
     tasks: [INVITES, RETRIES],
     workspaces: [WORKSPACE],
     workspace: WORKSPACE,
-    taskSections: SECTIONS,
+    taskSections: sections,
     onWriteSections: (asked) => writes.push(...asked),
   });
+  return createElement(DesktopSidebar, sidebarProps(tasks));
+}
+
+/** The sidebar over Launch, and a way to draw it again over other sections, as a refresh does. */
+async function mountSidebarRedrawn(writes: TaskSectionWrite[]) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
-    ),
-  );
-  await settle();
-  return container;
+  const registry = AtomRegistry.make();
+  const draw = async (sections: TaskSections) => {
+    act(() => root.render(onRegistry(registry, sidebarOver(sections, writes))));
+    await settle();
+  };
+  await draw(SECTIONS);
+  return { container, draw };
+}
+
+/** The sidebar over Launch, each write it asks heard by `writes`. */
+async function mountSidebar(writes: TaskSectionWrite[]): Promise<HTMLElement> {
+  return (await mountSidebarRedrawn(writes)).container;
 }
 
 /** The names of the tasks drawn under the region labelled `label`. */
@@ -197,4 +207,20 @@ test("a section's Delete section asks first, then deletes the section and none o
 
   assert.equal(asked, 0);
   assert.deepEqual(writes, [{ kind: TASK_SECTION_WRITE.DELETE, id: LAUNCH }]);
+});
+
+test("a section's Delete question goes when the section does, deleted on another Mac", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const { container, draw } = await mountSidebarRedrawn(writes);
+  const actions = container.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  assert.ok(actions);
+  act(() => actions.click());
+  act(() => item("Delete section").click());
+  assert.ok(document.querySelector('[role="alertdialog"]'), "the question is asked");
+
+  await draw({ sections: [], entries: [] });
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(writes, []);
 });

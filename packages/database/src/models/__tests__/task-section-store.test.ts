@@ -170,23 +170,28 @@ it.layer(getTestDB())("an account's task sections", (it) => {
     }),
   );
 
-  it.effect("a task of another workspace is put in no section, and one moved away leaves it", () =>
-    Effect.gen(function* () {
-      const { dean, workspace, first } = yield* openSharedWorkspace;
-      const elsewhere = yield* openWorkspace(dean);
-      const { id: other } = yield* createTask(dean, { name: "Other", organizationId: elsewhere });
-      const id = randomUUID();
-      yield* written(dean, create(workspace, "Launch", id));
+  it.effect(
+    "a task of another workspace is put in no section, and one moved away and back stands in none",
+    () =>
+      Effect.gen(function* () {
+        const { dean, workspace, first } = yield* openSharedWorkspace;
+        const elsewhere = yield* openWorkspace(dean);
+        const { id: other } = yield* createTask(dean, { name: "Other", organizationId: elsewhere });
+        const id = randomUUID();
+        yield* written(dean, create(workspace, "Launch", id));
 
-      assert.equal(yield* refused(dean, place(other, id)), true);
+        assert.equal(yield* refused(dean, place(other, id)), true);
 
-      yield* written(dean, place(first, id));
-      assert.equal(
-        Option.isSome(yield* updateTask(dean, first, { organizationId: elsewhere })),
-        true,
-      );
-      assert.deepEqual((yield* listTaskSections(dean)).entries, []);
-    }),
+        yield* written(dean, place(first, id));
+        assert.equal(
+          Option.isSome(yield* updateTask(dean, first, { organizationId: elsewhere })),
+          true,
+        );
+        assert.deepEqual((yield* listTaskSections(dean)).entries, []);
+        // Moved back, it stands in none of the sections it left.
+        yield* updateTask(dean, first, { organizationId: workspace });
+        assert.deepEqual((yield* listTaskSections(dean)).entries, []);
+      }),
   );
 
   it.effect("a section goes with its account and its workspace, and an entry with its task", () =>

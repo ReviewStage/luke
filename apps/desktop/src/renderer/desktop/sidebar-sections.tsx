@@ -232,21 +232,30 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
   const [icon, setIcon] = useState<TaskSectionIcon | undefined>(undefined);
   const [doomed, setDoomed] = useState<TaskSection | undefined>(undefined);
   const field = useRef<HTMLInputElement | null>(null);
-  const surroundings = { subject: tasks.signedIn, surfaceOpen };
-  const confirm: DialogConfirm = useConfirmDialog(surroundings, (): Promise<ActionResult> => {
-    const trimmed = title.trim();
-    if (trimmed === "" || ask === undefined) {
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: TITLE_ASKED });
-    }
-    tasks.onWriteSections(answerWrites(ask, trimmed, icon));
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
-  const deletion = useConfirmDialog(surroundings, (): Promise<ActionResult> => {
-    if (doomed !== undefined) {
-      tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: doomed.id }]);
-    }
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
+  // Note that a question about a section goes with the section, deleted on another Mac or by a refresh.
+  const standing = (section: TaskSection | undefined) =>
+    section !== undefined && tasks.taskSections.sections.some((each) => each.id === section.id);
+  const asked = ask?.kind === TASK_SECTION_WRITE.EDIT ? standing(ask.section) : true;
+  const confirm: DialogConfirm = useConfirmDialog(
+    { subject: tasks.signedIn && asked, surfaceOpen },
+    (): Promise<ActionResult> => {
+      const trimmed = title.trim();
+      if (trimmed === "" || ask === undefined) {
+        return Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: TITLE_ASKED });
+      }
+      tasks.onWriteSections(answerWrites(ask, trimmed, icon));
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
+  const deletion = useConfirmDialog(
+    { subject: tasks.signedIn && standing(doomed), surfaceOpen },
+    (): Promise<ActionResult> => {
+      if (doomed !== undefined) {
+        tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: doomed.id }]);
+      }
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
   const open = (next: SectionAsk, words: string, chosen: TaskSectionIcon | undefined) => {
     setAsk(next);
     setTitle(words);
