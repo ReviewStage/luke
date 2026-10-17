@@ -4,7 +4,6 @@ import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
 import type { ReadLink } from "@luke/features/luke-link";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
-import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type {
   AgentEndToast,
   AgentPlace,
@@ -254,9 +253,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
-    if (voiceWindow.owns(sender)) return { role: WINDOW_ROLE.VOICE, fullScreen: false };
-    if (callWindow.owns(sender)) return { role: WINDOW_ROLE.CALL, fullScreen: false };
-    return { role: WINDOW_ROLE.PANEL, fullScreen: panels.fullScreen(sender) };
+    if (voiceWindow.owns(sender) || callWindow.owns(sender)) return { fullScreen: false };
+    return { fullScreen: panels.fullScreen(sender) };
   }
 
   function publishAppState(): void {
