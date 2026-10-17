@@ -1747,7 +1747,7 @@ test("an item that needs no reply says a bare press won't message the agent, and
   assert.equal(quiet(), "Your note will be sent to the agent.");
 });
 
-test("an item that needs no reply, once settled, says a note was sent to the agent and a bare press kept for it to read", async () => {
+test("an item that needs no reply, once settled, says a note or a file was sent to the agent and a bare press kept for it to read", async () => {
   const quietDone = (id: string, title: string, at: number, note?: string): InboxItem => ({
     ...item(id, title, at),
     response: { type: INBOX_RESPONSE.TODO },
@@ -1756,6 +1756,16 @@ test("an item that needs no reply, once settled, says a note was sent to the age
     answeredBy: READER,
     answer: { reply: INBOX_REPLY.DONE, ...(note === undefined ? undefined : { note }) },
   });
+  const withFile: InboxItem = {
+    ...quietDone("a1b2c3d4-0000-4000-8000-000000000012", "Rotate the key", 5_000),
+    answerFiles: [
+      {
+        attachmentId: "a1b2c3d4-0000-4000-8000-0000000000f1",
+        name: "rotation.txt",
+        mediaType: "text/plain",
+      },
+    ],
+  };
   inboxes = new Map([
     [
       BILLING.id,
@@ -1767,6 +1777,7 @@ test("an item that needs no reply, once settled, says a note was sent to the age
           "On preview too.",
         ),
         quietDone("a1b2c3d4-0000-4000-8000-000000000011", "Add the secret", 5_500),
+        withFile,
       ],
     ],
     [INVITES.id, [EXPIRY]],
@@ -1779,6 +1790,11 @@ test("an item that needs no reply, once settled, says a note was sent to the age
   };
   assert.match(where("Turn on the flag") ?? "", /· Sent to /u);
   assert.match(where("Add the secret") ?? "", /Saved for the agent to read$/u);
+  assert.match(
+    where("Rotate the key") ?? "",
+    /· Sent to /u,
+    "a file reaches the agent as a note does",
+  );
 });
 
 test("an answered item that asked to be heard back, carried without its answer, still says it was sent to the agent", async () => {

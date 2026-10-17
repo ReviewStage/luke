@@ -267,6 +267,33 @@ it.effect(
 );
 
 it.effect(
+  "reads an inbox item's attachment as base64 under the type it was kept as, an answer's PDF or text file as much as a picture, and any other type as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+      const attachmentId = "6e3c9a1f-2b4d-4f70-8c8e-3d5f7b9c1e2a";
+      const servedAs = (type: string) =>
+        recordingHttpClient(
+          () => new Response("%PDF", { status: 200, headers: { "content-type": type } }),
+        );
+      const read = (type: string) =>
+        Effect.provide(client().inboxAttachment(itemId, attachmentId), servedAs(type).layer);
+
+      assert.deepEqual(yield* read("application/pdf"), {
+        contentType: "application/pdf",
+        base64: "JVBERg==",
+      });
+      assert.deepEqual(yield* read("text/plain"), {
+        contentType: "text/plain",
+        base64: "JVBERg==",
+      });
+      assert.deepEqual(yield* read("text/html"), {
+        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+      });
+    }),
+);
+
+it.effect(
   "reads an agent's picture, or its worker's, as base64 under the type the service named, and anything else as unanswered",
   () =>
     Effect.gen(function* () {
