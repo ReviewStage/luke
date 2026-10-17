@@ -23,17 +23,17 @@ import type React from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 
-/** How far the pointer goes up or down, in CSS pixels, before a press is a drag rather than a click. */
-const DRAG_THRESHOLD = 4;
+/** How far the pointer goes, in CSS pixels, before a press is a drag rather than a click. */
+export const DRAG_THRESHOLD = 4;
 
 /** The list's rows that move. */
 const ROW = ":scope > li";
 
 /** What a row and its list wear while a drag lasts; desktop.css lifts the one and slides the others. */
-const DRAGGING_ATTRIBUTE = "data-dragging";
+export const DRAGGING_ATTRIBUTE = "data-dragging";
 
 /** A press on what is typed into or a control of its own, which starts no drag. */
-const NOT_A_HANDLE = "input, textarea, select, [contenteditable], [data-editing]";
+export const NOT_A_HANDLE = "input, textarea, select, [contenteditable], [data-editing]";
 
 /** A row's stretch down the list as laid out when the press began. */
 interface Slot {
@@ -58,7 +58,6 @@ interface RowPress {
   slots: Slot[];
   gap: number;
   to: number;
-  dragging: boolean;
 }
 
 /** What the list's owner hears from a drop: the row at `from` now stands at `to`, which differs from it. */
@@ -135,6 +134,82 @@ function settleDropped(row: HTMLElement, top: number): void {
   row.style.transform = "";
 }
 
+/** What a press held at the window does as it goes: each step but `far` is heard only once the press is a drag. */
+export interface PressCourse {
+  /** Whether the pointer has gone far enough from the press for it to be a drag. */
+  readonly far: (event: PointerEvent) => boolean;
+  /** The press became a drag, its pointer captured by the press's owner. */
+  readonly lift: () => void;
+  /** The pointer moved on. */
+  readonly follow: (event: PointerEvent) => void;
+  /** The pointer was let go. */
+  readonly drop: () => void;
+  /** Escape, or the system taking the pointer away, put the drag back. */
+  readonly putBack: () => void;
+  /** Something scrolled beneath the pointer. */
+  readonly runBeneath: () => void;
+}
+
+/**
+ * Hears a press on `owner` at the window until it is let go, so it outlives
+ * the pointer leaving the owner, and captures the pointer only once the
+ * press is a drag, so a press that stays a click lands as any click does.
+ * Escape puts a drag back and is the drag's alone while it lasts, so it
+ * steps the window back no layer as well. `held` stands while the press
+ * does, and stops hearing it.
+ */
+export function holdPress(
+  owner: HTMLElement,
+  pointerId: number,
+  held: React.RefObject<(() => void) | undefined>,
+  course: PressCourse,
+): void {
+  let dragging = false;
+  const move = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    if (!dragging && !course.far(event)) return;
+    if (!dragging) {
+      dragging = true;
+      owner.setPointerCapture(pointerId);
+      course.lift();
+    }
+    course.follow(event);
+  };
+  const drop = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    held.current?.();
+    if (dragging) course.drop();
+  };
+  const cancel = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    held.current?.();
+    if (dragging) course.putBack();
+  };
+  const onEscape = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || !dragging) return;
+    event.preventDefault();
+    event.stopPropagation();
+    held.current?.();
+    course.putBack();
+  };
+  const runBeneath = () => {
+    if (dragging) course.runBeneath();
+  };
+  window.addEventListener("pointermove", move, true);
+  window.addEventListener("pointerup", drop, true);
+  window.addEventListener("pointercancel", cancel, true);
+  window.addEventListener("keydown", onEscape, true);
+  window.addEventListener("scroll", runBeneath, true);
+  held.current = () => {
+    window.removeEventListener("pointermove", move, true);
+    window.removeEventListener("pointerup", drop, true);
+    window.removeEventListener("pointercancel", cancel, true);
+    window.removeEventListener("keydown", onEscape, true);
+    window.removeEventListener("scroll", runBeneath, true);
+    held.current = undefined;
+  };
+}
+
 /**
  * The list's drag: spread `onPointerDown` on the list. A press is heard at
  * the window from then on, so it outlives the pointer leaving the list, and
@@ -155,71 +230,39 @@ export function useRowDrag(
 
   const begin = (list: HTMLElement, press: RowPress) => {
     const pressed = () => press.rows[press.at];
-    const move = (event: PointerEvent) => {
-      if (event.pointerId !== press.pointerId) return;
-      if (!press.dragging && Math.abs(event.clientY - press.y) < DRAG_THRESHOLD) return;
-      if (!press.dragging) {
-        press.dragging = true;
-        list.setPointerCapture(press.pointerId);
+    holdPress(list, press.pointerId, release, {
+      far: (event) => Math.abs(event.clientY - press.y) >= DRAG_THRESHOLD,
+      lift: () => {
         list.setAttribute(DRAGGING_ATTRIBUTE, "true");
         pressed()?.setAttribute(DRAGGING_ATTRIBUTE, "true");
-      }
-      press.pointer = event.clientY;
-      draw(press, list);
-    };
-    const putBack = () => {
-      release.current?.();
-      if (press.dragging) lower(press, list, true);
-    };
-    const drop = (event: PointerEvent) => {
-      if (event.pointerId !== press.pointerId) return;
-      release.current?.();
-      const row = pressed();
-      if (!press.dragging || row === undefined) return;
-      // A row pinned or unpinned under the drag leaves its places stale, so
-      // the drag is put back rather than dropped at a place that moved.
-      const now = [...list.querySelectorAll<HTMLElement>(ROW)];
-      if (now.length !== press.rows.length || now.some((each, at) => each !== press.rows[at])) {
-        lower(press, list, true);
-        return;
-      }
-      const top = row.getBoundingClientRect().top;
-      // The list is drawn in its new order before the rows come down, so they come down where that drew them.
-      flushSync(() => {
-        if (press.to !== press.at) latest.current?.(press.at, press.to);
-      });
-      lower(press, list, false);
-      settleDropped(row, top);
-    };
-    const cancel = (event: PointerEvent) => {
-      if (event.pointerId === press.pointerId) putBack();
-    };
-    // The sidebar run along under a pointer held still, by a wheel or a
-    // trackpad, moves where the row would land.
-    const runBeneath = () => {
-      if (press.dragging) draw(press, list);
-    };
-    // Escape puts a drag back, and is the drag's alone while it lasts, so it
-    // steps the window back no layer as well.
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !press.dragging) return;
-      event.preventDefault();
-      event.stopPropagation();
-      putBack();
-    };
-    window.addEventListener("pointermove", move, true);
-    window.addEventListener("pointerup", drop, true);
-    window.addEventListener("pointercancel", cancel, true);
-    window.addEventListener("keydown", onEscape, true);
-    window.addEventListener("scroll", runBeneath, true);
-    release.current = () => {
-      window.removeEventListener("pointermove", move, true);
-      window.removeEventListener("pointerup", drop, true);
-      window.removeEventListener("pointercancel", cancel, true);
-      window.removeEventListener("keydown", onEscape, true);
-      window.removeEventListener("scroll", runBeneath, true);
-      release.current = undefined;
-    };
+      },
+      follow: (event) => {
+        press.pointer = event.clientY;
+        draw(press, list);
+      },
+      drop: () => {
+        const row = pressed();
+        if (row === undefined) return;
+        // A row pinned or unpinned under the drag leaves its places stale, so
+        // the drag is put back rather than dropped at a place that moved.
+        const now = [...list.querySelectorAll<HTMLElement>(ROW)];
+        if (now.length !== press.rows.length || now.some((each, at) => each !== press.rows[at])) {
+          lower(press, list, true);
+          return;
+        }
+        const top = row.getBoundingClientRect().top;
+        // The list is drawn in its new order before the rows come down, so they come down where that drew them.
+        flushSync(() => {
+          if (press.to !== press.at) latest.current?.(press.at, press.to);
+        });
+        lower(press, list, false);
+        settleDropped(row, top);
+      },
+      putBack: () => lower(press, list, true),
+      // The sidebar run along under a pointer held still, by a wheel or a
+      // trackpad, moves where the row would land.
+      runBeneath: () => draw(press, list),
+    });
   };
 
   return (event) => {
@@ -237,6 +280,6 @@ export function useRowDrag(
     const gap = Number.parseFloat(getComputedStyle(list).rowGap) || 0;
     const pointer = { pointerId: event.pointerId, y: event.clientY, pointer: event.clientY };
     const listTop = list.getBoundingClientRect().top;
-    begin(list, { ...pointer, listTop, at, rows, slots, gap, to: at, dragging: false });
+    begin(list, { ...pointer, listTop, at, rows, slots, gap, to: at });
   };
 }
