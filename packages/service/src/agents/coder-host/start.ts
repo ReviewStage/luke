@@ -104,6 +104,14 @@ type StartNoteHeading = (typeof START_NOTE_HEADING)[keyof typeof START_NOTE_HEAD
 /** The heading the Linear issue a plan was started from stands under, after the plan and before any note. */
 export const LINEAR_ISSUE_HEADING = "## The Linear issue this task was started from";
 
+/** A run of whitespace, line breaks among it, which a line of the brief spells as one space. */
+const WHITESPACE_RUN = /\s+/gu;
+
+/** Words Linear holds, folded onto one line, so none of them can open a line of the brief outside the fence. */
+function oneLine(words: string): string {
+  return words.replace(WHITESPACE_RUN, " ").trim();
+}
+
 /**
  * The Linear issue a plan was started from, as an agent handed the plan
  * reads it after the plan: the issue as a mention; the branch name and the
@@ -113,16 +121,19 @@ export const LINEAR_ISSUE_HEADING = "## The Linear issue this task was started f
  * whole and `Part of` where it does some of it, which links without
  * closing; and the issue's description as the plan kept it when it
  * started, fenced as data, since whoever wrote it in Linear is not the
- * developer.
+ * developer. What stands outside the fence is folded onto one line, and
+ * the description keeps its leading indentation, an indented code block's
+ * among it.
  */
 function linearIssueBrief(issue: TaskLinearIssue): string {
-  const key = issue.identifier;
+  const key = oneLine(issue.identifier);
+  const name = `${key} ${oneLine(issue.title)}`;
   const mention = decodeMention(issue.url, null);
   const named =
     mention === undefined
-      ? `${key} ${issue.title} (${issue.url})`
-      : mentionMarkdown(mention, `${key} ${issue.title}`, { workspace: "", repository: null });
-  const description = issue.description.trim();
+      ? `${name} (${oneLine(issue.url)})`
+      : mentionMarkdown(mention, name, { workspace: "", repository: null });
+  const description = issue.description.trim() === "" ? "" : issue.description.trimEnd();
   return [
     LINEAR_ISSUE_HEADING,
     `This task was started from the Linear issue ${named}.`,
