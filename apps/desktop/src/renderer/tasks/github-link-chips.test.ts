@@ -320,7 +320,7 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map(readable);
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -344,7 +344,7 @@ function openerFace(chip: Element | undefined): [string | undefined, string | nu
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const mark = card?.querySelector<HTMLElement>(".card-note .actor-mark");
   const face: [string | undefined, string | null | undefined] = [
     mark?.dataset.kind,
@@ -390,7 +390,7 @@ function cardLabels(chip: Element | undefined): (string | null)[] {
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const labels = [...(card?.querySelectorAll<HTMLElement>(".card-label") ?? [])].map(
     (label) => label.textContent,
   );

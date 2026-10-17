@@ -20,7 +20,7 @@ import { LinesMenu } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 
 /**
- * page-pane.tsx -- one page an agent wrote for the plan, in the side panel: the page itself, drawn at the version chosen, and a bar to step between its versions and reload it.
+ * page-pane.tsx -- one page an agent wrote for the task, in the side panel: the page itself, drawn at the version chosen, and a bar to step between its versions and reload it.
  *
  * The page is HTML an agent wrote, so it is drawn in a frame of its own
  * scheme (`luke-page:`, served by main under a policy of its own) and
@@ -31,7 +31,7 @@ import { useLinesLook } from "./file-tab";
  * and the newest is followed until the developer steps back from it. A
  * link the page follows goes nowhere, since this window may frame nothing
  * but a page, and Reload draws the page again. What the page draws is the
- * plan's, so the pane is left out of the screen recording (`ph-no-capture`);
+ * task's, so the pane is left out of the screen recording (`ph-no-capture`);
  * the recording could not see into the frame in any case.
  *
  * The bar's code toggle shows the version's HTML in the frame's place, as a

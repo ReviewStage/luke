@@ -8,14 +8,14 @@ import { INBOX_GROUPING, type InboxGrouping } from "../tasks/inbox-model";
  * A fold is this window's alone, as the sidebar's width is, so it is kept in
  * the renderer's own storage rather than on the account: a group folded on
  * one Mac stays open on another. A group is kept by its repository's full
- * name, and the plans with no repository by null. A repository whose last
- * plan goes leaves its entry behind: it is a few bytes, and a plan on it
+ * name, and the tasks with no repository by null. A repository whose last
+ * task goes leaves its entry behind: it is a few bytes, and a task on it
  * later comes back folded as it was left. Pinned is kept under a key of
  * its own, since it is no repository, and so are the creators' groups, each
  * by its creator's account id and the tasks nobody is named for by null,
  * so a repository's fold stands through a while grouped by creator. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
- * Inbox's plan groups are kept on the same terms, each by its plan's id,
+ * Inbox's task groups are kept on the same terms, each by its task's id,
  * and so are its two view choices, Needs you and how it groups, and its
  * list's width; a task's own Inbox keeps a Needs you of its own, one for
  * every task, apart from the window's; a fixture run draws no inbox, so it has nothing staged to
@@ -65,7 +65,7 @@ const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.Stri
 /** Whether Pinned is folded, or the Inbox lists only what waits. */
 const storedFlag = Schema.fromJsonString(Schema.Boolean);
 
-/** The Inbox's folded plans, by id. */
+/** The Inbox's folded tasks, by id. */
 const storedTasks = Schema.fromJsonString(Schema.Array(Schema.String));
 
 /** How wide the Inbox's list stands. */
@@ -187,13 +187,13 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
   };
 }
 
-/** Which of the Inbox's plan groups are folded, and the press that folds or unfolds one. */
+/** Which of the Inbox's task groups are folded, and the press that folds or unfolds one. */
 export interface InboxTaskFolds {
   folded: (taskId: string) => boolean;
   toggle: (taskId: string) => void;
 }
 
-/** The Inbox's plan groups, each open until it is first folded, and kept as it is pressed. */
+/** The Inbox's task groups, each open until it is first folded, and kept as it is pressed. */
 export function useInboxTaskFolds(): InboxTaskFolds {
   const [folded, setFolded] = useState(() =>
     readKept(STORAGE_KEY.INBOX_TASKS, storedTasks, [], STORAGE_KEY.INBOX_TASKS_EARLIER),
@@ -236,7 +236,7 @@ export function useTaskInboxWaitingOnly(): InboxWaitingOnly {
   };
 }
 
-/** The Inbox's view choices, every item grouped by plan until first changed, and kept as each is pressed. */
+/** The Inbox's view choices, every item grouped by task until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
   const [waitingOnly, setWaitingOnly] = useState(() =>
     readKept(STORAGE_KEY.INBOX_WAITING_ONLY, storedFlag, false),

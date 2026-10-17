@@ -6,10 +6,10 @@ import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
- * coding-agent-wire.ts -- a plan's coding agents, as the desktop starts, lists, reads, messages, and stops them.
+ * coding-agent-wire.ts -- a task's coding agents, as the desktop starts, lists, reads, messages, and stops them.
  *
- * A coding agent is one cloud session the service runs over a plan: it
- * checks the plan's repository out, implements the plan, and decides on a
+ * A coding agent is one cloud session the service runs over a task: it
+ * checks the task's repository out, implements the plan, and decides on a
  * pull request. Or, where the developer started it with words of their own,
  * it is handed those as its prompt in the plan's place, and never the plan.
  * The desktop starts one with a key of its own, so a retry of the same
@@ -29,12 +29,12 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
  * again. An agent's model, effort, and context window can be changed while
  * it stands: the change is read at its next step, and the answer is the
  * agent as it then stands. A context window is named only where it is the
- * standard one; a choice that names none runs on the model's whole window. An agent's title is generated once from its plan as it starts,
+ * standard one; a choice that names none runs on the model's whole window. An agent's title is generated once from its task as it starts,
  * and the developer may rename it; a rename is never overwritten, and an
  * empty one clears the title so the tab falls back to the model's name.
  * Each of its workers is given a title the same way, from the task it was
  * handed, which no one renames. An agent may be archived, which stops a
- * turn still running and leaves it out of the plan's list unless the list
+ * turn still running and leaves it out of the task's list unless the list
  * asks for archived agents, and brought back; its transcript and pull
  * request are kept. The MCP servers an agent is handed, one per integration
  * provider the account connected, can each be switched off for it, at its
@@ -66,7 +66,7 @@ export const CODING_AGENT_BOUNDS = {
   MAX_START_WORDS_CHARS: 64_000,
   /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
   MAX_CALL_ID_CHARS: 128,
-  /** The most spoken lines one planning turn names as its ask, and the most characters of one line's id, which the voice's ledger mints. */
+  /** The most spoken lines one brain turn names as its ask, and the most characters of one line's id, which the voice's ledger mints. */
   MAX_ASKED_LINES: 20,
   MAX_LINE_ID_CHARS: 128,
   /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
@@ -136,7 +136,7 @@ export const CODING_AGENT_AUTHOR = {
 
 export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING_AGENT_AUTHOR];
 
-/** What an agent was handed as its first message: the plan's document, or a prompt the developer wrote in its place. */
+/** What an agent was handed as its first message: the task's document, or a prompt the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
   // Note that the value says "task", because a released desktop decodes it.
@@ -448,7 +448,7 @@ export const codingAgentServersRequestSchema = EffectSchema.Struct({
 export type CodingAgentServersRequest = typeof codingAgentServersRequestSchema.Type;
 
 /**
- * The plan's agent list's query (GET): `archived=include` lists the
+ * The task's agent list's query (GET): `archived=include` lists the
  * archived agents among the rest, each carrying its `archivedAt`. Without
  * it they are left out, which is what a build from before archiving asks.
  */
@@ -501,11 +501,11 @@ export const codingAgentArchivedBySchema = EffectSchema.Struct({
 export type CodingAgentArchivedBy = typeof codingAgentArchivedBySchema.Type;
 
 /**
- * One agent as the tabs draw it: the plan it works on, its title, what it
+ * One agent as the tabs draw it: the task it works on, its title, what it
  * runs on, when it started, where it stands, which turn that is, and when
- * that run began. The plan is null for an agent an automation started with
- * no plan, which only a read naming that agent answers: a plan's list holds
- * the plan's own, so a build that predates agents with no plan never meets
+ * that run began. The task is null for an agent an automation started with
+ * no task, which only a read naming that agent answers: a task's list holds
+ * the task's own, so a build that predates agents with no task never meets
  * one.
  */
 export const codingAgentSummarySchema = EffectSchema.Struct({
@@ -597,7 +597,7 @@ export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
 
 /**
  * One agent as its own page reads it, which is how an agent an automation
- * started with no plan is read, having no plan's tab to stand in: the
+ * started with no task is read, having no task's tab to stand in: the
  * summary the tabs draw, the automation whose run started it or none, the
  * run that did where one did, the workspace it belongs to, and the
  * repository it works in. An agent on a plan reads so too, by the same id.
@@ -613,7 +613,7 @@ export const codingAgentPageSchema = EffectSchema.Struct({
 
 export type CodingAgentPage = typeof codingAgentPageSchema.Type;
 
-/** One agent read by its id (GET), on a plan or with none. */
+/** One agent read by its id (GET), on a task or with none. */
 export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAgentPageSchema });
 
 /**
@@ -640,7 +640,7 @@ export const tasklessAgentSchema = EffectSchema.Struct({
 
 export type TasklessAgent = typeof tasklessAgentSchema.Type;
 
-/** The plan's agents (GET), in the order they were started. */
+/** The task's agents (GET), in the order they were started. */
 export const codingAgentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(codingAgentSummarySchema),
 });
@@ -1298,14 +1298,14 @@ export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
 export const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
-   * The turn the message is the journal of, on a planning conversation's
+   * The turn the message is the journal of, on a task conversation's
    * page, so the Call tab knows which of the developer's lines asked for it;
    * absent on a coding agent's page, on any other row, and from a service
    * older than it.
    */
   turnId: EffectSchema.optionalKey(EffectSchema.String),
   /**
-   * The developer's spoken lines a planning turn took as its ask, by the
+   * The developer's spoken lines a brain turn took as its ask, by the
    * ids the voice's ledger minted for them, in the order they were said, on
    * the turn's journal; absent where none stands, on a coding agent's page,
    * and from a service older than it.
@@ -1332,14 +1332,14 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
     ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ASKED_LINES)),
   ),
   /**
-   * What opened a planning turn, as its row recorded it, on the turn's
+   * What opened a brain turn, as its row recorded it, on the turn's
    * journal: a spoken turn is the voice's, whose words Luke says aloud
    * whether or not a line on screen asked for it, as the look around a
    * call opens with is. Absent on a coding agent's page, on any other row,
    * and from a service older than it.
    */
   origin: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(TURN_ORIGIN))),
-  /** Whether older parts of a planning turn's journal than these were left out, which the turn says above its parts; absent where none were, on a coding agent's page, and from a service older than it. */
+  /** Whether older parts of a brain turn's journal than these were left out, which the turn says above its parts; absent where none were, on a coding agent's page, and from a service older than it. */
   earlierOmitted: EffectSchema.optionalKey(EffectSchema.Boolean),
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
@@ -1482,7 +1482,7 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   cursor: codingAgentCursorSchema,
   /**
    * The turn the page before the oldest message here is read before, on a
-   * planning conversation's page read from its newest turns or before one;
+   * task conversation's page read from its newest turns or before one;
    * absent where no older turn stands, on a coding agent's page, and from a
    * service older than it.
    */
@@ -1527,7 +1527,7 @@ export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.T
  * A page of an agent's messages joined to the ones held: a message heard
  * again replaces the one held under its id, in place, and a new one joins
  * at the end, so a journal that grows in place is redrawn where it stands.
- * The agent's tab and the host's read of a plan's conversation join pages
+ * The agent's tab and the host's read of a task's conversation join pages
  * the same way, so both draw one transcript from the same answers.
  */
 export function applyMessagesPage(

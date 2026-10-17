@@ -23,7 +23,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
 /**
- * A File tab's lines mentioned in the agent's message box on the same plan's
+ * A File tab's lines mentioned in the agent's message box on the same task's
  * page, over the real editor bundle: the lines selected in the tab, the
  * command ⌥⌘K runs, and the box holding the mention as its chip, pinned to
  * the commit the lines were read at, sent as the lines' GitHub address.
@@ -112,7 +112,7 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
   });
 }
 
-/** A plan's page drawing the file's tab and, unless it is asked not to, the agent's box, every message the box sends written down. */
+/** A task's page drawing the file's tab and, unless it is asked not to, the agent's box, every message the box sends written down. */
 async function page({ box = true }: { box?: boolean } = {}) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
@@ -161,7 +161,7 @@ function cardOn(element: Element | undefined): (string | null | undefined)[] {
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-file-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
     card.querySelector(".card-name")?.textContent,

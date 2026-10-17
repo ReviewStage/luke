@@ -148,7 +148,7 @@ function withWebhookUrl(serviceBaseUrl: string, automation: AutomationSummary): 
   return { ...automation, webhookUrl: `${serviceBaseUrl}${automationWebhookPath(automation.id)}` };
 }
 
-/** The list's query: one plan's or one workspace's, or none for every automation the account reads. */
+/** The list's query: one task's or one workspace's, or none for every automation the account reads. */
 function listQuery(params: AutomationListParams): string {
   const query = new URLSearchParams();
   if (params.taskId !== undefined) query.set(AUTOMATION_LIST_QUERY.TASK_ID, params.taskId);
@@ -173,7 +173,7 @@ export class HostedAutomationClient {
     });
   }
 
-  /** The account's automations, or one plan's, or one workspace's. */
+  /** The account's automations, or one task's, or one workspace's. */
   list(
     params: AutomationListParams,
   ): Effect.Effect<AutomationListView, never, HttpClient.HttpClient> {

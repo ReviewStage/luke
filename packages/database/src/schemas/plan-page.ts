@@ -13,7 +13,7 @@ import { task } from "./task.js";
  * one version can be named alone, as a link to it would name it, and says who
  * showed it, Luke or a coding agent by its id, named as it is read. The HTML is
  * stored as written, like the plan's own text, readable by an operator and
- * kept the developer's own by the plan it hangs off. Rows go with their plan.
+ * kept the developer's own by the task it hangs off. Rows go with their task.
  */
 export const planPageVersion = pgTable(
   "plan_page_version",

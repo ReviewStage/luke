@@ -32,7 +32,7 @@ const NOW = 1_800_000_000_000;
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
 
-/** A plan saved `ago` before now, with the agents its row carries where it has any. */
+/** A task saved `ago` before now, with the agents its row carries where it has any. */
 function task(n: number, name: string, ago: number, agents?: TaskAgentsSummary): TaskSummary {
   const summary: TaskSummary = {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
@@ -65,7 +65,7 @@ function pullRequest(
   return { number, title: `PR ${number}`, state, checks, additions: 10, deletions: 2 };
 }
 
-/** What a plan's row says of its agents and pull requests. */
+/** What a task's row says of its agents and pull requests. */
 function agents(
   lines: readonly TaskAgentLine[],
   pullRequests: readonly TaskPullRequestLine[] = [],

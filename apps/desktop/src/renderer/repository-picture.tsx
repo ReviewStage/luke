@@ -7,7 +7,7 @@ import { useState } from "react";
  * The owner's picture, an organization's logo or a person's avatar, is how
  * GitHub itself and every devtool beside it tells repositories apart at a
  * glance, so a repository's name is led by it: the sidebar's headers, the
- * repository chip and the rows of its menu, a plan's row naming its
+ * repository chip and the rows of its menu, a task's row naming its
  * repository. A menu's action that opens GitHub keeps GitHub's mark, since
  * it is about GitHub rather than the repository. The picture is sized by
  * the glyph slot it stands in, as a glyph is. Where there is no picture to

@@ -9,7 +9,7 @@ import {
 } from "../core.js";
 
 /**
- * end-call.ts -- the planning model's `end_call` tool: the developer said they are done, so Luke hangs up.
+ * end-call.ts -- the brain's `end_call` tool: the developer said they are done, so Luke hangs up.
  *
  * Note that the call does nothing when it runs, as `queue_question` does
  * nothing: the store journals a call's input before it runs, so the voice's
@@ -36,7 +36,7 @@ const END_CALL_INPUT = Schema.Struct({});
 
 const isEndCallInput = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
 
-/** The tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The tool as the brain is offered it: its name, its words, and its input schema. */
 export const END_CALL_TOOL = {
   name: AGENT_TOOL.END_CALL,
   description:

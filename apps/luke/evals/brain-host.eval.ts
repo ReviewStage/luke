@@ -34,10 +34,10 @@ import { defineEval } from "eve/evals";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask in a
- * plan's conversation under the scripted fixture model, which is handed the
+ * task's conversation under the scripted fixture model, which is handed the
  * saved document in its standing context and answers in words, leaving the
  * document as the notetaker saved it, and the relay writes the turn into the
- * store through the writer. A read of the repository on a plan that has none
+ * store through the writer. A read of the repository on a task that has none
  * is refused ahead of any sandbox, in words the model repeats, so the eval
  * opens no Vercel Sandbox and needs no GitHub. The eve server runs in this process with the database the
  * environment names, so the eval reads the rows back from the same Postgres.
@@ -53,7 +53,7 @@ const LOCAL_DEV_PRINCIPAL = "local-dev";
 
 const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 
-/** The plan the planning scenario runs against, and the words its two sessions open with. */
+/** The task the brain's scenario runs against, and the words its two sessions open with. */
 const TASK = {
   name: "Teammate invitations",
 } as const;
@@ -110,14 +110,14 @@ function readMessagesByTurn(run: Run, conversationId: string, turnId: string) {
   );
 }
 
-/** The id of the plan's conversation, opened on its first call; the plan must stand. */
+/** The id of the task's conversation, opened on its first call; the task must stand. */
 async function taskConversation(run: Run, planId: string): Promise<string> {
   const opened = await run(openTaskConversation(LOCAL_DEV_PRINCIPAL, planId));
   assert.ok(Option.isSome(opened));
   return opened.value.conversationId;
 }
 
-/** The document the plan holds now, failing the eval where it does not read. */
+/** The document the task holds now, failing the eval where it does not read. */
 async function planDocument(run: Run, taskId: string) {
   const stored = await run(readTask(LOCAL_DEV_PRINCIPAL, taskId));
   assert.ok(Option.isSome(stored));
@@ -166,7 +166,7 @@ export default defineEval({
         return accepted;
       };
 
-      // The planning model is handed the saved document and answers in words;
+      // The brain is handed the saved document and answers in words;
       // the notetaker beside the call writes the plan, so the turn leaves the
       // document as it stood.
       const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
@@ -207,7 +207,7 @@ export default defineEval({
       assert.equal(runtimeSessionId, tasks.sessionId);
 
       // Research handed to the worker subagent returns a receipt at once, and
-      // the planning turn stays open until the worker's result reaches the
+      // the brain's turn stays open until the worker's result reaches the
       // model inside it: one turn on record, settled, holding the call, the
       // words before the wait, and the words after it.
       const researchTask = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
@@ -247,7 +247,7 @@ export default defineEval({
       // The words before the wait and the words after it, in one answer.
       assert.ok(researchAnswer.parts.filter((part) => isTextUIPart(part)).length >= 2);
 
-      // A repository read on a plan with no repository yet runs nothing and
+      // A repository read on a task with no repository yet runs nothing and
       // says so: the refusal reaches the model as the tool's result, ahead of
       // any sandbox, and the model repeats why.
       const readingTask = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));

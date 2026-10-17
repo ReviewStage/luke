@@ -1,0 +1,20 @@
+/* anchored-popover.css -- a popover hung from its own button
+   (`anchored-popover.tsx`): the layer stands a small gap above the box that
+   holds the button, or below it where only there is room, its asked edge at
+   the inset and width it was measured to. What it holds draws its own
+   surface. */
+
+@layer components {
+  .luke-anchored-popover {
+    position: absolute;
+    z-index: 2;
+  }
+
+  .luke-anchored-popover[data-side="above"] {
+    bottom: calc(100% + var(--luke-space-4));
+  }
+
+  .luke-anchored-popover[data-side="below"] {
+    top: calc(100% + var(--luke-space-4));
+  }
+}

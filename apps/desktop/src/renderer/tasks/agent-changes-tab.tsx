@@ -275,7 +275,7 @@ export function peopleOf(
 }
 
 /**
- * The card a Changes tab hangs, and its row in the plan's summary, in a tab
+ * The card a Changes tab hangs, and its row in the task's summary, in a tab
  * card's look: the pull request's title with its mark and number at the
  * right, the coding agent whose pull request it is under the title, by its
  * tile and name as every place naming an agent draws it (`ActorRef`),
@@ -344,7 +344,7 @@ export function AgentChangesTab({
   control: CodingAgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
-  /** The plan's repository, which the agent works in and the breadcrumbs name; none names the path plain. */
+  /** The task's repository, which the agent works in and the breadcrumbs name; none names the path plain. */
   repository: string | null;
   /** Whether the tree beside File and Changes tabs is open, and its toggle. */
   tree: { readonly open: boolean; readonly onToggle: () => void };

@@ -94,9 +94,11 @@ function GitHubInstalled(): React.JSX.Element {
       <section className={AUTH_CARD} aria-labelledby="landing-title">
         {/* The same pairing the sign-in card draws: the provider's mark, an
             arrow, and Luke's own face. */}
-        <ConnectionGraphic
-          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
-        />
+        <div className="mb-5">
+          <ConnectionGraphic
+            mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
+          />
+        </div>
         <div>
           <span className={AUTH_PILL} data-tone={card.settled ? "settled" : "attention"}>
             {card.badge}

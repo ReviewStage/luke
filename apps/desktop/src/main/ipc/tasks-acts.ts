@@ -77,11 +77,11 @@ import { Effect } from "effect";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 /**
- * planning-acts.ts -- the Plans tab's acts: the panel's asks of the host about the named plans.
+ * tasks-acts.ts -- the Tasks tab's acts: the panel's asks of the host about the named tasks.
  *
  * The one check this process makes is who asked. Only a panel draws the
- * Plans tab, and the takeover and the hidden voice window draw no plan, so
- * every row refuses them. What the host does with an ask — which plan is
+ * Tasks tab, and the takeover and the hidden voice window draw no task, so
+ * every row refuses them. What the host does with an ask — which task is
  * active, what the service answers — is the host's to
  * decide, and comes back as the panel's own answer. Nothing is held here.
  */
@@ -157,9 +157,9 @@ export interface TasksActsDependencies {
   openExternal: (url: string) => Promise<void>;
   /** The hosted service's origin, without a trailing slash, the only origin a page the host names may open on. */
   serviceBaseUrl: string;
-  /** The plan the panel has open, as main holds the host's view of it. */
+  /** The task the panel has open, as main holds the host's view of it. */
   activeTaskId: () => string | undefined;
-  /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
+  /** Tells the voice window, which owns the call, that the task's microphone was pressed. */
   talkAboutTask: (taskId: string) => void;
   /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
   voiceReady: () => boolean;
@@ -249,7 +249,7 @@ type WorkspaceActKind =
  */
 const PAGE_SOURCE_COLOURED_MAX_CHARS = 64 * 1024;
 
-/** The refusal a window that draws no Plans tab hears, in its kind's own words. */
+/** The refusal a window that draws no Tasks tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: TasksActKind, sender: ActSender): void {
   if (!sender.panel) {
     throw new ActRefused({ message: ACT[kind].refusal });
@@ -321,10 +321,10 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
       refuseUnlessPanel(ACT_KIND.TASKS_CLOSE, sender);
       return host.tasksClose();
     },
-    // Note that a started plan opens its call at once, because pressing
-    // Start plan is the developer's gesture and Luke opens a new plan by
+    // Note that a started task opens its call at once, because pressing
+    // Start task is the developer's gesture and Luke opens a new task by
     // greeting it; where the call would first have to ask for the
-    // microphone, the plan's own microphone button asks instead, and where
+    // microphone, the task's own microphone button asks instead, and where
     // a call already stands the panel asks whether to end it first. A task
     // started without planning opens no call, since skipping the call is
     // what that start asked for.
@@ -417,8 +417,8 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
       refuseUnlessPanel(ACT_KIND.WEB_OPEN, sender);
       return dependencies.openExternal(url);
     },
-    // The press names no plan: the plan is the one the host has open, read
-    // here, so the panel cannot open a call about a plan it is not showing.
+    // The press names no task: the task is the one the host has open, read
+    // here, so the panel cannot open a call about a task it is not showing.
     [ACT_KIND.TASKS_TALK]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_TALK, sender);
       const taskId = dependencies.activeTaskId();

@@ -14,10 +14,10 @@ import type { BrainHostSeams } from "./production.js";
 
 /**
  * The standing context as the host answers it to the eve project's prompt
- * resolver on each turn, over the real migrations on PGlite: the plan's name
+ * resolver on each turn, over the real migrations on PGlite: the task's name
  * and its saved document, read again from the row each turn, and nothing of
  * the conversation's own words, which are the eve session's history and the
- * rotation seed's. Synthetic accounts, plans, and words throughout.
+ * rotation seed's. Synthetic accounts, tasks, and words throughout.
  */
 
 const NOW = 1_800_000_000_000;

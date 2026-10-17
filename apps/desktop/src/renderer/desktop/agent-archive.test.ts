@@ -61,7 +61,7 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.equal(card?.querySelector(".card-name")?.textContent, "Retry audit");
   assert.match(card?.querySelector(".card-corner")?.textContent ?? "", /^Archived · /u);
 });
@@ -103,7 +103,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchiv
   act(() => {
     row?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return [...document.querySelectorAll(".tooltip-card [data-tab-card] .card-note")].map(
+  return [...document.querySelectorAll(".luke-tooltip-card [data-tab-card] .card-note")].map(
     (note) => note.textContent ?? "",
   );
 }

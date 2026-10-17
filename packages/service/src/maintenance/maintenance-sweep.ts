@@ -14,8 +14,8 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
- * will. A plan deleted thirty days ago has its conversation purged, a
- * deleted plan's call that was still open when the plan went is removed
+ * will. A task deleted thirty days ago has its conversation purged, a
+ * deleted task's call that was still open when the task went is removed
  * once it has ended, a turn whose end eve never told the relay is settled as
  * abandoned, a voice session whose device detached and never came back is
  * ended on Luke's key, as a connection would have ended it, the Vercel
@@ -34,9 +34,9 @@ type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
-  /** Removes the ended calls of plans deleted since, a sweep's worth, answering how many went. */
+  /** Removes the ended calls of tasks deleted since, a sweep's worth, answering how many went. */
   purgeDeletedTaskCalls: (now: number) => SweepRead<number>;
-  /** Settles every turn still running past its kind's bound, an hour for a planning turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
+  /** Settles every turn still running past its kind's bound, an hour for a brain turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Ends every voice session whose device socket went without a hang-up longer ago than the grace. */
   sweepVoice: (now: number) => SweepRead<VoiceOrphanSweepOutcome>;
@@ -70,7 +70,7 @@ export interface MaintenanceSweepOptions extends MaintenanceSweeps {
 interface MaintenanceSweepAnswer {
   /** Deleted conversations purged past their retention window. */
   purged: number;
-  /** Ended calls of deleted plans removed. */
+  /** Ended calls of deleted tasks removed. */
   purgedCalls: number;
   /** Turns still running past their kind's bound, settled as failed for abandonment. */
   abandoned: number;

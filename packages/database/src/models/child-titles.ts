@@ -1,12 +1,12 @@
 /**
  * child-titles.ts -- a subagent's title on the child conversation its session is recorded in, filled once and read by its parent's readers.
  *
- * A planning worker and a coding agent's worker are each one child
+ * The brain's worker and a coding agent's worker are each one child
  * conversation, so the title generated from the task it was handed is
  * written on that row (`coder-host/title.ts`), filled only where none
  * stands, and read back under the parent: a child of another account's, of
  * another parent's, or cleared reads as untitled. A leaf over the store
- * alone, so the routes that read a plan's work reach none of eve's code.
+ * alone, so the routes that read a task's work reach none of eve's code.
  */
 
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";

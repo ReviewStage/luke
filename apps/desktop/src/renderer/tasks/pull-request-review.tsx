@@ -4,9 +4,9 @@ import {
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
+import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
 import { MessageSquarePlusIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { Segmented } from "../segmented";
 import { Tooltip } from "../tooltip";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes";

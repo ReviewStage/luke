@@ -48,7 +48,7 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * the SDK's own client tries the first again for up to twenty seconds and
  * reads the second as terminal at once, and the same stands here. A session
  * still not ready past the last wait is answered as such, which the
- * planning ask reads as a retirement and a coding agent's message answers as
+ * brain's ask reads as a retirement and a coding agent's message answers as
  * a conflict the desktop tries again. The retry is what makes a wrong
  * "retired" rare; it is not what makes one safe. That
  * is the conversation row's forward-only claim: an inbox slower than the
@@ -70,7 +70,7 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  */
 
 /**
- * Where an eve service's routes stand under its origin: the planning brain's
+ * Where an eve service's routes stand under its origin: the brain's
  * at eve's own `/eve`, and the coding-agent service's at the named mount
  * `/eve/coder`, which the deployment's rewrite carries into that service and
  * whose own route transform turns back into `/eve/v1/*` before the door
@@ -298,7 +298,7 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
  * or a Stop rather than failing, and every subagent it delegates to
  * inherits that. Luke reads no such prompt and answers none, so a worker
  * past its per-session budget parked on one for good and held the
- * planning turn waiting on its result with it. Declared unable, the next
+ * brain turn waiting on its result with it. Declared unable, the next
  * model call past the budget fails as `SESSION_TOKEN_LIMIT_REACHED`, and
  * the caller's task comes back failed, so the turn goes on without it.
  */
@@ -314,7 +314,7 @@ interface EvePostBody {
 /**
  * Who reaches eve: the deployment acting for an account it names, under its
  * own secret, or the account itself, under the bearer its request carried,
- * which the door resolves the way every hosted route does. The planning
+ * which the door resolves the way every hosted route does. The
  * brain's asks come from the voice function as the deployment; a coding
  * agent's Start and Stop come from a route still holding the developer's
  * own bearer and reach eve as that developer.
@@ -335,7 +335,7 @@ export interface EveSessionsOptions {
   /** The origin eve answers on; the deployment's own, where its rewrites carry the mount's `/v1/*` into the eve service. */
   readonly origin: string;
   readonly caller: EveCaller;
-  /** Which eve service's routes are reached; the planning brain's when unsaid. */
+  /** Which eve service's routes are reached; the brain's when unsaid. */
   readonly mount?: EveMount;
 }
 

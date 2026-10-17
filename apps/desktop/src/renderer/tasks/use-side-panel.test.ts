@@ -25,12 +25,12 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** A plan that has used every fixed tab. */
+/** A task that has used every fixed tab. */
 function usedTask(id: string): OpenTask {
   return { id, holds: Object.fromEntries(SIDE_PANEL_TABS.map((tab) => [tab, true])) };
 }
 
-/** The open plan and its agents, every one, or nothing while unread. */
+/** The open task and its agents, every one, or nothing while unread. */
 interface Stood {
   task: string;
   taskAgents: readonly string[] | undefined;
@@ -38,7 +38,7 @@ interface Stood {
   bare?: boolean;
 }
 
-/** Mounts the panel alone, as a launch does, over the plan and agents given, answering the control as it stands. */
+/** Mounts the panel alone, as a launch does, over the task and agents given, answering the control as it stands. */
 function launch(stood: Stood) {
   let control: SidePanelControl | undefined;
   function Probe({ held }: { held: Stood }) {
@@ -80,14 +80,14 @@ test("an agent's Changes tab opens on its plan, stands chosen across a launch, a
   assert.deepEqual(first.control().tab, { changes: AGENT });
   first.quit();
 
-  // A launch opens the plan on the Changes tab it was left on, before its agents are read.
+  // A launch opens the task on the Changes tab it was left on, before its agents are read.
   const second = launch({ task: TASK, taskAgents: undefined });
   assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
   assert.deepEqual(second.control().tab, { changes: AGENT });
   second.render({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(second.control().tab, { changes: AGENT });
 
-  // Another plan, its agents unread, never draws it, nor shows it chosen.
+  // Another task, its agents unread, never draws it, nor shows it chosen.
   second.render({ task: OTHER_TASK, taskAgents: undefined });
   assert.deepEqual(second.control().changes, []);
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
@@ -141,14 +141,14 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   assert.deepEqual(first.control().strip.at(-1), { terminal: AGENT });
   assert.deepEqual(first.control().tab, { terminal: AGENT });
 
-  // Another plan never draws it, its agents read or not.
+  // Another task never draws it, its agents read or not.
   first.render({ task: OTHER_TASK, taskAgents: undefined });
   assert.ok(!first.control().strip.some((tab) => tab instanceof Object && "terminal" in tab));
   assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
   first.render({ task: OTHER_TASK, taskAgents: [] });
   assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
 
-  // Back on its plan it stands as it was; closed, the tab viewed before it is chosen.
+  // Back on its task it stands as it was; closed, the tab viewed before it is chosen.
   first.render({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(first.control().tab, { terminal: AGENT });
   act(() => first.control().onClose({ terminal: AGENT }));
@@ -179,7 +179,7 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
   act(() => second.control().onRenamePins(TASK, new Map([[AGENT, "Expiring invites"]])));
   assert.equal(second.control().pins[0]?.label, "Pull request: Expiring invites");
 
-  // Shown from its pin on another plan, it opens there, at the end of that plan's strip.
+  // Shown from its pin on another task, it opens there, at the end of that task's strip.
   second.render({ task: OTHER_TASK, taskAgents: [OTHER_AGENT] });
   act(() => second.control().onShow(TASK, { changes: AGENT }));
   second.render({ task: TASK, taskAgents: [AGENT] });
