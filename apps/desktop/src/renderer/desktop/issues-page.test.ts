@@ -899,6 +899,73 @@ test("on the board ↓ and ↑ move down a column, ← and → to the nearest ca
   assert.ok(page.querySelector("[aria-label='Issue title']"));
 });
 
+/**
+ * The board laid out as a narrow window lays it: each column 300px wide,
+ * side by side from the scroller's start, in a scroller 700px wide that
+ * scrolls sideways. jsdom lays nothing out, so this answers the geometry the
+ * browser would. Answers each scroller's sideways scroll as it stands.
+ */
+function layBoardOut(): () => number {
+  const COLUMN = 300;
+  const scrolled = new WeakMap<Element, number>();
+  const scroller = () => document.querySelector(".issue-board-scroll");
+  vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (this: Element) {
+    return scrolled.get(this) ?? 0;
+  });
+  vi.spyOn(Element.prototype, "scrollLeft", "set").mockImplementation(function (
+    this: Element,
+    left: number,
+  ) {
+    scrolled.set(this, left);
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.matches(".issue-board-scroll") ? 700 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.matches("[data-issue-column]") ? COLUMN : 0;
+  });
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const columns = [...document.querySelectorAll("[data-issue-column]")];
+    const at = columns.indexOf(this);
+    const left = at < 0 ? 0 : at * COLUMN - (scrolled.get(scroller() ?? this) ?? 0);
+    return new DOMRect(left, 0, at < 0 ? 0 : COLUMN, 0);
+  });
+  return () => {
+    const board = scroller();
+    return board === null ? -1 : (scrolled.get(board) ?? 0);
+  };
+}
+
+test("on a board wider than the window, the column of the card reached stands whole in view, by an arrow and on the way back from its issue", async () => {
+  standing = [issue(1), issue(2, { status: ISSUE_STATUS.DONE })];
+  const page = mount();
+  await settle();
+  const scrolledTo = layBoardOut();
+
+  press("ArrowDown", window);
+  press("ArrowRight");
+  const byArrow = scrolledTo();
+  const card = document.activeElement;
+  assert.ok(card instanceof HTMLButtonElement);
+  act(() => card.click());
+  await settle();
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+
+  // Note that Done is the fourth column, so it ends at 1200px, 500px past the scroller's 700.
+  assert.equal(byArrow, 500);
+  assert.equal(
+    document.activeElement?.closest("[data-issue-id]")?.getAttribute("data-issue-id"),
+    issue(2).id,
+  );
+  assert.equal(scrolledTo(), 500, "the board drawn again brings the returned card's column in");
+  assert.ok(page.querySelector("[data-issue-column]"));
+});
+
 test("View options lays the page out as the list and back as the board, and an issue opened from either goes back to it", async () => {
   standing = [issue(1)];
   const page = mount();

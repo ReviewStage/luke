@@ -136,7 +136,10 @@ function IssueCard({
 }): React.JSX.Element {
   const card = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
-    if (focused) card.current?.focus();
+    // Note that the board was drawn again on the way back, its scroller at its start, so the column is brought whole into view as an arrow brings it.
+    if (!focused || card.current === null) return;
+    card.current.focus();
+    keepColumnInView(card.current);
   }, [focused]);
   return (
     <li className="sidebar-task-item home-row factory-row" data-issue-id={issue.id}>
