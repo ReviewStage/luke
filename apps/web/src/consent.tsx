@@ -33,9 +33,6 @@ function Consent(): React.JSX.Element {
       captureSiteEvent(SITE_EVENT.SIGN_IN_COMPLETE);
     });
   }, []);
-  // The full mark, not a pair of dots: the card is the one thing on the
-  // page, so it carries the same face the product and the landing page wear.
-  // One word says where things stand, in the state palette the product uses.
   return (
     <AuthPage
       mark={

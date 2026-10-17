@@ -19,6 +19,12 @@ function providerHint(): SocialProvider | undefined {
   return socialProviderFromState(new URLSearchParams(window.location.search).get("state"));
 }
 
+/**
+ * The card opens on the provider's mark joined to Luke's, or Luke's full mark
+ * alone when the address names no provider. The closing note is its own line
+ * rather than a run-on: with no provider to continue with there is no action
+ * block between it and the copy above.
+ */
 function SignIn(): React.JSX.Element {
   const [provider] = useState(providerHint);
   const [pending, setPending] = useState<SocialProvider>();
@@ -49,10 +55,6 @@ function SignIn(): React.JSX.Element {
     }
   };
 
-  // The full mark, not a pair of dots: the card is the one thing on the
-  // page, so it carries the same face the product and the landing page wear.
-  // The closing note is its own line rather than a run-on: with no provider
-  // to continue with there is no action block between it and the copy above.
   return (
     <AuthPage
       mark={
