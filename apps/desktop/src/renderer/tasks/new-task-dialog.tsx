@@ -7,6 +7,7 @@ import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/s
 import {
   BUTTON_VARIANT,
   Button,
+  Combobox,
   ComposeIcon,
   DIALOG_SIZE,
   Dialog,
@@ -85,6 +86,9 @@ import type { TasksControl } from "./use-tasks-tab";
  * the planning the card shows, and Luke is handed the issue to research.
  * Command-Return creates the task under the name as typed whatever is
  * highlighted, and Escape puts the issues away before it puts the card away.
+ * The field and its issues are `@luke/ui`'s `Combobox`, which reads those
+ * keys; with no issues standing, Return creates the task with any modifier
+ * held, since the name has no second line to begin.
  * With no issue matching, or no Linear connected, or its issues not read,
  * the field is the plain name it always was.
  */
@@ -94,6 +98,9 @@ const CREATE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER, bare: true };
 
 /** The chord that creates the task under the name as typed while Linear's issues stand under the field. */
 const TYPED_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
+
+/** The key of the last option under the field, which creates the task under the name as typed. */
+const TYPED_OPTION = "typed";
 
 /** What the name field says before anything is typed, by whether it also searches Linear. */
 const NAME_PLACEHOLDER = {
@@ -238,46 +245,6 @@ function useLinearSearch(
   return [AsyncResult.isSuccess(answer) ? answer.value : undefined, ask];
 }
 
-/** One issue under the name field: Linear's mark, its title with the words typed marked, then its key and state. */
-function IssueOption({
-  id,
-  issue,
-  tokens,
-  highlighted,
-  onHighlight,
-  onPick,
-}: {
-  id: string;
-  issue: LinearIssueSummary;
-  tokens: readonly string[];
-  highlighted: boolean;
-  onHighlight: () => void;
-  onPick: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      id={id}
-      type="button"
-      role="option"
-      tabIndex={-1}
-      className="menu-item"
-      aria-selected={highlighted}
-      onMouseMove={onHighlight}
-      onClick={onPick}
-    >
-      <span className="menu-item-glyph">
-        <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
-      </span>
-      <span className="task-compose-menu-name">
-        <Highlighted text={issue.title} tokens={tokens} />
-      </span>
-      <span className="task-compose-menu-detail">
-        {issue.state === undefined ? issue.identifier : `${issue.identifier} · ${issue.state}`}
-      </span>
-    </button>
-  );
-}
-
 /**
  * The card with its own state, mounted afresh on each opening so a
  * cancelled name is never offered again: the name, the repository chosen
@@ -323,8 +290,6 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const picked = matching ? matches[at] : undefined;
   const tokens = searchTokens(name);
   const field = useRef<HTMLInputElement>(null);
-  const listId = useId();
-  const optionId = useId();
   const titleId = useId();
   const planningId = useId();
   const planningNoteId = useId();
@@ -353,32 +318,6 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const start = () => (picked === undefined ? startTyped() : startIssue(picked));
   const close = () => {
     if (!starting) newTask.onClose();
-  };
-
-  // Return starts what is highlighted, and Command-Return the name as typed;
-  // with no issues standing, Return creates the task with any modifier held,
-  // since the name has no second line to begin. The arrows wrap through the
-  // issues and the typed name's row after them.
-  const fieldKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (matching && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-      event.preventDefault();
-      const rows = matches.length + 1;
-      setHighlight((at + (event.key === "ArrowDown" ? 1 : -1) + rows) % rows);
-      return;
-    }
-    // Note that Escape goes no further while issues stand, because the card
-    // would put itself away with the name when only the issues were meant.
-    if (matching && event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      setDismissed(true);
-      return;
-    }
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    if (event.metaKey || event.ctrlKey) startTyped();
-    else start();
   };
 
   return (
@@ -425,79 +364,57 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
             </span>
           </Tooltip>
         </div>
-        {/* Note that the name is the shared text field's look on a native
-            input, because it is also the combobox over Linear's issues,
-            which the shared field does not draw yet. */}
-        <div className="new-task-name" data-matching={String(matching)}>
-          <input
-            ref={field}
-            type="text"
-            className="luke-text-field"
-            role="combobox"
-            aria-label="Task name"
-            aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-            aria-expanded={matching}
-            aria-controls={matching ? listId : undefined}
-            aria-autocomplete={searchesLinear ? "list" : undefined}
-            aria-activedescendant={matching ? `${optionId}-${at}` : undefined}
-            autoComplete="off"
-            placeholder={searchesLinear ? NAME_PLACEHOLDER.LINEAR : NAME_PLACEHOLDER.PLAIN}
-            maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
-            spellCheck
-            value={name}
-            disabled={starting}
-            onChange={(event) => {
-              const typed = event.currentTarget.value;
-              setName(typed);
-              setHighlight(0);
-              setDismissed(false);
-              searchLinear(typed, startsIn);
-            }}
-            onKeyDown={fieldKey}
-          />
-          {/* Note that a press on a row is kept from taking focus, because the
-              field is where the keys are read. */}
-          {matching ? (
-            <div
-              id={listId}
-              className="new-task-matches"
-              role="listbox"
-              aria-label="Linear issues"
-              onMouseDown={(event) => event.preventDefault()}
-            >
-              <div className="menu-heading" aria-hidden="true">
-                Linear issues
-              </div>
-              {matches.map((issue, index) => (
-                <IssueOption
-                  key={issue.id}
-                  id={`${optionId}-${index}`}
-                  issue={issue}
-                  tokens={tokens}
-                  highlighted={index === at}
-                  onHighlight={() => setHighlight(index)}
-                  onPick={() => startIssue(issue)}
-                />
-              ))}
-              <button
-                id={`${optionId}-${matches.length}`}
-                type="button"
-                role="option"
-                tabIndex={-1}
-                className="menu-item"
-                aria-selected={at === matches.length}
-                onMouseMove={() => setHighlight(matches.length)}
-                onClick={startTyped}
-              >
-                <span className="menu-item-glyph">
-                  <ComposeIcon />
-                </span>
-                <span className="task-compose-menu-name">Create task “{name.trim()}”</span>
-                <Shortcut chord={TYPED_CHORD} className="menu-item-hint" />
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <Combobox
+          ref={field}
+          label="Task name"
+          listLabel="Linear issues"
+          keyShortcuts={shortcutAria(CREATE_CHORD)}
+          placeholder={searchesLinear ? NAME_PLACEHOLDER.LINEAR : NAME_PLACEHOLDER.PLAIN}
+          maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
+          spellCheck
+          value={name}
+          disabled={starting}
+          onChange={(typed) => {
+            setName(typed);
+            setHighlight(0);
+            setDismissed(false);
+            searchLinear(typed, startsIn);
+          }}
+          groups={[
+            {
+              label: "Linear issues",
+              options: matches.map((issue) => ({
+                id: issue.id,
+                label: <Highlighted text={issue.title} tokens={tokens} />,
+                icon: <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />,
+                detail:
+                  issue.state === undefined
+                    ? issue.identifier
+                    : `${issue.identifier} · ${issue.state}`,
+              })),
+            },
+            {
+              options: [
+                {
+                  id: TYPED_OPTION,
+                  label: `Create task “${name.trim()}”`,
+                  icon: <ComposeIcon />,
+                  hint: <Shortcut chord={TYPED_CHORD} />,
+                },
+              ],
+            },
+          ]}
+          open={matching}
+          active={at}
+          onActiveChange={setHighlight}
+          onChoose={(index) => {
+            const issue = matches[index];
+            if (issue === undefined) startTyped();
+            else startIssue(issue);
+          }}
+          onEnter={startTyped}
+          onEscape={() => setDismissed(true)}
+        />
         {note === undefined ? null : <ErrorState>{note}</ErrorState>}
         <div className="new-task-actions">
           <RepositoryChip

@@ -7,6 +7,7 @@ import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
+import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
@@ -58,6 +59,7 @@ export const EXAMPLES: readonly Example[] = [
   BUTTONS_EXAMPLE,
   CHIPS_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
+  COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,

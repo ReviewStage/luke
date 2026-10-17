@@ -21,6 +21,7 @@
 /* After the chip's, whose width the field column sets. */
 @import "./components/select/select.css";
 @import "./components/collection-page/collection-page.css";
+@import "./components/combobox/combobox.css";
 @import "./components/confirm-dialog/confirm-dialog.css";
 @import "./components/detail-page/detail-page.css";
 @import "./components/dialog/dialog.css";

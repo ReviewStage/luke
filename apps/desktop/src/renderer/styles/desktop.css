@@ -8633,49 +8633,6 @@ button.automation-run:hover {
   color: var(--text-tertiary);
 }
 
-/* New task's name field and the Linear issues matching it are one well:
-   while issues stand, the field's foot opens onto the list under it, so the
-   list reads as the field's own suggestions rather than a menu over the
-   card. */
-.new-task-name {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.new-task-name[data-matching="true"] .luke-text-field {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-.new-task-matches {
-  display: flex;
-  max-height: 280px; /* off-scale: seven rows and the heading */
-  flex-direction: column;
-  overflow-y: auto;
-  padding: var(--luke-space-4);
-  border: 1px solid var(--luke-color-border-strong);
-  border-top: 0;
-  border-radius: 0 0 var(--luke-control-radius) var(--luke-control-radius);
-  background: var(--luke-color-input);
-}
-
-/* The list's keys stay in the field, so its one highlight is the row the
-   arrows or the pointer stand on, and the pointer's own hover draws nothing. */
-.new-task-matches .menu-item:hover {
-  background: none;
-}
-
-.new-task-matches .menu-item[aria-selected="true"] {
-  background: var(--luke-color-fill-strong);
-}
-
-/* An issue's key and state stand at the row's end, and its title gives way. */
-.new-task-matches .task-compose-menu-detail {
-  margin-left: auto;
-  padding-left: var(--luke-space-12);
-}
-
 /* New task's foot: the repository chip at its start, the answers at its
    end, a common width so a short verb is not a smaller target than Cancel. */
 .new-task-actions {
