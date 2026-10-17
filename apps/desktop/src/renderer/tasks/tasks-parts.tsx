@@ -1,3 +1,4 @@
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   MicrophoneIcon,
@@ -6,7 +7,6 @@ import {
   SpeakerOffIcon,
 } from "@luke/ui";
 import type { CallStatus } from "@luke/ui/tasks-model";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";
 

@@ -7,7 +7,6 @@ import {
   type RecordProductEvent,
 } from "@luke/features/analytics";
 import { ProductEventSender } from "@luke/features/analytics/sender";
-import { macRepositorySchema } from "@luke/features/mac-terminal-wire";
 import {
   carried,
   GATEWAY_EVENT,
@@ -31,14 +30,8 @@ import {
   settingAnalytics,
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
-import {
-  ACTION_RESULT_STATUS,
-  isWireBoolean,
-  type UnparsedWireValue,
-  unparsedWire,
-} from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Cause, Effect, Queue, Result, type Scope } from "effect";
+import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
+import { Cause, Effect, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -422,19 +415,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     }
 
     const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.MAC_REPOSITORIES_READ]: () =>
-        Effect.map(Effect.orDie(store.macRepositories()), (repositories) =>
-          carried({ repositories }),
-        ),
-      [GATEWAY_METHOD.MAC_REPOSITORY_SET]: (params) =>
-        Effect.gen(function* () {
-          const read = readEither(macRepositorySchema)(unparsedWire(params));
-          if (Result.isFailure(read)) {
-            return yield* invalid("a repository names itself and its command or null");
-          }
-          yield* Effect.orDie(store.setMacRepository(read.success));
-          return carried({ repositories: yield* Effect.orDie(store.macRepositories()) });
-        }),
       [GATEWAY_METHOD.SETTINGS_SNAPSHOT]: () =>
         Effect.map(Effect.orDie(store.snapshot()), (snapshot) => ({
           settings: carried(snapshot),

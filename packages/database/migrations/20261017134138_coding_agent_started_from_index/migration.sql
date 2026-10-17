@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "coding_agent_started_from_agent" ON "coding_agent" (("started_from"->>'agentId'));

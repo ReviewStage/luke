@@ -11,6 +11,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/h
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { AgentServersButton } from "./agent-servers";
 
@@ -78,22 +79,18 @@ const TOOLS = new Map<string, readonly IntegrationTool[]>([
 const roots: Root[] = [];
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.INTEGRATIONS_TOOLS
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: {
-                  tools: TOOLS.get(request.payload.connection ?? request.payload.provider) ?? [],
-                },
-              }
-            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-        ),
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.INTEGRATIONS_TOOLS
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                tools: TOOLS.get(request.payload.connection ?? request.payload.provider) ?? [],
+              },
+            }
+          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      ),
   });
 });
 

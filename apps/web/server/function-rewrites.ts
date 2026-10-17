@@ -159,6 +159,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "inbox/attachment",
     query: "id=$1&attachment=$2",
   },
+  { src: "/api/inbox/([^/]+)/messages", route: "inbox/messages", query: "id=$1" },
   { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1" },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },

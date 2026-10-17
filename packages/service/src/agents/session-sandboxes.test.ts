@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer } from "effect";
 import { afterEach, vi } from "vitest";
-import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
+import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
 import { SessionSandboxes, sessionSandboxesLayer } from "./session-sandboxes.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
@@ -11,7 +11,8 @@ import { SandboxUnavailable } from "./vercel-sandbox-api.js";
  * A session's sandboxes stopped through Vercel Sandbox's REST API, as the
  * deployment asks it under its own OIDC token: the sandboxes carrying the
  * session's tag are listed in the token's project, the one up has its
- * running session stopped, one already stopped is left, and a stop Vercel
+ * running session stopped by a POST sent as JSON, which Vercel refuses
+ * with 415 otherwise, one already stopped is left, and a stop Vercel
  * refused fails with its status alone. The token is a synthetic one the
  * environment carries, unexpired, so nothing refreshes it.
  */
@@ -33,6 +34,7 @@ function fixtureToken(): string {
 interface Asked {
   readonly method: string;
   readonly url: URL;
+  readonly contentType: string | null;
 }
 
 /** Vercel answering the list with the sandboxes given and every stop with the status given, keeping what it was asked. */
@@ -42,9 +44,10 @@ function vercel(sandboxes: readonly object[], stopStatus = 200) {
     sessionSandboxesLayer,
     fakeHttpClientLayer((url, init) => {
       const parsed = new URL(url);
-      asked.push({ method: init.method ?? "GET", url: parsed });
+      const contentType = new Headers(init.headers).get("content-type");
+      asked.push({ method: init.method ?? "GET", url: parsed, contentType });
       return parsed.pathname.endsWith("/stop")
-        ? new Response("{}", { status: stopStatus })
+        ? (sandboxStopRefusal(init) ?? new Response("{}", { status: stopStatus }))
         : (sandboxListRefusal(parsed) ?? Response.json({ sandboxes }));
     }),
   );
@@ -79,6 +82,7 @@ it.effect(
       assert.equal(list.url.searchParams.get("project"), PROJECT);
       assert.equal(list.url.searchParams.get("teamId"), TEAM);
       assert.equal(stop.method, "POST");
+      assert.equal(stop.contentType, "application/json");
       assert.equal(stop.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/stop");
       assert.equal(stop.url.searchParams.get("teamId"), TEAM);
     }),
