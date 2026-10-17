@@ -66,6 +66,7 @@ import {
   delegates,
   dockedTodos,
   endLine,
+  endLineContinues,
   endLineReason,
   lineSender,
   macOwnerOf,
@@ -81,6 +82,7 @@ import {
   workerStatusOf,
   workerToolState,
 } from "./coding-agent-model";
+import { ContinueAgent } from "./continue-agent";
 import { CopyMessageAction } from "./copy-message";
 import { ForkedToLine } from "./fork-action";
 import { openReply } from "./fork-model";
@@ -1140,6 +1142,7 @@ function AgentTranscriptView({
   readerId,
   planId,
   replay,
+  endTrail,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
@@ -1181,6 +1184,8 @@ function AgentTranscriptView({
   planId?: string | undefined;
   /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
   replay?: ReplayPlace | undefined;
+  /** What the end line ends on after its words: Continue in new agent, or the agents that continued it (`continue-agent.tsx`). */
+  endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   if (messages.length > 0) {
@@ -1268,6 +1273,7 @@ function AgentTranscriptView({
           ) : (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
+              {endTrail}
             </p>
           )}
           {footer}
@@ -1326,6 +1332,8 @@ function AgentTabView({
   readerId,
   run,
   replay,
+  endTrail,
+  closedRemedy,
 }: {
   agent: CodingAgentSummary;
   /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
@@ -1367,6 +1375,10 @@ function AgentTabView({
   starter?: string | undefined;
   /** The reader's own account id, whose messages the transcript names nobody over, and whose Mac its Mac commands say is theirs. */
   readerId?: string | undefined;
+  /** What a failed turn's end line ends on (`continue-agent.tsx`); none where it ends on its words. */
+  endTrail?: ReactNode;
+  /** What mends the box once it closed for good (`continue-agent.tsx`). */
+  closedRemedy?: ReactNode;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const chatOn = useChatOn();
@@ -1423,6 +1435,7 @@ function AgentTabView({
               ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
               endReason={endLineReason(transcript.failure, starter)}
               onOpenApiKeys={onOpenApiKeys}
+              endTrail={endTrail}
               onRetry={transcript.onRetry}
               footer={
                 showsPublishedRow(agent.status, published) ? (
@@ -1467,6 +1480,7 @@ function AgentTabView({
             keywords={keywords}
             skills={skills}
             replyDoor={replyDoor}
+            closedRemedy={closedRemedy}
           />
         )}
       </footer>
@@ -1584,6 +1598,11 @@ export function AgentTab({
     drawn: (messageId) => messages.some((message) => message.id === messageId),
     gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
   });
+  const starter = teammateStarter(agent.startedBy, control.me);
+  const openAgent =
+    onOpenTarget === undefined
+      ? undefined
+      : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
   return (
     <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
       <AgentTabView
@@ -1613,7 +1632,7 @@ export function AgentTab({
         onOpenApiKeys={control.onOpenApiKeys}
         keywords={control.keywords}
         skills={control.readSkills}
-        starter={teammateStarter(agent.startedBy, control.me)}
+        starter={starter}
         readerId={control.me}
         run={run}
         replay={replayPlace({
@@ -1624,6 +1643,19 @@ export function AgentTab({
           onOpenTarget,
           openGitHub,
         })}
+        endTrail={
+          endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
+            <ContinueAgent agentId={agent.id} control={control} onOpenAgent={openAgent} />
+          ) : undefined
+        }
+        closedRemedy={
+          <ContinueAgent
+            agentId={agent.id}
+            control={control}
+            onOpenAgent={openAgent}
+            carry={{ words: composer.draft, attachments: composer.attachments }}
+          />
+        }
       />
     </MessagePlaceProvider>
   );

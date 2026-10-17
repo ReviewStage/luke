@@ -2971,6 +2971,25 @@ button.pull-request-check:hover {
   margin-bottom: 0.75rem;
 }
 
+/* Where an agent may be continued (`continue-agent.tsx`), at the end of a
+   failed turn's end line or a closed box's note: Continue in new agent, or
+   the chips of the agents that continued it, wrapping as one group. */
+.agent-continue {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-8);
+  vertical-align: middle;
+}
+
+.agent-end-line > .agent-continue {
+  margin-left: var(--space-8);
+}
+
+.agent-continue-note {
+  color: var(--danger-text);
+}
+
 /* A finished turn's line (`working-time.tsx`) breaks between how long it
    worked and when it ended, never inside either. */
 [data-worked] > :is([data-worked-length], time) {
