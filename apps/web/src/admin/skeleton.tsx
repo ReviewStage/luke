@@ -225,7 +225,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <div
           className={
-            shape.plots.length > 1 ? "grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]" : undefined
+            shape.plots.length > 1
+              ? "grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+              : undefined
           }
         >
           {shape.plots.map((plot) => (
