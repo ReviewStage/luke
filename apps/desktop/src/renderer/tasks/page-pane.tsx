@@ -1,4 +1,3 @@
-import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
@@ -11,6 +10,7 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { FindScope } from "../find-in-tab";
 import { SpinnerRegion } from "../spinner";
@@ -22,8 +22,9 @@ import { useLinesLook } from "./file-tab";
 /**
  * page-pane.tsx -- one page an agent wrote for the task, in the side panel: the page itself, drawn at the version chosen, and a bar to step between its versions and reload it.
  *
- * The page is HTML an agent wrote, so it is drawn in a frame of its own
- * scheme (`luke-page:`, served by main under a policy of its own) and
+ * The page is HTML an agent wrote, so it is drawn in a frame from an address
+ * the shell names (`appPlatform().pageFrameUrl`: on the desktop, the
+ * `luke-page:` scheme main serves under a policy of its own) and
  * sandboxed to its scripts alone: no same origin, so it holds an opaque
  * origin with no storage and no reach into this window; no popups, forms,
  * top navigation, or modals; and no permission to delegate. The frame's
@@ -156,11 +157,9 @@ function PageSource({
   if (read.kind === SOURCE_READ.READING) return <SpinnerRegion label="Loading source" />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
-      <div className="side-panel-empty">
-        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          The page's source could not be read.
-        </ErrorState>
-      </div>
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        The page's source could not be read.
+      </ErrorState>
     );
   }
   return (
@@ -305,7 +304,7 @@ export function PagePane({
             key={reloads}
             className="page-view-frame"
             title={page.title}
-            src={pageFrameUrl({ taskId: taskId, pageId: page.id, version })}
+            src={appPlatform().pageFrameUrl({ taskId: taskId, pageId: page.id, version })}
             sandbox={PAGE_SANDBOX}
             allow=""
             referrerPolicy="no-referrer"

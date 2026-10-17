@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -16,6 +16,8 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
@@ -198,14 +200,10 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
+  fakeAppPlatform(QUIET_PANEL);
 });
 
 afterEach(() => {
@@ -332,8 +330,9 @@ test("Appearance draws every diff setting in a Diffs group of its own, under the
         "Diffs",
     ) ?? assert.fail("a Diffs group stands");
   assert.deepEqual(
-    [...group.querySelectorAll(".settings-copy strong")].map(
-      (name) => name.firstChild?.textContent,
+    [...group.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
+      // A pop-up's name ends with the value it names, which is not the row's.
+      (control) => control.getAttribute("aria-label")?.split(": ")[0],
     ),
     [
       "Line numbers",
@@ -406,13 +405,10 @@ function pressEscape(composing = false): void {
 /** Counts the searches the window reports opened. */
 function countSearchOpens() {
   let opens = 0;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      recordSurfaceEvent: (event: string) => {
-        if (event === PRODUCT_SURFACE_EVENT.SEARCH_OPEN) opens += 1;
-      },
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    recordSurfaceEvent: (event: string) => {
+      if (event === PRODUCT_SURFACE_EVENT.SEARCH_OPEN) opens += 1;
     },
   });
   return () => opens;
@@ -511,18 +507,15 @@ test("the Integrations page's search is cleared when another page is turned to",
 
 test("the plan template's version history keeps a call's card at the foot of its versions, as Settings' page list held it, and its way back asks for the call's plan", async () => {
   const sent: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: { kind: string }) => {
-        sent.push(request.kind);
-        return Promise.resolve(
-          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        );
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: { kind: string }) => {
+      sent.push(request.kind);
+      return Promise.resolve(
+        request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      );
     },
   });
   // The card's presses sent as `App` sends them, over the bridge.
@@ -565,17 +558,7 @@ test("the plan template's version history keeps a call's card at the foot of its
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   const row = pageButtons(page).find((each) => each.textContent === "Workspace");
   assert.ok(row, "the Workspace page is listed");

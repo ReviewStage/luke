@@ -54,6 +54,7 @@ import {
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
@@ -96,6 +97,7 @@ import {
 } from "../tasks/transcript-copy";
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
+import { OpenHereProvider } from "../tasks/use-open-link";
 import {
   type DrawnTabs,
   drawsChanges,
@@ -1314,7 +1316,7 @@ function TabContent({
   /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
-  const { act, tell } = useAct();
+  const { act } = useAct();
   if (isMacTerminalTab(tab)) {
     return <MacTerminalTab key={tab.macTerminal} tab={tab} />;
   }
@@ -1349,17 +1351,19 @@ function TabContent({
     );
   }
   if (isChangesTab(tab)) {
+    // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
-      <AgentPullRequestTab
-        key={tab.changes}
-        agentId={tab.changes}
-        control={agents}
-        shown={shown}
-        repository={repository}
-        tree={fileTree}
-        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
-        onView={(view) => onPullRequestView(tab.changes, view)}
-      />
+      <OpenHereProvider key={tab.changes} value={undefined}>
+        <AgentPullRequestTab
+          agentId={tab.changes}
+          control={agents}
+          shown={shown}
+          repository={repository}
+          tree={fileTree}
+          view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
+          onView={(view) => onPullRequestView(tab.changes, view)}
+        />
+      </OpenHereProvider>
     );
   }
   if (isFileTab(tab)) {
@@ -1381,7 +1385,7 @@ function TabContent({
           readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId: taskId, ...window })}
           readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
           readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
-          openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+          openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
           onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}

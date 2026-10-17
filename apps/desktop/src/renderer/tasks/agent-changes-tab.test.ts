@@ -16,10 +16,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { codingAgentsControl } from "#testing/tasks-control";
+import { appBridge } from "../app-bridge";
 import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
 
 /**
@@ -93,30 +95,27 @@ function handSettings(settings: Partial<AppSettingsView> = {}): void {
   let view: AppSettingsView = Object.assign(settingsView(), settings);
   const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
   const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      requestAppState: () => Promise.resolve(snapshot()),
-      onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.SETTING_UPDATE) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.REFUSED,
-            reason: "Not in this test.",
-          });
-        }
-        view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
-        const next = snapshot();
-        for (const listener of listeners) listener(next);
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(snapshot()),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.SETTING_UPDATE) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: next.settings },
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: "Not in this test.",
         });
-      },
+      }
+      view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
+      const next = snapshot();
+      for (const listener of listeners) listener(next);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(view) },
+      });
     },
   });
 }
@@ -144,10 +143,7 @@ beforeEach(() => {
     const width = this.classList.contains("diff-view") ? boxWidth : 0;
     return new DOMRect(0, 0, width, 0);
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({});
   handSettings();
 });
 
@@ -329,16 +325,13 @@ test("a setting is drawn as written while its write is out, so a press reads the
 /** Holds every settings write unanswered, and the window's document unchanged, until a test answers one. */
 function holdSettingWrites(): Array<(outcome: ActOutcome) => void> {
   const held: Array<(outcome: ActOutcome) => void> = [];
-  const before = window.luke.act;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) =>
-        request.kind === ACT_KIND.SETTING_UPDATE
-          ? new Promise((resolve) => held.push(resolve))
-          : before(request),
-    },
+  const before = appBridge().act;
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) =>
+      request.kind === ACT_KIND.SETTING_UPDATE
+        ? new Promise((resolve) => held.push(resolve))
+        : before(request),
   });
   return held;
 }

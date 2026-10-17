@@ -10,8 +10,10 @@ import { type ReactNode, useId } from "react";
  * something, as a form field's does. The row is its own inline-size
  * container, so where its controls stand is decided by the row's width and
  * not the window's: under 380px they drop below the words to the row's end.
- * The row owns its padding and the room between its parts; its edges and
- * the rules between rows are its section's.
+ * The row owns its padding, the least height its profile gives a row (the
+ * window's rows stand even whether or not they carry a description), and the
+ * room between its parts; its edges and the rules between rows are its
+ * section's.
  */
 
 /** What a row hands the controls it holds. */

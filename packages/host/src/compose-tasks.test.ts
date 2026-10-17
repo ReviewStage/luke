@@ -75,6 +75,7 @@ import {
 } from "@luke/gateway";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
@@ -856,7 +857,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           yield* standing.closing ?? Effect.void;
           standing.about = undefined;
         }),
-    });
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = tasks.methods[method];
       assert.ok(handler, `no handler for ${method}`);
@@ -969,6 +970,20 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
     assert.equal(last()?.activeTaskId, BILLING);
     assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: billing });
+  }),
+);
+
+it.effect("a refresh that reads what the view already holds tells the window nothing", () =>
+  Effect.gen(function* () {
+    const billing = task(BILLING, "Billing export", "# Billing export", 20);
+    const { call, told } = yield* subject(fakeService([billing]));
+
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    const firstRead = told.length;
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+
+    assert.ok(firstRead > 0, "the first read is told");
+    assert.equal(told.length, firstRead);
   }),
 );
 
