@@ -17,6 +17,10 @@ import { type ReactNode, useId } from "react";
  * which is the site's marketing display style and named apart from it; the
  * lead under either is the landing's. Sections follow at one rhythm, each
  * under an `h2` in the section role. The page takes no class or style.
+ *
+ * The content is on the site's reading column, or on a wider one for a page
+ * that sets a rail beside its words, as the changelog does; the banner and
+ * the footer keep to the reading column either way.
  */
 
 /** How a page's title is set: the profile's page title, or the landing's display hero. */
@@ -26,6 +30,14 @@ export const PUBLIC_TITLE = {
 } as const;
 
 export type PublicTitle = (typeof PUBLIC_TITLE)[keyof typeof PUBLIC_TITLE];
+
+/** How wide a page's content runs: the site's reading column, or wide enough for a rail beside it. */
+export const PUBLIC_PAGE_WIDTH = {
+  COLUMN: "column",
+  WIDE: "wide",
+} as const;
+
+export type PublicPageWidth = (typeof PUBLIC_PAGE_WIDTH)[keyof typeof PUBLIC_PAGE_WIDTH];
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -58,10 +70,8 @@ export function PublicSection({
 /**
  * The site's banner, standing still at the top of the document's scroll:
  * `children` on the page's column, over a wash of the ground across the page.
- * A page drawn on PublicPage hands its banner to it; a page that still draws
- * its own main stands this above it, so both start on one edge.
  */
-export function PublicBanner({ children }: { children: ReactNode }): React.JSX.Element {
+function PublicBanner({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <header className="luke-public-page-banner">
       <div className="luke-public-page-column luke-public-page-banner-column">{children}</div>
@@ -70,7 +80,7 @@ export function PublicBanner({ children }: { children: ReactNode }): React.JSX.E
 }
 
 /** The site's footer: `children` on the page's column, under a rule across the page. */
-export function PublicFooter({ children }: { children: ReactNode }): React.JSX.Element {
+function PublicFooter({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <footer className="luke-public-page-footer">
       <div className="luke-public-page-column luke-public-page-footer-column">{children}</div>
@@ -84,6 +94,7 @@ export function PublicPage({
   footer,
   title,
   titleStyle = PUBLIC_TITLE.PAGE,
+  width = PUBLIC_PAGE_WIDTH.COLUMN,
   lead,
   children,
 }: {
@@ -94,6 +105,7 @@ export function PublicPage({
   /** What the page is, as its `h1`; a page whose content brings its own leaves it out. */
   title?: ReactNode;
   titleStyle?: PublicTitle;
+  width?: PublicPageWidth;
   /** A sentence or two under the title on what the page is for, or opening a page whose content brings its title. */
   lead?: ReactNode;
   /** The page's sections, or the content of a page that is one; a title alone may leave it out. */
@@ -102,7 +114,7 @@ export function PublicPage({
   return (
     <div className="luke-public-page">
       {said(banner) ? <PublicBanner>{banner}</PublicBanner> : null}
-      <main className="luke-public-page-column luke-public-page-main">
+      <main className="luke-public-page-column luke-public-page-main" data-width={width}>
         {said(title) || said(lead) ? (
           <div className="luke-public-page-intro">
             {said(title) ? (

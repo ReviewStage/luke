@@ -429,6 +429,14 @@ body {
   font-size: var(--luke-type-caption-size);
 }
 
+/* A release in the wide page's example: its version and date on a rail
+   beside its notes, as the changelog lays them. */
+.catalog-public-release {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: var(--luke-space-40);
+}
+
 /* Luke's face at the size the OAuth cards open with. */
 .catalog-auth-mark {
   display: block;
