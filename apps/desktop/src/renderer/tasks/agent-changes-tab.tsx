@@ -380,11 +380,9 @@ export function AgentChangesTab({
   }
   if ("failure" in answer) {
     return (
-      <div className="side-panel-empty">
-        <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {CHANGES_WORDS.FAILED}
-        </ErrorState>
-      </div>
+      <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {CHANGES_WORDS.FAILED}
+      </ErrorState>
     );
   }
   if (pullRequest === null) {

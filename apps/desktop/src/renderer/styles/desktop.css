@@ -2441,13 +2441,6 @@ ul.actor-stack {
   gap: var(--space-4) var(--space-8);
 }
 
-/* Factory's scroller runs to the toolbar's edge, so its failure (`@luke/ui`'s
-   `ErrorState`, centred) stands off it as Automations' does by its
-   scroller's padding. */
-.factory-scroll > .luke-error-state[data-placement="centred"] {
-  margin-top: var(--space-16);
-}
-
 .failure-note-remedy {
   height: 24px;
   padding: 0 var(--space-8);
@@ -4698,10 +4691,6 @@ button.integration-tool-head:hover,
   min-height: 0;
   flex: 1;
   flex-direction: column;
-}
-
-.agent-page-note {
-  padding: var(--section-gap) var(--space-12);
 }
 
 .inbox-view-items {

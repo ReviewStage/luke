@@ -1268,13 +1268,16 @@ function AgentTranscriptView({
       </Conversation>
     );
   }
+  if (failed) {
+    return (
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {TRANSCRIPT_FAILED_LINE}
+      </ErrorState>
+    );
+  }
   return (
     <ConversationEmptyState>
-      {failed ? (
-        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {TRANSCRIPT_FAILED_LINE}
-        </ErrorState>
-      ) : reading && ended === undefined ? (
+      {reading && ended === undefined ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
         <p className="m-0" data-ended={ended === undefined ? undefined : ""}>
