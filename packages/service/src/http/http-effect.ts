@@ -16,6 +16,13 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * tagged error encodes beside it would be a byte those clients never asked for.
  */
 
+/**
+ * What a hosted answer is cached under unless its route says otherwise: an
+ * answer is one account's data, so neither a browser nor a shared cache on the
+ * way may keep a copy, which matters once a browser reads it on a cookie.
+ */
+const HOSTED_DEFAULT_CACHE_CONTROL = "private, no-store";
+
 /** The status each refusal is answered with, which is a function of the refusal alone. */
 const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: HOSTED_HTTP_STATUS.UNAUTHORIZED,
@@ -212,13 +219,6 @@ export const effectPassthrough = /* @__PURE__ */ Effect.fn("web/effectPassthroug
     ? bodylessAnswer(answer)
     : HttpServerResponse.raw(answer);
 });
-
-/**
- * What a hosted answer is cached under unless its route says otherwise: an
- * answer is one account's data, so neither a browser nor a shared cache on the
- * way may keep a copy, which matters once a browser reads it on a cookie.
- */
-const HOSTED_DEFAULT_CACHE_CONTROL = "private, no-store";
 
 /** What a route may set on its answer beside the body; a route whose answer is deliberately cacheable names its own `cacheControl`. */
 export interface HostedJsonOptions {
