@@ -175,6 +175,25 @@ test("acts too many for a phone's header wrap under the title, every one inside 
   }
 });
 
+test("on a phone, an act leaves a long title 240px and wraps under it rather than beside it", async () => {
+  await mount(
+    frame(
+      320,
+      createElement(CollectionPage, {
+        title: "Automations for the platform workspace",
+        actions: createElement(Button, null, "New automation"),
+        state: COLLECTION_STATE.EMPTY,
+        loadingLabel: "Reading automations",
+        empty: createElement("p", null, "No automations yet"),
+      }),
+    ),
+  );
+  const heading = box(page.getByRole("heading", { level: 1 }).element());
+  const act = box(page.getByRole("button", { name: "New automation" }).element());
+  expect(heading.width).toBeGreaterThanOrEqual(240);
+  expect(act.top).toBeGreaterThanOrEqual(heading.bottom);
+});
+
 test("filters taller than half a short pane scroll themselves, and the content keeps the rest", async () => {
   const { container } = await mount(
     createElement(
