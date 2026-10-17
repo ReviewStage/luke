@@ -202,10 +202,12 @@ function AcceptInvitation(): React.JSX.Element {
   const [accepting, setAccepting] = useState(false);
   const session = authClient.useSession();
   const signedIn = session.data?.user.email;
+  const verified = session.data?.user.emailVerified;
 
-  // Note that the invitation is read again only when who is signed in
-  // changes, not whenever the session is: accepting makes Better Auth read the
-  // session again, and a read of an invitation just accepted says it is spent.
+  // Note that the invitation is read again only when who is signed in, or
+  // whether their address is verified, changes, not whenever the session is:
+  // accepting makes Better Auth read the session again, and a read of an
+  // invitation just accepted says it is spent.
   useEffect(() => {
     if (session.isPending) return;
     if (signedIn === undefined) {
@@ -220,7 +222,7 @@ function AcceptInvitation(): React.JSX.Element {
       return;
     }
     void readInvitation(query, signedIn).then(setView);
-  }, [query, session.isPending, signedIn]);
+  }, [query, session.isPending, signedIn, verified]);
 
   const join = async (offer: { id: string; name: string }) => {
     if (accepting) return;

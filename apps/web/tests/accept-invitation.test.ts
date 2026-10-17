@@ -62,6 +62,14 @@ const SIGNED_IN: Answer = {
   },
 };
 
+const SIGNED_IN_UNVERIFIED: Answer = {
+  status: 200,
+  body: {
+    session: { id: "session-1", userId: "user-1", expiresAt: "2099-01-01T00:00:00.000Z" },
+    user: { id: "user-1", email: INVITED, name: "Ada", emailVerified: false },
+  },
+};
+
 const SIGNED_OUT: Answer = { status: 200, body: null };
 
 function offerRead(answer: InvitationOfferAnswer): Answer {
@@ -228,4 +236,27 @@ test("a sign-in asked for again, after a session came and went, carries no earli
   await titled(page, "Sign in to accept your invitation");
   expect(page.querySelector('[role="alert"]')?.textContent).toBe("");
   expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);
+});
+
+test("an address verified while the page stood open makes the invitation acceptable", async () => {
+  let session = SIGNED_IN_UNVERIFIED;
+  let offer = offerRead({ refused: INVITATION_OFFER_REFUSAL.UNVERIFIED });
+  const page = await openPage(
+    new Map([
+      ["/api/auth/get-session", () => session],
+      [HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER, () => offer],
+    ]),
+  );
+  await titled(page, "Your address isn't verified");
+
+  // Note that Better Auth refetches the session when the tab is shown again,
+  // but not within seconds of its last read, so the clock moves past that.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  session = SIGNED_IN;
+  offer = VALID;
+  vi.setSystemTime(Date.now() + 60_000);
+  await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+
+  await titled(page, "Join Atlas");
+  expect(buttonNames(page)).toEqual(["Accept invitation"]);
 });
