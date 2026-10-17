@@ -11,12 +11,11 @@ import {
   type SettingsRowsInput,
 } from "@luke/settings";
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
-import { EmptyState } from "@luke/ui";
+import { EmptyState, SettingsSection, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { FlaskConicalIcon } from "lucide-react";
 import { useAct } from "../act";
 import { useOpenFeedback } from "../open-feedback";
 import { SchemaSettingRows } from "./schema-rows";
-import { SettingsGroup } from "./settings-group";
 import { SwitchRow } from "./switch-row";
 import type { SettingsWrites } from "./writes";
 
@@ -39,6 +38,10 @@ import type { SettingsWrites } from "./writes";
  * the schema says they stand: so they appear as the switch is turned on, and
  * read as that experiment's rather than the page's. The card wears no title,
  * since its switch already names the experiment.
+ *
+ * Each card is `@luke/ui`'s `SettingsSection` and the signed-out note its
+ * caption `Text`; Send feedback stays a press among the row's detail words,
+ * drawn as the links beside such words are.
  */
 
 /** What the empty page says. */
@@ -95,7 +98,13 @@ export function ExperimentalPage({
   view?: SettingsRowsInput | undefined;
   writes: SettingsWrites;
 }): React.JSX.Element {
-  if (!signedIn) return <p className="settings-note">{SIGN_IN_NOTE}</p>;
+  if (!signedIn) {
+    return (
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        {SIGN_IN_NOTE}
+      </Text>
+    );
+  }
   if (entries.length === 0) {
     return <EmptyState icon={<FlaskConicalIcon />}>{NO_EXPERIMENTS_LINE}</EmptyState>;
   }
@@ -104,7 +113,7 @@ export function ExperimentalPage({
       {entries.map((entry) => {
         const section = sectionOf(entry.key);
         return (
-          <SettingsGroup key={entry.key}>
+          <SettingsSection key={entry.key}>
             <ExperimentRow entry={entry} on={experimentOn(experiments, entry.key)} />
             {section !== undefined && view !== undefined ? (
               <SchemaSettingRows
@@ -114,7 +123,7 @@ export function ExperimentalPage({
                 writes={writes}
               />
             ) : null}
-          </SettingsGroup>
+          </SettingsSection>
         );
       })}
     </>

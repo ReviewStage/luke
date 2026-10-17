@@ -216,5 +216,5 @@ test("with Video calls off, no avatar is offered", () => {
   });
 
   assert.equal(page.querySelector('[aria-label^="Avatar"]'), null);
-  assert.equal(page.querySelectorAll(".settings-card").length, EXPERIMENTS.length);
+  assert.equal(page.querySelectorAll("section").length, EXPERIMENTS.length);
 });
