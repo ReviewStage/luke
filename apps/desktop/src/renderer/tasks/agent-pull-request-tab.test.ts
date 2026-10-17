@@ -1375,13 +1375,13 @@ test("a draft's pill offers Ready for review, which is asked of the service for 
     ),
   );
   assert.equal(pill(tab).textContent, "Draft");
-  assert.deepEqual(offered(tab), ["Ready for review"]);
+  assert.deepEqual(offered(tab), ["Ready for review", "Close pull request"]);
 
   await pressAction(tab, "Ready for review");
 
   assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW }]]);
   assert.equal(pill(tab).textContent, "Open");
-  assert.deepEqual(offered(tab), ["Convert to draft"]);
+  assert.deepEqual(offered(tab), ["Convert to draft", "Close pull request"]);
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
 });
 
@@ -1641,4 +1641,94 @@ test("a merge asked about merges the head it was asked about, though a read land
       { action: PULL_REQUEST_ACTION.MERGE, method: MERGE_METHOD.SQUASH, headSha: "c0ffee1" },
     ],
   ]);
+});
+
+test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {
+  const open = await draw(controlAnswering());
+  await pressAction(open, "Close pull request");
+  act(() => root?.unmount());
+  root = undefined;
+  const closed = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.CLOSED } }),
+    }),
+  );
+  assert.deepEqual(offered(closed), ["Reopen pull request"]);
+  await pressAction(closed, "Reopen pull request");
+
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.REOPEN }],
+  ]);
+});
+
+/** The title's field, opened by its pencil. */
+function editTitle(tab: HTMLElement): HTMLInputElement {
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('[aria-label="Edit title"]') ??
+      assert.fail("the title has a pencil")
+    ).click(),
+  );
+  return (
+    tab.querySelector<HTMLInputElement>('[aria-label="Pull request title"]') ??
+    assert.fail("the pencil opens a field")
+  );
+}
+
+/** Words typed into a field, as React hears them. */
+function type(field: HTMLInputElement, words: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** A key pressed in a field, while an input method composes a word where `composing` says. */
+async function key(field: HTMLInputElement, name: string, composing = false): Promise<void> {
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, bubbles: true, isComposing: composing }),
+    );
+  });
+  await settle();
+}
+
+test("the title is edited in place: Enter keeps new words trimmed, and Escape, or words unchanged, sends nothing", async () => {
+  const tab = await draw(controlAnswering());
+  const escaped = editTitle(tab);
+  assert.equal(document.activeElement, escaped, "the field takes the keys as it opens");
+  type(escaped, "Something else");
+  await key(escaped, "Enter", true);
+  await key(escaped, "Escape", true);
+  assert.equal(escaped.isConnected, true, "keys an input method takes leave the field as it is");
+  const heard: string[] = [];
+  const hear = (event: KeyboardEvent) => heard.push(event.key);
+  window.addEventListener("keydown", hear);
+  await key(escaped, "Escape");
+  window.removeEventListener("keydown", hear);
+  assert.equal(tab.querySelector('[aria-label="Pull request title"]'), null);
+  assert.deepEqual(heard, [], "the field's own Escape never reaches the window");
+
+  const unchanged = editTitle(tab);
+  assert.equal(unchanged.value, PULL_REQUEST.title);
+  await key(unchanged, "Enter");
+  assert.deepEqual(changes, [], "neither Escape nor the same words change anything");
+
+  const renamed = editTitle(tab);
+  type(renamed, "  Expire invitations after a week  ");
+  await key(renamed, "Enter");
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      { action: PULL_REQUEST_ACTION.EDIT_TITLE, title: "Expire invitations after a week" },
+    ],
+  ]);
+  assert.equal(
+    tab.querySelector('[aria-label="Pull request title"]'),
+    null,
+    "the field closes once GitHub answered",
+  );
 });
