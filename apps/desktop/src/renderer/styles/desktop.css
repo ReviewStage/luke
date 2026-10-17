@@ -864,6 +864,13 @@ button.sidebar-section-head-name:hover {
   line-height: 1.45;
 }
 
+/* The task list's failure is a row of the section under Tasks' head: its
+   glyph where a row's glyph stands, and Retry at the end where the head's
+   own buttons stand, so Retry's glyph stands under View options'. */
+.sidebar-failure {
+  margin-inline-end: var(--luke-space-4);
+}
+
 /* The plans while the list is first read: each row a row's room around
    one block in the name's type, as far apart as the rows, so the rows land
    where the blocks stood. */

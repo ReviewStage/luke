@@ -1726,7 +1726,7 @@ function SidebarColumn({
             </p>
           ) : null}
           {tasks.listFailed ? (
-            <div className="sidebar-note">
+            <div className="sidebar-note sidebar-failure">
               <ErrorState onRetry={tasks.onRetryList}>Your tasks could not be read.</ErrorState>
             </div>
           ) : null}
