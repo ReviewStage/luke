@@ -9,7 +9,7 @@ import { UsageChart } from "../charts/usage-chart";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, RefreshFailureNotice, WindowSwitcher } from "../chrome/controls";
 import { RetentionNote, TopAccountsNote } from "../chrome/notes";
-import { PageHeader, type ViewerAccount } from "../chrome/page-header";
+import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { METRICS_PATH, windowedReadPath } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
@@ -148,19 +148,17 @@ export function DashboardScreen({
       const db = metrics.systemHealth.database;
 
       return frame(
-        <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
-          <PageHeader
-            title="Dashboard"
-            account={account}
-            onSignOut={signOut}
-            controls={
-              <>
-                <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-                <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-              </>
-            }
-          />
-
+        <AdminPage
+          title="Dashboard"
+          account={account}
+          onSignOut={signOut}
+          controls={
+            <>
+              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            </>
+          }
+        >
           <RefreshFailureNotice
             failure={state.refreshFailure}
             refreshing={refreshing}
@@ -290,7 +288,7 @@ export function DashboardScreen({
               </div>
             </div>
           </div>
-        </main>,
+        </AdminPage>,
       );
     }
   }
