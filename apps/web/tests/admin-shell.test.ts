@@ -114,16 +114,17 @@ test("the account menu opens on its avatar, and Escape or a press outside closes
   expect(trigger.getAttribute("aria-expanded")).toBe("true");
 
   await act(async () => {
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    signOut?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
   expect(document.activeElement).toBe(trigger);
 
   await act(async () => {
     trigger.click();
   });
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
   await act(async () => {
     document.querySelector("main h1")?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
   });
-  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
