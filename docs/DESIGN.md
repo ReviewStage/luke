@@ -150,6 +150,10 @@ Text that communicates a label, status, count, or instruction must meet WCAG
 AA contrast at its rendered size. Decorative marks and disabled controls may
 sit below that threshold only when their meaning is available elsewhere.
 
+Words the window draws are selectable, so any of them can be copied; a
+control's words are not, since a control is pressed rather than read
+(`base.css`). A rule that takes selection away from words says why.
+
 Every pointer action has a keyboard path and an accessible name. Tab lists use
 one tab stop and Left/Right/Home/End navigation. A control that floats over a
 thumbnail keeps at least a 24px target even when its glyph is smaller, and

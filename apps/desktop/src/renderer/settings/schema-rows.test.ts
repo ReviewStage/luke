@@ -8,6 +8,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { SchemaSettingRows } from "./schema-rows";
 import type { SettingsWrites } from "./writes";
 
@@ -49,7 +50,12 @@ function mount(): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const view = { settings: settingsView(), voiceControlsDrawn: false, accountDrawn: true };
+  const view = {
+    settings: settingsView(),
+    voiceControlsDrawn: false,
+    accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
+  };
   act(() =>
     root.render(createElement(SchemaSettingRows, { page: SETTINGS_PAGE.APPEARANCE, view, writes })),
   );

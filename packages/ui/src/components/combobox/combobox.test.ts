@@ -206,3 +206,39 @@ test("a press on an option chooses it and keeps the caret in the field; the poin
   assert.equal(mousedown.defaultPrevented, true);
   assert.deepEqual(chosen, ["Apricot"]);
 });
+
+test("an Escape an input method is composing with is kept from what stands behind even with the list shut", () => {
+  const { field, escapedPast } = mount();
+  type(field(), "kiwi");
+
+  press(field(), { key: "Escape", keyCode: 229 });
+
+  assert.equal(field().getAttribute("aria-expanded"), "false");
+  assert.equal(escapedPast.length, 0);
+});
+
+/** Lays `element` out as the browser would, which jsdom does not. */
+function layOut(element: HTMLElement, box: Record<string, number>): void {
+  for (const [name, value] of Object.entries(box)) {
+    Object.defineProperty(element, name, { configurable: true, value });
+  }
+}
+
+test("the list scrolls itself to keep the active option in view as the keys move it", () => {
+  const { field } = mount();
+  type(field(), "a");
+  const list = document.querySelector<HTMLElement>('[role="listbox"]') ?? assert.fail("the list");
+  layOut(list, { clientHeight: 32 });
+  for (const [index, option] of [
+    ...list.querySelectorAll<HTMLElement>('[role="option"]'),
+  ].entries()) {
+    layOut(option, { offsetTop: index * 32, offsetHeight: 32 });
+  }
+
+  press(field(), { key: "ArrowDown" });
+  const down = list.scrollTop;
+  press(field(), { key: "Home" });
+
+  assert.equal(down, 32);
+  assert.equal(list.scrollTop, 0);
+});

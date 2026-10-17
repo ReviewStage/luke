@@ -3,20 +3,16 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { Button, IconButton } from "./button.js";
+import { BUTTON_VARIANT, Button, ButtonLink, IconButton } from "./button.js";
 
 /**
- * button.test.ts -- a button that is not tabbable is left out of the tab
- * order, yet takes the focus a roving group hands it and is pressed as any
- * other; an ordinary button stays a Tab stop. A button that keeps focus
- * leaves it on the field that held it when a pointer presses it.
+ * button.test.ts -- a ButtonLink is a link a reader finds by its words,
+ * going where its address says, and its press is heard before the browser
+ * follows it. A button that is not tabbable is left out of the tab order,
+ * yet takes the focus a roving group hands it and is pressed as any other;
+ * an ordinary button stays a Tab stop. A button that keeps focus leaves it
+ * on the field that held it when a pointer presses it.
  */
-
-declare global {
-  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
-}
-
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
@@ -25,8 +21,8 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a container in the document and hands the container back. */
-function draw(element: React.ReactElement): HTMLElement {
+/** Draws `element` into a fresh container on the page. */
+function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -35,18 +31,45 @@ function draw(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** The button `container` holds, named `name`. */
-function buttonNamed(container: HTMLElement, name: string): HTMLButtonElement {
-  const button = [...container.querySelectorAll("button")].find(
-    (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
+test("a ButtonLink is a link named by its words, going to its address", () => {
+  const container = mount(
+    createElement(ButtonLink, {
+      href: "https://example.com/luke.dmg",
+      variant: BUTTON_VARIANT.PRIMARY,
+      icon: createElement("svg", { "aria-hidden": true }),
+      children: "Download for macOS",
+    }),
   );
-  if (button === undefined) throw new Error(`no button named ${name}`);
-  return button;
-}
+
+  const links = Array.from(container.querySelectorAll("a"));
+  expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+    ["Download for macOS", "https://example.com/luke.dmg"],
+  ]);
+  expect(container.querySelector("button")).toBeNull();
+});
+
+test("a press on a ButtonLink is heard, and the link is still followed", () => {
+  const presses: boolean[] = [];
+  const container = mount(
+    createElement(ButtonLink, {
+      href: "tryluke://tryluke.dev/acme",
+      onClick: (event) => presses.push(event.defaultPrevented),
+      children: "Open in Luke",
+    }),
+  );
+  const link = container.querySelector("a");
+  expect(link).not.toBeNull();
+  // Note that jsdom cannot follow a link, so the page stops it once the press has bubbled past the component.
+  document.addEventListener("click", (event) => event.preventDefault(), { once: true });
+
+  act(() => link?.click());
+
+  expect(presses).toEqual([false]);
+});
 
 test("a button that is not tabbable is skipped by Tab, yet takes the focus handed to it and its press", () => {
   const pressed: string[] = [];
-  const container = draw(
+  const container = mount(
     createElement(
       "div",
       null,
@@ -59,21 +82,20 @@ test("a button that is not tabbable is skipped by Tab, yet takes the focus hande
       }),
     ),
   );
-  const save = buttonNamed(container, "Save");
-  const more = buttonNamed(container, "Section actions");
+  const [save, more] = Array.from(container.querySelectorAll("button"));
 
-  expect(save.tabIndex).toBe(0);
-  expect(more.tabIndex).toBe(-1);
+  expect(save?.tabIndex).toBe(0);
+  expect(more?.tabIndex).toBe(-1);
 
-  act(() => more.focus());
+  act(() => more?.focus());
   expect(document.activeElement).toBe(more);
-  act(() => more.click());
+  act(() => more?.click());
   expect(pressed).toEqual(["Section actions"]);
 });
 
 test("a button that keeps focus, pressed with the pointer, leaves the focus on the field and is pressed", () => {
   const pressed: string[] = [];
-  const container = draw(
+  const container = mount(
     createElement(
       "div",
       null,
@@ -88,7 +110,8 @@ test("a button that keeps focus, pressed with the pointer, leaves the focus on t
     ),
   );
   const field = container.querySelector("input");
-  if (field === null) throw new Error("no field");
+  const [back, connect] = Array.from(container.querySelectorAll("button"));
+  if (field === null || back === undefined || connect === undefined) throw new Error("not drawn");
   act(() => field.focus());
 
   // Note that jsdom moves no focus on a mousedown, so the browser's move is read as the press's default action.
@@ -101,9 +124,9 @@ test("a button that keeps focus, pressed with the pointer, leaves the focus on t
     });
   };
 
-  press(buttonNamed(container, "Back"));
+  press(back);
   expect(document.activeElement).toBe(field);
-  press(buttonNamed(container, "Connect"));
-  expect(document.activeElement).toBe(buttonNamed(container, "Connect"));
+  press(connect);
+  expect(document.activeElement).toBe(connect);
   expect(pressed).toEqual(["Back", "Connect"]);
 });

@@ -25,12 +25,19 @@ import { type ReactNode, useId } from "react";
  * popover, already insets it. Unlike a card's row it does not stack under
  * 380px: a popover is narrower than that throughout, so its controls stay
  * beside its words and wrap below them only where they cannot fit at all.
+ *
+ * A list row (`SETTINGS_ROW_DENSITY.LIST`) is a card's row read rather than
+ * set, a line of a reference list such as the window's keyboard shortcuts:
+ * padded at the card's inline inset, ruled, and stacking under 380px as a
+ * card's row is, but at a list's tighter block inset and least height and
+ * with its label at body weight.
  */
 
-/** How a row stands: padded in a section's card, or bare inside a surface that insets it. */
+/** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
 export const SETTINGS_ROW_DENSITY = {
   CARD: "card",
   COMPACT: "compact",
+  LIST: "list",
 } as const;
 
 export type SettingsRowDensity = (typeof SETTINGS_ROW_DENSITY)[keyof typeof SETTINGS_ROW_DENSITY];

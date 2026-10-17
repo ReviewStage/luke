@@ -1,7 +1,11 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { settleEndedSessionTurn } from "@luke/database/models/abandoned-turns";
 import {
   type CodingAgent,
+  type CodingAgentLatestTurn,
   dispatchMentioningServers,
+  latestTurnsOfReached,
+  RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
@@ -72,7 +76,13 @@ import { codingAgentStatusOf } from "./status.js";
  * take no message, so a send to one is refused before eve is asked; a turn
  * already running when the task was archived runs on to its end. An agent
  * archived on its own takes none either, and is refused as one that names
- * nothing, since every list leaves it out until it is brought back.
+ * nothing, since every list leaves it out until it is brought back. A
+ * session eve answers it no longer runs has ended for good, and nothing
+ * will end the turn it was running, so that turn, as read before eve was
+ * asked, is settled failed for its session's end
+ * (`@luke/database/models/abandoned-turns`'s `settleEndedSessionTurn`):
+ * the agent then reads as failed, idle for an archive or a Stop, rather
+ * than running until the sweep's day-long bound.
  */
 
 /**
@@ -118,6 +128,43 @@ const unstartedRefusal = (agent: CodingAgent) =>
     CODING_AGENT_STATUS.FAILED
       ? HOSTED_REFUSAL.AGENT_RETIRED
       : HOSTED_REFUSAL.AGENT_NOT_READY,
+  );
+
+/** The turn a refusal as ended for good settles: the newest, where it still stood queued or running before eve was asked; none otherwise. */
+const runningTurnOf = (agent: CodingAgent) =>
+  Effect.map(
+    hostedStoreOrUnavailable(latestTurnsOfReached([agent.conversationId])),
+    (turns): CodingAgentLatestTurn | undefined => {
+      const turn = turns.get(agent.conversationId);
+      return turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status) ? turn : undefined;
+    },
+  );
+
+/**
+ * The turn read before the send settled failed for its session's end, now
+ * that eve said it runs the session no more; a write that fails is logged
+ * and the refusal stands all the same, since the sweep's bound still ends
+ * the turn in time.
+ */
+const settledEnded = (
+  writer: Effect.Effect<StoreWriter>,
+  agent: CodingAgent,
+  turn: CodingAgentLatestTurn,
+) =>
+  Effect.gen(function* () {
+    const write = yield* writer;
+    const now = yield* Clock.currentTimeMillis;
+    yield* settleEndedSessionTurn(
+      write,
+      { id: turn.id, userId: agent.userId, conversationId: agent.conversationId },
+      now,
+    );
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning(
+        `the turn of a coding agent whose session ended was not settled: ${causeKind(cause)}`,
+      ),
+    ),
   );
 
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
@@ -166,6 +213,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
         readMentioned(userId, line.text, { task: task?.task, workspaceId: agent.organizationId }),
       );
   const mentioned = reviewers ? undefined : mentionedContext(line.text, task?.task, reads);
+  // Read before eve is asked, so a refusal settles the turn the session was running and never one begun since.
+  const running = yield* runningTurnOf(agent);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
   const handOver = eve
@@ -224,6 +273,9 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     );
   }
   if (Option.isNone(written.success)) {
+    if (refused === HOSTED_REFUSAL.AGENT_RETIRED && running !== undefined) {
+      yield* settledEnded(writer, agent, running);
+    }
     return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
   }
   return STEER_OUTCOME.SENT;

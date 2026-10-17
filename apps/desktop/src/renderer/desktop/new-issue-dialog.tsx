@@ -5,8 +5,8 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "@luke/features/issue-wire";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { useId, useRef, useState } from "react";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { ModalShell } from "../modal-shell";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";

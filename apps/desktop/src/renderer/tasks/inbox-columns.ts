@@ -18,8 +18,8 @@
  * narrows onto its item again.
  */
 
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 
 /**

@@ -30,6 +30,7 @@ import {
 } from "@luke/features/plan-document-template";
 import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { noNetwork } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -38,7 +39,6 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { noNetwork } from "../testing/no-network.js";
 import { accountApp } from "./account-app.js";
 
 /**
