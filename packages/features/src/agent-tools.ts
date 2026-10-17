@@ -59,6 +59,7 @@ export const AGENT_TOOL = {
   // The workspace's chat, the planner's and every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,
   READ_CHAT: CHAT_TOOL.READ,
+  RESOLVE_ASK: CHAT_TOOL.RESOLVE,
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
   // An interactive page shown in the plan's side panel, and a read of one by its id.

@@ -147,6 +147,10 @@ const AUTHORED_TOOLS = {
     description: CHAT_TOOLS.READ.description,
     inputSchema: emitJsonSchema(CHAT_TOOLS.READ.inputSchema),
   },
+  [CODER_TOOL.RESOLVE_ASK]: {
+    description: CHAT_TOOLS.RESOLVE.description,
+    inputSchema: emitJsonSchema(CHAT_TOOLS.RESOLVE.inputSchema),
+  },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {
     description: SHOW_PAGE_TOOL.description,
