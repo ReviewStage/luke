@@ -53,6 +53,7 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.REPLY_TO_THREAD]: "Reply",
   [PULL_REQUEST_ACTION.RESOLVE_THREAD]: "Resolve conversation",
   [PULL_REQUEST_ACTION.UNRESOLVE_THREAD]: "Unresolve conversation",
+  [PULL_REQUEST_ACTION.COMMENT]: "Comment",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
