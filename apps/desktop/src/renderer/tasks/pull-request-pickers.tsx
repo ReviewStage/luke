@@ -29,8 +29,9 @@ import type { PullRequestWrites } from "./pull-request-writes";
  * made on GitHub as the member pressing it, on their own sign-in, and the
  * tab's reads are asked again once GitHub answers, so the header says what
  * GitHub holds rather than what the press assumed; GitHub's refusal stands
- * on the tab's line under the bar. While a change is out, the pickers stand
- * disabled. A pull request merged or closed asks no review, so only its
+ * on the tab's line under the bar. While a change is out, and until the
+ * read after it lands, the pickers stand disabled, so none is chosen from
+ * what the pull request held before. A pull request merged or closed asks no review, so only its
  * labels are offered.
  */
 
@@ -159,6 +160,7 @@ export function ReviewerPicker({
   requestedTeams,
   options,
   writes,
+  refreshing,
 }: {
   /** Who opened the pull request, whom GitHub asks no review of. */
   author: string | undefined;
@@ -166,6 +168,8 @@ export function ReviewerPicker({
   requestedTeams: readonly PullRequestReviewTeam[];
   options: ReviewOptions;
   writes: PullRequestWrites;
+  /** Whether the pull request is being read again, until which what it holds may be stale. */
+  refreshing: boolean;
 }): React.JSX.Element {
   const menu = useActionMenu(true);
   const asked = new Set(requested.map((person) => person.login));
@@ -176,7 +180,7 @@ export function ReviewerPicker({
       <PickerButton
         label={PICKER_WORDS.REVIEWERS}
         icon={<UserPlusIcon />}
-        disabled={writes.pending !== undefined}
+        disabled={writes.pending !== undefined || refreshing}
         trigger={{
           ...menu.trigger(dropBelowStart),
           onClick: (event: React.MouseEvent<HTMLElement>) => {
@@ -258,10 +262,13 @@ export function LabelPicker({
   labels,
   options,
   writes,
+  refreshing,
 }: {
   labels: readonly PullRequestLabel[];
   options: ReviewOptions;
   writes: PullRequestWrites;
+  /** Whether the pull request is being read again, until which the labels it holds may be stale. */
+  refreshing: boolean;
 }): React.JSX.Element {
   const menu = useActionMenu(true);
   const on = new Set(labels.map((label) => label.name));
@@ -271,7 +278,7 @@ export function LabelPicker({
       <PickerButton
         label={PICKER_WORDS.LABELS}
         icon={<TagIcon />}
-        disabled={writes.pending !== undefined}
+        disabled={writes.pending !== undefined || refreshing}
         trigger={{
           ...menu.trigger(dropBelowStart),
           onClick: (event: React.MouseEvent<HTMLElement>) => {

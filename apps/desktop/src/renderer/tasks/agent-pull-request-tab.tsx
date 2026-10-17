@@ -895,7 +895,11 @@ function PullRequestHead({
   parts: OverviewParts;
   now: number;
   /** The tab's writes and what its pickers offer, which the reviewer and label pickers send through and read. */
-  editing: { readonly writes: PullRequestWrites; readonly options: ReviewOptions };
+  editing: {
+    readonly writes: PullRequestWrites;
+    readonly options: ReviewOptions;
+    readonly refreshing: boolean;
+  };
 }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
@@ -1612,7 +1616,11 @@ export function AgentPullRequestTab({
         <>
           <header className="pull-request-header">
             <HeaderTitle title={title} />
-            <PullRequestHead parts={parts} now={now} editing={{ writes, options }} />
+            <PullRequestHead
+              parts={parts}
+              now={now}
+              editing={{ writes, options, refreshing: pullRequestRead.out }}
+            />
           </header>
           <PullRequestTabs
             tabs={tabsOf(parts, published, bar)}

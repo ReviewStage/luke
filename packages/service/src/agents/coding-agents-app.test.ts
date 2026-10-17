@@ -1755,6 +1755,28 @@ it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "a listing GitHub did not answer fails the read rather than offering an empty list, so the picker reads it again",
+    () =>
+      Effect.gen(function* () {
+        const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+        const { owner, task, ask } = yield* openTask({
+          github: (sent) =>
+            new URL(sent.url).pathname === `${repository}/labels`
+              ? Response.json({ message: "Service unavailable" }, { status: 503 })
+              : new URL(sent.url).pathname.startsWith(`${repository}/`) &&
+                  !new URL(sent.url).pathname.startsWith(`${repository}/pulls`)
+                ? Response.json([])
+                : publishedPullRequest(sent),
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+
+        const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
+
+        assert.notEqual(answered.status, HOSTED_HTTP_STATUS.OK);
+      }),
+  );
 });
 
 /** A message to the agent as the bearer given, with the body given. */

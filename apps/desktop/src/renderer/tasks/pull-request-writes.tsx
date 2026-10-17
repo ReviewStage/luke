@@ -163,11 +163,6 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   return { pending, note, write, dismiss };
 }
 
-/** The changes the pill's menu offers: where the pull request stands, never a review. */
-type StateAction =
-  | typeof PULL_REQUEST_ACTION.READY_FOR_REVIEW
-  | typeof PULL_REQUEST_ACTION.CONVERT_TO_DRAFT;
-
 /** The changes the pill's menu offers from where the pull request stands. */
 function actionsFrom(state: PullRequestState): readonly StateAction[] {
   switch (state) {

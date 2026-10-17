@@ -19,6 +19,7 @@ import {
   type CodingAgentSummary,
   DEPLOYMENT_STATE,
   DIFF_SIDE,
+  type GitHubPerson,
   MERGE_STATE,
   PULL_REQUEST_STATE,
   type PullRequestState,
@@ -1798,24 +1799,25 @@ async function pressItem(words: string): Promise<void> {
   await settle();
 }
 
-test("the reviewer picker reads what the repository offers once, as it first opens, lists its teams then its people, the author left out and those asked checked, and asks a review of one chosen, as the member, reading the pull request again", async () => {
-  let optionReads = 0;
-  let pullRequestReads = 0;
+test("the reviewer picker lists the repository's teams then its people, the author left out and those asked checked; choosing one asks a review of them as the member, and the picker waits on the pull request's read before it opens again, then checks them", async () => {
+  let asked: readonly GitHubPerson[] = [CHARLES_ON_GITHUB];
+  const reread = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
+  let reads = 0;
   const tab = await draw(
     controlAnswering({
       pullRequest: () => {
-        pullRequestReads += 1;
-        return Promise.resolve({
+        reads += 1;
+        const answer = {
           pullRequest: {
             ...PULL_REQUEST,
-            requested: [CHARLES_ON_GITHUB],
+            requested: asked,
             requestedTeams: [{ slug: "platform", name: "Platform" }],
           },
-        });
+        };
+        return reads === 1 ? Promise.resolve(answer) : reread.read();
       },
-      reviewOptions: () => {
-        optionReads += 1;
-        return Promise.resolve({
+      reviewOptions: () =>
+        Promise.resolve({
           labels: [],
           users: [
             CHARLES_ON_GITHUB,
@@ -1826,25 +1828,21 @@ test("the reviewer picker reads what the repository offers once, as it first ope
             { slug: "platform", name: "Platform" },
             { slug: "design", name: "Design" },
           ],
-        });
-      },
+        }),
     }),
   );
-  const picker =
+  const picker = () =>
     tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Edit reviewers"]') ??
     assert.fail("the reviewer picker stands beside the reviewers");
-  assert.equal(optionReads, 0, "nothing is read before the picker opens");
 
-  act(() => picker.click());
+  act(() => picker().click());
   await settle();
-  assert.deepEqual(
-    menuItems().map(({ checked }) => checked),
-    ["true", "false", "true", "false"],
-  );
-  assert.deepEqual(
-    menuItems().map(({ label }) => label),
-    ["Platform", "Design", "charlespan", "priyan"],
-  );
+  assert.deepEqual(menuItems(), [
+    { label: "Platform", checked: "true" },
+    { label: "Design", checked: "false" },
+    { label: "charlespan", checked: "true" },
+    { label: "priyan", checked: "false" },
+  ]);
   await pressItem("priyan");
 
   assert.deepEqual(changes, [
@@ -1853,10 +1851,22 @@ test("the reviewer picker reads what the repository offers once, as it first ope
       { action: PULL_REQUEST_ACTION.REQUEST_REVIEW, reviewer: { kind: "user", name: "priyan" } },
     ],
   ]);
-  assert.equal(pullRequestReads, 2, "the pull request is read again once GitHub took it");
-  act(() => picker.click());
+  assert.equal(picker().disabled, true, "nothing is chosen from what the pull request held before");
+  asked = [CHARLES_ON_GITHUB, { login: "priyan", bot: false }];
+  reread.answer({
+    pullRequest: {
+      ...PULL_REQUEST,
+      requested: asked,
+      requestedTeams: [{ slug: "platform", name: "Platform" }],
+    },
+  });
   await settle();
-  assert.equal(optionReads, 1, "what the repository offers is read once");
+  act(() => picker().click());
+  await settle();
+  assert.deepEqual(
+    menuItems().find((item) => item.label === "priyan"),
+    { label: "priyan", checked: "true" },
+  );
   await pressItem("Platform");
   assert.deepEqual(changes.at(-1), [
     AGENT.id,

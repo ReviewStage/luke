@@ -1899,18 +1899,22 @@ export interface GitHubReviewOptions {
  * One of the pickers' listings, every page up to the bound. Note that one
  * the App may not read, as the teams of a repository a person owns or of an
  * installation that never granted the read, lists none, said once in the
- * log, because the others stand without it.
+ * log, because the others stand without it; and that any other failure, a
+ * GitHub that did not answer, fails the read, so the pickers read it again
+ * rather than hold an empty list that is no answer at all.
  */
 function optionsListing<A>(
   token: Redacted.Redacted,
   path: string,
   schema: Schema.Codec<readonly A[], unknown>,
   what: string,
-): Effect.Effect<readonly A[], never, HttpClient.HttpClient> {
+): Read<readonly A[]> {
   return everyPage(token, path, schema, OPTIONS_MAX_PAGES).pipe(
     Effect.map((listed) => listed.slice(0, OVERVIEW_BOUNDS.MAX_OPTIONS)),
     Effect.catch((failure) =>
-      Effect.as(Effect.logWarning(`the repository's ${what} were not read: ${failure._tag}`), []),
+      failure.status === GITHUB_HTTP_STATUS.FORBIDDEN
+        ? Effect.as(Effect.logWarning(`the App may not read the repository's ${what}`), [])
+        : Effect.fail(failure),
     ),
   );
 }
@@ -1924,7 +1928,7 @@ export const pullRequestReviewOptions = /* @__PURE__ */ Effect.fn("web/pullReque
   function* (
     token: Redacted.Redacted,
     fullName: string,
-  ): Effect.fn.Return<GitHubReviewOptions, never, HttpClient.HttpClient> {
+  ): Effect.fn.Return<GitHubReviewOptions, PullRequestReadFailure, HttpClient.HttpClient> {
     const path = repositoryPath(fullName);
     const [labels, users, teams] = yield* Effect.all(
       [
