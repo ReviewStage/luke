@@ -297,6 +297,11 @@ body {
   max-width: 320px;
 }
 
+/* The tooltip example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
+.catalog-hinted {
+  display: inline-flex;
+}
+
 /* A bare text input standing in for a control an example holds. */
 .catalog-input {
   box-sizing: border-box;

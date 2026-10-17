@@ -915,7 +915,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
 
-  const card = document.querySelector(".tooltip-card [data-task-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.equal(card?.querySelector(".card-name")?.textContent, DOCUMENT_NAME);
 });
 

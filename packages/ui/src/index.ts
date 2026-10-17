@@ -16,6 +16,7 @@ export * from "./components/spinner/spinner.js";
 export * from "./components/switch/switch.js";
 export * from "./components/text/text.js";
 export * from "./components/text-field/text-field.js";
+export * from "./components/tooltip/tooltip.js";
 export * from "./css.js";
 export * from "./face/glyphs.js";
 export * from "./face/wing-face.js";

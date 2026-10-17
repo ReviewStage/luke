@@ -18,6 +18,7 @@
 @import "./components/dialog/dialog.css";
 @import "./components/form-field/form-field.css";
 @import "./components/text-field/text-field.css";
+@import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";
 @import "./components/switch/switch.css";
 @import "./components/segmented/segmented.css";
