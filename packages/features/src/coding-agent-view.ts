@@ -359,22 +359,6 @@ export const dictationTranscribeAnswerViewSchema = EffectSchema.Union([
 
 export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerViewSchema.Type;
 
-/** One plan's inbox past a cursor, as the window asks it: the plan, and where the window stands. */
-export const codingAgentInboxParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentInboxParams = typeof codingAgentInboxParamsSchema.Type;
-
-/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a plan's inbox is. */
-export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
-  agentId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
-
 /** The plan's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
 

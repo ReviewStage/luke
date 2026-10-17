@@ -42,8 +42,8 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@luke/gateway";
-import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
-import { Effect, Fiber } from "effect";
+import type { WireRecord, WireValue } from "@luke/wire";
+import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 import type { LiveClient } from "./live-follow.js";
@@ -643,13 +643,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       agent: PAGE,
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-        agentId: AGENT_ID,
-        after: INBOX_CURSOR_START,
-      }),
-      { items: [ITEM], cursor: "8" },
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
     );
@@ -667,13 +660,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
         src: "https://camo.githubusercontent.com/abc",
       }),
       { contentType: GITHUB_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-        taskId: TASK_ID,
-        after: INBOX_CURSOR_START,
-      }),
-      { items: [ITEM], cursor: "7" },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
@@ -727,14 +713,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `archive:${AGENT_ID}:true`,
       `pin:${AGENT_ID}:true`,
       `page:${AGENT_ID}`,
-      `agent-inbox-live:${AGENT_ID}`,
-      `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `overview:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
-      `plan-inbox-live:${TASK_ID}`,
-      `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
@@ -947,81 +929,6 @@ const ITEM_ROW = {
   answeredByName: null,
   closedReason: null,
 };
-
-it.effect(
-  "a plan's inbox is answered from its Realtime subscription: at once once its rows land, then as soon as they move past the reader's cursor, unchanged when the hold ends, and never from the held read",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked, sealScope, realtime } = yield* subject();
-      sealScope(SEALED_SCOPE);
-      const first = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: INBOX_CURSOR_START }),
-      );
-      yield* settled;
-      assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
-      realtime.deliver("items", [ITEM_ROW]);
-      yield* settled;
-      const answered = yield* Fiber.join(first);
-      assert.ok(isRecord(answered) && isWireString(answered.cursor));
-      assert.deepEqual(answered.items, [ITEM]);
-
-      // Read again from that cursor, it holds until the items move.
-      const next = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: answered.cursor }),
-      );
-      yield* settled;
-      const closed = {
-        ...ITEM_ROW,
-        revision: 3,
-        status: INBOX_STATUS.CLOSED,
-        closedReason: "Done",
-      };
-      realtime.deliver("items", [closed]);
-      yield* settled;
-      const moved = yield* Fiber.join(next);
-      assert.ok(isRecord(moved) && isWireString(moved.cursor));
-      assert.notEqual(moved.cursor, answered.cursor);
-      assert.deepEqual(moved.items, [
-        { ...ITEM, revision: 3, status: INBOX_STATUS.CLOSED, closedReason: "Done" },
-      ]);
-
-      const unchanged = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: moved.cursor }),
-      );
-      yield* settled;
-      yield* TestClock.adjust("20 seconds");
-      assert.deepEqual(yield* Fiber.join(unchanged), moved);
-      // One subscription served every read, and the service's held read was never asked.
-      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
-      assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
-    }),
-);
-
-it.effect(
-  "an agent's inbox the account does not reach is not found, and one the service seals nothing for is the held read",
-  () =>
-    Effect.gen(function* () {
-      const refused = yield* subject();
-      refused.sealScope({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-      assert.deepEqual(
-        yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-          agentId: AGENT_ID,
-          after: INBOX_CURSOR_START,
-        }),
-        { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
-      );
-
-      const held = yield* subject();
-      assert.deepEqual(
-        yield* held.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-          agentId: AGENT_ID,
-          after: INBOX_CURSOR_START,
-        }),
-        { items: [ITEM], cursor: "8" },
-      );
-      assert.deepEqual(held.realtime.opened, []);
-    }),
-);
 
 const PLAN_SCOPE = { kind: "plan", id: TASK_ID } as const;
 const AGENT_SCOPE = { kind: "agent", id: AGENT_ID } as const;

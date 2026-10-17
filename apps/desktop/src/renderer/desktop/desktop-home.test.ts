@@ -8,7 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -29,6 +29,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { followedInboxes } from "#testing/followed-inboxes";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
@@ -123,7 +124,7 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** Each agent with no plan's inbox as the service answers a read of it. */
+/** Each agent with no plan's inbox as main pushes it. */
 const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUARANTINE]]]);
 
 /** The plans holding items, and those of them with an item waiting, as main reads the account. */
@@ -162,19 +163,19 @@ let automationReads: string[] = [];
 
 beforeEach(() => {
   automationReads = [];
+  // Main pushes each plan's inbox, and each agent's with no plan, as it is followed.
+  const main = followedInboxes(({ kind, id }) => ({
+    items: (kind === INBOX_SCOPE_KIND.PLAN ? INBOXES : AGENT_INBOXES).get(id) ?? [],
+  }));
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
+      onInbox: main.onInbox,
       act: (request: Act) => {
-        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-          const value: CodingAgentInboxAnswerView = {
-            items: AGENT_INBOXES.get(request.payload.agentId) ?? [],
-            cursor: "1",
-          };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
+        const followed = main.act(request);
+        if (followed !== undefined) return followed;
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           automationReads.push(request.payload.workspaceId ?? "");
           return Promise.resolve({
@@ -185,14 +186,7 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
         }
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        const value: CodingAgentInboxAnswerView = {
-          items: INBOXES.get(request.payload.taskId) ?? [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
       },
     },
   });

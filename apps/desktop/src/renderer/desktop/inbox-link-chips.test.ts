@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
@@ -22,6 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
+import { followedInboxes } from "#testing/followed-inboxes";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import type { InboxChoice } from "../tasks/use-tasks-tab";
@@ -128,11 +129,12 @@ async function inbox(options: {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
     tasks: { ...IDLE_TASKS_VIEW, tasks: [PLAN], workspaces: options.workspaces ?? [ACME, GLOBEX] },
   };
-  const inboxOf = (items: readonly InboxItem[]): Promise<ActOutcome> =>
-    Promise.resolve({
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { items, cursor: "1" } satisfies CodingAgentInboxAnswerView,
-    });
+  // Main pushes the plan's inbox, and the sweep agent's, as each is followed.
+  const main = followedInboxes(({ kind }) =>
+    kind === INBOX_SCOPE_KIND.PLAN
+      ? { items: options.planItems }
+      : { items: options.sweep === undefined ? [] : [options.sweep.item] },
+  );
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -140,8 +142,11 @@ async function inbox(options: {
       recordSurfaceEvent: () => undefined,
       onAppState: () => () => undefined,
       requestAppState: () => Promise.resolve(state),
+      onInbox: main.onInbox,
       act: (request: Act): Promise<ActOutcome> => {
         asked.push(request);
+        const followed = main.act(request);
+        if (followed !== undefined) return followed;
         switch (request.kind) {
           case ACT_KIND.TASKS_PULL_REQUEST: {
             const pullRequest = PULL_REQUESTS.get(request.payload.repository);
@@ -153,15 +158,6 @@ async function inbox(options: {
                   : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
             });
           }
-          case ACT_KIND.CODING_AGENTS_INBOX:
-            // A read past the cursor is held open while nothing changes, as the service holds it.
-            return request.payload.after === "0"
-              ? inboxOf(options.planItems)
-              : new Promise(() => undefined);
-          case ACT_KIND.CODING_AGENTS_AGENT_INBOX:
-            return request.payload.after === "0"
-              ? inboxOf(options.sweep === undefined ? [] : [options.sweep.item])
-              : new Promise(() => undefined);
           case ACT_KIND.CODING_AGENTS_LIST:
             return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
           default:

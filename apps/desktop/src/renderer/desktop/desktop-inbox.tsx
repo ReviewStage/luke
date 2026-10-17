@@ -1,7 +1,4 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxParams,
-} from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -146,16 +143,12 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  const readInbox = useCallback(
-    (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
   const { inboxTasks, tasks: listedTasks } = tasks.listed;
   const holdings = useMemo(
     () => listedHoldings(inboxTasks, listedTasks),
     [inboxTasks, listedTasks],
   );
-  const read = useInboxItems({ holdings, readInbox });
+  const read = useInboxItems({ holdings });
   const taskless = useTasklessInboxItems(tasks.inboxTaskless);
   const asked = view.chosen;
   const chosenTask =
@@ -177,17 +170,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     onStarted: () => undefined,
     me: tasks.me,
   });
-  const readAgentInbox = useCallback(
-    (after: string) =>
-      chosenAgentId === undefined
-        ? Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const)
-        : act(ACT_KIND.CODING_AGENTS_AGENT_INBOX, { agentId: chosenAgentId, after }),
-    [act, chosenAgentId],
-  );
   // Note that an agent with no plan holds its own read, by its id, as a plan's is held by the plan's.
   const live = useTaskInbox({
     taskId: taskId ?? chosenAgentId,
-    ...(chosenAgentId === undefined ? undefined : { reader: readAgentInbox }),
+    kind: chosenAgentId === undefined ? INBOX_SCOPE_KIND.PLAN : INBOX_SCOPE_KIND.AGENT,
     shown: tasks.shown,
     waiting:
       tasks.inbox.some((each) => each.taskId === taskId) ||

@@ -53,7 +53,8 @@ import type { ChoiceWriter } from "./use-agent-model";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
 import type { ServersWriter } from "./use-agent-servers";
 import type { TranscriptReader } from "./use-agent-transcript";
-import type { InboxAnswerer, InboxImageReader, InboxReader } from "./use-task-inbox";
+import { type InboxFollower, windowInboxFollower } from "./use-followed-inboxes";
+import type { InboxAnswerer, InboxImageReader } from "./use-task-inbox";
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -228,8 +229,8 @@ export interface CodingAgentsControl {
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
   readSkills: SkillSource | undefined;
-  /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
-  readInbox: InboxReader;
+  /** How a plan's or an agent's inbox is followed, and heard pushed, as the Inbox tab draws it. */
+  inboxFollower: InboxFollower;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
   /** One read of an inbox item's image, as its card asks it. */
@@ -855,10 +856,7 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readInbox = useCallback<InboxReader>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
+  const inboxFollower = useMemo(() => windowInboxFollower({ act }), [act]);
 
   const answerInbox = useCallback<InboxAnswerer>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, params),
@@ -937,7 +935,7 @@ export function useCodingAgents(input: {
     readOverview,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
-    readInbox,
+    inboxFollower,
     answerInbox,
     readInboxImage,
   };

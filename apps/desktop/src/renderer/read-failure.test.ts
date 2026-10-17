@@ -6,7 +6,6 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
 } from "@luke/features/coding-agent-view";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
   ACT_KIND,
@@ -22,6 +21,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { followedInboxes } from "#testing/followed-inboxes";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
@@ -54,6 +54,9 @@ const TASK: TaskSummary = {
 /** Whether the service answers a read, rather than failing it, as a Retry finds it once it is back. */
 let answering = false;
 
+/** Main's follows: a followed inbox could not be read until the service answers again, then holds nothing. */
+const main = followedInboxes(() => (answering ? { items: [] } : UNANSWERED));
+
 /** The bridge: every read fails until the service answers again, then answers with nothing in it. */
 function answer(request: Act): Promise<ActOutcome> {
   const done = (value: ActResultFor<ActKind>): Promise<ActOutcome> =>
@@ -61,10 +64,9 @@ function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_LIST:
       return done({ agents: [] });
-    case ACT_KIND.CODING_AGENTS_INBOX:
-      // A read past the cursor is held open while nothing changes, as the service holds it.
-      if (request.payload.after !== INBOX_CURSOR_START) return new Promise(() => undefined);
-      return done(answering ? { items: [], cursor: "1" } : UNANSWERED);
+    case ACT_KIND.CODING_AGENTS_INBOX_FOLLOW:
+    case ACT_KIND.CODING_AGENTS_INBOX_UNFOLLOW:
+      return main.act(request) ?? Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     case ACT_KIND.PROVIDER_KEYS_READ:
       return done(answering ? { keys: [] } : UNANSWERED);
     default:
@@ -82,7 +84,12 @@ beforeEach(() => {
   });
   Object.defineProperty(window, "luke", {
     configurable: true,
-    value: { act: answer, onMenuCommand: () => ignore, recordSurfaceEvent: ignore },
+    value: {
+      act: answer,
+      onInbox: main.onInbox,
+      onMenuCommand: () => ignore,
+      recordSurfaceEvent: ignore,
+    },
   });
 });
 
