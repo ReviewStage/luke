@@ -66,6 +66,7 @@ import {
   useConversationFilters,
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
+import { blockedWords, MergeActions } from "./merge-box";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
 import {
   PullRequestStateMenu,
@@ -625,17 +626,23 @@ function Checks({
 /** Whether the pull request would merge as it stands, in its tone's colour; drawn only while it is open. */
 function MergeLine({
   pullRequest,
+  actions,
 }: {
   pullRequest: CodingAgentOverviewPullRequest;
+  /** The merge box's presses at the line's end (`merge-box.tsx`). */
+  actions: ReactNode;
 }): React.JSX.Element {
   const { line, tone } = mergeWords(pullRequest.merge, pullRequest.base);
+  const blocked =
+    pullRequest.merge === MERGE_STATE.BLOCKED ? blockedWords(pullRequest.merging) : undefined;
   return (
-    <p className="pull-request-merge" data-merge-tone={tone}>
+    <div className="pull-request-merge" data-merge-tone={tone}>
       {tone === MERGE_TONE.READY ? <CheckIcon aria-hidden="true" /> : null}
       {tone === MERGE_TONE.BLOCKED ? <XIcon aria-hidden="true" /> : null}
       {tone === MERGE_TONE.WAITING ? <CircleDotIcon aria-hidden="true" /> : null}
-      {line}
-    </p>
+      <span className="pull-request-merge-words">{blocked ?? line}</span>
+      {actions}
+    </div>
   );
 }
 
@@ -857,7 +864,18 @@ interface OverviewParts {
 }
 
 /** Under the title: the branches, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
-function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }): React.JSX.Element {
+function PullRequestHead({
+  parts,
+  now,
+  repository,
+  writes,
+}: {
+  parts: OverviewParts;
+  now: number;
+  /** The agent's repository, which the merge box keeps the method chosen by. */
+  repository: string | null;
+  writes: PullRequestWrites;
+}): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
     return (
@@ -894,7 +912,14 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
         </span>
         {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} />}
       </div>
-      {open ? <MergeLine pullRequest={pullRequest} /> : null}
+      {open ? (
+        <MergeLine
+          pullRequest={pullRequest}
+          actions={
+            <MergeActions pullRequest={pullRequest} repository={repository} writes={writes} />
+          }
+        />
+      ) : null}
     </>
   );
 }
@@ -1543,7 +1568,7 @@ export function AgentPullRequestTab({
         <>
           <header className="pull-request-header">
             <HeaderTitle title={title} />
-            <PullRequestHead parts={parts} now={now} />
+            <PullRequestHead parts={parts} now={now} repository={repository} writes={writes} />
           </header>
           <PullRequestTabs
             tabs={tabsOf(parts, published, bar)}

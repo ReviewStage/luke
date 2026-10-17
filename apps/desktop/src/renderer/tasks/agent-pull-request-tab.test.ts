@@ -20,12 +20,16 @@ import {
   DEPLOYMENT_STATE,
   DIFF_SIDE,
   MERGE_STATE,
+  type MergeState,
   PULL_REQUEST_STATE,
+  type PullRequestMerging,
   type PullRequestState,
+  REVIEW_DECISION,
   REVIEW_STATE,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import {
+  MERGE_METHOD,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
@@ -1447,4 +1451,140 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
     assert.fail("the line may be dismissed");
   act(() => dismiss.click());
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
+});
+
+/** How the pull request may be merged where a test says nothing else: squash or rebase, nothing asked for yet, checks passing. */
+const MERGING: PullRequestMerging = {
+  methods: [MERGE_METHOD.SQUASH, MERGE_METHOD.REBASE],
+  autoMergeAllowed: true,
+  queue: false,
+  queued: null,
+  autoMerge: null,
+  headSha: "c0ffee1",
+  review: null,
+  checks: CHECK_SUMMARY.PASSING,
+};
+
+/** The plan's agents, its pull request standing as given and merged as given. */
+function merging(merge: MergeState, merged: Partial<PullRequestMerging> = {}): CodingAgentsControl {
+  return controlAnswering({
+    pullRequest: () =>
+      Promise.resolve({
+        pullRequest: { ...PULL_REQUEST, merge, merging: { ...MERGING, ...merged } },
+      }),
+  });
+}
+
+/** The merge box's presses, by their words. */
+function boxPresses(tab: HTMLElement): string[] {
+  return words(tab, ".merge-box-press");
+}
+
+/** The merge box's press of the words given, pressed. */
+async function pressBox(tab: HTMLElement, label: string): Promise<void> {
+  const press =
+    [...tab.querySelectorAll<HTMLButtonElement>(".merge-box-press")].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the merge box offers ${label}`);
+  act(() => press.click());
+  await settle();
+}
+
+test("a pull request ready to merge offers Merge by the first method the repository allows, keeps the method chosen for the repository, and asks before merging against the head it read", async () => {
+  const first = await draw(merging(MERGE_STATE.CLEAN));
+  assert.deepEqual(boxPresses(first), ["Squash and merge"]);
+  act(() =>
+    (
+      first.querySelector<HTMLButtonElement>('[aria-label="Choose how to merge"]') ??
+      assert.fail("the box offers the repository's other methods")
+    ).click(),
+  );
+  const rebase =
+    [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitemcheckbox"], [role="menuitem"]',
+      ),
+    ].find((each) => each.textContent?.startsWith("Rebase and merge")) ??
+    assert.fail("the methods are offered");
+  act(() => rebase.click());
+  assert.deepEqual(boxPresses(first), ["Rebase and merge"]);
+  act(() => root?.unmount());
+  root = undefined;
+
+  const again = await draw(merging(MERGE_STATE.CLEAN));
+  assert.deepEqual(boxPresses(again), ["Rebase and merge"], "the method chosen is kept");
+  await pressBox(again, "Rebase and merge");
+  assert.deepEqual(changes, [], "a merge asks first");
+  const dialog =
+    document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]') ??
+    assert.fail("the merge is asked about");
+  const merge =
+    [...dialog.querySelectorAll("button")].find(
+      (each) => each.textContent === "Rebase and merge",
+    ) ?? assert.fail("the dialog offers the merge");
+  act(() => merge.click());
+  await settle();
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      { action: PULL_REQUEST_ACTION.MERGE, method: MERGE_METHOD.REBASE, headSha: "c0ffee1" },
+    ],
+  ]);
+});
+
+test("auto-merge is offered while checks run, and turned off once on; a merge queue's base offers Merge when ready, and a queued pull request Remove from queue; a conflict offers nothing", async () => {
+  const cases: readonly (readonly [CodingAgentsControl, string, PullRequestActionRequest])[] = [
+    [
+      merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.PENDING }),
+      "Enable auto-merge",
+      {
+        action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE,
+        method: MERGE_METHOD.SQUASH,
+        headSha: "c0ffee1",
+      },
+    ],
+    [
+      merging(MERGE_STATE.BLOCKED, { autoMerge: { method: MERGE_METHOD.SQUASH } }),
+      "Disable auto-merge",
+      { action: PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE },
+    ],
+    [
+      merging(MERGE_STATE.CLEAN, { queue: true }),
+      "Merge when ready",
+      { action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, headSha: "c0ffee1" },
+    ],
+    [
+      merging(MERGE_STATE.CLEAN, {
+        queue: true,
+        queued: { position: 2 },
+        autoMerge: { method: null },
+      }),
+      "Remove from queue",
+      { action: PULL_REQUEST_ACTION.DEQUEUE },
+    ],
+  ];
+  for (const [control, label, request] of cases) {
+    changes = [];
+    const tab = await draw(control);
+    assert.deepEqual(boxPresses(tab), [label]);
+    await pressBox(tab, label);
+    assert.deepEqual(changes, [[AGENT.id, request]]);
+    act(() => root?.unmount());
+    root = undefined;
+  }
+
+  const blocked = await draw(
+    merging(MERGE_STATE.BLOCKED, {
+      review: REVIEW_DECISION.REVIEW_REQUIRED,
+      checks: CHECK_SUMMARY.PENDING,
+    }),
+  );
+  assert.match(
+    blocked.querySelector(".pull-request-merge")?.textContent ?? "",
+    /A required review is missing/u,
+  );
+  act(() => root?.unmount());
+  root = undefined;
+  const conflicted = await draw(merging(MERGE_STATE.CONFLICTS));
+  assert.deepEqual(boxPresses(conflicted), []);
 });

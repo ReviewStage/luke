@@ -1952,6 +1952,63 @@ button.file-ref:hover .file-ref-path {
   color: var(--merge-tone);
 }
 
+.pull-request-merge-words {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* The merge box's presses at the line's end (`merge-box.tsx`): what stands
+   of a merge already asked for, quiet, then the one press, a method's
+   press joined to the chevron that chooses the method. */
+.merge-box-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  margin-inline-start: auto;
+}
+
+.merge-box-note {
+  color: var(--text-secondary);
+}
+
+.merge-box-split {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.merge-box-press {
+  height: 26px;
+  padding: 0 var(--space-8);
+  gap: var(--space-4);
+  font-size: 12px;
+}
+
+.merge-box-press svg {
+  width: 13px;
+  height: 13px;
+}
+
+.merge-box-split > .merge-box-press:not(:last-child) {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.merge-box-picker {
+  height: 26px;
+  padding: 0 var(--space-4);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  margin-inline-start: -1px;
+}
+
+.merge-box-picker svg {
+  width: 13px;
+  height: 13px;
+}
+
 [data-merge-tone="ready"] {
   --merge-tone: var(--state-complete);
 }

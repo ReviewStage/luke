@@ -396,6 +396,7 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
   "pull-request-write-wire": {
+    mergeMethodSchema: pullRequestWriteWire.mergeMethodSchema,
     pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,
     pullRequestWriteAnswerSchema: pullRequestWriteWire.pullRequestWriteAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof pullRequestWriteWire>,

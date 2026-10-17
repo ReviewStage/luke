@@ -39,6 +39,7 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
+  type PullRequestMerging,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
 import {
@@ -71,8 +72,16 @@ import {
   namedOverviewConversation,
   namedOverviewPullRequest,
 } from "../github/github-people.js";
-import { githubReadOrRefusal } from "../github/github-refusal.js";
-import { pullRequestNodeId, setPullRequestDraft } from "../github/pull-request-writes.js";
+import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
+import { pullRequestMerging } from "../github/pull-request-merging.js";
+import {
+  type GitHubWriteFailure,
+  mergePullRequest,
+  pullRequestNodeId,
+  setAutoMerge,
+  setPullRequestDraft,
+  takeOutOfMergeQueue,
+} from "../github/pull-request-writes.js";
 import {
   type PullRequestReadFailure,
   pullRequestChecks,
@@ -931,11 +940,32 @@ const overviewPullRequestEndpoint = /* @__PURE__ */ Effect.fn(
   "web/agentOverviewPullRequestEndpoint",
 )(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
   return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-    Effect.flatMap(pullRequestOverview(token, agent.repository, pullRequest.number), (read) =>
-      Option.isNone(read) ? Effect.succeed(null) : namedOverviewPullRequest(agent, read.value),
-    ),
+    Effect.gen(function* () {
+      const [read, merging] = yield* Effect.all(
+        [
+          pullRequestOverview(token, agent.repository, pullRequest.number),
+          mergingOrNone(token, agent.repository, pullRequest.number),
+        ],
+        { concurrency: "unbounded" },
+      );
+      if (Option.isNone(read)) return null;
+      const named = yield* namedOverviewPullRequest(agent, read.value);
+      return Option.isNone(merging) ? named : { ...named, merging: merging.value };
+    }),
   );
 });
+
+/**
+ * How the pull request may be merged, for its merge box; none where GitHub
+ * would not say, logged by its kind, since the header it rides with stands
+ * without it.
+ */
+const mergingOrNone = (token: Redacted.Redacted, repository: string, number: number) =>
+  pullRequestMerging(token, repository, number).pipe(
+    Effect.catch((failure) =>
+      Effect.as(logGitHubReadFailure(failure), Option.none<PullRequestMerging>()),
+    ),
+  );
 
 /**
  * GET reads the checks on the agent's pull request's head, failures first,
@@ -975,13 +1005,37 @@ const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
   );
 });
 
+/** The write a change makes on the pull request, on the member's token, by the pull request's GraphQL id. */
+function writeOf(
+  request: PullRequestActionRequest,
+  token: Redacted.Redacted,
+  id: string,
+): Effect.Effect<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  switch (request.action) {
+    case PULL_REQUEST_ACTION.READY_FOR_REVIEW:
+      return setPullRequestDraft(token, id, false);
+    case PULL_REQUEST_ACTION.CONVERT_TO_DRAFT:
+      return setPullRequestDraft(token, id, true);
+    case PULL_REQUEST_ACTION.MERGE:
+      return mergePullRequest(token, id, request.method, request.headSha);
+    case PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE:
+      return setAutoMerge(token, id, { method: request.method, headSha: request.headSha });
+    case PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE:
+      return setAutoMerge(token, id, undefined);
+    case PULL_REQUEST_ACTION.DEQUEUE:
+      return takeOutOfMergeQueue(token, id);
+  }
+}
+
 /** The write a change makes on the pull request, on the member's token. */
 function actionWrite(
   request: PullRequestActionRequest,
-): (pullRequest: MemberPullRequest) => ReturnType<typeof setPullRequestDraft> {
+): (
+  pullRequest: MemberPullRequest,
+) => Effect.Effect<void, GitHubWriteFailure, HttpClient.HttpClient> {
   return ({ token, repository, number }) =>
     Effect.flatMap(pullRequestNodeId(token, repository, number), (id) =>
-      setPullRequestDraft(token, id, request.action === PULL_REQUEST_ACTION.CONVERT_TO_DRAFT),
+      writeOf(request, token, id),
     );
 }
 
