@@ -11,9 +11,9 @@ import {
   type SettingsRowsInput,
 } from "@luke/settings";
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
+import { EmptyState } from "@luke/ui";
 import { FlaskConicalIcon } from "lucide-react";
 import { useAct } from "../act";
-import { EmptyState } from "../empty-state";
 import { useOpenFeedback } from "../open-feedback";
 import { SchemaSettingRows } from "./schema-rows";
 import { SettingsGroup } from "./settings-group";

@@ -257,6 +257,17 @@ body {
   white-space: nowrap;
 }
 
+/* A pane's room an empty state fills, tall enough to stand it above the middle. */
+.catalog-empty-room {
+  display: flex;
+  flex-direction: column;
+  height: 280px;
+}
+
+.catalog-empty-room-narrow {
+  width: 200px;
+}
+
 /* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
   padding: var(--luke-space-8);
