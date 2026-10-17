@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
@@ -28,9 +30,12 @@ import {
 } from "@luke/database/models/chat-store";
 import {
   archiveCodingAgent,
+  createCodingAgent,
+  discardCodingAgent,
   lineSendersOf,
   readCodingAgent,
   readCodingAgentByKey,
+  recordCodingAgentPublished,
   renameCodingAgent,
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
@@ -40,13 +45,14 @@ import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { openTaskConversation, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { member, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { conversations } from "@luke/database/schemas/storage";
+import { conversations, messages } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
@@ -57,6 +63,12 @@ import {
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
+import {
+  firstMessageParts,
+  newestStepsWithin,
+  REPLAY_STEP_KIND,
+  START_NOTE_HEADING,
+} from "@luke/features/agent-replay";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -80,7 +92,9 @@ import {
   mentionedHandles,
 } from "@luke/features/chat-wire";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
@@ -102,9 +116,10 @@ import {
   INBOX_RESPONSE,
   type InboxImageBlock,
   type InboxPost,
+  inboxAnsweredSchema,
   inboxAnswerSchema,
 } from "@luke/features/inbox-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
@@ -114,6 +129,7 @@ import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wi
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { temporaryDirectory } from "@luke/wire/testing";
 import { and, eq } from "drizzle-orm";
 import {
   Clock,
@@ -131,6 +147,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { afterEach, type TestContext, vi } from "vitest";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
@@ -165,6 +182,13 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import {
+  fixtureOidcToken,
+  SOURCE_SANDBOX,
+  type SourceCheckout,
+  sourceCheckout,
+  sourceSandbox,
+} from "../testing/source-sandbox.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -185,6 +209,7 @@ import {
 import { ASK_REFUSAL } from "./coder-host/chat-ask.js";
 import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
 import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
+import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
@@ -2914,6 +2939,75 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
+    "an answer carrying a file and no note reaches the agent with the file, even from an item that asks nothing back, and the item names the file it kept",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { post, answer, read } = yield* openInbox(eve);
+        const todo = yield* post({
+          key: "flag-file",
+          title: "Turn on the agent-mail flag in staging",
+          response: { type: INBOX_RESPONSE.TODO },
+          needsReply: false,
+        });
+        assert.ok(Result.isSuccess(todo));
+        const before = eve.sent.length;
+        const trace = {
+          name: "flag-trace.txt",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          data: Buffer.from("flag on in staging\n").toString("base64"),
+        };
+
+        const sent = yield* answer(todo.success.id, {
+          revision: todo.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+          attachments: [trace],
+        });
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.OK);
+        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
+        assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
+        assert.ok(handed.includes("flag on in staging"), "it carries the file");
+        const kept = (yield* read()).items.find((item) => item.key === "flag-file");
+        assert.deepEqual(
+          kept?.answerFiles?.map((file) => [file.name, file.mediaType]),
+          [[trace.name, trace.mediaType]],
+        );
+      }),
+  );
+
+  it.effect("an answer in the developer's own words may be a file alone", () =>
+    Effect.gen(function* () {
+      const { post, answer } = yield* openInbox();
+      const asked = yield* post(QUESTION);
+      assert.ok(Result.isSuccess(asked));
+      const shot = {
+        name: "invite.png",
+        mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+        data: Buffer.from(PNG).toString("base64"),
+      };
+      const answered = (attachments?: readonly (typeof shot)[]) =>
+        answer(asked.success.id, {
+          revision: asked.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.ANSWERED,
+          ...(attachments === undefined ? undefined : { attachments }),
+        });
+
+      assert.deepEqual(
+        yield* answered(),
+        refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+      );
+      const taken = readAnswer(inboxAnsweredSchema, HOSTED_HTTP_STATUS.OK, yield* answered([shot]));
+      assert.equal(taken.taken, true);
+      assert.deepEqual(
+        taken.item.answerFiles?.map((file) => file.name),
+        [shot.name],
+      );
+    }),
+  );
+
+  it.effect(
     "a run of the account's own automation that failed to start rides the account's inbox read and moves its cursor, as no item, and another account's read carries none",
     () =>
       Effect.gen(function* () {
@@ -3577,8 +3671,8 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         agents.push({
           userId: opened.owner,
-          agentId: started.agent.id,
           planId: opened.task.id,
+          self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
           repository: RELAY_FULL_NAME,
           telling,
         });
@@ -3838,7 +3932,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         yield* db
           .update(codingAgent)
           .set({ taskId: null })
-          .where(eq(codingAgent.id, chat.first.agentId));
+          .where(eq(codingAgent.id, "agentId" in chat.first.self ? chat.first.self.agentId : ""));
         const planless = { ...chat.first, planId: null };
         const posted = yield* chat.post(planless, { text: "@luke who owns the invite table?" });
         assert.ok("seq" in posted);
@@ -4117,6 +4211,768 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.ok(missing.status === ACTION_RESULT_STATUS.REJECTED && "reason" in missing);
         assert.ok(missing.reason.endsWith("missing.png"), missing.reason);
+      }),
+  );
+});
+
+/** A row of an agent's transcript as the relay leaves it, written straight to the store at the sequence given, answering its id. */
+const transcriptRow = (
+  agent: { readonly userId: string; readonly conversationId: string },
+  seq: number,
+  role: typeof MESSAGE_ROLE.USER | typeof MESSAGE_ROLE.ASSISTANT,
+  parts: WireBoundaryInput,
+) =>
+  Effect.map(
+    Database.use((db) =>
+      db
+        .insert(messages)
+        .values({
+          userId: agent.userId,
+          conversationId: agent.conversationId,
+          seq,
+          clientId: randomUUID(),
+          role,
+          // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
+          parts: parts as never,
+          metadata:
+            role === MESSAGE_ROLE.USER
+              ? userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined)
+              : { author: MESSAGE_AUTHOR.BRAIN },
+          placedAt: new Date(),
+        })
+        .returning({ id: messages.id }),
+    ),
+    ([row]) => row?.id ?? assert.fail("the row was not written"),
+  );
+
+const text = (words: string) => ({ type: "text", text: words });
+
+/** The first message the newest session opened on, read back into its brief, its replay, and its note. */
+function openedParts(eve: ReturnType<typeof fakeEve>) {
+  const message = eve.opened.at(-1)?.message.message;
+  if (message === undefined || Array.isArray(message)) {
+    return assert.fail("the session opened on words alone");
+  }
+  return { text: message, parts: firstMessageParts(message) };
+}
+
+it.layer(getTestDB())("starting an agent from another", (it) => {
+  /** A source agent on the owner's plan, on a choice and servers of its own, with a transcript of two turns, a branch, and a pull request, its GitHub answering as given. */
+  const sourceAgentOn = (github?: RepositoryScript) =>
+    Effect.gen(function* () {
+      const opened = yield* openTask(github === undefined ? {} : { github });
+      const source = readAnswer(
+        codingAgentAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* opened.ask(
+          startAs(opened.owner, opened.task.id, {
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+          }),
+        ),
+      ).agent;
+      const stored = Option.getOrThrow(yield* readCodingAgent(opened.owner, source.id));
+      yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
+      yield* transcriptRow(stored, 2, MESSAGE_ROLE.USER, [text("Use the mailer.")]);
+      const firstTurn = yield* transcriptRow(stored, 3, MESSAGE_ROLE.ASSISTANT, [
+        { type: "reasoning", text: "A thought of its own.", state: "done" },
+        text("On it."),
+        {
+          type: "tool-bash",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { command: "pnpm test" },
+          output: "ok",
+        },
+      ]);
+      const laterLine = yield* transcriptRow(stored, 4, MESSAGE_ROLE.USER, [
+        text("Also add tests."),
+      ]);
+      yield* transcriptRow(stored, 5, MESSAGE_ROLE.ASSISTANT, [text("Done.")]);
+      yield* updateCodingAgentBranch(opened.owner, source.id, PUBLISHED.branch);
+      yield* recordCodingAgentPublished(opened.owner, source.id, {
+        number: PUBLISHED.number,
+        title: "Expire teammate invitations",
+        url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
+        state: PULL_REQUEST_STATE.OPEN,
+        checks: CHECK_SUMMARY.NONE,
+        additions: 4,
+        deletions: 1,
+        changedFiles: 1,
+      });
+      return { ...opened, source, stored, firstTurn, laterLine };
+    });
+  const sourceAgent = sourceAgentOn();
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.effect(
+    "a continue is handed the plan as it stands now and every step after the source's brief, its reasoning left out, on the source's choice and servers, and names where it came from",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source } = yield* sourceAgent;
+        yield* savePlanText(owner, task.id, "## Goal\n\nInvite by link.\n");
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+        ).agent;
+        const { text: handed, parts } = openedParts(eve);
+
+        assert.deepEqual(started.from, { agentId: source.id, steps: 5, totalSteps: 5 });
+        assert.deepEqual(
+          [started.model, started.effort, started.disabledServers],
+          [SOL, "low", [INTEGRATION_PROVIDER.LINEAR]],
+        );
+        assert.equal(parts.brief, "# Teammate invitations\n\n## Goal\n\nInvite by link.\n");
+        assert.deepEqual(
+          parts.replay?.steps.map((step) => [step.kind, step.summary]),
+          [
+            [REPLAY_STEP_KIND.LINE, "The developer: Use the mailer."],
+            [REPLAY_STEP_KIND.SAID, "Said: On it."],
+            [REPLAY_STEP_KIND.TOOL, "Ran: pnpm test"],
+            [REPLAY_STEP_KIND.LINE, "The developer: Also add tests."],
+            [REPLAY_STEP_KIND.SAID, "Said: Done."],
+          ],
+        );
+        assert.match(parts.replay?.steps[2]?.words ?? "", /Result: ok/u);
+        assert.match(parts.replay?.preamble ?? "", /You continue the work/u);
+        assert.ok(parts.replay?.preamble.includes(PUBLISHED.branch));
+        assert.match(
+          parts.replay?.preamble ?? "",
+          /what it had not pushed could not be copied from its sandbox/u,
+          "a source that never opened a sandbox is taken up from the branch it pushed",
+        );
+        assert.ok(parts.replay?.preamble.includes(`/pull/${PUBLISHED.number}`));
+        assert.doesNotMatch(handed, /A thought of its own/u);
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        assert.equal(
+          stored.planSnapshot,
+          handed,
+          "the agent keeps the first message it was handed",
+        );
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
+        );
+        const fromOf = new Map(listed.agents.map((agent) => [agent.id, agent.from]));
+        assert.deepEqual(
+          [fromOf.has(source.id), fromOf.get(source.id), fromOf.get(started.id)],
+          [true, undefined, { agentId: source.id, steps: 5, totalSteps: 5 }],
+        );
+      }),
+  );
+
+  /** A source whose stopped sandbox holds a change it never committed, over a checkout and remote on disk, and a continue of it. */
+  const copyScenario = (t: TestContext) =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureOidcToken());
+      const checkout = sourceCheckout(yield* Effect.promise(() => temporaryDirectory(t, "copy-")));
+      writeFileSync(join(checkout.checkout, "invites.ts"), "export const ttl = 7;\n");
+      const sandbox = sourceSandbox(checkout, "stopped");
+      const opened = yield* sourceAgentOn((sent) =>
+        sandbox.answer(sent.url, sent.method, sent.body),
+      );
+      yield* claimRuntimeSession(opened.stored, "wrun_source", new Date());
+      const continued = Effect.gen(function* () {
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* opened.ask(
+            startAs(opened.owner, opened.task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: opened.source.id },
+            }),
+          ),
+        ).agent;
+        return { started, preamble: openedParts(opened.eve).parts.replay?.preamble ?? "" };
+      });
+      return { ...opened, checkout, sandbox, continued };
+    });
+
+  /** The fetch the preamble hands on, run in a checkout of the remote cloned as an agent's is, with the default branch alone; answers that checkout. */
+  const fetchedAsHanded = (checkout: SourceCheckout, preamble: string) => {
+    const fetch = /`(git remote set-branches [^`]+)`/u.exec(preamble)?.[1] ?? "";
+    const fresh = join(checkout.root, "fresh");
+    checkout.sh(
+      checkout.root,
+      "git",
+      "clone",
+      "--quiet",
+      "--single-branch",
+      "--branch",
+      "main",
+      checkout.remote,
+      fresh,
+    );
+    checkout.sh(fresh, "sh", "-c", fetch);
+    return fresh;
+  };
+
+  it.effect(
+    "a continue copies the source's checkout, what it had not committed included, to a branch of its own from the sandbox it wakes and stops again, names that branch and how a fresh checkout fetches it, and keeps it on its record",
+    (t) =>
+      Effect.gen(function* () {
+        const { checkout, sandbox, continued } = yield* copyScenario(t);
+
+        const { started, preamble } = yield* continued;
+
+        const branch = started.from?.branch ?? "";
+        assert.match(branch, /^luke\/teammate-invitations-continued-[0-9a-f]{8}$/u);
+        assert.ok(
+          preamble.includes(
+            `with what it had not committed or pushed recorded as one snapshot commit on top, is copied to the branch \`${branch}\`, made for you`,
+          ),
+        );
+        assert.ok(preamble.includes(`Its own branch was \`${PUBLISHED.branch}\``));
+        // The words the preamble hands on, run in a checkout cloned as an agent's is, find the copy.
+        const fresh = fetchedAsHanded(checkout, preamble);
+        assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), branch);
+        assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+        assert.deepEqual(
+          [sandbox.ran, sandbox.stops],
+          [[SOURCE_SANDBOX.WOKEN], [SOURCE_SANDBOX.WOKEN]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a sandbox held past the copy's own hold, by a developer's terminal or another Start's copy, is woken for the copy and left up",
+    (t) =>
+      Effect.gen(function* () {
+        const { stored, sandbox, continued } = yield* copyScenario(t);
+        yield* holdSandbox(stored.conversationId, new Date(Date.now() + 10 * 60_000));
+
+        const { started } = yield* continued;
+
+        assert.ok(started.from?.branch !== undefined);
+        assert.deepEqual([sandbox.ran, sandbox.stops], [[SOURCE_SANDBOX.WOKEN], []]);
+      }),
+  );
+
+  it.effect(
+    "a source whose task moved to another repository since it started is copied nowhere, its sandbox left asleep, and taken up from the branch it pushed, fetched as one word whatever a shell would read in its name",
+    (t) =>
+      Effect.gen(function* () {
+        const { owner, source, checkout, sandbox, continued } = yield* copyScenario(t);
+        // A name git allows whose words a shell would run, joined so it reads as no template placeholder.
+        const pushedBranch = ["luke/invites$(touch$", "{IFS}pwned)"].join("");
+        checkout.sh(
+          checkout.checkout,
+          "git",
+          "push",
+          "--quiet",
+          "origin",
+          `HEAD:refs/heads/${pushedBranch}`,
+        );
+        yield* updateCodingAgentBranch(owner, source.id, pushedBranch);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ repository: "Acme/Former" })
+            .where(eq(codingAgent.id, source.id)),
+        );
+
+        const { started, preamble } = yield* continued;
+
+        assert.equal(started.from?.branch, undefined);
+        assert.match(preamble, /what it had not pushed could not be copied from its sandbox/u);
+        assert.deepEqual([sandbox.ran, sandbox.stops, sandbox.state.status], [[], [], "stopped"]);
+        const fresh = fetchedAsHanded(checkout, preamble);
+        assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), pushedBranch);
+        assert.equal(existsSync(join(fresh, "pwned")), false);
+      }),
+  );
+
+  it.effect(
+    "a fork is cut at the source's message, its turn included, warned of the files the source edited after it, and a message that is none of the source's journals is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, stored, firstTurn, laterLine } = yield* sourceAgent;
+        const patch = (files: readonly string[]) => ({
+          patchText: `*** Begin Patch\n${files.map((file) => `*** Update File: ${file}\n@@\n-a\n+b`).join("\n")}\n*** End Patch`,
+        });
+        yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-2",
+            state: "output-available",
+            input: patch(["src/invites.ts", "src/expiry.ts"]),
+            output: "ok",
+          },
+          {
+            type: "tool-write_file",
+            toolCallId: "call-3",
+            state: "output-available",
+            input: { filePath: "src/mailer.ts", content: "x" },
+            output: "ok",
+          },
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-4",
+            state: "output-error",
+            input: patch(["src/refused.ts"]),
+            errorText: "the patch did not apply",
+          },
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-5",
+            state: "output-available",
+            input: patch(["src/invites.ts"]),
+            output: "ok",
+          },
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-6",
+            state: "output-available",
+            input: {
+              patchText:
+                "*** Begin Patch\n*** Update File: src/old.ts\n*** Move to: src/new.ts\n*** End Patch",
+            },
+            output: "ok",
+          },
+        ]);
+        const fork = (messageId: string) =>
+          ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: source.id, messageId },
+            }),
+          );
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* fork(firstTurn),
+        ).agent;
+        const { parts } = openedParts(eve);
+
+        assert.deepEqual(started.from, {
+          agentId: source.id,
+          messageId: firstTurn,
+          steps: 3,
+          totalSteps: 3,
+        });
+        assert.deepEqual(
+          parts.replay?.steps.map((step) => step.summary),
+          ["The developer: Use the mailer.", "Said: On it.", "Ran: pnpm test"],
+        );
+        assert.match(parts.replay?.preamble ?? "", /You are a fork/u);
+        assert.match(
+          parts.replay?.preamble ?? "",
+          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`; undo/u,
+        );
+        for (const named of [laterLine, randomUUID()]) {
+          assert.deepEqual(
+            yield* fork(named),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "a source on another plan, or one the account does not reach, is refused as naming nothing, and a prompt beside a source as invalid",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, eve, source } = yield* sourceAgent;
+        const elsewhere = yield* startTask(owner, { name: "Billing", repository: RELAY_FULL_NAME });
+        const away = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: elsewhere.id,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: RELAY_FULL_NAME,
+          }),
+        ).agent;
+        const opened = eve.opened.length;
+
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: away.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(
+            startAs(other, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              task: "Do it again.",
+              from: { agentId: source.id },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  /** A server mention as the desktop writes one. */
+  const serverMention = (provider: IntegrationProvider, name: string) =>
+    mentionMarkdown({ kind: MENTION_KIND.SERVER, provider }, name, {
+      workspace: "acme",
+      repository: null,
+    });
+
+  /** The words and files the session opened on, its first part's words read back as a first message. */
+  const openedWithFiles = (eve: ReturnType<typeof fakeEve>) => {
+    const message = eve.opened.at(-1)?.message.message;
+    assert.ok(Array.isArray(message), "the session opened on parts");
+    const [first] = message;
+    assert.ok(first?.type === "text", "the first part is the words");
+    return {
+      parts: firstMessageParts(first.text),
+      files: message.flatMap((part) => (part.type === "file" ? [part.filename] : [])),
+    };
+  };
+
+  it.effect(
+    "a note beside a source is written after the replay as the developer's with its files, and the first turn's servers are read from the note, never the replay",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        yield* transcriptRow(stored, 6, MESSAGE_ROLE.USER, [
+          text(`Look in ${serverMention(INTEGRATION_PROVIDER.NOTION, "Notion")} too.`),
+        ]);
+        const note = `Now check ${serverMention(INTEGRATION_PROVIDER.LINEAR, "Linear")} first.`;
+        const png = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(PNG).toString("base64"),
+        };
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: source.id },
+              note: `  ${note}\n`,
+              attachments: [png],
+            }),
+          ),
+        ).agent;
+        const { parts, files } = openedWithFiles(eve);
+
+        assert.deepEqual(parts.note, { heading: START_NOTE_HEADING.DEVELOPER, text: note });
+        assert.equal(parts.replay?.steps.length, 6);
+        assert.deepEqual(files, ["flow.png"]);
+        const kept = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        assert.deepEqual(yield* takeCodingAgentMentionedServers(owner, kept.conversationId), [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+      }),
+  );
+
+  it.effect(
+    "the source's files are attached again only as far as they fit beside the note's within one message's bounds, and the rest are named as not passed on",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const data = Buffer.from(PNG).toString("base64");
+        const source = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: task.id,
+            planSnapshot: null,
+            prompt: "Match these screens.",
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: RELAY_FULL_NAME,
+          }),
+        ).agent;
+        const shots = Array.from(
+          { length: CODING_AGENT_BOUNDS.MAX_ATTACHMENTS },
+          (_, at) => `screen-${at}.png`,
+        );
+        yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, [
+          text("Match these screens."),
+          ...shots.map((filename) => ({
+            type: "file",
+            mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+            filename,
+            url: `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`,
+          })),
+        ]);
+
+        yield* ask(
+          startAs(owner, task.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: source.id },
+            note: "And this one.",
+            attachments: [{ name: "new.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data }],
+          }),
+        );
+        const { parts, files } = openedWithFiles(eve);
+
+        assert.deepEqual(files, [...shots.slice(0, -1), "new.png"]);
+        assert.match(parts.replay?.preamble ?? "", /could not be passed on: screen-9\.png\./u);
+      }),
+  );
+
+  it.effect(
+    "an automation run's source hands on the servers its own prompt names and the note's, never those of the webhook body it carried",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const prompt = `Triage ${serverMention(INTEGRATION_PROVIDER.LINEAR, "Linear")} daily.`;
+        const run = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: task.id,
+            planSnapshot: null,
+            prompt: `${prompt}\n\nThe webhook said: see ${serverMention(INTEGRATION_PROVIDER.NOTION, "Notion")}.`,
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: RELAY_FULL_NAME,
+            automationOrigin: {
+              name: "Daily triage",
+              firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 40 },
+              prompt,
+            },
+          }),
+        ).agent;
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: run.id },
+              note: `Post it in ${serverMention(INTEGRATION_PROVIDER.SLACK, "Slack")}.`,
+            }),
+          ),
+        ).agent;
+
+        const kept = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        assert.deepEqual(
+          (yield* takeCodingAgentMentionedServers(owner, kept.conversationId)).toSorted(),
+          [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SLACK],
+        );
+      }),
+  );
+
+  it.effect(
+    "a note without a source, files beside a source with no note, and a prompt beside a source and a note are refused as invalid",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source } = yield* sourceAgent;
+        const png = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(PNG).toString("base64"),
+        };
+        const opened = eve.opened.length;
+        for (const body of [
+          { note: "Carry on." },
+          { from: { agentId: source.id }, attachments: [png] },
+          { from: { agentId: source.id }, note: "Carry on.", task: "Do it again." },
+          { from: { agentId: source.id }, note: " " },
+        ]) {
+          assert.deepEqual(
+            yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), ...body })),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+            JSON.stringify(Object.keys(body)),
+          );
+        }
+        assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  it.effect(
+    "a retry from another agent answers the agent its key made though the source has gone since, and a source whose transcript does not read is answered as unavailable rather than as an empty replay",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        const body = { idempotencyKey: randomUUID(), from: { agentId: source.id } };
+        const first = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, body)),
+        ).agent;
+
+        yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
+        const opened = eve.opened.length;
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.equal(eve.opened.length, opened);
+
+        yield* discardCodingAgent(owner, source.id);
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(startAs(owner, task.id, body)),
+        ).agent;
+        assert.equal(again.id, first.id);
+        assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  it.effect(
+    "a transcript of more rows than are read keeps its newest rows, so a continue replays where it ended and a fork at a late message is found, and an unreadable row past a fork's cut refuses only a continue",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const source = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
+        const turns = REPLAY_BOUNDS.MAX_ROWS + 50;
+        const ids: string[] = [];
+        // Note that the rows go in by the thousand, because one insert a row would take minutes.
+        for (let from = 0; from < turns; from += 1_000) {
+          const rows = Array.from({ length: Math.min(1_000, turns - from) }, (_, at) => ({
+            userId: stored.userId,
+            conversationId: stored.conversationId,
+            seq: from + at + 2,
+            clientId: randomUUID(),
+            role: MESSAGE_ROLE.ASSISTANT,
+            // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
+            parts: [text(`Step ${from + at}.`)] as never,
+            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            placedAt: new Date(),
+          }));
+          const written = yield* Database.use((db) =>
+            db.insert(messages).values(rows).returning({ id: messages.id }),
+          );
+          ids.push(...written.map((row) => row.id));
+        }
+        const startFrom = (from: WireBoundaryInput) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+
+        yield* startFrom({ agentId: source.id });
+        assert.equal(
+          openedParts(eve).parts.replay?.steps.at(-1)?.summary,
+          `Said: Step ${turns - 1}.`,
+        );
+        const late = turns - 10;
+        yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
+        assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
+
+        // A fork with more rows after it than are read names no files as if they were all it edited.
+        yield* startFrom({ agentId: source.id, messageId: ids[10] ?? "" });
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Which files it edited after that message could not all be read/u,
+        );
+
+        // A fork with exactly as many rows after it as are read still names what they edited, here nothing.
+        yield* startFrom({
+          agentId: source.id,
+          messageId: ids[turns - 1 - REPLAY_BOUNDS.MAX_ROWS] ?? "",
+        });
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Its file tools edited no file after that message/u,
+        );
+
+        // A row past the cut that does not read refuses a continue, but not a fork that needs none of it.
+        yield* transcriptRow(stored, turns + 2, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        const fork = yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
+        assert.equal(fork.from?.steps, openedParts(eve).parts.replay?.steps.length);
+        assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Which files it edited after that message could not all be read/u,
+        );
+      }),
+  );
+
+  it.effect(
+    "a long transcript keeps its newest steps within the bound, and a continue of a continue carries the first source's kept steps ahead of its own within the same bound",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const first = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const firstStored = Option.getOrThrow(yield* readCodingAgent(owner, first.id));
+        yield* transcriptRow(firstStored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
+        const turns = 30;
+        for (let turn = 0; turn < turns; turn += 1) {
+          yield* transcriptRow(firstStored, turn + 2, MESSAGE_ROLE.ASSISTANT, [
+            text(`Step ${turn}. ${"x".repeat(5_000)}`),
+          ]);
+        }
+        const continueFrom = (agentId: string) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+
+        const second = yield* continueFrom(first.id);
+        const secondSteps = openedParts(eve).parts.replay?.steps ?? [];
+        assert.equal(second.from?.totalSteps, turns);
+        assert.ok((second.from?.steps ?? turns) < turns, "the oldest steps went past the bound");
+        assert.equal(second.from?.steps, secondSteps.length);
+        assert.match(secondSteps.at(-1)?.summary ?? "", /^Said: Step 29\./u);
+        assert.equal(
+          newestStepsWithin(secondSteps, REPLAY_BOUNDS.MAX_CHARS).length,
+          secondSteps.length,
+        );
+
+        const secondStored = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
+        yield* transcriptRow(secondStored, 1, MESSAGE_ROLE.USER, [
+          text(secondStored.planSnapshot ?? ""),
+        ]);
+        yield* transcriptRow(secondStored, 2, MESSAGE_ROLE.ASSISTANT, [
+          text(`Picked it up. ${"y".repeat(5_000)}`),
+        ]);
+        const third = yield* continueFrom(second.id);
+        const thirdSteps = openedParts(eve).parts.replay?.steps ?? [];
+
+        assert.equal(third.from?.totalSteps, turns + 1);
+        assert.equal(third.from?.steps, thirdSteps.length);
+        assert.match(thirdSteps.at(-1)?.summary ?? "", /^Said: Picked it up\./u);
+        assert.match(thirdSteps.at(-2)?.summary ?? "", /^Said: Step 29\./u);
+        assert.equal(
+          newestStepsWithin(thirdSteps, REPLAY_BOUNDS.MAX_CHARS).length,
+          thirdSteps.length,
+        );
+        assert.notEqual(
+          thirdSteps[0]?.summary,
+          secondSteps[0]?.summary,
+          "the chain's oldest kept step went to make room for the new one",
+        );
       }),
   );
 });

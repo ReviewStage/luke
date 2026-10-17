@@ -364,6 +364,8 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
             asked.closed += 1;
           },
           onChoose: setChosen,
+          pages: undefined,
+          onRereadPages: () => undefined,
         },
         onShowTask: (planId) => asked.shownTasks.push(planId),
         onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
@@ -805,8 +807,8 @@ function standingCard(): readonly [string | null | undefined, string | null | un
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "an agent's card is hung");
   return [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-corner")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-corner")?.textContent,
   ];
 }
 
@@ -1745,7 +1747,7 @@ test("an item that needs no reply says a bare press won't message the agent, and
   assert.equal(quiet(), "Your note will be sent to the agent.");
 });
 
-test("an item that needs no reply, once settled, says a note was sent to the agent and a bare press kept for it to read", async () => {
+test("an item that needs no reply, once settled, says a note or a file was sent to the agent and a bare press kept for it to read", async () => {
   const quietDone = (id: string, title: string, at: number, note?: string): InboxItem => ({
     ...item(id, title, at),
     response: { type: INBOX_RESPONSE.TODO },
@@ -1754,6 +1756,16 @@ test("an item that needs no reply, once settled, says a note was sent to the age
     answeredBy: READER,
     answer: { reply: INBOX_REPLY.DONE, ...(note === undefined ? undefined : { note }) },
   });
+  const withFile: InboxItem = {
+    ...quietDone("a1b2c3d4-0000-4000-8000-000000000012", "Rotate the key", 5_000),
+    answerFiles: [
+      {
+        attachmentId: "a1b2c3d4-0000-4000-8000-0000000000f1",
+        name: "rotation.txt",
+        mediaType: "text/plain",
+      },
+    ],
+  };
   inboxes = new Map([
     [
       BILLING.id,
@@ -1765,6 +1777,7 @@ test("an item that needs no reply, once settled, says a note was sent to the age
           "On preview too.",
         ),
         quietDone("a1b2c3d4-0000-4000-8000-000000000011", "Add the secret", 5_500),
+        withFile,
       ],
     ],
     [INVITES.id, [EXPIRY]],
@@ -1777,6 +1790,11 @@ test("an item that needs no reply, once settled, says a note was sent to the age
   };
   assert.match(where("Turn on the flag") ?? "", /· Sent to /u);
   assert.match(where("Add the secret") ?? "", /Saved for the agent to read$/u);
+  assert.match(
+    where("Rotate the key") ?? "",
+    /· Sent to /u,
+    "a file reaches the agent as a note does",
+  );
 });
 
 test("an answered item that asked to be heard back, carried without its answer, still says it was sent to the agent", async () => {
@@ -2060,7 +2078,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.deepEqual(openings('[data-actor-card="automation"]'), [], "no Open automation");
   const name = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card [data-actor-card="automation"] .card-name button',
+    '.luke-tooltip-card [data-actor-card="automation"] .luke-hover-card-name button',
   );
   assert.equal(name?.textContent, "Nightly flake sweep", "the card's name is a button");
   act(() => name?.click());

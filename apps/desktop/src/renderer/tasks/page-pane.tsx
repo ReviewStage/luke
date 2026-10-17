@@ -1,6 +1,8 @@
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -11,10 +13,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCopyToast } from "../copy-feedback";
 import { FindScope } from "../find-in-tab";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { CodeLineRows } from "./code-pane";
 import { LinesMenu } from "./file-menu";
 import { useLinesLook } from "./file-tab";
@@ -156,13 +156,9 @@ function PageSource({
   if (read.kind === SOURCE_READ.READING) return <SpinnerRegion label="Loading source" />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
-      <div className="side-panel-empty">
-        <ReadFailure
-          line="The page's source could not be read."
-          onRetry={onRetry}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
-      </div>
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        The page's source could not be read.
+      </ErrorState>
     );
   }
   return (

@@ -96,6 +96,17 @@ const SECTIONS: TaskSections = {
   entries: [{ taskId: INVITES.id, sectionId: LAUNCH, addedAt: 2 }],
 };
 
+const SOMEDAY = "0a1b2c3d-0000-4000-8000-000000000002";
+
+/** Launch, and Someday, made without an icon, holding Retry audit. */
+const ICONLESS: TaskSections = {
+  sections: [
+    ...SECTIONS.sections,
+    { id: SOMEDAY, workspaceId: WORKSPACE.id, title: "Someday", createdAt: 2 },
+  ],
+  entries: [...SECTIONS.entries, { taskId: RETRIES.id, sectionId: SOMEDAY, addedAt: 3 }],
+};
+
 /** Lets the window's document land, as main hands it, and what it moves settle. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -115,8 +126,8 @@ function sidebarOver(sections: TaskSections, writes: TaskSectionWrite[]) {
   return createElement(DesktopSidebar, sidebarProps(tasks));
 }
 
-/** The sidebar over Launch, and a way to draw it again over other sections, as a refresh does. */
-async function mountSidebarRedrawn(writes: TaskSectionWrite[]) {
+/** The sidebar over `sections`, Launch unless said, and a way to draw it again over other sections, as a refresh does. */
+async function mountSidebarRedrawn(writes: TaskSectionWrite[], sections = SECTIONS) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -125,13 +136,42 @@ async function mountSidebarRedrawn(writes: TaskSectionWrite[]) {
     act(() => root.render(onRegistry(registry, sidebarOver(sections, writes))));
     await settle();
   };
-  await draw(SECTIONS);
+  await draw(sections);
   return { container, draw };
 }
 
-/** The sidebar over Launch, each write it asks heard by `writes`. */
-async function mountSidebar(writes: TaskSectionWrite[]): Promise<HTMLElement> {
-  return (await mountSidebarRedrawn(writes)).container;
+/** The sidebar over `sections`, Launch unless said, each write it asks heard by `writes`. */
+async function mountSidebar(writes: TaskSectionWrite[], sections = SECTIONS): Promise<HTMLElement> {
+  return (await mountSidebarRedrawn(writes, sections)).container;
+}
+
+/** The header of the section titled `title`, failing where none is drawn. */
+function sectionHeader(sidebar: HTMLElement, title: string): HTMLElement {
+  const name = [
+    ...sidebar.querySelectorAll('nav[aria-label="Sections"] .sidebar-repository-name'),
+  ].find((each) => each.textContent === title);
+  const found = name?.closest<HTMLElement>(".sidebar-repository-header");
+  return found ?? assert.fail(`no ${title} section`);
+}
+
+/** Opens the task named `name`'s menu, then its Move to section. */
+function openMoveToSection(sidebar: HTMLElement, name: string): void {
+  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-task")].find((each) =>
+    each.textContent?.includes(name),
+  );
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  act(() => item("Move to section").click());
+}
+
+/** The dialog's button whose words or label are `label`, failing where none is drawn. */
+function dialogButton(label: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === label || button.getAttribute("aria-label") === label,
+  );
+  return found ?? assert.fail(`no ${label} button`);
 }
 
 /** The names of the tasks drawn under the region labelled `label`. */
@@ -144,7 +184,7 @@ function namesIn(sidebar: HTMLElement, label: string): string[] {
 
 /** The menu item named `label`, failing where none is drawn. */
 function item(label: string): HTMLElement {
-  const name = [...document.querySelectorAll(".task-menu-label")].find(
+  const name = [...document.querySelectorAll(".luke-menu-item-label")].find(
     (each) => each.textContent === label,
   );
   const found = name?.closest<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]');
@@ -223,4 +263,66 @@ test("a section's Delete question goes when the section does, deleted on another
 
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(writes, []);
+});
+
+test("a section without an icon draws its title alone, with no glyph before it", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([], ICONLESS);
+
+  const toggle = sectionHeader(sidebar, "Someday").querySelector(".sidebar-repository-toggle");
+  assert.equal(toggle?.firstElementChild?.className, "sidebar-repository-name");
+  assert.equal(toggle?.querySelector("svg"), null);
+  const launch = sectionHeader(sidebar, "Launch").querySelector(".sidebar-repository-glyph");
+  assert.equal(launch?.textContent, "🚀");
+});
+
+test("Move to section names a section without an icon with no glyph beside it", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([], ICONLESS);
+
+  openMoveToSection(sidebar, "Invite expiry");
+
+  assert.equal(item("Someday").querySelector(".luke-menu-item-glyph")?.childElementCount, 0);
+  assert.equal(item("Launch").querySelector(".luke-menu-item-glyph")?.textContent, "🚀");
+});
+
+test("a new section starts with no icon and is made without one", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  assert.equal(dialogButton("No icon").getAttribute("aria-pressed"), "true");
+  const title = document.querySelector<HTMLInputElement>('[aria-label="Section title"]');
+  assert.ok(title);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(title, "Someday");
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => dialogButton("Create section").click());
+
+  const made = writes[0];
+  assert.equal(made?.kind, TASK_SECTION_WRITE.CREATE);
+  assert.equal(made.title, "Someday");
+  assert.equal("icon" in made, false);
+});
+
+test("choosing No icon and saving clears a section's icon", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  assert.ok(actions);
+
+  act(() => actions.click());
+  act(() => item("Edit section").click());
+  assert.equal(dialogButton("🚀").getAttribute("aria-pressed"), "true");
+  act(() => dialogButton("No icon").click());
+  await act(async () => dialogButton("Save").click());
+
+  assert.deepEqual(writes, [
+    { kind: TASK_SECTION_WRITE.EDIT, id: LAUNCH, title: "Launch", icon: null },
+  ]);
 });

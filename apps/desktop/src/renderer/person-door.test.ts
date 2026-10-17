@@ -92,7 +92,9 @@ function cardOf(view: HTMLElement): Element {
   act(() => {
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return document.querySelector(".luke-tooltip-card .card") ?? assert.fail("a card hangs");
+  return (
+    document.querySelector(".luke-tooltip-card .luke-hover-card") ?? assert.fail("a card hangs")
+  );
 }
 
 function press(element: Element | null | undefined): void {

@@ -26,7 +26,7 @@
  * What each kind of tab whose name is not its subject's is called, wherever
  * it is named (the desktop's `tasks/tab-look.tsx`): the task's Inbox, a
  * draft agent's tab and the "+" row that opens one, an agent the window holds
- * nothing of, and an agent's Pull request before its agent is read. The side panel's fixed kinds
+ * nothing of, and an agent's Pull request before its pull request is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {
@@ -38,9 +38,12 @@ export const TAB_WORDS = {
   MAC_TERMINAL: "This Mac",
 } as const;
 
-/** A Pull request tab's name for its agent's: the agent's own, after the word for what it shows. */
-export function pullRequestLabelOf(agentLabel: string): string {
-  return `${TAB_WORDS.PULL_REQUEST}: ${agentLabel}`;
+/** A Pull request tab's name once its pull request is read: the pull request's number, then its title, as GitHub names it. */
+export function pullRequestLabelOf(pullRequest: {
+  readonly number: number;
+  readonly title: string;
+}): string {
+  return `#${pullRequest.number} ${pullRequest.title}`;
 }
 
 /** One coding agent's tab, named by the agent it shows. */

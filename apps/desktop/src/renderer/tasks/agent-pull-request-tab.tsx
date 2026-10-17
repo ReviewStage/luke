@@ -30,7 +30,7 @@ import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
-import { CopyIcon, EmptyState, ProviderMark } from "@luke/ui";
+import { CopyIcon, EmptyState, ErrorState, ProviderMark, useMenu } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   CheckIcon,
@@ -49,8 +49,7 @@ import { type ReactNode, useCallback, useId, useState } from "react";
 import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import { ReadFailure } from "../read-failure";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
@@ -332,7 +331,7 @@ function PullRequestMenu({
   onRefresh: () => void;
 }): React.JSX.Element {
   const label = "Pull request actions";
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyWithToast = useCopyToast();
   const actions: MenuAction[] = [
     {
@@ -676,7 +675,7 @@ function PartSkeleton({
 function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
   return (
     <div className="pull-request-failure">
-      <ReadFailure line={line} onRetry={onRetry} />
+      <ErrorState onRetry={onRetry}>{line}</ErrorState>
     </div>
   );
 }
@@ -1519,11 +1518,13 @@ export function AgentPullRequestTab({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's reads and the checks where their tab was shown, never before.
+  // Refresh reads again the header's reads and the checks where their tab was shown, never before,
+  // and what the agent published, which names this tab and its pin by the pull request's title.
   const refresh = () => {
     ask.pullRequest();
     ask.conversation();
     if (askedYet(checksRead)) ask.checks();
+    void control.readPullRequest(agentId).catch(() => undefined);
   };
   const parts: OverviewParts = {
     pullRequest: partOf(pullRequestRead),
@@ -1539,11 +1540,8 @@ export function AgentPullRequestTab({
   );
   const title = landed(parts.pullRequest) ?? published;
   const now = useMinute();
-  // A change is read back both ways: the tab, and what the agent published, which the plan's own marks draw.
-  const written = () => {
-    refresh();
-    void control.readPullRequest(agentId).catch(() => undefined);
-  };
+  // A change is read back as Refresh reads: the tab, and what the agent published, which the plan's own marks draw.
+  const written = refresh;
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.

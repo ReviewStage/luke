@@ -88,7 +88,7 @@ function open(switcher: HTMLButtonElement | null): void {
 
 /** An item's label, the words beside its glyph. */
 function labelOf(item: HTMLElement): string | null {
-  return item.querySelector(".task-menu-label")?.textContent ?? null;
+  return item.querySelector(".luke-menu-item-label")?.textContent ?? null;
 }
 
 /** Chooses the open menu's item by its label. */
@@ -303,7 +303,7 @@ test("each workspace in the menu says who shares it under its name, to the eye a
     .slice(0, 4)
     .map((item) => [
       labelOf(item),
-      item.querySelector(".menu-item-detail")?.textContent,
+      item.querySelector(".luke-menu-item-detail")?.textContent,
       item.getAttribute("aria-label"),
     ]);
 

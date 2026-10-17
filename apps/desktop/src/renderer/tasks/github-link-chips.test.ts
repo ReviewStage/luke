@@ -321,7 +321,7 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
-  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map(readable);
+  const notes = [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].map(readable);
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
@@ -345,7 +345,7 @@ function openerFace(chip: Element | undefined): [string | undefined, string | nu
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
-  const mark = card?.querySelector<HTMLElement>(".card-note .actor-mark");
+  const mark = card?.querySelector<HTMLElement>(".luke-hover-card-note .actor-mark");
   const face: [string | undefined, string | null | undefined] = [
     mark?.dataset.kind,
     mark?.querySelector("img")?.getAttribute("src"),

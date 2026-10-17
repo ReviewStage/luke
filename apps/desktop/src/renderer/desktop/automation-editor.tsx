@@ -64,13 +64,17 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   AnchoredPopover,
+  BUTTON_VARIANT,
   ConfirmDialog,
   EllipsisIcon,
   POPOVER_ALIGN,
   ProviderMark,
   SidePanelIcon,
   useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -96,9 +100,7 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
@@ -563,7 +565,7 @@ function AutomationActions({
   automation: AutomationSummary;
   onDelete: () => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",
@@ -647,7 +649,7 @@ function EditorToolbar({
       <div className="automation-toolbar">
         <div className="desktop-toolbar-heading">
           <nav className="automation-crumbs" aria-label="Path">
-            <FoldingButton label="Automations" glyph={<ZapIcon />} onClick={onBack} />
+            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
             <ChevronRightIcon aria-hidden="true" />
             <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
           </nav>
@@ -661,16 +663,11 @@ function EditorToolbar({
           {automation === undefined ? null : (
             <FoldingButton
               label="Run now"
-              glyph={<PlayIcon />}
+              icon={<PlayIcon />}
+              variant={BUTTON_VARIANT.OUTLINE}
               busy={running ? "Running" : undefined}
-              className="toolbar-button bordered-button"
-              disabled={running}
               onClick={onRunNow}
-            >
-              <BusyLabel busy={running} label="Running">
-                Run now
-              </BusyLabel>
-            </FoldingButton>
+            />
           )}
           <button
             type="button"

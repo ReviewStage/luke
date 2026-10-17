@@ -186,6 +186,8 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        pages: undefined,
+        onRereadPages: () => undefined,
       },
       onNewTask: () => setAsked(true),
       newTask: { ...control.newTask, open: asked, onClose: () => setAsked(false) },
@@ -916,7 +918,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
   });
 
   const card = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.equal(card?.querySelector(".card-name")?.textContent, DOCUMENT_NAME);
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, DOCUMENT_NAME);
 });
 
 /** The sidebar's Chat row, where one stands. */

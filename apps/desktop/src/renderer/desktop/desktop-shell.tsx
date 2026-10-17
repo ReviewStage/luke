@@ -494,9 +494,10 @@ export function DesktopShell({
     );
   }
   // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then. The Inbox,
-  // Factory, the Automations page, and Chat stand in the plan's place, so they
-  // draw no panel to toggle; an agent's page draws the agent's own.
+  // toolbar beneath it leaves the toggle room then and only then. Factory,
+  // the Automations page, and Chat stand in the plan's place, so they draw
+  // no panel to toggle; an agent's page draws the agent's own, and the Inbox
+  // the chosen item's task's.
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
@@ -505,7 +506,8 @@ export function DesktopShell({
   const chatOpen = tasks.chatView.open && chatOn;
   const issuesOpen = tasks.issuesView.open && issuesOn;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  const panelToggle = planToggle || pageAgent !== undefined;
+  const panelToggle =
+    planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the task's column, call bar
   // and all, so the captions float in its place then.
@@ -543,9 +545,7 @@ export function DesktopShell({
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             ) : inboxOpen ? (
-              <PageFind page={FIND_PAGE.INBOX} active={tasks.shown}>
-                <DesktopInbox tasks={tasks} />
-              </PageFind>
+              <DesktopInbox tasks={tasks} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />

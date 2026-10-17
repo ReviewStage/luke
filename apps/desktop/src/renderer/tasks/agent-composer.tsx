@@ -11,7 +11,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
+import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon, riseAboveEnd, useMenu } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
@@ -24,7 +24,7 @@ import {
   PromptInputTools,
   submitPromptInput,
 } from "../ai-elements/prompt-input";
-import { ActionMenu, type MenuAction, riseAboveEnd, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { editorBundleAtom } from "../editor-bundle";
 import { FailureNote } from "../failure-note";
 import { imageFiles } from "../feedback-images";
@@ -210,7 +210,7 @@ function ComposerMore({
   foot: RefObject<HTMLDivElement | null>;
   offers: readonly OverflowOffer[];
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const [taken, setTaken] = useState<readonly OverflowPress[]>([]);
   const trigger = menu.trigger(riseAboveEnd);
   const standing = menu.open !== undefined;
@@ -267,6 +267,7 @@ export function AgentComposer({
   keywords = [],
   skills,
   replyDoor,
+  sendsEmpty = false,
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
@@ -298,6 +299,8 @@ export function AgentComposer({
   skills?: SkillSource | undefined;
   /** Where the box hands the transcript's Reply the door that lays a quote in at its caret; none where nothing replies. */
   replyDoor?: RefObject<((words: string) => void) | undefined> | undefined;
+  /** Whether an empty box sends too, as a fork's draft does, which needs no words of its own. */
+  sendsEmpty?: boolean;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
@@ -322,7 +325,7 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
-  const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
+  const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const bundle = useAtomValue(editorBundleAtom);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;

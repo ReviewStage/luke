@@ -215,7 +215,9 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
-  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map((note) => note.textContent);
+  const notes = [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].map(
+    (note) => note.textContent,
+  );
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });

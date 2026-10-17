@@ -905,6 +905,29 @@ it.effect(
 );
 
 it.effect(
+  "a plan's pages are answered to the Inbox that asked, never told in the view, and a plan whose pages the service did not answer says so",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const funnel = {
+        id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        title: "Invite funnel",
+        version: 2,
+        at: 1_500,
+      };
+      service.pageLines[INVITES] = [funnel];
+      const { call, told } = yield* subject(service);
+
+      const read = yield* call(GATEWAY_METHOD.TASKS_PAGES, { taskId: INVITES });
+      const unread = yield* call(GATEWAY_METHOD.TASKS_PAGES, { taskId: "another-plan" });
+
+      assert.deepEqual(read, { pages: [funnel] });
+      assert.deepEqual(unread, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.equal(told.length, 0, "a plan's pages read for the Inbox are never told in the view");
+    }),
+);
+
+it.effect(
   "a picture the editor took is kept on the service and read back by the id it answered, and one past the plan's bound is refused in so many words",
   () =>
     Effect.gen(function* () {

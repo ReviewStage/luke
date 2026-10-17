@@ -5,8 +5,9 @@ import { useCallback, useState } from "react";
  *
  * The element the ref is handed is measured whenever its box resizes: words
  * renamed, or the room around them given to something else. The owner marks
- * it `data-overflow`, which desktop.css fades out over its last
- * `--label-fade`, as Chrome's and Arc's tabs end a long title.
+ * it `data-overflow`, which its stylesheet fades out over its last few
+ * pixels (the desktop's `--label-fade`), as Chrome's and Arc's tabs end a
+ * long title.
  */
 export function useClipped(): [(element: HTMLElement | null) => (() => void) | undefined, boolean] {
   const [clipped, setClipped] = useState(false);

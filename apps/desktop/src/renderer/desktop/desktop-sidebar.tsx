@@ -11,12 +11,14 @@ import {
   ArrowRightIcon,
   ComposeIcon,
   EllipsisIcon,
+  ErrorState,
   FolderIcon,
   PinIcon,
   PlusIcon,
   ProviderMark,
   SearchIcon,
   UnpinIcon,
+  useMenu,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { forYou } from "@luke/ui/chat-model";
@@ -64,7 +66,6 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
@@ -77,7 +78,7 @@ import { useUnreadTasks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { type HoverPane, useHoverPane } from "./hover-pane";
@@ -565,7 +566,7 @@ function RepositorySection({
   const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
   // The menu is drawn over the window rather than inside the sidebar, so it
   // closes with the sidebar folding away as well as with the tab hiding.
-  const menu = useActionMenu(context.tasks.shown && context.inSight);
+  const menu = useMenu(context.tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const actionGroups = repositoryActionGroups(group, context.tasks, context.archived);
   return (
@@ -1629,7 +1630,7 @@ function SidebarColumn({
           ) : null}
           {tasks.listFailed ? (
             <div className="sidebar-note">
-              <ReadFailure line="Your tasks could not be read." onRetry={tasks.onRetryList} />
+              <ErrorState onRetry={tasks.onRetryList}>Your tasks could not be read.</ErrorState>
             </div>
           ) : null}
           {/* The list is empty before its first read lands, so that it

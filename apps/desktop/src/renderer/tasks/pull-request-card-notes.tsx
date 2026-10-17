@@ -1,8 +1,8 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
+import { HoverCardNote } from "@luke/ui";
 import { githubActor } from "@luke/ui/actor-model";
 import { GitCommitHorizontalIcon, MessageSquareIcon } from "lucide-react";
 import { ActorLine, ActorRef } from "../actor-ref";
-import { CardNote } from "../hover-card";
 import { useMemberDirectory } from "../member-directory";
 import { LinesChanged } from "./agent-published";
 import { RelativeTime } from "./relative-time";
@@ -64,7 +64,7 @@ function SizeNote({
   const { lines, files } = pullRequest;
   const filesWords = files === undefined ? undefined : counted(files, "file", "files");
   return (
-    <CardNote>
+    <HoverCardNote>
       {heading}
       {lines === undefined ? null : (
         <>
@@ -77,7 +77,7 @@ function SizeNote({
         : lines === undefined
           ? `${SEPARATOR}${filesWords}`
           : ` in ${filesWords}`}
-    </CardNote>
+    </HoverCardNote>
   );
 }
 
@@ -102,15 +102,15 @@ export function OpenedNote({
   const ago = when === undefined ? null : <RelativeTime at={when.at} now={now} hint={false} ago />;
   if (opener === undefined) {
     return (
-      <CardNote>
+      <HoverCardNote>
         {`${words?.lead ?? ""} `}
         {ago}
-      </CardNote>
+      </HoverCardNote>
     );
   }
   const actor = githubActor(opener, { members, readerId, former });
   return (
-    <CardNote>
+    <HoverCardNote>
       <ActorLine>
         {"Opened by "}
         <ActorRef actor={actor} />
@@ -122,7 +122,7 @@ export function OpenedNote({
           </span>
         )}
       </ActorLine>
-    </CardNote>
+    </HoverCardNote>
   );
 }
 
@@ -136,7 +136,7 @@ function CountsNote({
 }): React.JSX.Element | null {
   if (comments === undefined && commits === undefined) return null;
   return (
-    <p className="card-note card-counts">
+    <p className="luke-hover-card-note card-counts">
       {comments === undefined ? null : (
         <span className="card-count">
           <MessageSquareIcon aria-hidden="true" />
@@ -173,11 +173,11 @@ export function PullRequestCardNotes({
       <SizeNote heading={heading} pullRequest={pullRequest} />
       <OpenedNote opener={opener} when={pullRequest.when} />
       {branches === undefined ? null : (
-        <CardNote oneLine>
+        <HoverCardNote oneLine>
           <code className="card-code">{branches.base}</code>
           {" ← "}
           <code className="card-code">{branches.head}</code>
-        </CardNote>
+        </HoverCardNote>
       )}
       {labels.length === 0 ? null : (
         <ul className="card-labels" aria-label="Labels">
