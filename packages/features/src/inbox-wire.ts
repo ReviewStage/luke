@@ -277,6 +277,9 @@ const WORD_BLOCKS = [
   }),
 ] as const;
 
+/** One word block as a person writes it from the window: Markdown, a link, or lines of code, never a picture. */
+export const inboxWordBlockSchema = EffectSchema.Union(WORD_BLOCKS);
+
 /** What an image block says of its picture: the words that stand for it where it cannot be seen. */
 const imageWords = { alt: filledText(INBOX_BOUNDS.MAX_ALT_CHARS) };
 

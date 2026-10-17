@@ -16,7 +16,13 @@ import {
 } from "./account-call.js";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import type { AccountToken } from "./account-token.js";
-import { CHAT_QUERY, chatAnswerSchema } from "./chat-wire.js";
+import {
+  CHAT_QUERY,
+  type ChatWriteRequest,
+  chatAnswerSchema,
+  chatWriteAnswerSchema,
+  chatWriteRequestSchema,
+} from "./chat-wire.js";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -24,6 +30,7 @@ import {
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
@@ -836,6 +843,29 @@ export class HostedCodingAgentClient {
     );
   }
 
+  /**
+   * Writes to a workspace's chat as the account's own member of it: a post,
+   * an answer to an ask, a resolve, or how far the person has read, under
+   * the key the window made where the write carries one, which a retry
+   * carries again; a write the service would refuse by shape is refused
+   * here without traveling.
+   */
+  chatPost(
+    workspaceId: string,
+    request: ChatWriteRequest,
+  ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    const query = new URLSearchParams({ [CHAT_QUERY.WORKSPACE_ID]: workspaceId });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, chatWriteAnswerSchema, MESSAGE_REFUSALS),
+    );
+  }
   /**
    * One image an agent's pull request's overview names, by the address
    * GitHub's rendering spelled, fetched under the account: its bytes in

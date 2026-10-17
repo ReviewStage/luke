@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
-import { chatAnswerSchema } from "./chat-wire.js";
+import { chatAnswerSchema, chatWriteAnswerSchema } from "./chat-wire.js";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
@@ -513,3 +513,11 @@ export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema
 export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
 
 export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
+
+/** A write to a workspace's chat, as the window hears it: what the write came to, or why there is no answer. */
+export const codingAgentChatWriteAnswerViewSchema = EffectSchema.Union([
+  chatWriteAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentChatWriteAnswerView = typeof codingAgentChatWriteAnswerViewSchema.Type;

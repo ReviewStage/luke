@@ -39,11 +39,13 @@ import {
   leave,
   markNoticed,
   memberNamed,
+  messageAt,
   openAsksOf,
   openTopicChannel,
   peekUnread,
   postAsk,
   postMessage,
+  readAllTo,
   readAttachment,
   readThrough,
   readTo,
@@ -726,6 +728,59 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
         assert.deepEqual(
           yield* room.post(room.first, "Still here?"),
           Result.fail(CHAT_REFUSAL.AUTHOR_LEFT),
+        );
+      }),
+  );
+
+  it.effect(
+    "a message is read at its place by a reader who sees it, and a person's cursor moves on to a place, never back or past the head, letting go of the notice it passes",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const posted = yield* room.posted(room.first, "In the channel.");
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.ada.id),
+        );
+        const private_ = yield* room.posted(room.first, "To Ada alone.", { channelId: dm.id });
+        const at = (reader: ChatMemberRow, seq: number) =>
+          Effect.map(
+            messageAt(room.owner, room.workspace, reader.id, seq),
+            Option.map((message) => message.id),
+          );
+        assert.deepEqual(yield* at(room.ada, posted.seq), Option.some(posted.id));
+        assert.deepEqual(yield* at(room.ada, private_.seq), Option.some(private_.id));
+        assert.deepEqual(yield* at(room.second, private_.seq), Option.none());
+        assert.deepEqual(yield* at(room.ada, 999), Option.none());
+
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.ada.id, room.channel.id, posted.seq),
+          true,
+        );
+        assert.deepEqual(
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, posted.seq),
+          Option.some(posted.seq),
+        );
+        // The notice it passed is let go, so the next one is told.
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.ada.id, dm.id, private_.seq),
+          true,
+        );
+        assert.deepEqual(
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, 0),
+          Option.some(posted.seq),
+        );
+        assert.deepEqual(
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, 999),
+          Option.some(private_.seq),
+        );
+        // A person moves no other person's cursor.
+        assert.deepEqual(
+          yield* readAllTo(room.teammate, room.workspace, room.ada.id, private_.seq),
+          Option.none(),
+        );
+        assert.deepEqual(
+          yield* readAllTo(yield* openAccount(), room.workspace, room.ada.id, 1),
+          Option.none(),
         );
       }),
   );
