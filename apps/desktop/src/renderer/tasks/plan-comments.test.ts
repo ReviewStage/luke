@@ -14,12 +14,21 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import {
+  installEditorBundle,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "#testing/composer";
+import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
 import { CommentFocusScope, PlanCommentsTab } from "./plan-comments";
+import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 
 /**
  * A plan's comments on its own page: each open thread's words marked where
@@ -122,6 +131,7 @@ function drawn(
   landing: () => boolean = () => true,
   plan: Task = PLAN,
   reveal?: { readonly thread: string; readonly ask: number },
+  mentions?: PlanMentionsValue,
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
   const started: PlanCommentStartRequest[] = [];
@@ -156,15 +166,20 @@ function drawn(
           live: false,
           ...(view === "page" ? { sectionLinks: PAGE_LINKS } : undefined),
         });
-  act(() =>
-    root.render(
-      createElement(
-        PlanCommentsProvider,
-        { value: control },
-        createElement(CommentFocusScope, { reveal, children: page }),
-      ),
-    ),
+  // Note that a page with mentions draws on a registry of its own, so the editor bundle installed for it is read afresh.
+  const registry = AtomRegistry.make();
+  const tree = createElement(
+    PlanCommentsProvider,
+    { value: control },
+    createElement(CommentFocusScope, {
+      reveal,
+      children:
+        mentions === undefined
+          ? page
+          : createElement(PlanMentions, { value: mentions, children: page }),
+    }),
   );
+  act(() => root.render(mentions === undefined ? tree : onRegistry(registry, tree)));
   return { container, asked, started };
 }
 
@@ -572,4 +587,66 @@ test("a link to a resolved thread lists it under Resolved, open, and scrolls the
   } finally {
     if (rect !== undefined) Object.defineProperty(Element.prototype, "getBoundingClientRect", rect);
   }
+});
+
+/** The plan's page's mentions, as the page hands them to every box on it. */
+const PAGE_MENTIONS: PlanMentionsValue = {
+  taskId: PLAN.id,
+  taskName: "Invitations",
+  workspace: "acme",
+  repository: "acme/relay",
+  text: () => TEXT,
+  doors: {
+    taskId: PLAN.id,
+    place: { workspace: "acme", repository: "acme/relay" },
+    anchors: new Set(["goal", "approach"]),
+    onOpenTask: () => undefined,
+    onOpenFile: undefined,
+  },
+};
+
+test("on a plan's page a reply is written in the agent box's editor, its words posted on Return, and a comment's mention drawn as its chip", async () => {
+  installEditorBundle();
+  installEditorLayout();
+  const mentioned = threadOn(ID.OPEN, "**single-use link** that expires", "", {
+    entries: [
+      {
+        id: `${ID.OPEN.slice(0, -4)}aaaa`,
+        kind: PLAN_COMMENT_ENTRY.COMMENT,
+        writer: {
+          actor: PLAN_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-charles", name: "Charles Pan" },
+        },
+        words: `See [@Goal](https://tryluke.dev/acme/plan/${PLAN.id}#goal) first.`,
+        at: 1,
+      },
+    ],
+  });
+  const { container, asked } = drawn(
+    "page",
+    [mentioned],
+    () => true,
+    PLAN,
+    undefined,
+    PAGE_MENTIONS,
+  );
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  await act(async () => undefined);
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.ok(card);
+
+  assert.ok(card.querySelector(".comment-words .mention-chip"), "the mention is drawn as its chip");
+  assert.ok(card.querySelector(".composer-editor"), "the reply is the agent box's editor");
+  typeInComposer(card, "Agreed.");
+  pressInComposer(card, "Enter");
+  await act(async () => undefined);
+
+  assert.deepEqual(
+    asked.map(({ action }) => [action.action, "words" in action ? action.words : undefined]),
+    [[PLAN_COMMENT_ACTION.REPLY, "Agreed."]],
+  );
 });
