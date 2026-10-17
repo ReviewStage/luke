@@ -78,26 +78,42 @@ export const CODER_TOOL = {
   LIST_MODELS: AGENT_TOOL.LIST_MODELS,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
+  READ_COMMENTS: AGENT_TOOL.READ_COMMENTS,
+  REPLY_TO_COMMENT: AGENT_TOOL.REPLY_TO_COMMENT,
+  RESOLVE_THREAD: AGENT_TOOL.RESOLVE_THREAD,
+  REOPEN_THREAD: AGENT_TOOL.REOPEN_THREAD,
   READ_PAGE: AGENT_TOOL.READ_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
   SHOW_IMAGE: AGENT_TOOL.SHOW_IMAGE,
   SLEEP: AGENT_TOOL.SLEEP,
 } as const;
 
-/** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, and `show_page`, which shows a page on it. */
-export type TaskTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE;
+/** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, `show_page`, which shows a page on it, and the four that read and answer its comments. */
+export type TaskTool =
+  | typeof CODER_TOOL.EDIT_PLAN
+  | typeof CODER_TOOL.SHOW_PAGE
+  | (typeof COMMENT_TASK_TOOLS)[number];
+
+/** The comment tools every agent on a task is offered, one handed a prompt among them, since a member may send any of them a thread. */
+const COMMENT_TASK_TOOLS = [
+  CODER_TOOL.READ_COMMENTS,
+  CODER_TOOL.REPLY_TO_COMMENT,
+  CODER_TOOL.RESOLVE_THREAD,
+  CODER_TOOL.REOPEN_THREAD,
+] as const;
 
 /**
  * The plan's tools an agent is offered: none for one on no plan, as an
  * automation's run starts one, and no `edit_plan` for one handed a prompt,
- * which never saw the plan. Note that each tool withheld is one its call
+ * which never saw the plan; every agent on a task reads and answers its
+ * comments. Note that each tool withheld is one its call
  * would only be refused by (`host.ts`'s `editPlan` and `showPage`), and that
  * the instructions leave out the same words (`instructions.ts`).
  */
 export function taskToolsOf(agent: Pick<CodingAgent, "taskId" | "prompt">): ReadonlySet<TaskTool> {
   if (agent.taskId === null) return new Set();
-  if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE]);
-  return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE]);
+  if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
+  return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
 }
 
 /**

@@ -19,6 +19,7 @@ import {
   type TaskToggler,
 } from "@luke/panel/markdown-message";
 import { useCreator } from "@luke/panel/member-directory";
+import type { PlanEditorHandle } from "@luke/panel/plan-editor/contract";
 import { DocumentByline, DocumentScroll } from "@luke/panel/tasks/document-frame";
 import { PlanPictures, usePlanPictureDrawer } from "@luke/panel/tasks/plan-pictures";
 import {
@@ -693,11 +694,12 @@ function TitleMenu({
 function useCommentedEdit(
   edit: MarkdownEdit | undefined,
   section: PlanSection | undefined,
+  planText: string,
 ): MarkdownEdit | undefined {
   const control = usePlanCommentsControl();
   const { active, pending } = useCommentFocus();
   if (control === undefined || section === undefined) return edit;
-  const spans = commentSpansIn(control.threads, section, active, pending);
+  const spans = commentSpansIn(control.threads, section, active, pending, planText);
   if (spans.length === 0) return edit;
   const comments = spans.map((span) => ({
     from: span.from,
@@ -724,6 +726,7 @@ function DocumentUnit({
   anchor,
   entry,
   onTask,
+  planText,
 }: {
   view: UnitView;
   /** Where the unit's words stand in the plan's text, where they stand as drawn, which marks the comments on them; none mid-chase. */
@@ -739,11 +742,13 @@ function DocumentUnit({
   entry: boolean;
   /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
   onTask?: TaskToggler | undefined;
+  /** The plan's text as saved, which `section` stands in and a thread being started is laid over. */
+  planText: string;
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
   const picture = usePlanPictureDrawer();
-  const edit = useCommentedEdit(view.edit, section);
+  const edit = useCommentedEdit(view.edit, section, planText);
   const drawn = (
     <MarkdownMessage
       words={view.words}
@@ -830,6 +835,8 @@ export function PlanBody({
   };
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  // The open editor's handle, which a comment started on its words is measured through.
+  const editorHandle = useRef<PlanEditorHandle | undefined>(undefined);
   // A press on the document's empty room opens its text there, at its end
   // where it lands under the last line, or anywhere on a plan with no text
   // yet, which has no section to click into; the open editor's own room
@@ -1005,6 +1012,7 @@ export function PlanBody({
           anchor={anchors[section] ?? ""}
           entry={entry === view.id}
           onTask={taskToggler(section)}
+          planText={task.document.body}
         />
       </DocumentBlock>
     ) : (
@@ -1016,6 +1024,7 @@ export function PlanBody({
         link={link}
         linked={linked}
         anchor={anchors[section] ?? ""}
+        planText={task.document.body}
         // Note that a document that cannot be edited has no block Tab stop, so each ⋯ is one.
         entry
       />
@@ -1090,6 +1099,7 @@ export function PlanBody({
               hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
               mentions={mentionDoors}
               scroller={scroller}
+              handle={editorHandle}
             />
           )}
           {comments === undefined || !commentsHere || drawnSections === undefined ? null : (
@@ -1100,7 +1110,7 @@ export function PlanBody({
               sections={drawnSections}
               text={task.document.body}
               doors={{ control: comments, agents, me: reader.readerId }}
-              editing={editing.editor !== undefined}
+              editor={editing.editor === undefined ? undefined : editorHandle}
             />
           )}
         </div>

@@ -5638,8 +5638,23 @@ button.picture-frame {
 
 .comment-slot {
   position: absolute;
+  top: 0;
   right: 0;
   left: 0;
+  animation: comment-slot-arrive var(--duration-quick) ease-out backwards;
+}
+
+/* A card already in the margin travels to its next place, as threads above
+   it open, grow, or arrive, on the spring every move rides; one arriving
+   lands where it belongs and fades in. */
+.comment-slot[data-moves="true"] {
+  transition: transform var(--duration-shape) var(--spring);
+}
+
+@keyframes comment-slot-arrive {
+  from {
+    opacity: 0;
+  }
 }
 
 /* The bar at the end of a block a thread is on whole, stronger while it is open. */
@@ -5843,6 +5858,19 @@ button.picture-frame {
   margin-left: var(--luke-space-4);
 }
 
+/* Who sent a thread to whom: the line wraps between its names rather than
+   cutting the first one short, and a name cut at all is cut alone, within
+   the card's width. */
+.comment-event > .actor-words {
+  flex-wrap: wrap;
+  row-gap: var(--luke-space-2);
+}
+
+.comment-event > .actor-words > * {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
 .comment-note {
   margin: var(--luke-space-6) 0 0;
   color: var(--luke-color-danger-text);
@@ -5916,6 +5944,21 @@ button.picture-frame {
   justify-content: space-between;
   gap: var(--luke-space-6);
   padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+}
+
+/* Send to, at the field's start, as the composer's model chip stands at its foot. */
+.comment-send-to {
+  height: 26px; /* off-scale: a chip in a field's foot stands a size under a control */
+  padding: 0 var(--luke-space-8);
+  color: var(--luke-color-text-body);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.comment-send-to svg {
+  width: 12px;
+  height: 12px;
+  color: var(--luke-color-text-subtle);
 }
 
 /* Send, as the composer's: a disc in the primary ink. */

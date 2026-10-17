@@ -10,8 +10,9 @@ import { Markdown } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import { anchorsLaidIn, anchorsOf, commentAnchorMark } from "./comment-anchors.js";
+import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
 import type {
+  EditorSpan,
   MentionNode,
   PlanEditorHandle,
   PlanEditorPictures,
@@ -346,6 +347,44 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     },
     settlePicture: (upload, src) => settledPicture(editor.view, upload, src),
     removePicture: (upload) => removedPicture(editor.view, upload),
+    selectionSpan: () => {
+      const { from, to, empty } = editor.state.selection;
+      return empty ? undefined : editorSpan(editor, manager, held, from, to);
+    },
+    blockSpan: (element) => {
+      const { doc } = editor.state;
+      const at = editor.view.posAtDOM(element, 0);
+      const resolved = doc.resolve(Math.min(Math.max(at, 0), doc.content.size));
+      if (resolved.depth < 1) return undefined;
+      // A bullet is its own words, up to any list nested under it, as the read view comments on one.
+      for (let depth = resolved.depth; depth >= 1; depth -= 1) {
+        const node = resolved.node(depth);
+        if (LIST_ITEMS.has(node.type.name)) {
+          const start = resolved.start(depth);
+          const own = node.firstChild?.nodeSize ?? node.content.size;
+          return editorSpan(editor, manager, held, start, start + own);
+        }
+      }
+      return editorSpan(editor, manager, held, resolved.before(1), resolved.after(1));
+    },
     destroy: () => editor.destroy(),
   };
+}
+
+/** The nodes a list's bullets are, each commented on alone. */
+const LIST_ITEMS: ReadonlySet<string> = new Set(["listItem", "taskItem"]);
+
+/** The document's stretch from `from` to `to` as a thread started on it anchors it, in the Markdown the editor would hand over now; nothing where it holds no word the text keeps. */
+function editorSpan(
+  editor: Editor,
+  manager: Parameters<typeof documentMarkdown>[0],
+  held: HeldSources,
+  from: number,
+  to: number,
+): EditorSpan | undefined {
+  const { doc } = editor.state;
+  const text = documentMarkdown(manager, doc, held);
+  const span = spanIn(doc, text, from, to);
+  const quote = doc.textBetween(from, to, "\n", "\uFFFC").trim();
+  return span === undefined || quote === "" ? undefined : { ...span, quote, text };
 }

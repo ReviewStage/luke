@@ -701,6 +701,7 @@ export function PlanDocumentEditor({
   hostOf,
   mentions,
   scroller,
+  handle,
 }: {
   task: Task;
   editor: DocumentEditor;
@@ -711,6 +712,8 @@ export function PlanDocumentEditor({
   mentions?: MentionDoors | undefined;
   /** The column the document scrolls in, whose empty room moves the caret (`useTextRoom`). */
   scroller?: React.RefObject<HTMLElement | null> | undefined;
+  /** Where the mounted editor's handle is kept, for the merged answers and for a comment started on its words. */
+  handle: React.RefObject<PlanEditorHandle | undefined>;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
   // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
@@ -723,7 +726,6 @@ export function PlanDocumentEditor({
             ? []
             : [{ thread: thread.id, ...thread.anchor }],
         );
-  const handle = useRef<PlanEditorHandle | undefined>(undefined);
   useMergedAnswers(editor, editing, task, handle);
   const module = useAtomValue(useSideBundles().planEditor);
   const room = useRef<HTMLElement>(null);

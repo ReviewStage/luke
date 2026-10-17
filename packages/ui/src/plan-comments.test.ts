@@ -87,3 +87,29 @@ test("the open card stands exactly level with its words, and the ones above it s
 
   assert.deepEqual(Object.fromEntries(tops), { a: -48, b: 40, c: 248 });
 });
+
+test("a thread begun on the editor's words is marked on the same words of the saved text, though words typed before them are not saved yet", () => {
+  const saved = "alpha beta gamma";
+  const draft = "alpha new beta gamma";
+  const from = draft.indexOf("beta");
+  const pending = {
+    from,
+    to: from + 4,
+    scope: PLAN_COMMENT_SCOPE.WORDS,
+    quote: "beta",
+    text: draft,
+  };
+
+  const [span] = commentSpansIn([], { from: 0, to: saved.length }, undefined, pending, saved);
+  const onlyDraft = commentSpansIn(
+    [],
+    { from: 0, to: saved.length },
+    undefined,
+    { ...pending, from: draft.indexOf("new"), to: draft.indexOf("new") + 3, quote: "new" },
+    saved,
+  );
+
+  assert.equal(span?.thread, PENDING_THREAD);
+  assert.equal(span === undefined ? "" : saved.slice(span.from, span.to), "beta");
+  assert.deepEqual(onlyDraft, [], "words not saved yet mark nothing");
+});

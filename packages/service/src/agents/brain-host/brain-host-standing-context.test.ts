@@ -1,8 +1,17 @@
 import assert from "node:assert/strict";
 import { changeIssue, createIssue } from "@luke/database/models/issue-store";
+import {
+  actOnPlanCommentThread,
+  startPlanCommentThread,
+} from "@luke/database/models/plan-comments";
 import { openTaskConversation, savePlanText } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { insertMessage, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
+import {
+  PLAN_COMMENT_ACTION,
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_SCOPE,
+} from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -204,4 +213,44 @@ test("a plan started from one of the workspace's issues hands every turn the iss
   assert.match(issue.identifier, new RegExp(`-${filed.number}$`));
   assert.ok(String(issue.url).endsWith(`/issue/${filed.id}`));
   assert.equal(other.includes("[workspace issue"), false);
+});
+
+test("a turn of a task's conversation is handed its plan's open comment threads, each with its words and comments, and no resolved one", async () => {
+  const userId = await database.createUser();
+  const task = await database.run(startTask(userId, { name: TASK_NAME }));
+  const conversationId = Option.getOrThrow(
+    await database.run(openTaskConversation(userId, task.id)),
+  ).conversationId;
+  await database.run(savePlanText(userId, task.id, FIRST));
+  const words = FIRST.slice(0, 12);
+  const start = (comment: string) =>
+    database.run(
+      startPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId }, task.id, {
+        clientKey: crypto.randomUUID(),
+        scope: PLAN_COMMENT_SCOPE.WORDS,
+        quote: words,
+        anchor: { from: 0, to: words.length },
+        text: FIRST,
+        words: comment,
+      }),
+    );
+  await start("Should this be a setting?");
+  const resolved = await start("Already settled.");
+  if (!("answer" in resolved) || !("thread" in resolved.answer)) throw new Error("not started");
+  await database.run(
+    actOnPlanCommentThread(
+      { actor: PLAN_COMMENT_ACTOR.MEMBER, userId },
+      task.id,
+      resolved.answer.thread.id,
+      {
+        action: PLAN_COMMENT_ACTION.RESOLVE,
+      },
+    ),
+  );
+
+  const handedNow = await standingContextOf({ userId, conversationId });
+
+  assert.ok(handedNow.includes("[open comment threads]"));
+  assert.ok(handedNow.includes("Should this be a setting?"));
+  assert.equal(handedNow.includes("Already settled."), false);
 });

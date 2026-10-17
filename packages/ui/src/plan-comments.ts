@@ -1,4 +1,6 @@
+import { textChange } from "@luke/features/plan-comment-anchor";
 import {
+  PLAN_COMMENT_ACTION,
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
@@ -52,6 +54,10 @@ const COMMENT_NOTE = {
   NO_WORDS: "The words this comment was on are no longer in the plan.",
   NOT_YOURS: "Only its writer can change this comment.",
   GONE: "This comment is no longer in the thread.",
+  NO_AGENT: "That agent is no longer on this task.",
+  AGENT_AWAY:
+    "That agent isn't running, so it couldn't take the thread. Send it to Luke or another agent.",
+  NOT_SENT: "The thread could not be sent.",
 } as const;
 
 /** How one read is asked: the plan and the cursor to read past. */
@@ -101,6 +107,10 @@ function refusalWords(refusal: PlanCommentRefusal): string {
       return COMMENT_NOTE.GONE;
     case PLAN_COMMENT_REFUSAL.KEY_TAKEN:
       return COMMENT_NOTE.NOT_CHANGED;
+    case PLAN_COMMENT_REFUSAL.NO_AGENT:
+      return COMMENT_NOTE.NO_AGENT;
+    case PLAN_COMMENT_REFUSAL.AGENT_AWAY:
+      return COMMENT_NOTE.AGENT_AWAY;
   }
 }
 
@@ -233,7 +243,14 @@ export function usePlanComments(input: {
         return false;
       }
       if ("failure" in answer) {
-        note(threadId, "words" in action ? COMMENT_NOTE.NOT_POSTED : COMMENT_NOTE.NOT_CHANGED);
+        note(
+          threadId,
+          "words" in action
+            ? COMMENT_NOTE.NOT_POSTED
+            : action.action === PLAN_COMMENT_ACTION.ASK
+              ? COMMENT_NOTE.NOT_SENT
+              : COMMENT_NOTE.NOT_CHANGED,
+        );
         return false;
       }
       took(planId, answer);
@@ -286,10 +303,37 @@ export interface PendingThread {
   readonly to: number;
   readonly scope: PlanCommentThread["scope"];
   readonly quote: string;
+  /** The text `from` and `to` are offsets in, where it is not the plan's as saved: the open editor's, for words started on there. */
+  readonly text?: string;
 }
 
 /** The id the thread being started is drawn under until the service names it. */
 export const PENDING_THREAD = "pending";
+
+/** The last laying of a thread being started's text over the plan's, kept since every section asks it of the same two texts. */
+let laid:
+  | { readonly from: string; readonly to: string; readonly change: ReturnType<typeof textChange> }
+  | undefined;
+
+/**
+ * A thread being started, where it stands in the plan's text as saved: one
+ * begun on the editor's words is measured in the editor's text, laid over
+ * the saved text so its mark stands on the same words; nothing where none of
+ * them is saved yet.
+ */
+function pendingIn(
+  pending: PendingThread,
+  planText: string | undefined,
+): PendingThread | undefined {
+  if (pending.text === undefined || planText === undefined || pending.text === planText) {
+    return pending;
+  }
+  if (laid?.from !== pending.text || laid.to !== planText) {
+    laid = { from: pending.text, to: planText, change: textChange(pending.text, planText) };
+  }
+  const span = laid.change(pending);
+  return span === undefined ? undefined : { ...pending, ...span };
+}
 
 /**
  * The open threads' words inside one section of the plan's text, `from` to
@@ -301,22 +345,24 @@ export function commentSpansIn(
   section: { readonly from: number; readonly to: number },
   active: string | undefined,
   pending: PendingThread | undefined,
+  planText?: string,
 ): readonly CommentSpan[] {
+  const begun = pending === undefined ? undefined : pendingIn(pending, planText);
   const anchored = threads.flatMap((thread) =>
     thread.anchor !== undefined && openThread(thread)
       ? [{ ...thread.anchor, thread: thread.id, block: thread.scope === PLAN_COMMENT_SCOPE.BLOCK }]
       : [],
   );
   const all =
-    pending === undefined
+    begun === undefined
       ? anchored
       : [
           ...anchored,
           {
-            from: pending.from,
-            to: pending.to,
+            from: begun.from,
+            to: begun.to,
             thread: PENDING_THREAD,
-            block: pending.scope === PLAN_COMMENT_SCOPE.BLOCK,
+            block: begun.scope === PLAN_COMMENT_SCOPE.BLOCK,
           },
         ];
   return all.flatMap((span) => {

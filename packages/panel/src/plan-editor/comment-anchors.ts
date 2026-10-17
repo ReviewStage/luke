@@ -144,3 +144,23 @@ export function anchorsOf(
   });
   return { anchors, carried };
 }
+
+/**
+ * Where the editor's document stretch from `from` to `to` stands in
+ * `markdown`, the text the editor would hand over now, from its first letter
+ * to its last: what a thread started on the editor's words is anchored to.
+ * Nothing where the stretch holds no letter the text keeps.
+ */
+export function spanIn(
+  doc: PmNode,
+  markdown: string,
+  from: number,
+  to: number,
+): { readonly from: number; readonly to: number } | undefined {
+  const words = editorWords(doc);
+  // Note that a block's break, written where the block starts, is no letter of the stretch's.
+  const first = words.at.findIndex((pos, index) => pos >= from && words.text[index] !== "\n");
+  const last = words.at.findLastIndex((pos, index) => pos < to && words.text[index] !== "\n");
+  if (first < 0 || last < first) return undefined;
+  return textChange(words.text, markdown)({ from: first, to: last + 1 });
+}

@@ -32,13 +32,13 @@ afterEach(() => {
 });
 
 /** The editor mounted on the text with the thread's words anchored, and every draft and report it handed over. */
-function mounted() {
+function mounted(text = TEXT) {
   const drafts: { markdown: string; anchors: EditorAnchors | undefined }[] = [];
   const host = document.createElement("div");
   document.body.append(host);
-  const from = TEXT.indexOf(WORDS);
+  const from = text.indexOf(WORDS);
   const handle = mountPlanEditor(host, {
-    markdown: TEXT,
+    markdown: text,
     placement: undefined,
     focus: true,
     label: "Plan",
@@ -46,7 +46,7 @@ function mounted() {
     onDraft: (markdown, anchors) => drafts.push({ markdown, anchors }),
     onFinish: () => undefined,
     onLeaveUp: () => undefined,
-    anchors: [{ thread: THREAD, from, to: from + WORDS.length }],
+    anchors: from < 0 ? [] : [{ thread: THREAD, from, to: from + WORDS.length }],
   });
   editors.push(handle);
   const element = host.querySelector<TiptapEditorHTMLElement>(".plan-document-text");
@@ -114,4 +114,38 @@ test("deleted words leave the thread carried with no anchor, undo brings the anc
   editor.commands.redo();
   assert.equal(anchored(), undefined);
   assert.deepEqual(last().anchors?.carried, [THREAD]);
+});
+
+test("words selected in the editor are measured in the text it would hand over now, words typed before them and not yet saved included", () => {
+  const { editor, handle, spanOf, select } = mounted();
+  editor.commands.insertContentAt(spanOf("The email").from, "Quick note. ");
+
+  select(spanOf("withdrawn link"));
+  const span = handle.selectionSpan();
+
+  assert.ok(span, "the selection is measured");
+  assert.equal(span.quote, "withdrawn link");
+  assert.equal(span.text, handle.markdown());
+  assert.ok(span.text.includes("Quick note. "));
+  assert.equal(span.text.slice(span.from, span.to), "withdrawn link");
+});
+
+test("the editor's block button measures one bullet, a parent's own words without the bullets nested under it", () => {
+  const text = "## Goal\n\n- First item\n- Second item\n  - nested one\n  - nested two\n";
+  const { handle, host } = mounted(text);
+  const items = [...host.querySelectorAll("li")];
+  const second = items.find((li) => li.textContent?.startsWith("Second item"));
+  const nested = items.find((li) => li.textContent === "nested two");
+  assert.ok(second && nested);
+
+  const parent = handle.blockSpan(second);
+  const child = handle.blockSpan(nested);
+
+  assert.equal(parent?.quote, "Second item");
+  assert.equal(
+    parent === undefined ? "" : parent.text.slice(parent.from, parent.to),
+    "Second item",
+  );
+  assert.equal(child?.quote, "nested two");
+  assert.equal(child === undefined ? "" : child.text.slice(child.from, child.to), "nested two");
 });
