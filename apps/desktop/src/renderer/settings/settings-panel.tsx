@@ -88,8 +88,8 @@ export function settingsRowsInput({
  * Why the Voice page's row in a list of pages wears its mark, or nothing while
  * voice is fully set up. Judged from the panel's props rather than on the Voice
  * page because the mark has to stand while that page is not drawn: it is the
- * list saying a page one press away still needs a hand. The keyless half moved
- * to the Account and usage heading with the ways in, so the row marks only a
+ * list saying a page one press away still needs a hand. A voice that cannot
+ * run yet is signing in's to fix, not this page's, so the row marks only a
  * microphone still ungranted for a voice that can run. The Settings sidebar
  * reads it, and the Voice page wears the same mark on the row it means.
  */

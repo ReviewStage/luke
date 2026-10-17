@@ -53,6 +53,9 @@ const MOTION_DELAY_MS = {
   ROW_STAGGER: 32,
   // How long a pointer rests on a control before its hover hint shows.
   HINT: 500,
+  // How long a state that often heals at once (a dropped connection being
+  // made again) holds before it is shown, so a blip is never seen.
+  LATE: 1000,
 };
 const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
 // The desktop window's panes (the sidebar, the side panel) open and close on
@@ -136,6 +139,7 @@ function motionTokensCss() {
   --motion-pane: ${MOTION_PANE};
   --row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};
   --hint-delay: ${ms(MOTION_DELAY_MS.HINT)};
+  --late-delay: ${ms(MOTION_DELAY_MS.LATE)};
 }
 `;
 }

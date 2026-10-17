@@ -8,6 +8,7 @@ import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
+import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
@@ -15,6 +16,7 @@ import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
+import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
@@ -52,6 +54,7 @@ export const EXAMPLES: readonly Example[] = [
   CHIPS_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
+  DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   FORM_FIELD_EXAMPLE,
@@ -62,6 +65,7 @@ export const EXAMPLES: readonly Example[] = [
   SWITCHES_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
+  PUBLIC_PAGE_EXAMPLE,
   SEGMENTED_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,

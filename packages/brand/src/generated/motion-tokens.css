@@ -74,4 +74,5 @@
   --motion-pane: cubic-bezier(0.2, 0, 0, 1);
   --row-stagger: 32ms;
   --hint-delay: 500ms;
+  --late-delay: 1000ms;
 }

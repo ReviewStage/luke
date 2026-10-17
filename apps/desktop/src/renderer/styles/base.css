@@ -967,6 +967,8 @@ svg.working-mark[viewBox] {
   --duration-hover: 0s;
   --duration-pane: 0s;
   --row-stagger: 0s;
+  /* A late state shows at once, so a capture never waits on its delay. */
+  --late-delay: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
      first frame, he is the same face in every PNG. The working rows' spinners
@@ -988,6 +990,9 @@ svg.working-mark[viewBox] {
     --duration-fast: 1ms;
     --duration-pane: 1ms;
     --row-stagger: 0ms;
+    /* A late state's wait (`--late-delay`) stands: it holds back a blip that
+       heals at once rather than moving anything, and zeroing it would
+       flash every blip on screen. */
     /* Idle motion is the one thing here that no one asked for, so it is the
        first thing to stop: Luke sits still, upright, with his eyes open. The
        spinner holds too — a working row still says Working in words. */

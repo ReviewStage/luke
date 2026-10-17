@@ -401,6 +401,48 @@ body {
   height: 480px;
 }
 
+/* A screen as tall as a window's content, so a detail page's columns
+   scroll in it. */
+.catalog-screen-detail {
+  display: flex;
+  height: 480px;
+}
+
+/* A screen as tall as a window, which scrolls the public page it holds as a
+   document would, so its banner stands still at the top. */
+.catalog-screen-public {
+  height: 480px;
+  overflow-y: auto;
+}
+
+/* The words an example lays in a public page's banner and footer, as the
+   site's own chrome lays them. */
+.catalog-public-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-16);
+}
+
+.catalog-public-wordmark {
+  font-family: var(--luke-font-display);
+  font-weight: var(--luke-weight-bold);
+}
+
+.catalog-public-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-16);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-label-size);
+}
+
+.catalog-public-footer {
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+}
+
 /* Luke's face at the size the OAuth cards open with. */
 .catalog-auth-mark {
   display: block;
