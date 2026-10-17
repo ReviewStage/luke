@@ -212,9 +212,12 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       : [list];
   }
   if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
+  // The Issues list has no link of its own, and the task it stands over is not in sight, so it offers none.
   const issues = tasks.issuesView;
-  if (issues.open && issues.place.kind === ISSUES_PAGE.ISSUE) {
-    return [at_({ kind: LINK_PLACE.ISSUE, issueId: issues.place.issueId }, LINK_THING.ISSUE)];
+  if (issues.open) {
+    return issues.place.kind === ISSUES_PAGE.ISSUE
+      ? [at_({ kind: LINK_PLACE.ISSUE, issueId: issues.place.issueId }, LINK_THING.ISSUE)]
+      : [];
   }
   return taskLinks(tasks, at);
 }

@@ -1054,6 +1054,21 @@ test("on an issue's page ⌘K offers Copy link to issue and ⌥⌘C copies its l
   assert.deepEqual(copied, [`https://tryluke.dev/acme/issue/${issueId}`]);
 });
 
+test("on the Issues list over an open task nothing has a link, so ⌘K lists no Copy link and ⌥⌘C copies nothing", async () => {
+  const copied = installClipboard();
+  openPalette({
+    ...ON_AGENT_TAB,
+    issuesView: { ...ON_AGENT_TAB.issuesView, open: true, place: { kind: ISSUES_PAGE.LIST } },
+  });
+  type("copy link");
+  const listed = rows().filter((row) => row.startsWith("Copy link to "));
+  act(() => runAppCommand(APP_COMMAND.COPY_LINK));
+  await act(async () => undefined);
+
+  assert.deepEqual(listed, []);
+  assert.deepEqual(copied, []);
+});
+
 test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K lists no Copy link", () => {
   openPalette(tasksControl());
   type("copy link");
