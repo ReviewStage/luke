@@ -3,6 +3,7 @@ import {
   type ChatMemberRow,
   type ChatMessageRow,
   type ChatStoreEffect,
+  channelReads,
   channelsOf,
   chatHead,
   chatPast,
@@ -136,6 +137,32 @@ function heldUntilMoved(
   );
 }
 
+/** Each channel's own cursor past the floor, left out where none is. */
+function readsPast(
+  floor: number,
+  reads: readonly { readonly channelId: string; readonly readSeq: number }[],
+): Pick<ChatAnswer, "reads"> | undefined {
+  const past = reads.filter((each) => each.readSeq > floor);
+  return past.length === 0 ? undefined : { reads: past };
+}
+
+/**
+ * How far a member has read: its cursor everywhere, and each channel it has
+ * read further on that channel's own cursor.
+ */
+export function readsOf(
+  userId: string,
+  organizationId: string,
+  memberId: string,
+): ChatStoreEffect<Pick<ChatAnswer, "readSeq" | "reads">> {
+  return Effect.gen(function* () {
+    const members = yield* roster(userId, organizationId);
+    const floor = members.find((member) => member.id === memberId)?.readSeq ?? 0;
+    const reads = yield* channelReads(userId, organizationId, memberId);
+    return { readSeq: floor, ...readsPast(floor, reads) };
+  });
+}
+
 /**
  * The workspace's chat as the account's person reads it from the cursor,
  * the next place it has yet to read, held while nothing moved past it;
@@ -157,9 +184,11 @@ export function workspaceChatPast(
     const members = yield* roster(userId, organizationId);
     const channels = yield* channelsOf(userId, organizationId);
     const reader = members.find((member) => member.id === self.value.id) ?? self.value;
+    const reads = yield* channelReads(userId, organizationId, reader.id);
     return Option.some({
       self: reader.id,
       readSeq: reader.readSeq,
+      ...readsPast(reader.readSeq, reads),
       members: members.map(memberOnWire),
       channels: channels.map(channelOnWire),
       messages: past.value.messages.map(messageOnWire),

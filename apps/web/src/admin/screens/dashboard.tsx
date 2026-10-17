@@ -9,7 +9,7 @@ import { UsageChart } from "../charts/usage-chart";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, RefreshFailureNotice, WindowSwitcher } from "../chrome/controls";
 import { RetentionNote, TopAccountsNote } from "../chrome/notes";
-import { PageHeader, type ViewerAccount } from "../chrome/page-header";
+import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { METRICS_PATH, windowedReadPath } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
@@ -148,19 +148,17 @@ export function DashboardScreen({
       const db = metrics.systemHealth.database;
 
       return frame(
-        <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
-          <PageHeader
-            title="Dashboard"
-            account={account}
-            onSignOut={signOut}
-            controls={
-              <>
-                <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-                <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-              </>
-            }
-          />
-
+        <AdminPage
+          title="Dashboard"
+          account={account}
+          onSignOut={signOut}
+          controls={
+            <>
+              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            </>
+          }
+        >
           <RefreshFailureNotice
             failure={state.refreshFailure}
             refreshing={refreshing}
@@ -194,7 +192,7 @@ export function DashboardScreen({
                 grouped
               />
             </StatGroup>
-            <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
+            <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
               <SignupsChart
                 daily={metrics.users.dailySignups}
                 trend={metrics.users.signupTrend}
@@ -290,7 +288,7 @@ export function DashboardScreen({
               </div>
             </div>
           </div>
-        </main>,
+        </AdminPage>,
       );
     }
   }

@@ -239,6 +239,43 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
   );
 
   it.effect(
+    "a base the agent names is the branch GitHub is asked to merge into, and a base GitHub does not know opens nothing and answers why",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent(31, CODING_AGENT_AUTHOR.DEVELOPER);
+        const stacked = { ...INPUT, base: "luke/teammate-invitations-store" };
+        // GitHub's own answer to a base it has no branch for: an error with a field and a code, and no message.
+        const unknownBase = () =>
+          Response.json(
+            {
+              message: "Validation Failed",
+              errors: [{ resource: "PullRequest", field: "base", code: "invalid" }],
+            },
+            { status: 422 },
+          );
+
+        const accepted = yield* open(agent, agent.target, opened, stacked);
+        const refused = yield* open(agent, agent.target, unknownBase, {
+          ...INPUT,
+          base: "luke/gone",
+        });
+
+        assert.equal(accepted.result.status, ACTION_RESULT_STATUS.ACCEPTED);
+        assert.equal(JSON.parse(accepted.openings[0]?.body ?? "{}").base, stacked.base);
+        assert.deepEqual(refused.result, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: "Not opened: GitHub said: Validation Failed base invalid",
+        });
+        assert.ok(
+          refused.openings.every(
+            (sent) => sent.headers.get("authorization") === `Bearer ${DEVELOPER_TOKEN}`,
+          ),
+          "the App does not try in the developer's place",
+        );
+      }),
+  );
+
+  it.effect(
     "a rate limit on the developer's request, or their token not refreshing while GitHub is down, opens nothing and leaves the agent theirs, for the call to be made again",
     () =>
       Effect.gen(function* () {

@@ -9,16 +9,18 @@ import type { FieldControl } from "../form-field/form-field.js";
  * so what is drawn is always what the caller has. Inside a `FormField`
  * each takes the field's control (`field`), which names it by the field's
  * label, describes it by the field's words, and marks it invalid while the
- * field says something is wrong; standing alone it is named by `label`.
+ * field says something is wrong; standing alone it is named by `label`, and
+ * marked invalid by `invalid`, as a `SettingsRow` failing its write says.
  *
  * Text arriving through an input method (a Japanese or Chinese IME, the
  * Mac's accent menu) is composed in place before it is committed. Its
  * changes reach `onChange` as they come, as any other typing does, but the
  * Enter that commits a composition is the input method's, not the
  * caller's, so a TextField's `onEnter` answers only an Enter pressed while
- * nothing is being composed. An `onEscape` keeps its press likewise: the
- * Escape that cancels a composition is the input method's, and one pressed
- * otherwise is the field's, kept from whatever stands around it.
+ * nothing is being composed. A field given an `onEscape` marks every
+ * Escape taken, but answers only one pressed while nothing is being
+ * composed: the Escape that cancels a composition is the input method's,
+ * and must not close the page the field stands on either.
  */
 
 /** What a one-line field holds: words, a search, an address, a secret, or a time of day. */
@@ -52,7 +54,8 @@ export type TextFieldAutoComplete =
 /**
  * How a text entry is named: by its `FormField`'s label, through the field's
  * control, or by a `label` of its own where it stands alone, so none is
- * drawn without a name.
+ * drawn without a name; one standing alone is described by `describedBy`
+ * and marked invalid by `invalid`.
  */
 type Named =
   | {
@@ -64,6 +67,10 @@ type Named =
       field?: undefined;
       /** The accessible name, where no `FormField` labels it. */
       label: string;
+      /** The id of the words that say what the entry is for, where some stand beside it, as a `SettingsRow`'s description does. */
+      describedBy?: string | undefined;
+      /** Whether what it holds is wrong, as a `SettingsRow`'s error says while it stands. */
+      invalid?: boolean | undefined;
     };
 
 /** What both kinds of text entry take. */
@@ -80,7 +87,7 @@ type TextEntryProps = Named & {
   maxLength?: number | undefined;
   /** Whether the system's spell check marks the words; off for a name, an identifier, or code. */
   spellCheck?: boolean | undefined;
-  /** What an Escape does, pressed while no input method is composing; the press is marked taken, so a page Escape would close passes it by. */
+  /** What an Escape does, pressed while no input method is composing; every Escape is marked taken, so the page's Escape passes it by. */
   onEscape?: (() => void) | undefined;
   /** The face its words are set in; the body's where none is named. */
   font?: TextFieldFont | undefined;
@@ -91,8 +98,14 @@ function entryAttributes(props: TextEntryProps) {
   return {
     id: props.field?.id,
     "aria-label": props.field === undefined ? props.label : undefined,
-    "aria-describedby": props.field?.["aria-describedby"],
-    "aria-invalid": props.field?.["aria-invalid"],
+    "aria-describedby":
+      props.field === undefined ? props.describedBy : props.field["aria-describedby"],
+    "aria-invalid":
+      props.field === undefined
+        ? props.invalid === true
+          ? true
+          : undefined
+        : props.field["aria-invalid"],
     placeholder: props.placeholder,
     disabled: props.disabled,
     readOnly: props.readOnly,
@@ -113,11 +126,18 @@ function composing(event: KeyboardEvent): boolean {
   return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
-/** Answers an Escape with `onEscape`, keeping the press, where one is given and nothing is composing. */
+/**
+ * Marks an Escape taken where `onEscape` is given, and answers it unless an
+ * input method is composing. Note that the press still reaches the window,
+ * because the app's own Escape, stopping a live call, comes before any
+ * field's; the page's Escape passes a taken press by. A composing press is
+ * the input method's already when the page hears it, so marking it takes
+ * nothing from the input method.
+ */
 function answerEscape(event: KeyboardEvent, onEscape: (() => void) | undefined): void {
-  if (event.key !== "Escape" || onEscape === undefined || composing(event)) return;
+  if (event.key !== "Escape" || onEscape === undefined) return;
   event.preventDefault();
-  onEscape();
+  if (!composing(event)) onEscape();
 }
 
 /** One line of text, answering Enter with `onEnter` where it is given. */

@@ -29,7 +29,14 @@ import {
   turnStretches,
   workerLines,
 } from "./coding-agent-model";
-import { leftOutLine, replayCount, replayOpening, replayVerb, stepLine } from "./replay-card-model";
+import {
+  leftOutLine,
+  replayCount,
+  replayOpening,
+  replayVerb,
+  stepLine,
+  summaryLine,
+} from "./replay-card-model";
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
 import type { TranscriptReader } from "./use-agent-transcript";
 
@@ -384,14 +391,18 @@ export function latestActivity(transcript: CopiedTranscript): LatestActivity | u
   return { kind: LATEST_ACTIVITY.CALL, verb: lead, subject, code };
 }
 
-/** A reasoning block as the full copy reads it: under a bold word, quoted. */
-function reasoningSaid(text: string): string {
-  const quoted = text
+/** Text as a Markdown quote, a blank line kept as the quote's own. */
+function quoted(text: string): string {
+  return text
     .trim()
     .split("\n")
     .map((line) => (line === "" ? ">" : `> ${line}`))
     .join("\n");
-  return `**Reasoning**\n\n${quoted}`;
+}
+
+/** A reasoning block as the full copy reads it: under a bold word, quoted. */
+function reasoningSaid(text: string): string {
+  return `**Reasoning**\n\n${quoted(text)}`;
 }
 
 /** A call as the full copy reads it: what it did in bold, its input, and its answer or its error. */
@@ -437,7 +448,12 @@ function replaySaid(replay: Replay, copy: TranscriptCopy): string[] {
     return `**${who}:** ${line}\n\n${fenced(step.words, "")}`;
   });
   const listed = copy === TRANSCRIPT_COPY.CONCISE && steps.length > 0 ? [steps.join("\n")] : steps;
-  return [heading, ...(left === undefined ? [] : [`_${left}_`]), ...listed];
+  const summary = summaryLine(replay);
+  const summarized =
+    summary === undefined || replay.summary === undefined
+      ? []
+      : [`**${summary}**`, quoted(replay.summary.text)];
+  return [heading, ...summarized, ...(left === undefined ? [] : [`_${left}_`]), ...listed];
 }
 
 /** The transcript as the markdown the copy asked for puts on the clipboard: its name, its brief, the replay where there is one, then each turn under who said it. */
