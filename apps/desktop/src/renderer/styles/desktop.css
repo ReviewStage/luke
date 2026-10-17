@@ -3205,7 +3205,6 @@ ul.actor-stack {
 }
 
 .desktop-document .plan-body,
-.desktop-document .task-crumb,
 .desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
@@ -3244,15 +3243,6 @@ ul.actor-stack {
 
 .desktop-document .markdown-heading[data-level="3"] {
   font-size: 1.05em;
-}
-
-/* In a column under 480px the crumb wraps rather than cutting its names to a
-   letter: the workspace, then the repository with its separator, then who
-   can edit, each on a line of its own where they do not fit together. */
-@container plan-document (width < 480px) {
-  .task-crumb {
-    flex-wrap: wrap;
-  }
 }
 
 /* In a column under 400px the title steps down to a section's size and a

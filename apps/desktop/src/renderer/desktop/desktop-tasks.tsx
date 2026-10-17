@@ -6,7 +6,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
-import { repositoryGroups, repositoryLabel, taskRow } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -49,7 +48,6 @@ import {
 } from "../tasks/plan-mentions";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip";
 import { SkillFiles } from "../tasks/skill-chip";
-import { TaskCrumb } from "../tasks/task-crumb";
 import { taskLinkPlace } from "../tasks/task-menu-items";
 import { useMinute } from "../tasks/task-time";
 import { CallBar } from "../tasks/tasks-parts";
@@ -486,12 +484,6 @@ function PlanDocument({
   const { workspace } = taskLinkPlace(tasks.workspaces, task);
   const archived = task.archivedAt !== undefined;
   const listed = listedOpen ?? task;
-  // What the crumb opens is the plan's own workspace's, so the window lists
-  // that workspace first where another is listed. Note that the switch
-  // reopens nothing, because the plan open is that workspace's own.
-  const listHome = () => {
-    if (home !== undefined && tasks.workspace?.id !== home.id) tasks.onChooseWorkspace(home.id);
-  };
   const unarchive = () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE);
   const repositoryNote = refusal?.taskId === task.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
@@ -760,32 +752,6 @@ function PlanDocument({
                           onMark: (unread) => reads.mark(task, unread),
                         }}
                         sectionLinks={sectionLinksOf(task.id, workspace)}
-                        crumb={
-                          home === undefined ? undefined : (
-                            <TaskCrumb
-                              workspace={home}
-                              repository={task.repository}
-                              archived={archived}
-                              created={task}
-                              doors={{
-                                personal: tasks.workspaces[0]?.id === home.id,
-                                onOpenWorkspace: () => {
-                                  listHome();
-                                  tasks.onGoHome();
-                                },
-                                repository: {
-                                  label: (repository) =>
-                                    repositoryLabel(
-                                      repository,
-                                      repositoryGroups(tasks.listed.tasks.map(taskRow)),
-                                    ),
-                                  pictures: tasks.repositories.pictures,
-                                  read: tasks.newTask.repositoriesIn(home.id).read,
-                                },
-                              }}
-                            />
-                          )
-                        }
                       />
                     </section>
                     {tab === MAIN_TAB.INBOX ? (

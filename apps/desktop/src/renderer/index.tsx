@@ -4,7 +4,11 @@ import type { AppStateSnapshot } from "@luke/host/app-state";
 import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
-import { eventWithoutAccessTokens, withoutAccessTokens } from "#shared/sentry-breadcrumbs";
+import {
+  eventWithoutAccessTokens,
+  transactionWithoutAccessTokens,
+  withoutAccessTokens,
+} from "#shared/sentry-breadcrumbs";
 import { App } from "./app";
 import { callAvatarAtom } from "./call/call-avatar";
 import { CallWindowCard } from "./call/call-card";
@@ -13,7 +17,16 @@ import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead } from "./use-app-state";
 import { VoiceHost } from "./voice/voice-host";
 
-Sentry.init({ beforeBreadcrumb: withoutAccessTokens, beforeSend: eventWithoutAccessTokens });
+// Every window's tracing, as Sentry's Electron guide sets up a renderer; the
+// DSN, release, and environment are main's, which every renderer event goes
+// through.
+Sentry.init({
+  integrations: [Sentry.browserTracingIntegration()],
+  tracesSampleRate: 1.0,
+  beforeBreadcrumb: withoutAccessTokens,
+  beforeSend: eventWithoutAccessTokens,
+  beforeSendTransaction: transactionWithoutAccessTokens,
+});
 
 // The panel's avatar is subscribed to before anything is drawn, because main
 // hands a page the standing grant once it has drawn its first frame. No other

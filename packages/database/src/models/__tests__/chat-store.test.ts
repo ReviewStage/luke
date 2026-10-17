@@ -26,6 +26,7 @@ import {
   type ChatMemberRow,
   type ChatPost,
   channelNamed,
+  channelOf,
   channelsOf,
   chatPast,
   ensureGeneral,
@@ -41,8 +42,10 @@ import {
   postAsk,
   postMessage,
   readAttachment,
+  releaseNotice,
   resolveAsk,
   roster,
+  threadAuthors,
   unreadFor,
   waitingOn,
   waitingStamps,
@@ -1414,5 +1417,49 @@ it.layer(getTestDB())("the chat store's pictures", (it) => {
         true,
       );
     }),
+  );
+});
+
+it.layer(getTestDB())("the chat store's reads for telling a message", (it) => {
+  it.effect(
+    "a thread's authors are its root's then each replier's before a place, once each; a channel reads by its id; and a notice let go lets the next be told",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const root = yield* room.posted(room.first, "Who owns it?");
+        yield* room.posted(room.ada, "agent-2.", { replyTo: root.seq });
+        yield* room.posted(room.second, "Yes.", { replyTo: root.seq });
+        const last = yield* room.posted(room.ada, "Thanks.", { replyTo: root.seq });
+        assert.deepEqual(yield* threadAuthors(room.owner, room.workspace, root.id, last.seq), [
+          room.first.id,
+          room.ada.id,
+          room.second.id,
+        ]);
+        assert.equal(
+          Option.getOrThrow(yield* channelOf(room.owner, room.workspace, room.channel.id)).id,
+          room.channel.id,
+        );
+
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.second.id, root.seq),
+          true,
+        );
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.second.id, last.seq),
+          false,
+        );
+        yield* releaseNotice(room.owner, room.workspace, room.second.id, root.seq);
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.second.id, last.seq),
+          true,
+        );
+
+        const stranger = yield* openAccount();
+        assert.deepEqual(yield* threadAuthors(stranger, room.workspace, root.id, last.seq), []);
+        assert.deepEqual(
+          yield* channelOf(stranger, room.workspace, room.channel.id),
+          Option.none(),
+        );
+      }),
   );
 });
