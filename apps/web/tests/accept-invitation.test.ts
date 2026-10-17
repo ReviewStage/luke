@@ -147,9 +147,7 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await act(async () => buttonNamed(page, "Accept invitation").click());
   expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true");
 
-  // Note that Better Auth reads the session again once an invitation is
-  // accepted, and Luke's route then answers that the invitation is spent, so
-  // the page is read only after that session read has been answered.
+  // Note that accepting makes Better Auth read the session again, after which the route answers spent.
   const sessionReadAgain = new Promise<void>((settle) => {
     sessionRead = settle;
   });
@@ -249,8 +247,7 @@ test("an address verified while the page stood open makes the invitation accepta
   );
   await titled(page, "Your address isn't verified");
 
-  // Note that Better Auth refetches the session when the tab is shown again,
-  // but not within seconds of its last read, so the clock moves past that.
+  // Note that Better Auth refetches on visibility only after the prior session read has aged out.
   vi.useFakeTimers({ toFake: ["Date"] });
   session = SIGNED_IN;
   offer = VALID;
