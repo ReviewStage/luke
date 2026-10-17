@@ -1,11 +1,11 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@luke/features/analytics";
+import type { ActRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
+import { channels } from "@luke/host/bridge";
 import type { HostOperator } from "@luke/host/host-operator";
 import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
-import { channels } from "#shared/bridge";
-import type { ActRows } from "../act-router";
 import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";
 import type { PanelManager } from "../window/panel-manager";
@@ -63,8 +63,8 @@ export function voiceRuntimeActRows(
       voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
     },
     // The call card's way back, from the floating window or from a panel's
-    // own card, names no plan: the call's is read here, so it cannot bring
-    // forward a plan the call is not about.
+    // own card, names no task: the call's is read here, so it cannot bring
+    // forward a task the call is not about.
     [ACT_KIND.CALL_SHOW_TASK]: (_payload, { call, panel }) => {
       const taskId = state.snapshot().voice.view?.callTaskId;
       if ((!call && !panel) || taskId === undefined) return;

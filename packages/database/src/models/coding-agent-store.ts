@@ -43,9 +43,10 @@ import {
   type StoredAgentStep,
   type StoredArchive,
   type StoredAutomationOrigin,
+  type StoredStartedFrom,
 } from "../schemas/coding-agent.js";
-import { task } from "../schemas/plan.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
+import { task } from "../schemas/task.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
@@ -68,18 +69,18 @@ import {
 import type { ConversationTarget } from "./writer.js";
 
 /**
- * coding-agent-store.ts -- the coding agents started on a workspace's plans, each one conversation and one row linking it to its plan.
+ * coding-agent-store.ts -- the coding agents started on a workspace's tasks, each one conversation and one row linking it to its task.
  *
- * An agent belongs to its workspace, its plan's or, for an agent an
- * automation started with no plan, its own: every member reads, renames,
+ * An agent belongs to its workspace, its task's or, for an agent an
+ * automation started with no task, its own: every member reads, renames,
  * and re-chooses it, whichever of them started it. Every statement names the
- * account beside the plan or the agent and gates on that account's
+ * account beside the task or the agent and gates on that account's
  * membership of that workspace (`workspace-store.ts`), so an agent of
  * a workspace the account is not in reads and starts exactly as an id that
  * names nothing. The one read keyed by the account alone is a Start's retry
  * key, which is the starter's own. Starting an agent is one transaction
- * under the plan's own row lock: the lock is the membership check and what
- * serialises two Starts of one plan, so a retry carrying the key of a Start
+ * under the task's own row lock: the lock is the membership check and what
+ * serialises two Starts of one task, so a retry carrying the key of a Start
  * already made finds that agent rather than opening a second conversation
  * beside it, and says which it did, since only a Start that made the agent
  * opens its eve session. The agent's conversation is a `coding_agent`
@@ -112,9 +113,9 @@ import type { ConversationTarget } from "./writer.js";
  * the transcript, which is what the tab's context ring draws. The pull
  * request from the agent's branch is written as GitHub answered each read
  * of it (`coder-host/published.ts`), and read back beside the agents of
- * every plan the list names, so the list asks GitHub nothing. An agent
+ * every task the list names, so the list asks GitHub nothing. An agent
  * the developer archived is a stamp on its row: every list leaves it out
- * but the plan's own where it asks for archived agents, and a read of the
+ * but the task's own where it asks for archived agents, and a read of the
  * agent by its id still finds it, so its transcript and pull request stand.
  * A pin of an agent with no plan is the reading member's own
  * (`agent-pin.ts`), as a plan's is, so one member's pin reads pinned for
@@ -138,14 +139,16 @@ export interface CodingAgent {
   readonly id: string;
   /** The account that started the agent, whose conversation it runs in and whose provider key pays for it. */
   readonly userId: string;
-  /** The plan the agent works on; null for an agent an automation started with no plan. */
+  /** The task the agent works on; null for an agent an automation started with no task. */
   readonly taskId: string | null;
-  /** The workspace the agent belongs to: its own, or its plan's on a row the backfill has not reached. */
+  /** The workspace the agent belongs to: its own, or its task's on a row the backfill has not reached. */
   readonly organizationId: string;
   /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
   readonly automationId: string | null;
   /** The run of an automation that started the agent, as it stood then, kept once that automation is deleted; null for one started by hand. */
   readonly automationOrigin: StoredAutomationOrigin | null;
+  /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
+  readonly startedFrom: StoredStartedFrom | null;
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
@@ -199,9 +202,9 @@ export type CodingAgentBriefText =
   | { readonly planSnapshot: null; readonly prompt: string };
 
 /**
- * Where a Start puts the agent: on a plan, whose workspace it joins and
+ * Where a Start puts the agent: on a task, whose workspace it joins and
  * whose text or the developer's prompt it is handed, or in a workspace with
- * no plan, as an automation's run puts one, handed a prompt, since there is
+ * no task, as an automation's run puts one, handed a prompt, since there is
  * no plan to hand it.
  */
 export type CodingAgentPlace =
@@ -219,6 +222,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent; none for one started by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The agent of the same plan this one is started from, with its replay's counts; none for one started afresh. */
+  readonly startedFrom?: StoredStartedFrom | undefined;
   /** The agent's title from the start, a run's fixed name; none where it is named later. */
   readonly title?: string | undefined;
   readonly idempotencyKey: string;
@@ -241,6 +246,7 @@ const CODING_AGENT_COLUMNS = {
   organizationId: AGENT_WORKSPACE,
   automationId: codingAgent.automationId,
   automationOrigin: codingAgent.automationOrigin,
+  startedFrom: codingAgent.startedFrom,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
@@ -290,6 +296,16 @@ const AutomationOriginColumnSchema = Schema.NullOr(
     body: Schema.optionalKey(Schema.String),
   }),
 );
+/** The `started_from` column as a row holds it. */
+const StartedFromColumnSchema = Schema.NullOr(
+  Schema.Struct({
+    agentId: Schema.String,
+    messageId: Schema.optionalKey(Schema.String),
+    steps: Schema.Number,
+    totalSteps: Schema.Number,
+    branch: Schema.optionalKey(Schema.String),
+  }),
+);
 /** The `archived_by` column as a row holds it. */
 const ArchivedByColumnSchema = Schema.NullOr(
   Schema.Struct({
@@ -310,6 +326,7 @@ const CodingAgentRowSchema = Schema.Struct({
   organizationId: Schema.String,
   automationId: Schema.NullOr(Schema.String),
   automationOrigin: AutomationOriginColumnSchema,
+  startedFrom: StartedFromColumnSchema,
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
@@ -340,7 +357,7 @@ function reachableAgent(userId: string, agentId: string): SQL | undefined {
   return and(eq(codingAgent.id, agentId), agentReachableBy(userId));
 }
 
-/** The plan row under its own lock, where the account is a member of its workspace, with whether it is archived. */
+/** The task row under its own lock, where the account is a member of its workspace, with whether it is archived. */
 const lockReachableTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({
@@ -362,7 +379,7 @@ const lockReachableTask = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspace, locked, where the account is a member of it: the lock serialises two Starts in it under one key, as the plan's own lock does for a plan. */
+/** The workspace, locked, where the account is a member of it: the lock serialises two Starts in it under one key, as the task's own lock does for a task. */
 const lockReachableWorkspace = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -378,7 +395,7 @@ const lockReachableWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspace a Start puts its agent in, locked: the plan's, where the plan stands archived or not, or the workspace named; nothing where the account reaches neither. */
+/** The workspace a Start puts its agent in, locked: the task's, where the task stands archived or not, or the workspace named; nothing where the account reaches neither. */
 const lockedPlace = Effect.fnUntraced(function* (userId: string, place: CodingAgentPlace) {
   if (place.taskId === null) {
     const reached = yield* lockReachableWorkspace({ userId, organizationId: place.organizationId });
@@ -428,6 +445,7 @@ const insertAgent = SqlSchema.findOne({
     organizationId: Schema.String,
     automationId: Schema.NullOr(Schema.String),
     automationOrigin: AutomationOriginColumnSchema,
+    startedFrom: StartedFromColumnSchema,
     title: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
@@ -451,6 +469,7 @@ const insertAgent = SqlSchema.findOne({
           organizationId: write.organizationId,
           automationId: write.automationId,
           automationOrigin: write.automationOrigin,
+          startedFrom: write.startedFrom,
           title: write.title,
           conversationId: write.conversationId,
           model: write.model,
@@ -1024,7 +1043,7 @@ const deleteAgentRow = SqlSchema.findAll({
     ),
 });
 
-/** By id alone, because the agent row the delete before it took passed the plan's gate and named this conversation. */
+/** By id alone, because the agent row the delete before it took passed the task's gate and named this conversation. */
 const deleteConversationRow = SqlSchema.void({
   Request: Schema.String,
   execute: (conversationId) =>
@@ -1032,14 +1051,14 @@ const deleteConversationRow = SqlSchema.void({
 });
 
 /**
- * Starts an agent on a plan of the account's workspace, or in a workspace
- * of the account's with no plan: a `coding_agent` conversation of the
- * account's and the row that binds it to the plan or the workspace, with
+ * Starts an agent on a task of the account's workspace, or in a workspace
+ * of the account's with no task: a `coding_agent` conversation of the
+ * account's and the row that binds it to the task or the workspace, with
  * the plan text or the prompt, the repository, and the automation whose run
  * started it with that run, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
- * Nothing where the account reaches no such plan or is no member of the
- * workspace. An archived plan starts no
+ * Nothing where the account reaches no such task or is no member of the
+ * workspace. An archived task starts no
  * agent, read under the same lock, though a retry still answers the agent
  * its Start made before the archive.
  */
@@ -1076,6 +1095,7 @@ export function createCodingAgent(
           organizationId: reached.value.organizationId,
           automationId: started.automationId ?? null,
           automationOrigin: started.automationOrigin ?? null,
+          startedFrom: started.startedFrom ?? null,
           title: started.title ?? null,
           idempotencyKey: started.idempotencyKey,
           model: started.model,
@@ -1115,7 +1135,7 @@ export function discardCodingAgent(
   );
 }
 
-/** Every agent started on the plan, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such plan. */
+/** Every agent started on the task, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such task. */
 export function listCodingAgents(
   userId: string,
   taskId: string,
@@ -1125,7 +1145,7 @@ export function listCodingAgents(
 }
 
 /**
- * The workspace's agents, on a plan or with none, by any member, newest
+ * The workspace's agents, on a task or with none, by any member, newest
  * started first, an archived one left out unless `includeArchived` asks,
  * only those on the repository named where one is, on the plan named
  * where one is, and whose title or task's name holds the words where some

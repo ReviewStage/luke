@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { AVATAR_STOP_REASON, type AvatarStopReason } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import { runModeFor } from "@luke/host";
+import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { HostAvatar } from "@luke/host/effect";
 import {
@@ -20,7 +21,6 @@ import {
 import type { UnparsedWireValue } from "@luke/wire";
 import { Context, Effect, PubSub, Stream } from "effect";
 import type { WebContents } from "electron";
-import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { AppStateStore, initialAppState } from "../app-state";
 import { linkAvatar } from "../services/avatar-link";
 import { avatarActRows, avatarReports } from "./avatar-acts";
@@ -120,7 +120,7 @@ function fakeHost() {
 
 function fixture() {
   return Effect.gen(function* () {
-    const state = new AppStateStore(initialAppState(RUN, false), Context.empty());
+    const state = new AppStateStore(initialAppState(RUN, false, []), Context.empty());
     const { host, move, grant, setVideo, restarts } = yield* fakeHost();
     /** What reached the panel's page: each grant handed over, each feed and view signal relayed; and what reached the call window's. */
     const grants: (AvatarGrant | undefined)[] = [];

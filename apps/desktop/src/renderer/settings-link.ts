@@ -12,9 +12,9 @@ import { landOnSettingsRow } from "./settings-search";
  * shows for as long as Settings stays open, the sidebar untouched; then
  * Settings, which lands on Profile, then the page, and last the section,
  * which is looked for once the page is drawn and given up on quietly where
- * it is not. Note that the sidebar is left as it was, because the plan open
+ * it is not. Note that the sidebar is left as it was, because the task open
  * behind Settings must still be the listed workspace's when Back returns to
- * it, and an open of another plan answered late must not move what Settings
+ * it, and an open of another task answered late must not move what Settings
  * shows.
  */
 

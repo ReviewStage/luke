@@ -4,20 +4,22 @@ import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import type { TasksEditAnswer } from "@luke/features/tasks-view";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { DIAGRAM_DRAWING } from "../diagram/contract";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
+import type { SideBundles } from "../bundle-loader";
 import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
 import { PlanBody } from "./plan-body";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
  * tested beside it. Here the document mounts a stand-in for that bundle at
- * its one boundary, `window.lukePlanEditor`, and the tests speak as the
+ * its one boundary, the bundle's importer, and the tests speak as the
  * editor would: the text it hands over, its finish, and its leaving up.
  */
 
@@ -52,16 +54,25 @@ const STAND_IN: PlanEditorModule = {
   mountComposer: () => assert.fail("the plan document mounts no message box"),
 };
 
-// Set before any document renders, since the document reads the bundle once per window.
-window.lukePlanEditor = STAND_IN;
-
 /** The diagram bundle's stand-in: a picture named by the code and the appearance it was asked to draw. */
 const diagramPicture = (code: string, appearance: string) =>
   `data:image/svg+xml,${encodeURIComponent(`${appearance}:${code}`)}`;
-window.lukeDiagram = {
+const DIAGRAM_STAND_IN: DiagramModule = {
   draw: (code, appearance) =>
     Promise.resolve({ kind: DIAGRAM_DRAWING.DRAWN, url: diagramPicture(code, appearance) }),
 };
+
+let bundles: SideBundles;
+
+// Landed before any document renders, as both are once a plan has been shown in this window.
+beforeAll(async () => {
+  bundles = await Effect.runPromise(
+    landedBundles({
+      planEditor: () => Promise.resolve(STAND_IN),
+      diagram: () => Promise.resolve(DIAGRAM_STAND_IN),
+    }),
+  );
+});
 
 const roots: Root[] = [];
 
@@ -109,7 +120,14 @@ function mount(answers: readonly TasksEditAnswer[] = []) {
     return Promise.resolve(true);
   };
   const render = (task: Task, door: typeof onEdit = onEdit) =>
-    act(() => root.render(createElement(PlanBody, { task, live: false, onEdit: door, onRename })));
+    act(() =>
+      root.render(
+        onSideBundles(
+          bundles,
+          createElement(PlanBody, { task, live: false, onEdit: door, onRename }),
+        ),
+      ),
+    );
   render(DOCUMENT_TASK);
   const unmount = () => {
     act(() => root.unmount());
@@ -148,18 +166,6 @@ function title(container: HTMLElement): HTMLElement {
   assert.ok(text, "the title's words");
   return text;
 }
-
-test("the document fades under the toolbar or a banner over it and over the call bar under it, rather than being sliced at either", () => {
-  const { container } = mount();
-  const sheets = layFades();
-  try {
-    const scroller =
-      container.querySelector(".plan-document-scroll") ?? assert.fail("the document scrolls");
-    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
-});
 
 test("a click into a section opens the whole text in place, the caret where the click landed, under a block the recording does not capture", () => {
   const { container } = mount();

@@ -14,6 +14,7 @@ import {
 } from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
@@ -38,9 +39,11 @@ import {
 } from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
+import { appBridge } from "./app-bridge";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
+import { appPlatform } from "./app-platform";
+import { usePrefetchEditorBundle } from "./bundle-loader";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useCallCardVideo } from "./call/panel-avatar";
 import { useWindowFocused } from "./call/use-window-focused";
@@ -50,7 +53,6 @@ import { DesktopShell } from "./desktop/desktop-shell";
 import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
-import { prefetchEditorBundle } from "./editor-bundle";
 import { FeedbackDialog } from "./feedback-dialog";
 import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
@@ -63,9 +65,11 @@ import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { OpenPersonProvider } from "./person-door";
 import { applySessionReplay } from "./session-replay";
+import { shownSettingsView } from "./settings/pages";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast";
+import { useChatToasts } from "./tasks/chat-toast";
 import { useInboxToasts } from "./tasks/inbox-toast";
 import { MessageRevealProvider } from "./tasks/message-links";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy";
@@ -86,9 +90,9 @@ const NO_UNSEEN_AGENTS: readonly string[] = [];
 /** Nothing waits on the developer, as the document reads before main has answered. */
 const NOTHING_WAITING: readonly AppInboxTask[] = [];
 
-/** No plan holds an inbox item, as the document reads before main has answered. */
+/** No task holds an inbox item, as the document reads before main has answered. */
 const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
-/** Nothing waiting from agents with no plan, as one value across renders. */
+/** Nothing waiting from agents with no task, as one value across renders. */
 const NOTHING_TASKLESS: readonly AppInboxTasklessItem[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
@@ -148,7 +152,8 @@ export function App(): React.JSX.Element {
     applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
   // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
-  useEffect(prefetchEditorBundle, []);
+  const prefetchEditorBundle = usePrefetchEditorBundle();
+  useEffect(prefetchEditorBundle, [prefetchEditorBundle]);
   // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
   useEffect(prefetchMarkdownHtmlParser, []);
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
@@ -165,14 +170,14 @@ export function App(): React.JSX.Element {
         setSettingsView(SETTINGS_VIEW.ACCOUNT);
         // `PanelTab` and the counted tab are the same union: both are
         // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
-        window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+        appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
           panel_tab: tab,
         });
       })(next),
     [guardLeave, setSettingsView, setTab],
   );
   // Where a link's workspace is handed, read through a ref, because the
-  // workspace Settings shows is held beside the Plans tab, built after the opener.
+  // workspace Settings shows is held beside the Tasks tab, built after the opener.
   const linkWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
   /**
    * Opens Settings at the place a link names: the workspace it names, which
@@ -243,7 +248,7 @@ export function App(): React.JSX.Element {
     shortcutCapture.current = capturing;
     // The talk and stop keys are routed by the main process to a window that
     // is not this one, so the recording is reported there to be honored.
-    window.luke.setShortcutCapturing(capturing);
+    appPlatform().setShortcutCapturing(capturing);
   }, []);
 
   // A capture run stages its conversation from the launch profile, since no
@@ -274,8 +279,8 @@ export function App(): React.JSX.Element {
   const volumeHintWanted =
     fixtureMuted ||
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
-  // The Plans tab, drawn from the same voice report the strip reads, so a
-  // planning call's words and levels are the shape's as any call's are.
+  // The Tasks tab, drawn from the same voice report the strip reads, so a
+  // task call's words and levels are the shape's as any call's are.
   const tasks = useTasksTab({
     acts: { act, tell },
     tasks: state?.tasks ?? IDLE_TASKS_VIEW,
@@ -304,19 +309,21 @@ export function App(): React.JSX.Element {
     settingsShown: tab === PANEL_TAB.SETTINGS,
   });
   linkWorkspace.current = settingsWorkspace.link;
+  // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
+  const shownView = shownSettingsView(settingsView, state?.run.capabilities ?? []);
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,
     tab === PANEL_TAB.SETTINGS
       ? {
-          view: settingsView,
+          view: shownView,
           workspace: tasks.workspaces.find((each) => each.id === settingsWorkspace.shownId),
         }
       : undefined,
     !accountGated,
   );
-  // A coding agent's notification clicked: the Plans tab, on that agent,
-  // its plan's tab or its own page where it has no plan. Read through refs,
+  // A coding agent's notification clicked: the Tasks tab, on that agent,
+  // its task's tab or its own page where it has no task. Read through refs,
   // because the tab hands new closures each render and the subscription is
   // owed to the window, not to a render. Note that each way here the window
   // is moved by more than one step asks once, as a whole, while a page holds
@@ -334,13 +341,19 @@ export function App(): React.JSX.Element {
       })(),
     [changeTab, guardLeave],
   );
-  useEffect(() => window.luke.onShowAgent(openAgent), [openAgent]);
+  useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const toast = useToast();
   const openLukeLink = (link: ReadLink) => {
-    const route = linkRoute(link, { workspaces: tasks.workspaces, factoryOn, automationsOn });
+    const route = linkRoute(link, {
+      workspaces: tasks.workspaces,
+      factoryOn,
+      automationsOn,
+      issuesOn,
+    });
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
@@ -357,7 +370,7 @@ export function App(): React.JSX.Element {
   // holds its own workspace, so none read means none read yet).
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
-  useEffect(() => window.luke.onShowLink(openLink), [openLink]);
+  useEffect(() => appBridge().onShowLink(openLink), [openLink]);
   // A failed run's notification clicked, or its toast's View: the run's own link, held as any link is until the workspaces are read, so it opens in its automation's workspace.
   const openRunLink = useRef(openLink);
   openRunLink.current = openLink;
@@ -369,14 +382,14 @@ export function App(): React.JSX.Element {
       }),
     [],
   );
-  useEffect(() => window.luke.onShowFailedRun(openFailedRun), [openFailedRun]);
-  // The call card's way back: the Plans tab, on the call's plan's document,
-  // opening it where another plan, or none, is open.
+  useEffect(() => appBridge().onShowFailedRun(openFailedRun), [openFailedRun]);
+  // The call card's way back: the Tasks tab, on the call's task's document,
+  // opening it where another task, or none, is open.
   const showTask = useRef(tasks.onShowTask);
   showTask.current = tasks.onShowTask;
   useEffect(
     () =>
-      window.luke.onShowTask(({ taskId: planId }) =>
+      appBridge().onShowTask(({ taskId: planId }) =>
         guardLeave(() => {
           changeTab(PANEL_TAB.TASKS);
           showTask.current(planId);
@@ -385,7 +398,7 @@ export function App(): React.JSX.Element {
     [changeTab, guardLeave],
   );
   // The call card, while this window has the keyboard and its call bar is not
-  // on screen: another plan, the home page, Settings, or the plan itself
+  // on screen: another task, the home page, Settings, or the task itself
   // under its version history, the Inbox, an agent's page, or a side panel filling the window.
   const focused = useWindowFocused();
   const taskShown = callBarTaskId({
@@ -413,7 +426,7 @@ export function App(): React.JSX.Element {
   useAgentEndToasts(openAgent, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
   // A run that failed to start, said in the toast while the window was focused: its View opens the automation.
   useFailedRunToasts(openFailedRun);
-  // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
+  // An inbox notification clicked, or an item's toast's View: the Tasks tab, on that task's Inbox.
   const showInbox = useRef(tasks.onShowInbox);
   showInbox.current = tasks.onShowInbox;
   const openInbox = useCallback(
@@ -424,14 +437,14 @@ export function App(): React.JSX.Element {
       })(),
     [changeTab, guardLeave],
   );
-  useEffect(() => window.luke.onShowInbox(({ taskId }) => openInbox(taskId)), [openInbox]);
-  // A notification of an item of an agent with no plan clicked: the window's Inbox, on that item
+  useEffect(() => appBridge().onShowInbox(({ taskId }) => openInbox(taskId)), [openInbox]);
+  // A notification of an item of an agent with no task clicked: the window's Inbox, on that item
   // in its own workspace's list, the item itself shown where the Inbox shows one column.
   const inboxDoors = useRef(tasks);
   inboxDoors.current = tasks;
   useEffect(
     () =>
-      window.luke.onShowInboxItem(({ agentId, itemId, workspaceId }) =>
+      appBridge().onShowInboxItem(({ agentId, itemId, workspaceId }) =>
         guardLeave(() => {
           const doors = inboxDoors.current;
           changeTab(PANEL_TAB.TASKS);
@@ -450,13 +463,27 @@ export function App(): React.JSX.Element {
     state?.version ?? 0,
     tasks.inboxShown,
   );
+  // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the Chat of
+  // the workspace the message waits in, listing that workspace first where another is listed.
+  const openChat = useCallback(
+    (workspaceId: string) =>
+      guardLeave(() => {
+        const doors = inboxDoors.current;
+        changeTab(PANEL_TAB.TASKS);
+        if (doors.workspace?.id !== workspaceId) doors.onChooseWorkspace(workspaceId);
+        doors.chatView.onOpen();
+      })(),
+    [changeTab, guardLeave],
+  );
+  useEffect(() => appBridge().onShowChat(({ workspaceId }) => openChat(workspaceId)), [openChat]);
+  useChatToasts(openChat, tasks.chatShown);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
     known: state !== undefined && !accountGated,
     tab,
     onTabChange: changeTab,
-    settingsView,
+    settingsView: shownView,
     onSettingsViewChange: setSettingsView,
     tasks,
   });
@@ -484,7 +511,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (opened.current || !state?.settings) return;
     opened.current = true;
-    window.luke.notifyReady();
+    appBridge().notifyReady();
   }, [state]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
@@ -536,7 +563,7 @@ export function App(): React.JSX.Element {
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Issues page, back to wherever it was
       // opened from, then a side panel filling the window back beside its
-      // plan, then an open plan back to the home page. A menu and the
+      // task, then an open task back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
       // clearing, then letting go of the caret — so neither is a layer here,
       // bar the caret Settings opens with, whose untouched Escape leaves it.
@@ -553,7 +580,7 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_ISSUES)) return;
-      // An open plan unwinds to the home page, which leaves it and ends
+      // An open task unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       tasks.back();
     };
@@ -619,7 +646,7 @@ export function App(): React.JSX.Element {
   const workspace = {
     workspaces: tasks.workspaces,
     workspaceId: settingsWorkspace.shownId,
-    // A leave closes Settings onto the Plans tab, whose Home the tab turns to.
+    // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
     onLeft: (workspaceId: string) => {
       tasks.onLeftWorkspace(workspaceId);
       changeTab(PANEL_TAB.TASKS);
@@ -628,7 +655,7 @@ export function App(): React.JSX.Element {
     onRetryList: tasks.onRetryList,
   };
 
-  // A remedy under a refused start or message mends the plan's repository through the Plans tab's doors.
+  // A remedy under a refused start or message mends the task's repository through the Tasks tab's doors.
   const repositoryRemedies: RepositoryRemedyDoors = {
     openWorkspaceGitHub: tasks.onOpenWorkspaceGitHub,
     openGitHub: tasks.repositories.openGitHub,
@@ -717,7 +744,7 @@ export function App(): React.JSX.Element {
                                   };
                                 }
                               },
-                              view: settingsView,
+                              view: shownView,
                               onViewChange: setSettingsView,
                               microphone,
                               notifications: {
@@ -730,6 +757,7 @@ export function App(): React.JSX.Element {
                               settings,
                               shortcuts,
                               workspace,
+                              capabilities: state.run.capabilities,
                             }}
                           />
                         </MessageRevealProvider>
@@ -759,8 +787,10 @@ export function App(): React.JSX.Element {
                             settings,
                             microphone,
                             account: state.account,
+                            capabilities: state.run.capabilities,
                             workspace,
                           }),
+                          capabilities: state.run.capabilities,
                           onViewChange: setSettingsView,
                         }}
                         readFiles={(planId) =>

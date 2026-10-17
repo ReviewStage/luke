@@ -1,3 +1,4 @@
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   MicrophoneIcon,
@@ -6,17 +7,16 @@ import {
   SpeakerOffIcon,
 } from "@luke/ui";
 import type { CallStatus } from "@luke/ui/tasks-model";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";
 
 /**
- * planning-parts.tsx -- the open plan's call bar, as a pure layout.
+ * tasks-parts.tsx -- the open task's call bar, as a pure layout.
  *
  * It draws what it is handed and decides nothing, so what it shows is
- * `planning-model.ts`'s answer and a press is a callback the tab hands down.
+ * `tasks-model.ts`'s answer and a press is a callback the tab hands down.
  * Luke's face and the meter for whoever is talking are the sidebar's, and
- * the captions the window's own, drawn for a planning call exactly as for
+ * the captions the window's own, drawn for a task's call exactly as for
  * any other.
  */
 
@@ -123,12 +123,12 @@ function CallToggle({
 /**
  * The call bar under the document, laid out the way a voice composer's own
  * controls are. At rest it is one press, the microphone's: Talk about this
- * plan, or what the microphone needs first. Once the open plan's call is in
+ * task, or what the microphone needs first. Once the open task's call is in
  * progress it is the call: its status at the left, and at the right the
  * speaker and microphone mutes, each struck through and filled while on, and
  * End call beside them, apart from both so muting never hangs up. The
  * microphone's press is the same toggle at rest and in the call, so the talk
- * key, the permission asks, and a call about another plan all answer as they
+ * key, the permission asks, and a call about another task all answer as they
  * always have. The speaker silences Luke on this Mac alone; the call goes on.
  * A call the tab reports a status for is drawn as the call even where it
  * offers no stop, a fixture's staged call or one closing, since the press
@@ -144,11 +144,11 @@ export function CallBar({
   stop,
   titled = false,
 }: {
-  /** The call's status, absent while no call about this plan stands. */
+  /** The call's status, absent while no call about this task stands. */
   status: CallStatus | undefined;
   microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
   speaker: { muted: boolean; onPress: () => void };
-  /** Ends the call; shown is whether the open plan's call is in progress. */
+  /** Ends the call; shown is whether the open task's call is in progress. */
   stop: { shown: boolean; onPress: () => void };
   /** Whether Luke's command carries its whole words as the system's hint, where no tooltip fits. */
   titled?: boolean;

@@ -1,21 +1,20 @@
-import {
-  ISSUE_PRIORITY_WORDS,
-  ISSUE_STATUS_WORDS,
-  issueGroups,
-  issueIdentifier,
-} from "@luke/features/issue-list-model";
+import { ISSUE_STATUS_WORDS, issueGroups, issueIdentifier } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
+import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text, useMenu } from "@luke/ui";
 import { useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
-import { PRIORITY_GLYPH, StatusGlyph } from "./issue-pickers";
+import { IssueActions } from "./issue-actions";
+import { PriorityMark, StatusGlyph } from "./issue-pickers";
+import type { IssueChange } from "./use-issues";
 
 /**
  * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, each row its status, its identifier, its title, how much it matters, and when it last changed.
  *
- * The headings and rows are Home's own (`desktop-home.tsx`): a section
- * title with its count over the sidebar's rows, each a button inside its
+ * The rows are Home's own (`desktop-home.tsx`): a section heading with its
+ * count over the sidebar's rows, each a button inside its
  * item, so the page's ↑ and ↓ move through the rows and Return opens the
- * one reached.
+ * one reached. A right-click on a row, or the menu key or ⇧F10 on it,
+ * opens its actions (`issue-actions.tsx`).
  * The order is the view model's (`issue-list-model.ts`); nothing is sorted
  * here.
  */
@@ -26,43 +25,51 @@ function IssueRow({
   workspaceName,
   now,
   focused,
+  shown,
   onOpen,
+  onChange,
 }: {
   issue: Issue;
   workspaceName: string;
   now: number;
   focused: boolean;
+  shown: boolean;
   onOpen: () => void;
+  onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
-  const priority = PRIORITY_GLYPH[issue.priority];
+  const menu = useMenu(shown);
+  const identifier = issueIdentifier(workspaceName, issue.number);
   const row = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     if (focused) row.current?.focus();
   }, [focused]);
   return (
     <li className="sidebar-task-item home-row" data-issue-id={issue.id}>
-      <button ref={row} type="button" className="sidebar-task" onClick={onOpen}>
+      <button
+        ref={row}
+        type="button"
+        className="sidebar-task"
+        onClick={onOpen}
+        onContextMenu={menu.contextMenu()}
+        onKeyDown={menu.keyMenu}
+      >
         <span className="sidebar-task-line">
           <span className="home-row-picture">
             <StatusGlyph status={issue.status} />
           </span>
-          <span className="issue-row-identifier">
-            {issueIdentifier(workspaceName, issue.number)}
-          </span>
+          <span className="issue-row-identifier">{identifier}</span>
           <span className="sidebar-task-name issue-row-title">{issue.title}</span>
-          {priority === null ? null : (
-            <span
-              className="issue-priority-mark"
-              data-priority={issue.priority}
-              title={ISSUE_PRIORITY_WORDS[issue.priority]}
-            >
-              {priority}
-              <span className="visually-hidden">{ISSUE_PRIORITY_WORDS[issue.priority]}</span>
-            </span>
-          )}
+          <PriorityMark priority={issue.priority} />
           <RelativeTime className="sidebar-task-time" at={issue.updatedAt} now={now} />
         </span>
       </button>
+      <IssueActions
+        issue={issue}
+        identifier={identifier}
+        menu={menu}
+        shown={shown}
+        onChange={onChange}
+      />
     </li>
   );
 }
@@ -73,14 +80,20 @@ export function IssueList({
   workspaceName,
   now,
   focused,
+  shown,
   onOpen,
+  onChange,
 }: {
   issues: readonly Issue[];
   workspaceName: string;
   now: number;
   /** The issue whose row takes the keyboard as the list is drawn: the one the page came back from. */
   focused: string | undefined;
+  /** Whether the page stands, which a card's menu and question do not outlive. */
+  shown: boolean;
   onOpen: (issue: Issue) => void;
+  /** Sends a change to an issue from its menu, answering whether it was kept. */
+  onChange: (issue: Issue, change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   return (
     <>
@@ -90,9 +103,14 @@ export function IssueList({
           className="home-section"
           aria-label={ISSUE_STATUS_WORDS[group.status]}
         >
-          <h2 className="home-section-title">
-            {ISSUE_STATUS_WORDS[group.status]}
-            <span className="home-section-count">{group.issues.length}</span>
+          {/* Note that the count stands inside the heading, so a reader moving by headings hears it. */}
+          <h2 className="issue-group-head">
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
+              {ISSUE_STATUS_WORDS[group.status]}
+            </Text>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {group.issues.length}
+            </Text>
           </h2>
           <ul className="sidebar-tasks">
             {group.issues.map((issue) => (
@@ -102,7 +120,9 @@ export function IssueList({
                 workspaceName={workspaceName}
                 now={now}
                 focused={issue.id === focused}
+                shown={shown}
                 onOpen={() => onOpen(issue)}
+                onChange={(change) => onChange(issue, change)}
               />
             ))}
           </ul>

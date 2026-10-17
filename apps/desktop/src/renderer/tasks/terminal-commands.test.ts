@@ -6,13 +6,16 @@ import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { StripTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
@@ -26,7 +29,7 @@ import { NO_LOOKS } from "./use-task-looks";
  * Show terminal (⌘J) and New terminal from each place a developer can be,
  * as the new-terminal rules have them: which agent's Terminal tab the side
  * panel is asked to show, whether a new shell is asked of its sandbox, and
- * the picker where the rules leave the agent to the developer. The plan is
+ * the picker where the rules leave the agent to the developer. The task is
  * drawn by the real window over a staged control; main answers how each
  * sandbox stands.
  */
@@ -50,7 +53,7 @@ const SUMMARY: TaskSummary = {
   repository: TASK.repository,
 };
 
-/** An agent on the plan, standing where `status` says. */
+/** An agent on the task, standing where `status` says. */
 function agent(
   id: string,
   title: string,
@@ -84,24 +87,21 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   // Main answers how each agent's sandbox stands: the working agent's runs, the other's is stopped.
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.TERMINAL_LIST) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        const running = request.payload.agentId === WORKING.id;
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: running
-            ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
-            : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
-        });
-      },
-      onMenuCommand: () => () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.TERMINAL_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
+      const running = request.payload.agentId === WORKING.id;
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: running
+          ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
+          : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
+      });
     },
   });
+  handCapabilities(DESKTOP_CAPABILITIES);
 });
 
 afterEach(() => {
@@ -116,9 +116,9 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The plan drawn with the agents given, its column on `main` and the panel on `side`, answering what the panel was asked to show. */
-function mount(input: {
-  /** The plan's agents, or nothing while their read is out. */
+/** The task drawn with the agents given, its column on `main` and the panel on `side`, answering what the panel was asked to show. */
+async function mount(input: {
+  /** The task's agents, or nothing while their read is out. */
   agents: readonly CodingAgentSummary[] | undefined;
   /** Why no agent can start now, where none can. */
   cannotStart?: string;
@@ -173,6 +173,8 @@ function mount(input: {
       ),
     ),
   );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   return {
     /** Every tab the side panel was asked to show, in order. */
     shown,
@@ -210,7 +212,7 @@ function picker() {
 }
 
 test("on a plan with one agent, ⌘J shows its Terminal tab and New terminal asks its sandbox for a new shell there", async () => {
-  const task = mount({ agents: [WORKING] });
+  const task = await mount({ agents: [WORKING] });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
   assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
   assert.equal(task.asked(WORKING.id), 0);
@@ -221,7 +223,7 @@ test("on a plan with one agent, ⌘J shows its Terminal tab and New terminal ask
 });
 
 test("from an agent's own tab, both mean that agent, whatever else is on the plan", async () => {
-  const task = mount({
+  const task = await mount({
     agents: [WORKING, DONE],
     main: { agent: DONE.id },
     lastTerminal: WORKING.id,
@@ -232,7 +234,7 @@ test("from an agent's own tab, both mean that agent, whatever else is on the pla
 });
 
 test("with several agents, ⌘J shows the terminal used last, and New terminal asks with that one chosen and said", async () => {
-  const task = mount({ agents: [WORKING, DONE], lastTerminal: DONE.id });
+  const task = await mount({ agents: [WORKING, DONE], lastTerminal: DONE.id });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
   assert.deepEqual(task.shown, [{ terminal: DONE.id }]);
   await task.run(APP_COMMAND.NEW_TERMINAL);
@@ -249,7 +251,7 @@ test("with several agents, ⌘J shows the terminal used last, and New terminal a
 });
 
 test("with several agents and no terminal used yet, ⌘J asks, and the agent picked has its terminal shown, no shell added", async () => {
-  const task = mount({ agents: [WORKING, DONE] });
+  const task = await mount({ agents: [WORKING, DONE] });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
   assert.deepEqual(task.shown, []);
   await picker()?.choose("Expiry job");
@@ -259,7 +261,7 @@ test("with several agents and no terminal used yet, ⌘J asks, and the agent pic
 
 test("with no agent on the plan, the picker offers to start one", async () => {
   let started = 0;
-  const task = mount({ agents: [], started: () => (started += 1) });
+  const task = await mount({ agents: [], started: () => (started += 1) });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
     { name: "Start a coding agent", detail: undefined, chosen: true },
@@ -270,12 +272,14 @@ test("with no agent on the plan, the picker offers to start one", async () => {
 });
 
 test("the panel's + lists each agent's terminal under Terminal, says how it stands, and a pick adds a shell to that agent's sandbox", async () => {
-  const task = mount({
+  const task = await mount({
     agents: [WORKING, DONE],
     side: SIDE_PANEL_TAB.BOARD,
     lastTerminal: DONE.id,
   });
-  const add = document.querySelector<HTMLButtonElement>(".side-panel-tabs button.tab-add");
+  const add = document.querySelector<HTMLButtonElement>(
+    '.side-panel-tabs button[aria-label="Open a tab"]',
+  );
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
@@ -302,11 +306,11 @@ function menuItem(label: string) {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".task-menu-label")?.textContent === label,
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
   );
   assert.ok(item, `the menu offers ${label}`);
   return {
-    hint: item.querySelector(".menu-item-hint")?.textContent,
+    hint: item.querySelector(".luke-menu-item-hint")?.textContent,
     press: async () => {
       await act(async () => item.click());
       await settle();
@@ -314,7 +318,7 @@ function menuItem(label: string) {
   };
 }
 
-/** Opens the right-click menu of the plan's column's tab named `name`. */
+/** Opens the right-click menu of the task's column's tab named `name`. */
 function rightClickTab(name: string): void {
   const tab = [
     ...document.querySelectorAll<HTMLElement>('.desktop-task-main .desktop-toolbar [role="tab"]'),
@@ -328,7 +332,7 @@ function rightClickTab(name: string): void {
 }
 
 test("an agent's tab offers Open terminal on its right-click and its bar's ⋯, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
-  const task = mount({
+  const task = await mount({
     agents: [WORKING, DONE],
     main: { agent: WORKING.id },
     lastTerminal: DONE.id,
@@ -365,9 +369,67 @@ test("an agent's tab offers Open terminal on its right-click and its bar's ⋯, 
   assert.equal(task.asked(DONE.id), 0);
 });
 
+/** The labels of the menu standing open. */
+function menuLabels(): string[] {
+  const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
+  assert.ok(menu, "a menu stands open");
+  return [...menu.querySelectorAll(".luke-menu-item-label")].map((each) => each.textContent ?? "");
+}
+
+/** The task drawn as `mount` draws it, on a platform offering `capabilities`. */
+async function mountOn(
+  capabilities: readonly HostCapability[],
+  input: Parameters<typeof mount>[0],
+): ReturnType<typeof mount> {
+  handCapabilities(capabilities);
+  return mount(input);
+}
+
+test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers neither Open terminal nor Run", async () => {
+  const offered = (each: HostCapability) =>
+    each !== HOST_CAPABILITY.TERMINALS && each !== HOST_CAPABILITY.MAC_TERMINAL;
+  await mountOn(DESKTOP_CAPABILITIES, {
+    agents: [WORKING],
+    main: { agent: WORKING.id },
+  });
+  rightClickTab("Invite flow");
+  const onDesktop = menuLabels();
+  act(() => roots.pop()?.unmount());
+
+  await mountOn(DESKTOP_CAPABILITIES.filter(offered), {
+    agents: [WORKING],
+    main: { agent: WORKING.id },
+    side: SIDE_PANEL_TAB.BOARD,
+  });
+  rightClickTab("Invite flow");
+  const without = menuLabels();
+  assert.equal(runAppCommand(APP_COMMAND.SHOW_TERMINAL), false);
+  assert.equal(runAppCommand(APP_COMMAND.NEW_TERMINAL), false);
+  const add = document.querySelector<HTMLButtonElement>(
+    '.side-panel-tabs button[aria-label="Open a tab"]',
+  );
+  assert.ok(add, "the panel's +");
+  await act(async () => add.click());
+  await settle();
+  const groups = [...document.querySelectorAll('.tab-add-menu [role="group"]')].map(
+    (group) => group.textContent ?? "",
+  );
+
+  assert.ok(
+    onDesktop.includes("Open terminal") && onDesktop.includes("Run"),
+    "the desktop offers both",
+  );
+  assert.equal(without.includes("Open terminal"), false);
+  assert.equal(without.includes("Run"), false);
+  assert.equal(
+    groups.some((group) => group.startsWith("Terminal")),
+    false,
+  );
+});
+
 test("where no agent can start, the picker says why beside the offer and starts nothing", async () => {
   let started = 0;
-  const task = mount({
+  const task = await mount({
     agents: [],
     cannotStart: "Choose a repository first",
     started: () => (started += 1),
@@ -381,7 +443,7 @@ test("where no agent can start, the picker says why beside the offer and starts 
 });
 
 test("while the plan's agents are still being read, the picker says so and offers to start none", async () => {
-  const task = mount({ agents: undefined });
+  const task = await mount({ agents: undefined });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, []);
   assert.equal(

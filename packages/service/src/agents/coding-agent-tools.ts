@@ -17,6 +17,7 @@ import { listTasks } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -35,11 +36,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
-  isRecord,
-  isSettledToolPartState,
   isStoredToolPart,
-  isWireString,
-  type StoredToolPart,
   type StoredUIMessage,
   type UnparsedWireValue,
   type WireRecord,
@@ -54,10 +51,11 @@ import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
-import { START_NOTE_HEADING, startCodingAgent } from "./coder-host/start.js";
+import { callEntry } from "./coder-host/replay.js";
+import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
-import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
   AGENT_LIST_INPUT,
   type AgentTask,
@@ -72,11 +70,11 @@ import {
 import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.js";
 
 /**
- * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, message one, start one, and for Luke on a call read one's progress.
+ * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, message one, start one.
  *
  * Luke on a call and every coding agent are offered the same `list_agents`,
- * `message_agent`, and `start_agent`, one implementation each, and Luke
- * `read_agent` beside them; the caller is what differs (`AgentCaller`):
+ * `read_agent`, `message_agent`, and `start_agent`, one implementation each;
+ * the caller is what differs (`AgentCaller`):
  * Luke acting for the member on the call, on the call's task, or a coding
  * agent acting for its starter, on its own task, which the host read from
  * the session it admitted and never from the call. A list, a read, and a
@@ -91,7 +89,11 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * transcript's turn journals, rendered as a short tail of what the agent
  * said and did; a read of one agent also asks GitHub what that branch
  * published, as the agent's tab does (`coder-host/published.ts`), and says
- * nothing of it where GitHub could not be asked. A message takes the one
+ * nothing of it where GitHub could not be asked. Luke summarises a read
+ * aloud, so his tail's entries are cut close and his words for the tool say
+ * so; a coding agent reads its tail as text, to learn why an agent went
+ * quiet, so each of its entries keeps more, and it may ask for a longer
+ * tail, to a bound. A message takes the one
  * path the message box's does (`coder-host/steer.ts`), under the key eve
  * gave the tool call, so a call eve runs again after a lost answer sends
  * once, and answers as soon as the session took it, never waiting on a
@@ -133,12 +135,16 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
 const TASKS_LIST_LIMIT = 50;
 
 const CODING_AGENT_TOOL_BOUNDS = {
-  /** The newest turns a progress read walks, the one under way included. */
+  /** The newest turns a progress read walks first, the one under way included. */
   TAIL_TURNS: 3,
-  /** The most entries a progress read answers, the newest last. */
+  /** The entries a progress read answers where it asks for no number, the newest last. */
   TAIL_ENTRIES: 20,
-  /** The most characters one entry of the tail carries. */
+  /** The most entries a progress read may ask for: with a coding agent's entries, about ten thousand tokens. */
+  MAX_TAIL_ENTRIES: 50,
+  /** The most characters one entry of Luke's tail carries, which he summarises aloud. */
   ENTRY_CHARS: 300,
+  /** The most characters one entry of a coding agent's tail carries, which it reads as text. */
+  AGENT_ENTRY_CHARS: 800,
   /** The most characters an agent's latest activity carries in the list. */
   ACTIVITY_CHARS: 160,
 } as const;
@@ -212,8 +218,9 @@ export const READ_PAGE_REFUSAL = {
 export const START_CODING_AGENT_REFUSAL = {
   UNREADABLE:
     "Not started: give a prompt as text of at most " +
-    `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, a note ` +
-    "bounded the same or none, and a model with its effort, both or neither.",
+    `${CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
+    `bounded the same or none, a title of at most ${CODING_AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
+    "characters or none, and a model with its effort, both or neither.",
   NO_TASK: `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
@@ -276,6 +283,21 @@ const AGENT_ID = describeWire(
 
 const READ_AGENT_INPUT = Schema.Struct({ agentId: AGENT_ID });
 
+/** A coding agent's read names the agent and, at most, how long a tail it wants. */
+const CODER_READ_AGENT_INPUT = Schema.Struct({
+  agentId: AGENT_ID,
+  entries: Schema.optionalKey(
+    describeWire(
+      Schema.Int.check(
+        Schema.isBetween({ minimum: 1, maximum: CODING_AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES }),
+      ),
+      "How many entries of its transcript to read, the newest last; " +
+        `${CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES} when left out, at most ` +
+        `${CODING_AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES}.`,
+    ),
+  ),
+});
+
 const MESSAGE_AGENT_INPUT = Schema.Struct({
   agentId: AGENT_ID,
   text: describeWire(
@@ -289,15 +311,24 @@ const MESSAGE_AGENT_INPUT = Schema.Struct({
   ),
 });
 
-/** A prompt a start may name: bounded as a message to an agent is. */
+/** A prompt or a note a start may name: bounded apart from a message, since a brief to a worker on a long plan is quoted whole. */
 const START_PROMPT = Schema.Trim.check(
   Schema.isNonEmpty(),
-  Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS),
+);
+
+/** A title a start may name: bounded as a rename's is, and never empty, since an empty one names nothing. */
+const START_TITLE = Schema.Trim.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS),
 );
 
 /**
  * A start names a prompt at most, a note at most, and a model with its
- * effort or neither; the catalog decides whether the two name anything.
+ * effort or neither; the catalog decides whether the two name anything. A
+ * title it names is the agent's from the start, as an automation's run's
+ * fixed name is, so no generated title ever covers it; without one the
+ * agent is named from its first exchange as any is.
  * Note that the note is what lets one start carry everything: without it a
  * start on the plan had no room for what was said beyond the plan, so the
  * caller started the agent and then messaged it the rest.
@@ -325,6 +356,13 @@ const START_AGENT_INPUT = Schema.Struct({
         "message; leave it out where there is nothing beyond the plan.",
     ),
   ),
+  title: Schema.optionalKey(
+    describeWire(
+      START_TITLE,
+      "The agent's title from the start, how the developer sees it named, such as the pull " +
+        "request it will open; leave it out to have it named from what it is told.",
+    ),
+  ),
   model: Schema.optionalKey(
     describeWire(
       modelChoiceSchema.fields.model,
@@ -341,6 +379,7 @@ const START_AGENT_INPUT = Schema.Struct({
 });
 
 const readAgentRef = Schema.decodeUnknownResult(READ_AGENT_INPUT);
+const readAgentAsked = Schema.decodeUnknownResult(CODER_READ_AGENT_INPUT);
 
 const ARCHIVE_AGENT_INPUT = Schema.Struct({
   agentId: AGENT_ID,
@@ -384,6 +423,7 @@ export const LIST_AGENTS_TOOL = {
   inputSchema: AGENT_LIST_INPUT,
 } as const;
 
+/** `read_agent` as Luke on a call is offered it, who says what he read aloud. */
 export const READ_AGENT_TOOL = {
   name: AGENT_TOOL.READ_AGENT,
   description:
@@ -391,6 +431,21 @@ export const READ_AGENT_TOOL = {
     "request from it as GitHub holds them, and a short tail of what it last said and did, " +
     "newest last. Summarise it in a sentence or two; never read it out.",
   inputSchema: READ_AGENT_INPUT,
+} as const;
+
+/** `read_agent` as a coding agent is offered it, which reads the tail as text and may ask for more of it. */
+export const CODER_READ_AGENT_TOOL = {
+  name: AGENT_TOOL.READ_AGENT,
+  description:
+    "Read one coding agent of your workspace by its id, on any task and started by any member: " +
+    `what ${AGENT_TOOL.LIST_AGENTS} says of it, the branch it pushed and the pull request from it ` +
+    "as GitHub holds them, and the tail of its transcript, what it last said and which tools it " +
+    "called on what, newest last, each entry cut to " +
+    `${CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS} characters. Read one to learn why an agent ` +
+    "went quiet, what it is stuck on, or what it did, before you message it or decide what " +
+    "comes next. It only reads: the agent is not told. Answers `accepted` with the reading, or " +
+    "`rejected` and why.",
+  inputSchema: CODER_READ_AGENT_INPUT,
 } as const;
 
 export const MESSAGE_AGENT_TOOL = {
@@ -507,66 +562,13 @@ export const LIST_TASKS_TOOL = {
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
-/** How a call of one coding tool is said: its verb, and the one input field that names its subject. */
-interface CallWords {
-  readonly verb: string;
-  readonly key: string;
-}
-
-/** Each coding tool's words; a patch names its files in its own headers and stands apart. */
-const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
-  [CODER_TOOL.BASH, { verb: "Ran", key: "command" }],
-  [CODER_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
-  [CODER_TOOL.WRITE_FILE, { verb: "Wrote", key: "filePath" }],
-  [CODER_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.GREP, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
-  [CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
-  [RETIRED_CODER_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
-  [RETIRED_CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
-]);
-
-/** A patch header naming a file, as `apply_patch` spells one. */
-const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete|Move to) File: (.+)$/u;
-
 const ENTRY_WORDS = {
   SAID: "Said",
-  EDITED: "Edited",
-  USED: "Used",
-  RUNNING: "(running)",
 } as const;
 
 function cut(text: string, maximumChars: number): string {
   const line = text.replace(/\s+/gu, " ").trim();
   return line.length > maximumChars ? `${line.slice(0, maximumChars - 1)}…` : line;
-}
-
-/** What a call was done to, read from its input alone. */
-function subjectOf(name: string, input: UnparsedWireValue): string {
-  if (name === CODER_TOOL.APPLY_PATCH) {
-    const patch = isRecord(input) && isWireString(input.patchText) ? input.patchText : "";
-    return patch
-      .split("\n")
-      .flatMap((line) => PATCH_FILE_HEADER.exec(line.trimEnd())?.[1] ?? [])
-      .join(", ");
-  }
-  const words = CALL_WORDS.get(name);
-  if (words === undefined || !isRecord(input)) return "";
-  const subject = input[words.key];
-  return isWireString(subject) ? subject : "";
-}
-
-/** One call as a line of the tail: its verb, its subject, and whether it still runs. */
-function callEntry(part: StoredToolPart): string {
-  const name = part.type.slice("tool-".length);
-  const verb =
-    name === CODER_TOOL.APPLY_PATCH
-      ? ENTRY_WORDS.EDITED
-      : (CALL_WORDS.get(name)?.verb ?? ENTRY_WORDS.USED);
-  // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
-  const subject = subjectOf(name, part.input as UnparsedWireValue) || name;
-  const running = isSettledToolPartState(part.state) ? "" : ` ${ENTRY_WORDS.RUNNING}`;
-  return `${verb}: ${subject}${running}`;
 }
 
 /** A journal's entries in order: each of the agent's own texts, and each call with its subject. */
@@ -858,15 +860,41 @@ export function runListAgents(
   );
 }
 
-/** One call of `read_agent`: the agent as the list reads it, and the tail of its newest turns. */
+/**
+ * The newest entries of an agent's transcript, as many as asked where it
+ * has them. Note that the newest turns are read first and older ones only
+ * where those fall short, because a coding agent's one turn is often its
+ * whole run, long enough on its own; and that the second read takes as many
+ * turns as entries asked, since a turn that ended carries at least one.
+ */
+const tailOf = (agent: CodingAgent, entries: number, entryChars: number) =>
+  Effect.gen(function* () {
+    const entriesIn = (journals: readonly StoredUIMessage[]) =>
+      journals.flatMap((journal) => entriesOf(journal, entryChars));
+    const newest = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
+    const read = entriesIn(newest);
+    const more =
+      read.length < entries &&
+      newest.length === CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS &&
+      entries > CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS;
+    const all = more ? entriesIn(yield* journalsOf(agent, entries)) : read;
+    return all.slice(-entries);
+  });
+
+/** One call of `read_agent`: the agent as the list reads it, and the tail of its newest turns, as long as asked and each entry cut for the caller. */
 export function runReadAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readAgentRef(input);
+  const asked = readAgentAsked(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE));
   }
+  const entries = asked.success.entries ?? CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES;
+  const entryChars =
+    call.caller.kind === AGENT_CALLER.AGENT
+      ? CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS
+      : CODING_AGENT_TOOL_BOUNDS.ENTRY_CHARS;
   return orStoreRefusal(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(call.caller, asked.success.agentId);
@@ -876,10 +904,7 @@ export function runReadAgent(
       const step = yield* workspaceStepOf(callerUserId(call.caller), workspaceId);
       const reading = yield* readAgent(agent, task, standing(agent), yield* offeredModels, step);
       const published = yield* publishedOf(callerUserId(call.caller), agent);
-      const journals = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
-      const tail = journals
-        .flatMap((journal) => entriesOf(journal, CODING_AGENT_TOOL_BOUNDS.ENTRY_CHARS))
-        .slice(-CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES);
+      const tail = yield* tailOf(agent, entries, entryChars);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: readingRecord(reading),
@@ -1008,6 +1033,7 @@ export function runStartAgent(
         choice,
         prompt,
         note,
+        title: asked.success.title,
         ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {

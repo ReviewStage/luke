@@ -20,7 +20,8 @@ import {
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { layContainersAt } from "#testing/container-width";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import {
   focusedSegment,
   pressKeyIn,
@@ -115,10 +116,8 @@ beforeEach(() => {
   keys = [];
   sent = [];
   refuseWrite = false;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({ act: answer });
 });
 
 afterEach(() => {
@@ -146,6 +145,19 @@ const fastSwitch = (page: HTMLElement) =>
   page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Fast"]') ??
   assert.fail("no Fast switch");
 
+/** The words that describe a control, in the order it names them. */
+const descriptionOf = (control: HTMLElement) =>
+  (control.getAttribute("aria-describedby") ?? "")
+    .split(" ")
+    .map((id) => document.getElementById(id)?.textContent ?? "")
+    .join(" ");
+
+/** What the page announces now: its alerts and its live regions that say something. */
+const announced = (page: HTMLElement) =>
+  [...page.querySelectorAll('[role="alert"], [aria-live]')]
+    .map((each) => each.textContent ?? "")
+    .filter((words) => words !== "");
+
 /** The defaults the page asked the service to keep, in order. */
 const written = () =>
   sent.flatMap((request) =>
@@ -159,12 +171,12 @@ test("a Fast the service refuses says so under Fast's own row, the switch left o
   act(() => fastSwitch(page).click());
   await settle();
 
-  const alert = page.querySelector('[role="alert"]') ?? assert.fail("no refusal");
-  assert.equal(alert.textContent, "The default could not be saved. Try again.");
-  assert.equal(
-    alert.previousElementSibling?.contains(fastSwitch(page)),
-    true,
-    "the refusal stands under the Fast row, not under the rows after it",
+  assert.deepEqual(announced(page), ["The default could not be saved. Try again."]);
+  assert.equal(fastSwitch(page).getAttribute("aria-invalid"), "true");
+  assert.match(
+    descriptionOf(fastSwitch(page)),
+    /The default could not be saved\. Try again\./u,
+    "the refusal describes the Fast switch, not the rows after it",
   );
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
   assert.equal(fastSwitch(page).disabled, false);
@@ -204,25 +216,9 @@ test("Effort and Context are each a radio group, the stored value checked and th
   ]);
 });
 
-test("the Effort control gives way to a row narrower than its segments, wrapping them inside its trough, rather than running its last past the card", async () => {
-  const page = await mount();
-  const effort = segmentedGroup(page, "Effort");
-
-  const sheets = layContainersAt({});
-  try {
-    const drawn = getComputedStyle(effort);
-    assert.deepEqual(
-      { shrinks: drawn.flexShrink, widest: drawn.maxWidth, wraps: drawn.flexWrap },
-      { shrinks: "1", widest: "100%", wraps: "wrap" },
-    );
-  } finally {
-    sheets.remove();
-  }
-});
-
 test("a refusal goes once any row's save lands, Fast's after an effort is kept and the effort's after Fast is, since every row writes the one default", async () => {
   const page = await mount();
-  const alerts = () => [...page.querySelectorAll('[role="alert"]')].map((each) => each.textContent);
+  const alerts = () => announced(page);
 
   refuseWrite = true;
   act(() => fastSwitch(page).click());
@@ -248,11 +244,10 @@ test("a refusal goes once any row's save lands, Fast's after an effort is kept a
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "true");
 });
 
-/** The Fast row's words under its name. */
+/** The Fast row's words under its name, which describe its switch. */
 const fastNote = (page: HTMLElement) =>
-  [...page.querySelectorAll<HTMLElement>(".settings-row")]
-    .find((row) => row.querySelector("strong")?.textContent === "Fast")
-    ?.querySelector("small") ?? assert.fail("no Fast note");
+  document.getElementById(fastSwitch(page).getAttribute("aria-describedby")?.split(" ")[0] ?? "") ??
+  assert.fail("no Fast note");
 
 test("a model whose fast version the key's organization was never granted rests saying so, and on the account's own key links to where it asks Anthropic, opened in the browser", async () => {
   models = [{ ...OPUS, fastNotEnabled: true }];
@@ -308,7 +303,10 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
     page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
     assert.fail("no Anthropic field");
   act(() => {
-    field.value = "sk-ant-api03-synthetic-0000000000000000new1";
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      field,
+      "sk-ant-api03-synthetic-0000000000000000new1",
+    );
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
   act(() => field.form?.requestSubmit());

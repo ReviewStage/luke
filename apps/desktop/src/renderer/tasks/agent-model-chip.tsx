@@ -1,11 +1,11 @@
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { HarnessMark } from "../harness-marks";
 import { Tooltip } from "../tooltip";
-import { useDisclosure } from "../use-disclosure";
 import { agentUsageLine, choiceLabel, providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { ModelMenu, settledChoice } from "./model-menu";
@@ -15,7 +15,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * agent-model-chip.tsx -- the chip at the agent box's foot that names what the agent runs on, and the menu that changes it.
  *
  * Drawn along the composer card's foot as the window's toolbar chip
- * (`../chip.tsx`), the plan toolbar's repository chip's look, with no
+ * (`../chip.tsx`), the task toolbar's repository chip's look, with no
  * border and no fill until the pointer is on it or its menu is open:
  * "Opus 5.5 High" (`model-label.tsx`), with "Fast" after the effort where
  * the fast version is on and the standard context window's size where the
@@ -23,7 +23,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * 272K"), and a chevron saying it opens a menu. A press
  * opens the shared model menu (`model-menu.tsx`) right above the chip,
  * from its trailing edge, since the chip stands at the foot's right
- * (`../anchored-popover.tsx`), the
+ * (`@luke/ui`'s `AnchoredPopover`), the
  * agent's choice checked; what the menu chooses is the agent's model,
  * effort, and context window for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
  * same whatever the agent is doing, since a change mid-turn applies from

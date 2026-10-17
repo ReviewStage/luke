@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type {
-  AccountFailedRun,
-  AccountInboxEntry,
-  AccountTasklessEntry,
+import {
+  ACCOUNT_CHAT_REASON,
+  type AccountChatEntry,
+  type AccountFailedRun,
+  type AccountInboxEntry,
+  type AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import {
@@ -27,6 +29,7 @@ import {
   type AgentNotice,
   AgentNoticeDoors,
   type AgentPlace,
+  type ChatMessageToast,
   createAgentNotices,
   type FailedRunToast,
   type InboxItemToast,
@@ -59,7 +62,7 @@ function agent(
   };
 }
 
-/** An inbox read's answer as a test gives it: its plans holding items left out where none does. */
+/** An inbox read's answer as a test gives it: its tasks holding items left out where none does. */
 type InboxAnswerGiven =
   | Exclude<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>
   | (Omit<Extract<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>, "plans"> & {
@@ -70,7 +73,7 @@ type InboxAnswerGiven =
     });
 
 /**
- * The notices over a scripted host: each plan's list answers from its own
+ * The notices over a scripted host: each task's list answers from its own
  * queue, the last answer standing, the account's inbox read holds until the
  * test answers it, and everything posted, toasted, opened, badged, and
  * written is kept for the test to read. Electron's doors are a Layer of the
@@ -84,12 +87,16 @@ function fixture() {
   const toasted: AgentEndToast[] = [];
   const inboxToasted: InboxItemToast[] = [];
   const runsToasted: FailedRunToast[] = [];
+  const chatToasted: ChatMessageToast[] = [];
+  const chatOpened: string[] = [];
+  let chatOn = true;
   const badges: number[] = [];
   const doors = Layer.succeed(AgentNoticeDoors, {
     post: (notice) => posted.push(notice),
     toast: (end) => toasted.push(end),
     toastInbox: (item) => inboxToasted.push(item),
     toastFailedRun: (run) => runsToasted.push(run),
+    toastChat: (message) => chatToasted.push(message),
     badge: (count) => badges.push(count),
   });
   const inboxReads: string[] = [];
@@ -178,6 +185,8 @@ function fixture() {
       },
       openFailedRun: (place) => openedAutomations.push(place.automationId),
       automationsOn: () => automationsOn,
+      openChat: (workspaceId) => chatOpened.push(workspaceId),
+      chatOn: () => chatOn,
       openInbox: (planId) => openedInboxes.push(planId),
       openTasklessItem: (item) => openedTaskless.push(item),
       watchInterval: WATCH,
@@ -196,7 +205,7 @@ function fixture() {
     opened,
     openedTaskless,
     unseen,
-    /** The list answers a plan's reads hear, in order; the last stands for every read after it. */
+    /** The list answers a task's reads hear, in order; the last stands for every read after it. */
     answer: (planId: string, ...queue: CodingAgentListAnswer[]) => answers.set(planId, queue),
     /** The page answers an agent's own reads hear, in order; the last stands for every read after it. */
     answerPage: (agentId: string, ...queue: CodingAgentPageAnswerView[]) =>
@@ -215,7 +224,7 @@ function fixture() {
       accountChanged(next);
       Queue.offerUnsafe(accounts, next);
     },
-    /** The account's inbox read answered, as the host answers the one standing; no plan holds an item but where the answer says. */
+    /** The account's inbox read answered, as the host answers the one standing; no task holds an item but where the answer says. */
     answerInbox: (answer: InboxAnswerGiven) => {
       assert.ok(inboxAnswers);
       Queue.offerUnsafe(inboxAnswers, "failure" in answer ? answer : { plans: [], ...answer });
@@ -230,6 +239,13 @@ function fixture() {
     runsToasted,
     failedRuns,
     openedAutomations,
+    chatToasted,
+    /** The workspace each chat notification's click opened Chat on. */
+    chatOpened,
+    /** The account's Chat experiment. */
+    turnChat: (on: boolean) => {
+      chatOn = on;
+    },
     /** The account's Automations experiment. */
     turnAutomations: (on: boolean) => {
       automationsOn = on;
@@ -244,7 +260,7 @@ function fixture() {
     },
     /** What was said, without the clicks. */
     said: () => posted.map(({ title, body }) => ({ title, body })),
-    /** How many times the plan list was asked for again. */
+    /** How many times the task list was asked for again. */
     listReads: () => listReads,
   };
 }
@@ -566,7 +582,7 @@ it.effect(
       assert.deepEqual(f.posted, []);
     }),
 );
-/** An item of an agent with no plan waiting on the developer, as the account's inbox read carries it. */
+/** An item of an agent with no task waiting on the developer, as the account's inbox read carries it. */
 function tasklessItem(id: string, patch: Partial<AccountTasklessEntry> = {}): AccountTasklessEntry {
   return {
     id,
@@ -921,5 +937,181 @@ it.effect(
 
       assert.deepEqual(f.posted, []);
       assert.deepEqual(f.failedRuns.at(-1), [later]);
+    }),
+);
+
+/** A chat message waiting on the developer, as the account's read carries it. */
+function chatEntry(seq: number, patch: Partial<AccountChatEntry> = {}): AccountChatEntry {
+  return {
+    messageId: `00000000-0000-4000-8000-${String(seq).padStart(12, "0")}`,
+    seq,
+    workspaceId: "workspace-acme",
+    reason: ACCOUNT_CHAT_REASON.DIRECT,
+    from: "agent-2",
+    planId: TASK_ID,
+    touchedSeq: seq,
+    updatedAt: READ_AT,
+    ...patch,
+  };
+}
+
+it.effect(
+  "a chat message that comes to wait is announced once by who and why under its task, never what was said: as a notification behind, in the toast in front, and nowhere while Chat is on screen; the badge counts it beside the items",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      // The first answer is where the account stands, and announces nothing it holds.
+      f.answerInbox({ items: [], chat: [chatEntry(40)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      assert.equal(f.posted.length, 0);
+      assert.equal(f.badges.at(-1), 1);
+
+      f.answerInbox({
+        items: [waitingItem(ITEM_A)],
+        chat: [
+          chatEntry(40),
+          chatEntry(47, {
+            reason: ACCOUNT_CHAT_REASON.MENTION,
+            from: "luke",
+            workspaceId: "workspace-beta",
+          }),
+        ],
+        cursor: "2",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      // The mention that came to wait is announced; the message already waiting is not.
+      assert.ok(
+        f.said().some((said) => said.title === TASK_NAME && said.body === "@luke mentioned you"),
+      );
+      assert.equal(f.badges.at(-1), 3);
+      f.posted.find((notice) => notice.body === "@luke mentioned you")?.onClick();
+      // Its click opens the Chat of the workspace it waits in, whichever the window lists.
+      assert.deepEqual(f.chatOpened, ["workspace-beta"]);
+
+      f.focus(true);
+      f.answerInbox({
+        items: [waitingItem(ITEM_A)],
+        chat: [
+          chatEntry(40),
+          chatEntry(47),
+          chatEntry(51, { reason: ACCOUNT_CHAT_REASON.ASK, planId: null }),
+        ],
+        cursor: "3",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(f.chatToasted, [
+        {
+          messageId: chatEntry(51).messageId,
+          workspaceId: "workspace-acme",
+          planId: null,
+          words: "@agent-2 asked you",
+          detail: "Chat",
+        },
+      ]);
+
+      notices.shownChat({ workspaceId: "workspace-acme", planId: null });
+      const before = f.posted.length;
+      f.answerInbox({
+        items: [waitingItem(ITEM_A)],
+        chat: [
+          chatEntry(40),
+          chatEntry(47),
+          chatEntry(51),
+          chatEntry(52),
+          chatEntry(53, { workspaceId: "workspace-beta", planId: null }),
+        ],
+        cursor: "4",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      // Chat on screen is Acme's, so Acme's message is read there and Beta's is still told.
+      assert.deepEqual(
+        f.chatToasted.map((toast) => toast.messageId),
+        [chatEntry(51).messageId, chatEntry(53).messageId],
+      );
+      assert.equal(f.posted.length, before);
+    }),
+);
+
+it.effect(
+  "a task's Chat tab on screen quiets only what waits in its plan's channel: a direct message and another plan's message in the same workspace are still told",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+      f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      notices.shownChat({ workspaceId: "workspace-acme", planId: TASK_ID });
+      const otherPlan = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
+      f.answerInbox({
+        items: [],
+        chat: [
+          chatEntry(60),
+          chatEntry(61, { planId: null }),
+          chatEntry(62, { planId: otherPlan }),
+        ],
+        cursor: "2",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(
+        f.chatToasted.map((toast) => toast.messageId),
+        [chatEntry(61).messageId, chatEntry(62).messageId],
+      );
+    }),
+);
+
+it.effect(
+  "with Chat off for the account, nothing waiting in chat is announced or counted on the badge",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.turnChat(false);
+      f.focus(false);
+      f.answerInbox({ items: [], chat: [chatEntry(40)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      f.answerInbox({
+        items: [],
+        chat: [chatEntry(40), chatEntry(41)],
+        cursor: "2",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.equal(f.posted.length, 0);
+      assert.equal(f.badges.at(-1), 0);
+    }),
+);
+
+it.effect(
+  "an open ask that comes to the read changed before the last answer was read, as one of a workspace just joined, is no news, where a mention stamped late still is",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      f.answerInbox({
+        items: [],
+        chat: [
+          chatEntry(30, { reason: ACCOUNT_CHAT_REASON.ASK, updatedAt: READ_AT - 4 * 86_400_000 }),
+          chatEntry(31, { updatedAt: READ_AT + 60_000 }),
+          // A mention its person was stamped for only now, after a retried post, is news however old.
+          chatEntry(32, { reason: ACCOUNT_CHAT_REASON.MENTION, updatedAt: READ_AT - 86_400_000 }),
+        ],
+        cursor: "2",
+        readAt: READ_AT + 120_000,
+      });
+      yield* settled;
+      assert.deepEqual(f.said(), [
+        { title: TASK_NAME, body: "@agent-2 messaged you" },
+        { title: TASK_NAME, body: "@agent-2 mentioned you" },
+      ]);
     }),
 );

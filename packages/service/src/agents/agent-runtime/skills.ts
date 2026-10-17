@@ -6,7 +6,7 @@
  * names it or the work matches it; it never looks in a checkout for skills
  * of its own. So a repository's skills are read from GitHub as a session
  * starts (`../repository-skills.ts`), on a read token for that one
- * repository minted on the installation of the plan's workspace, and handed to eve as skills of the session, each one's body
+ * repository minted on the installation of the task's workspace, and handed to eve as skills of the session, each one's body
  * told where the skill stands in the agent's own view of the repository, so
  * the files it names can be found. A skill's body is handed as markdown
  * alone, so eve writes nothing into a sandbox and opens none for it. Which
@@ -34,7 +34,7 @@ export interface AgentSkill {
 /**
  * The skills the repository keeps on its default branch, as eve is handed
  * them, each body led by where it stands for the agent reading it; none
- * where the installation of the plan's workspace does not reach the
+ * where the installation of the task's workspace does not reach the
  * repository or GitHub could not be read, which is logged.
  */
 export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills")(function* (

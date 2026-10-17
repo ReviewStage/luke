@@ -4,6 +4,7 @@ import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
 import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -30,7 +31,7 @@ export function waitingOf(item: InboxItem): AppInboxWaitingItem {
   return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
 }
 
-/** The plan's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
+/** The task's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
 export const UNPINNED_SUMMARY: SummaryPin = {
   pinned: false,
   onToggle: ignore,
@@ -38,7 +39,7 @@ export const UNPINNED_SUMMARY: SummaryPin = {
   onMeasured: ignore,
 };
 
-/** A plan whose version history is shut, its history still being read, no version chosen, every press ignored. */
+/** A task whose version history is shut, its history still being read, no version chosen, every press ignored. */
 function versionHistoryControl(
   overrides: Partial<VersionHistoryControl> = {},
 ): VersionHistoryControl {
@@ -71,7 +72,7 @@ const NO_REPOSITORIES = {
   manages: true,
 } as const satisfies TasksControl["repositories"];
 
-/** A plan with no agents and no repository, every press ignored. */
+/** A task with no agents and no repository, every press ignored. */
 export function codingAgentsControl(
   overrides: Partial<CodingAgentsControl> = {},
 ): CodingAgentsControl {
@@ -81,16 +82,19 @@ export function codingAgentsControl(
     agents: [],
     archived: [],
     agentIds: [],
-    // A plan with no archived agent holds exactly the agents given.
+    // A task with no archived agent holds exactly the agents given.
     heldIds: overrides.agentIds ?? [],
     keywords: [],
     readSkills: undefined,
     draft: undefined,
     onNewDraft: () => "draft",
+    onForkDraft: () => "draft",
+    onDropFork: ignore,
     onDraftChange: ignore,
     onDraftAttachments: ignore,
     onDiscardDraft: ignore,
     startPrompt: () => Promise.resolve(undefined),
+    startFork: () => Promise.resolve(undefined),
     listFailed: false,
     listMissing: false,
     onRetryList: ignore,
@@ -99,6 +103,7 @@ export function codingAgentsControl(
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,
+    continueAgent: undefined,
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
     onStop: () => Promise.resolve(),
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -121,7 +126,11 @@ export function codingAgentsControl(
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readOverview: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewPullRequest: () =>
+      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewChecks: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewConversation: () =>
+      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     changesPeople: new Map(),
     readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -131,8 +140,8 @@ export function codingAgentsControl(
 }
 
 /**
- * A signed-in Plans tab on screen on its home page with no plans, every
- * press ignored, bound for whichever plan it is given as open.
+ * A signed-in Tasks tab on screen on its home page with no tasks, every
+ * press ignored, bound for whichever task it is given as open.
  */
 export function tasksControl(overrides: Partial<TasksControl> = {}): TasksControl {
   return {
@@ -250,6 +259,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     sectionReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
+    onShowChat: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,
@@ -265,6 +275,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     inbox: [],
     inboxShown: null,
+    chatShown: null,
     inboxTasks: [],
     inboxView: {
       open: false,
@@ -272,6 +283,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onClose: ignore,
       onChoose: ignore,
+      pages: undefined,
+      onRereadPages: () => undefined,
     },
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
     personView: {
@@ -299,7 +312,10 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     callTaskId: undefined,
     chatView: {
       open: false,
+      available: false,
       chat: undefined,
+      failed: false,
+      onRetry: ignore,
       place: FOR_YOU,
       onOpen: ignore,
       onClose: ignore,
@@ -339,6 +355,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onArchiveTasks: ignore,
     pinnedRepositories: [],
     onPinRepository: ignore,
+    taskSections: NO_TASK_SECTIONS,
+    onWriteSections: ignore,
     onPinAgent: ignore,
     onMovePins: ignore,
     onDeleteTask: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),

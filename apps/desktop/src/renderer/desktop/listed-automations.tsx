@@ -4,12 +4,12 @@ import { listedIn } from "../tasks/inbox-model";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 
 /**
- * listed-automations.tsx -- the listed workspace's automations, read around the whole window, so an agent's card on Home's rows or in ⌘K names the automation that started it as the plan's own does.
+ * listed-automations.tsx -- the listed workspace's automations, read around the whole window, so an agent's card on Home's rows or in ⌘K names the automation that started it as the task's own does.
  *
  * They are read only while the Automations experiment is on and an agent
- * the window lists names an automation: one on a listed plan's row, one of
- * the open plan's agents, or one with no plan whose question waits in the
- * listed workspace. The open plan and the Inbox stand directories of their
+ * the window lists names an automation: one on a listed task's row, one of
+ * the open task's agents, or one with no task whose question waits in the
+ * listed workspace. The open task and the Inbox stand directories of their
  * own, which share this read where they are of the listed workspace
  * (`automation-directory.tsx`).
  */

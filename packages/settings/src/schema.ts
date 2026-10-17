@@ -1,6 +1,6 @@
 import {
+  DEFAULT_VIDEO_AVATAR,
   isVideoAvatar,
-  VIDEO_AVATAR,
   VIDEO_AVATAR_LIST,
   VIDEO_AVATAR_NAME,
   videoAvatarCover,
@@ -8,6 +8,22 @@ import {
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
+import { Schema } from "effect";
+import { HOST_CAPABILITY } from "./capabilities.js";
+import {
+  DIFF_FONT,
+  DIFF_FONT_LABEL,
+  DIFF_FONT_SIZES,
+  DIFF_INDICATORS,
+  DIFF_INDICATORS_LABEL,
+  DIFF_LAYOUT,
+  DIFF_LAYOUT_LABEL,
+  DIFF_LINE_HEIGHT,
+  DIFF_LINE_HEIGHT_LABEL,
+  DIFF_THEMES,
+  INLINE_DIFF,
+  INLINE_DIFF_LABEL,
+} from "./diff-view.js";
 import { EXPERIMENT, experimentOn } from "./experiments.js";
 import { choiceSetting, hotkeySetting, optional, toggleSetting } from "./schema-builders.js";
 import {
@@ -51,8 +67,31 @@ function themeOptionLabel(theme: Theme): string {
   return theme.charAt(0).toUpperCase() + theme.slice(1);
 }
 
+/** One of a fixed set of words, as a diff setting's guard reads a value arriving from storage or IPC. */
+function oneOf<Value extends string>(values: readonly Value[]) {
+  const reads = Schema.is(Schema.Literals(values));
+  return (value: UnparsedWireValue): value is Value => reads(value);
+}
+
+const DIFF_LAYOUT_LIST = Object.values(DIFF_LAYOUT);
+const DIFF_INDICATORS_LIST = Object.values(DIFF_INDICATORS);
+const INLINE_DIFF_LIST = Object.values(INLINE_DIFF);
+const DIFF_FONT_LIST = Object.values(DIFF_FONT);
+const DIFF_LINE_HEIGHT_LIST = Object.values(DIFF_LINE_HEIGHT);
+const DIFF_DARK_THEME_LIST = DIFF_THEMES.DARK.map((theme) => theme.id);
+const DIFF_LIGHT_THEME_LIST = DIFF_THEMES.LIGHT.map((theme) => theme.id);
+
+/** A syntax theme's own name, by its id among those of its appearance. */
+function themeLabel(themes: readonly { readonly id: string; readonly label: string }[]) {
+  return (id: string): string => themes.find((theme) => theme.id === id)?.label ?? id;
+}
+
 /** Voice available and the microphone granted: the whole of what a control needs. */
 const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
+
+/** The voice controls drawn on a platform that routes the microphone itself. */
+const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
+  view.voiceControlsDrawn && view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
 
 /** Signed in with Video calls on: an avatar is a choice only while calls can show one. */
 const videoCallsDrawn = (view: SettingsVisibility): boolean =>
@@ -144,8 +183,9 @@ export const APP_SETTING_SCHEMA = {
     visible: voiceControlDrawn,
   }),
   /*
-   * Who Luke appears as on video: the deployment's own persona, or one of
-   * Keyframe's stock avatars. Kept on this Mac, beside the Video calls switch
+   * Who Luke appears as on video: one of Keyframe's stock avatars. A stored
+   * `default`, the deployment's own persona an earlier build offered, is no
+   * longer listed and reads as the default. Kept on this Mac, beside the Video calls switch
    * it belongs to, and read as each avatar starts, so a change shows the next
    * time video does rather than ending the call in progress.
    */
@@ -160,7 +200,7 @@ export const APP_SETTING_SCHEMA = {
     // Each stock avatar's face, loaded from Keyframe as the menu draws it.
     optionPicture: videoAvatarCover,
     guard: (value: UnparsedWireValue) => optional(value, isVideoAvatar),
-    default: VIDEO_AVATAR.DEFAULT,
+    default: DEFAULT_VIDEO_AVATAR,
     page: SETTINGS_PAGE.EXPERIMENTAL,
     section: SETTING_SECTION.VIDEO_CALLS,
     order: 40,
@@ -218,6 +258,187 @@ export const APP_SETTING_SCHEMA = {
     order: 110,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    visible: voiceControlDrawn,
+    visible: microphoneRouteDrawn,
+  }),
+  lineNumbers: toggleSetting({
+    field: "lineNumbers",
+    id: APP_SETTING_ID.LINE_NUMBERS,
+    label: "Line numbers",
+    detail: "In File tabs and diffs alike.",
+    default: true,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 200,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    // Nothing to run per write: the panel draws code from every settings snapshot.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  wordWrap: toggleSetting({
+    field: "wordWrap",
+    id: APP_SETTING_ID.WORD_WRAP,
+    label: "Word wrap",
+    detail: "In File tabs and diffs alike.",
+    default: true,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 205,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffLayout: choiceSetting({
+    field: "diffLayout",
+    id: APP_SETTING_ID.DIFF_LAYOUT,
+    label: "Layout",
+    detail: "A diff too narrow to split is drawn unified.",
+    values: DIFF_LAYOUT_LIST,
+    token: (layout) => layout,
+    optionLabel: (layout) => DIFF_LAYOUT_LABEL[layout],
+    guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_LAYOUT_LIST)),
+    default: DIFF_LAYOUT.UNIFIED,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 210,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffIndicators: choiceSetting({
+    field: "diffIndicators",
+    id: APP_SETTING_ID.DIFF_INDICATORS,
+    label: "Indicators",
+    values: DIFF_INDICATORS_LIST,
+    token: (indicators) => indicators,
+    optionLabel: (indicators) => DIFF_INDICATORS_LABEL[indicators],
+    guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_INDICATORS_LIST)),
+    default: DIFF_INDICATORS.BARS,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 215,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  inlineDiff: choiceSetting({
+    field: "inlineDiff",
+    id: APP_SETTING_ID.DIFF_INLINE,
+    label: "Inline diffs",
+    values: INLINE_DIFF_LIST,
+    token: (inline) => inline,
+    optionLabel: (inline) => INLINE_DIFF_LABEL[inline],
+    guard: (value: UnparsedWireValue) => optional(value, oneOf(INLINE_DIFF_LIST)),
+    default: INLINE_DIFF.WORD_ALT,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 220,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffBackgrounds: toggleSetting({
+    field: "diffBackgrounds",
+    id: APP_SETTING_ID.DIFF_BACKGROUNDS,
+    label: "Backgrounds",
+    default: true,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 225,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffDarkTheme: choiceSetting({
+    field: "diffDarkTheme",
+    id: APP_SETTING_ID.DIFF_DARK_THEME,
+    label: "Dark theme",
+    values: DIFF_DARK_THEME_LIST,
+    token: (theme) => theme,
+    optionLabel: themeLabel(DIFF_THEMES.DARK),
+    guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_DARK_THEME_LIST)),
+    default: "github-dark-default",
+    search: "Search themes",
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 230,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffLightTheme: choiceSetting({
+    field: "diffLightTheme",
+    id: APP_SETTING_ID.DIFF_LIGHT_THEME,
+    label: "Light theme",
+    values: DIFF_LIGHT_THEME_LIST,
+    token: (theme) => theme,
+    optionLabel: themeLabel(DIFF_THEMES.LIGHT),
+    guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_LIGHT_THEME_LIST)),
+    default: "github-light-default",
+    search: "Search themes",
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 235,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffFont: choiceSetting({
+    field: "diffFont",
+    id: APP_SETTING_ID.DIFF_FONT,
+    label: "Font",
+    values: DIFF_FONT_LIST,
+    token: (font) => font,
+    optionLabel: (font) => DIFF_FONT_LABEL[font],
+    guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_FONT_LIST)),
+    default: DIFF_FONT.SF_MONO,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 240,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffFontSize: choiceSetting({
+    field: "diffFontSize",
+    id: APP_SETTING_ID.DIFF_FONT_SIZE,
+    label: "Font size",
+    values: DIFF_FONT_SIZES,
+    token: (size) => size,
+    optionLabel: (size) => `${size}px`,
+    guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_FONT_SIZES)),
+    default: "11.5",
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 245,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffLineHeight: choiceSetting({
+    field: "diffLineHeight",
+    id: APP_SETTING_ID.DIFF_LINE_HEIGHT,
+    label: "Line height",
+    values: DIFF_LINE_HEIGHT_LIST,
+    token: (height) => height,
+    optionLabel: (height) => DIFF_LINE_HEIGHT_LABEL[height],
+    guard: (value: UnparsedWireValue) => optional(value, oneOf(DIFF_LINE_HEIGHT_LIST)),
+    default: DIFF_LINE_HEIGHT.NORMAL,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 250,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffLigatures: toggleSetting({
+    field: "diffLigatures",
+    id: APP_SETTING_ID.DIFF_LIGATURES,
+    label: "Ligatures",
+    default: false,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 255,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  diffMinimizeComments: toggleSetting({
+    field: "diffMinimizeComments",
+    id: APP_SETTING_ID.DIFF_MINIMIZE_COMMENTS,
+    label: "Minimize inline comments",
+    default: false,
+    page: SETTINGS_PAGE.APPEARANCE,
+    section: SETTING_SECTION.DIFFS,
+    order: 260,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
 } as const;

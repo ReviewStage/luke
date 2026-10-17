@@ -203,7 +203,9 @@
    banner, a bar at its foot, a band stuck inside it, or the window's drag
    strip. Content dissolves over `--scroll-fade` rather than being sliced
    against that edge. A scroller wears `scroll-fade` to fade at both edges,
-   or `scroll-fade-top` where only its top meets something pinned.
+   or `scroll-fade-top` where only its top meets something pinned; the
+   shared settings page, which takes no class of the window's, fades as
+   `scroll-fade-top` by its place under a Settings page's drag strip.
 
    Each edge's depth is a registered length that a scroll timeline eases
    from none to `--scroll-fade` over the first (or the last) `--scroll-fade`
@@ -250,7 +252,8 @@
 }
 
 .scroll-fade,
-.scroll-fade-top {
+.scroll-fade-top,
+.settings-page > .luke-settings-page {
   --scroll-fade-mask: linear-gradient(
     to bottom,
     #000 var(--fade-inset-top),
@@ -274,7 +277,8 @@
   scroll-padding-bottom: var(--scroll-fade);
 }
 
-.scroll-fade-top {
+.scroll-fade-top,
+.settings-page > .luke-settings-page {
   animation-name: scroll-fade-start, none;
 }
 
@@ -430,14 +434,32 @@ body,
      or scrollIntoView can drag the whole window's content out of. */
   overflow: clip;
   background: transparent;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
-/* The one place a selection is wanted: a credential being pasted. */
-.settings-input {
-  -webkit-user-select: text;
-  user-select: text;
+/* Words are selectable wherever they are read, so any line the window draws,
+   a failure's sentence, a heading, a row's detail, can be copied. A control
+   is pressed rather than read, so its words never select: a press, a tab, a
+   menu's row, a switch, a label that presses what it names, a glyph, and
+   whatever is dragged, where a selection would start in place of the drag. */
+:where(
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="option"],
+  [role="switch"],
+  [role="slider"],
+  [role="separator"],
+  summary,
+  label,
+  svg,
+  img,
+  [draggable="true"]
+) {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Luke's face ------------------------------------------------------------ */
@@ -808,9 +830,10 @@ body,
 }
 
 /* A fault's words, in the danger text colour: a refusal under the row or
-   the dialog it answers, a press that did not land, and a read that did not
-   (`read-failure.tsx`). The one class for them, so a failure reads alike
-   wherever it is said. */
+   the dialog it answers, and a press that did not land. The one class for
+   them, so a failure reads alike wherever it is said. A read that did not
+   land is said more quietly, its glyph alone in red (`@luke/ui`'s
+   `ErrorState`). */
 .error-message {
   margin: 0;
   color: var(--danger-text);
@@ -890,82 +913,6 @@ svg.working-mark[viewBox] {
   }
 }
 
-/* The window's one spinner for a wait (`spinner.tsx`): an arc in the ink
-   around it over a faint track, filling whatever box holds it. An endless
-   motion held by `--loop-motion` like every animation with no end of its
-   own, and still reading as a wait while held. */
-.spinner-ring {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  border: var(--spinner-stroke, 1.5px) solid color-mix(in srgb, currentColor 22%, transparent);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: spinner-turn 900ms linear infinite;
-  animation-play-state: var(--loop-motion);
-}
-
-@keyframes spinner-turn {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* A wait: 16px beside words or inside a control, 22px alone in a region, in
-   the secondary ink a wait is said in everywhere else. */
-.spinner {
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  color: var(--text-secondary);
-}
-
-.spinner[data-size="region"] {
-  --spinner-stroke: 2px;
-  width: 22px;
-  height: 22px;
-}
-
-/* A region still being read holds its ring at the centre of the room it fills. */
-.spinner-region {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  align-self: stretch;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-24);
-}
-
-/* A control's words and the ring share one cell, so the ring stands over the
-   words' own room rather than taking a width of its own. */
-.busy-label {
-  display: inline-grid;
-  align-items: center;
-  gap: inherit;
-  justify-items: center;
-}
-
-.busy-label > :not(.visually-hidden) {
-  grid-area: 1 / 1;
-}
-
-.busy-label-words {
-  display: inline-flex;
-  align-items: center;
-  gap: inherit;
-}
-
-.busy-label[data-shown="true"] > .busy-label-words {
-  visibility: hidden;
-}
-
-.busy-label > .spinner {
-  color: inherit;
-}
-
 /* Session primitives ----------------------------------------------------- */
 
 /* Read by assistive tech and drawn nowhere: the rows carry state in colour and
@@ -1043,6 +990,8 @@ svg.working-mark[viewBox] {
   --duration-hover: 0s;
   --duration-pane: 0s;
   --row-stagger: 0s;
+  /* A late state shows at once, so a capture never waits on its delay. */
+  --late-delay: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
      first frame, he is the same face in every PNG. The working rows' spinners
@@ -1064,6 +1013,9 @@ svg.working-mark[viewBox] {
     --duration-fast: 1ms;
     --duration-pane: 1ms;
     --row-stagger: 0ms;
+    /* A late state's wait (`--late-delay`) stands: it holds back a blip that
+       heals at once rather than moving anything, and zeroing it would
+       flash every blip on screen. */
     /* Idle motion is the one thing here that no one asked for, so it is the
        first thing to stop: Luke sits still, upright, with his eyes open. The
        spinner holds too — a working row still says Working in words. */

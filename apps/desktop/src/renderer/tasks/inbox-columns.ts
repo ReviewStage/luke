@@ -11,15 +11,15 @@
  * item again. An Inbox whose
  * list holds nothing but the item has no way back, there being no list worth
  * going back to. The line is drawn by the Inbox's own width rather than the
- * window's, because the window's Inbox and a plan's own Inbox tab stand in
+ * window's, because the window's Inbox and a task's own Inbox tab stand in
  * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
  * narrowed keeps the item it shows, as Material's list-detail layout does,
  * and one that splits again forgets that the list was asked for, so it
  * narrows onto its item again.
  */
 
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 
 /**
@@ -57,6 +57,11 @@ export interface InboxColumns {
   readonly onBack: (() => void) | undefined;
   /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
   readonly onList: () => void;
+}
+
+/** The list head's Needs you, the list's one steady control, found by the glyph it alone wears. */
+export function needsYouButton(list: ParentNode | null): HTMLElement | null {
+  return list?.querySelector(".inbox-needs-you-glyph")?.closest("button") ?? null;
 }
 
 /** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
@@ -129,7 +134,7 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     // An item chosen that the list holds no row for, as a link's missing item or one Needs you leaves out, hands the keyboard to the first row instead, or to Needs you, the list's one steady control, where no row stands.
     const rows = [...held.querySelectorAll<HTMLElement>(".inbox-tasks [data-item-id]")];
     const row = rows.find((each) => each.dataset.itemId === chosen) ?? rows[0];
-    (row ?? held.querySelector<HTMLElement>(".inbox-tasks .inbox-needs-you-only"))?.focus();
+    (row ?? needsYouButton(held.querySelector(".inbox-tasks")))?.focus();
     setShowAlls(0);
   }, [shown, chosen, showAlls]);
 

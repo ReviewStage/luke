@@ -6,9 +6,9 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
 import { RetryButton } from "../retry-button";
@@ -19,6 +19,8 @@ import { AgentTabCard } from "../tasks/agent-tab-card";
 import type { ChatNoticeDoors } from "../tasks/chat-notice";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { DraftAgentTab } from "../tasks/draft-agent-tab";
+import { agentForkDoors, ForkProvider } from "../tasks/fork-action";
+import type { AgentFork } from "../tasks/fork-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
 import type { ToolTarget } from "../tasks/tool-call-model";
@@ -49,36 +51,36 @@ import { TabStrip } from "./tab-strip";
 import { TaskNameField, useTaskRename } from "./task-name-field";
 
 /**
- * main-tabs.tsx -- the plan's column's tabs: the plan's own, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
+ * main-tabs.tsx -- the task's column's tabs: the plan's own, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
  *
  * Each part draws what `use-main-tabs.ts` holds and hands every press back
  * to it. The strip is the side panel's in every way but its first tab: the
  * same pills, the same hover and chosen fills, dragged and stepped along,
  * closed by ×, Delete, ⌘W, or the menu's Close and Close others, each tab's
  * menu on a right-click (`strip-tabs.tsx`). The toolbar's ⋯ acts on the
- * chosen tab: the plan's actions on the plan's tab, and on an agent's its
+ * chosen tab: the task's actions on the plan's tab, and on an agent's its
  * Rename, its Open terminal, its transcript's copies, and its Archive,
  * standing in the one slot the toolbar keeps for it, left empty on a tab
  * with nothing of the kind.
  *
- * The plan's tab stands first, named for the plan, and hangs the plan's
+ * The plan's tab stands first, named for the task, and hangs the task's
  * card, as its sidebar row does (`task-card.tsx`): its repository, its
  * agents, and its pull requests. It is anchored there: it never moves, and
  * Close others on it closes every other tab. Beside another tab it closes
  * as that tab does, and the "+" offers the plan first to open it again; as
  * the column's only tab it offers no close, so the column is never empty
- * (`use-main-tabs.ts`). A press chooses it; its menu renames the plan in
+ * (`use-main-tabs.ts`). A press chooses it; its menu renames the task in
  * place, as the ⋯ menu does. While it is the column's only tab it is quiet,
  * drawing no fill at rest, as a lone tab need not be told from others;
  * beside an agent's it is drawn as any tab is.
  *
- * The plan's Inbox tab stands among the agents' while it is open: an item
+ * The task's Inbox tab stands among the agents' while it is open: an item
  * the developer has not seen opens it after every tab, and it closes and
  * moves as an agent's tab does (`use-main-tabs.ts`). It counts the items
  * that wait on the developer after its name, dimmed as a model's effort is
  * after the model's, so an item posted while the developer reads elsewhere
  * is seen from any tab. Its menu offers Pin tab as an agent's does; pinned,
- * it wears no × and offers no Close, so it stands on its plan whether or
+ * it wears no × and offers no Close, so it stands on its task whether or
  * not anything new waits, until Unpin tab.
  *
  * Each agent's tab is named by its title, or its model until it has one,
@@ -98,16 +100,16 @@ import { TaskNameField, useTaskRename } from "./task-name-field";
  *
  * The "+" after the last tab drops the shared searchable menu: the plan,
  * which chooses its tab or opens it again where it was closed, New coding
- * agent, which opens a draft agent's tab, or chooses the plan's draft where
+ * agent, which opens a draft agent's tab, or chooses the task's draft where
  * it has one, unavailable with Start's own reason while Start could not
- * run, the plan's Inbox where it has an agent, and each of the plan's
+ * run, the task's Inbox where it has an agent, and each of the task's
  * agents in the order started, picking one choosing its tab or opening it
- * again. An archived plan starts no agent,
+ * again. An archived task starts no agent,
  * so its menu offers only the agents to read, and its agents are not
  * renamed.
  */
 
-/** The "+" menu's section for the plan's agents, which the plan's summary lists under the same heading. */
+/** The "+" menu's section for the task's agents, which the task's summary lists under the same heading. */
 export const AGENTS_SECTION = "Coding agents";
 
 /** The "+" menu's row that opens a draft agent, which no agent's id spells. */
@@ -116,7 +118,7 @@ const NEW_AGENT_ROW = "new-coding-agent";
 /** What the row that opens a draft says while a Start is out. */
 const NEW_AGENT_STARTING = "Starting…";
 
-/** The row that opens the plan's Inbox, which no agent's id spells. */
+/** The row that opens the task's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
 
 /** The "+" menu's row that opens the plan's own tab, which no agent's id spells. */
@@ -124,6 +126,8 @@ const PLAN_ROW = "plan";
 
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
+/** The "+" menu's row for the plan's Chat tab. */
+const CHAT_ROW = "chat";
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
@@ -153,7 +157,7 @@ function RenamableTab({
 }: {
   look: TabLook;
   doors: TabDoors;
-  /** The rename the tab's menu opens; none where nothing is renamed, as on an archived plan. */
+  /** The rename the tab's menu opens; none where nothing is renamed, as on an archived task. */
   rename: ReturnType<typeof useTaskRename> | undefined;
   /** What the field is called for a reader and how long a name it takes; a plan's where absent. */
   field?: { label: string; maxLength: number } | undefined;
@@ -191,7 +195,7 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, renamed in place from its menu while its plan is not archived, and archived from it (`agent-archive.tsx`). */
+/** An agent's tab, renamed in place from its menu while its task is not archived, and archived from it (`agent-archive.tsx`). */
 function AgentMenuTab({
   agent,
   agents,
@@ -214,7 +218,7 @@ function AgentMenuTab({
       <RenamableTab
         look={look}
         doors={{ ...doors, archive: archive.action }}
-        // A rename still open when the plan is archived elsewhere is let go unsaved.
+        // A rename still open when the task is archived elsewhere is let go unsaved.
         rename={agents.onUnarchive === undefined ? rename : undefined}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
         slot={slot}
@@ -300,8 +304,8 @@ function agentTabs(input: {
 }
 
 /**
- * Each of the plan's agents in the order started, as the "+" menu offers it,
- * the plan's summary lists it (`task-summary.tsx`), and ⌘K finds it, in its
+ * Each of the task's agents in the order started, as the "+" menu offers it,
+ * the task's summary lists it (`task-summary.tsx`), and ⌘K finds it, in its
  * tab's look: its harness's mark wearing where it stands, and, where the
  * row draws one, a failure at its end, as its tab does. Picking an agent
  * whose tab is open chooses that tab rather than opening another, as a
@@ -321,7 +325,7 @@ export function agentEntries(main: MainTabsControl, agents: CodingAgentsControl)
 }
 
 /**
- * The plan's Inbox as a row: its tray and its name, then what waits on the
+ * The task's Inbox as a row: its tray and its name, then what waits on the
  * developer counted at its end in the sidebar's quiet count, and nothing at
  * none. It names no section, so the summary lists it under Tabs, beside the
  * panel's kinds.
@@ -342,28 +346,37 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
 }
 
 /**
- * The plan's Inbox as the "+" menu and ⌘K offer it, by itself rather than
- * among the plan's agents, though only they post to it; none on a plan with
+ * The task's Inbox as the "+" menu and ⌘K offer it, by itself rather than
+ * among the task's agents, though only they post to it; none on a task with
  * no agent. Picking it opens the tab where it was closed and chooses it,
  * through `onPick`.
  */
 export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
-  // An archived agent's items still stand, so the row stands while the plan holds any agent.
+  // An archived agent's items still stand, so the row stands while the task holds any agent.
   if ((agents.heldIds?.length ?? 0) === 0) return [];
   return [inboxEntry(onPick, 0)];
 }
 
+/** The plan's Chat tab as the "+" menu and ⌘K offer it, by itself, while there is a chat to read. */
+export function chatEntries(available: boolean, onPick: () => void): AddEntry[] {
+  if (!available) return [];
+  return [
+    { row: { id: CHAT_ROW, ...tabLook({ kind: TAB_KIND.CHAT }) }, endMark: undefined, onPick },
+  ];
+}
+
 /**
  * The "+" menu's rows: the plan itself, which opens its tab again where it
- * was closed, and its Inbox, each by itself under no heading
+ * was closed, its Inbox, and its Chat, each by itself under no heading
  * (`inboxEntries`); New coding agent, unavailable with Start's own reason
- * while Start could not run, and left out on an archived plan; then each
+ * while Start could not run, and left out on an archived task; then each
  * of its agents under Coding agents (`agentEntries`).
  */
 function addEntries(
   task: TaskSummary,
   main: MainTabsControl,
   agents: CodingAgentsControl,
+  chat: boolean,
 ): AddEntry[] {
   const { start } = agents;
   const plan: AddEntry = {
@@ -374,14 +387,21 @@ function addEntries(
     row: {
       id: NEW_AGENT_ROW,
       ...tabLook({ kind: TAB_KIND.DRAFT }),
-      // Start's reason stands exactly while Start could not run on the open plan.
+      // Start's reason stands exactly while Start could not run on the open task.
       disabled: start.busy ? NEW_AGENT_STARTING : start.reason,
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
   const inbox = inboxEntries(agents, () => main.onChoose(MAIN_TAB.INBOX));
+  const chatRows = chatEntries(chat, () => main.onChoose(MAIN_TAB.CHAT));
   const agentRows = agentEntries(main, agents);
-  return [plan, ...inbox, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
+  return [
+    plan,
+    ...inbox,
+    ...chatRows,
+    ...(agents.onUnarchive === undefined ? [newAgent] : []),
+    ...agentRows,
+  ];
 }
 
 /**
@@ -406,9 +426,10 @@ export function MainTabStrip({
   actionsSlot,
   onOpenTerminal,
   onOpenOnMac,
+  chat,
 }: {
   task: TaskSummary;
-  /** The plan's card, as its sidebar row hangs it, which its tab hangs (`task-card.tsx`). */
+  /** The task's card, as its sidebar row hangs it, which its tab hangs (`task-card.tsx`). */
   taskCard: React.ReactNode;
   main: MainTabsControl;
   agents: CodingAgentsControl;
@@ -421,20 +442,22 @@ export function MainTabStrip({
     onPin: (tab: ColumnPinnableTab, label: string, model?: string) => void;
     onUnpin: (taskId: string, tab: ColumnPinnableTab) => void;
   };
-  /** The plan's rename, which its tab's menu opens; none while the plan is archived. */
+  /** The task's rename, which its tab's menu opens; none while the task is archived. */
   rename: ReturnType<typeof useTaskRename> | undefined;
   /** Whether the column offers its keys: on screen, and holding the window's focus. */
   keys: boolean;
-  /** Whether the plan's page is on screen, which a tab's Archive asks its question on. */
+  /** Whether the task's page is on screen, which a tab's Archive asks its question on. */
   shown: boolean;
-  /** How many of the plan's inbox items wait on the developer, which its Inbox tab counts. */
+  /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
   inbox: number;
   /** The toolbar's slot the chosen tab's ⋯ stands in, where the plan's own stands on its tab. */
   actionsSlot: HTMLElement | null;
-  /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent. */
-  onOpenTerminal: (agentId: string) => void;
-  /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository. */
+  /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
+  onOpenTerminal?: ((agentId: string) => void) | undefined;
+  /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository or the platform has no Mac terminal. */
   onOpenOnMac?: ((agentId: string) => void) | undefined;
+  /** Whether there is a chat to read, so the "+" menu offers the plan's Chat tab. */
+  chat: boolean;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -455,10 +478,23 @@ export function MainTabStrip({
         },
       ]
     : [];
-  // The agents', the draft's, and the Inbox's tabs in the column's order,
-  // which the developer's moves and the Inbox's opening set (`use-main-tabs.ts`).
+  const chatTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.CHAT)
+    ? [
+        {
+          tab: MAIN_TAB.CHAT,
+          look: {
+            ...tabLook({ kind: TAB_KIND.CHAT }),
+            selected: main.tab === MAIN_TAB.CHAT,
+            onSelect: () => main.onChoose(MAIN_TAB.CHAT),
+          },
+          close: () => main.onClose(MAIN_TAB.CHAT),
+        },
+      ]
+    : [];
+  // The agents', the draft's, the Inbox's, and Chat's tabs in the column's order,
+  // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    [...agentTabs({ main, agents, unread, views, copied }), ...inboxTab],
+    [...agentTabs({ main, agents, unread, views, copied }), ...inboxTab, ...chatTab],
     main.tabs,
     (entry) => entry.tab,
   );
@@ -519,7 +555,10 @@ export function MainTabStrip({
             },
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
-      onOpenTerminal: agent === undefined ? undefined : () => onOpenTerminal(agent.id),
+      onOpenTerminal:
+        agent === undefined || onOpenTerminal === undefined
+          ? undefined
+          : () => onOpenTerminal(agent.id),
       onOpenOnMac:
         agent === undefined || onOpenOnMac === undefined ? undefined : () => onOpenOnMac(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),
@@ -578,7 +617,7 @@ export function MainTabStrip({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries(task, main, agents)}
+        entries={addEntries(task, main, agents, chat)}
         onOpen={agents.onRetryList}
         asked={main.newTabAsked}
         answers={keys}
@@ -592,6 +631,7 @@ export function MainTabStrip({
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (tab === MAIN_TAB.PLAN) return undefined;
   if (tab === MAIN_TAB.INBOX) return tabLook({ kind: TAB_KIND.INBOX }).label;
+  if (tab === MAIN_TAB.CHAT) return tabLook({ kind: TAB_KIND.CHAT }).label;
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
@@ -618,8 +658,9 @@ export function MainTabContent({
   onOpenTarget,
   cards,
   chat,
+  onFork,
 }: {
-  tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
+  tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX | typeof MAIN_TAB.CHAT>;
   agents: CodingAgentsControl;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
@@ -640,38 +681,50 @@ export function MainTabContent({
   cards: TaskCards;
   /** The chat a chat notice's card reads and opens; none where the window holds none. */
   chat?: ChatNoticeDoors | undefined;
+  /** Opens the task's draft as a fork of one of an agent's messages; none where no draft opens, as on an agent no task holds. */
+  onFork?: ((fork: AgentFork) => void) | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
-    // The tab stands for a draft the plan no longer holds only until the
-    // column moves back to the plan, a render away.
+    // The tab stands for a draft the task no longer holds only until the
+    // column moves back to the task, a render away.
     return agents.draft?.id === tab.draft ? (
-      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} />
+      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} cards={cards.call} />
     ) : (
       <SpinnerRegion label="Loading agent" />
     );
   }
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   // The tab stands for an agent the list no longer holds only until the
-  // column moves back to the plan, a render away.
+  // column moves back to the task, a render away.
   return agent === undefined ? (
     <SpinnerRegion label="Loading agent" />
   ) : (
-    <AgentTab
+    <ForkProvider
       key={agent.id}
-      agent={agent}
-      control={agents}
-      shown={shown}
-      onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
-      onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
-      onOpenPullRequest={
-        onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agent.id)
-      }
-      onOpenTarget={onOpenTarget}
-      cards={cards.agent(agent.id)}
-      chat={chat}
-      onHeld={views.onAgentHeld}
-      run={agents.origin}
-    />
+      value={agentForkDoors({
+        agent,
+        control: agents,
+        onFork,
+        cards: cards.agent(agent.id),
+        onOpenTarget,
+      })}
+    >
+      <AgentTab
+        agent={agent}
+        control={agents}
+        shown={shown}
+        onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
+        onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
+        onOpenPullRequest={
+          onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agent.id)
+        }
+        onOpenTarget={onOpenTarget}
+        cards={cards.agent(agent.id)}
+        chat={chat}
+        onHeld={views.onAgentHeld}
+        run={agents.origin}
+      />
+    </ForkProvider>
   );
 }
 

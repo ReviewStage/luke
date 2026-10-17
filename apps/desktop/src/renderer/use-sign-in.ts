@@ -3,6 +3,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useCallback, useRef, useState } from "react";
 import { useAct } from "./act";
+import { appPlatform } from "./app-platform";
 
 export interface SignIn {
   signInWait: AccountProvider | undefined;
@@ -46,14 +47,14 @@ export function useSignIn(): SignIn {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
           // The browser has the focus the sign-in finished in, and signing in
-          // is an arrival at the plans it just unlocked.
-          tell(ACT_KIND.WINDOW_FOCUS_PANEL);
+          // is an arrival at the tasks it just unlocked.
+          appPlatform().focusPanel();
         },
         () => {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
           setSignInFailure("Sign-in didn't finish. Try again.");
-          tell(ACT_KIND.WINDOW_FOCUS_PANEL);
+          appPlatform().focusPanel();
         },
       );
     },

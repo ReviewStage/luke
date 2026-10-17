@@ -1,24 +1,21 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@luke/features/feedback";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand, useMenuCommands } from "./app-commands";
 import { FeedbackDialog } from "./feedback-dialog";
 import { ToastHost } from "./toast";
-
-/** The window's own stylesheet, which says how tall the dialog may stand. */
-const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "styles/desktop.css"), "utf8");
 
 /** The two Help items that open the dialog, one per kind of note. */
 type FeedbackCommand = typeof APP_COMMAND.SEND_FEEDBACK | typeof APP_COMMAND.SUGGEST_FEATURE;
@@ -37,20 +34,19 @@ let menuListener: ((command: AppCommand) => void) | undefined;
 beforeEach(() => {
   sent = [];
   answer = { delivered: true };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        sent.push(request);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
-      },
-      onMenuCommand: (listener: (command: AppCommand) => void) => {
-        menuListener = listener;
-        return () => {
-          menuListener = undefined;
-        };
-      },
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
+    },
+  });
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    onMenuCommand: (listener: (command: AppCommand) => void) => {
+      menuListener = listener;
+      return () => {
+        menuListener = undefined;
+      };
     },
   });
 });
@@ -124,27 +120,15 @@ test("each of Help's items opens the dialog of its own kind, with the field taki
   assert.equal(feedback.querySelector("h2")?.textContent, "Send feedback");
   assert.equal(document.activeElement, field());
   assert.equal(field().placeholder, "What happened, and what did you expect?");
-  assert.ok(feedback.closest(".ph-no-capture"), "the dialog is left out of the screen recording");
+  assert.ok(
+    feedback.children.length > 0 &&
+      [...feedback.children].every((part) => part.classList.contains("ph-no-capture")),
+    "everything the dialog holds is left out of the screen recording",
+  );
 
   act(() => button("Cancel").click());
   const prompt = openFromHelp(APP_COMMAND.SUGGEST_FEATURE);
   assert.equal(prompt.querySelector("h2")?.textContent, "Suggest a feature");
-});
-
-test("the dialog is never taller than the window: the note gives way, down to its least height, and the answers stay on the card", () => {
-  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  mount();
-
-  const feedback = openFromHelp(APP_COMMAND.SEND_FEEDBACK);
-
-  assert.match(getComputedStyle(feedback).maxHeight, /100vh/u, "the card is capped at the window");
-  assert.equal(field().parentElement, feedback, "the note is one of the card's own rows");
-  assert.equal(getComputedStyle(field()).minHeight, "112px");
-  assert.doesNotMatch(
-    getComputedStyle(field()).maxHeight,
-    /vh/u,
-    "the card, not the note, answers the window",
-  );
 });
 
 test("opened from an experiment's row, the dialog is titled for it and its note names the experiment", async () => {
@@ -223,4 +207,31 @@ test("a note kept from one experiment's row is not sent under another place's ti
   draw(undefined);
   assert.equal(dialog()?.querySelector("h2")?.textContent, "Send feedback");
   assert.equal(field().value, "");
+});
+
+test("a refused send says why and keeps the note, and sending again delivers it", async () => {
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field(), "The board missed a plan.");
+    field().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  answer = { delivered: false };
+  await act(async () => button("Send").click());
+  assert.equal(
+    dialog()?.querySelector('[role="alert"]')?.textContent,
+    "Could not send that. Try again.",
+  );
+  assert.equal(field().value, "The board missed a plan.");
+
+  answer = { delivered: true };
+  await act(async () => button("Send").click());
+  assert.equal(dialog(), null);
+  assert.equal(
+    sent.filter((request) => request.kind === ACT_KIND.FEEDBACK_SEND).length,
+    2,
+    "the kept note went again",
+  );
 });

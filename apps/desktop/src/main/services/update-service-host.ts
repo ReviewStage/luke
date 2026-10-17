@@ -3,7 +3,7 @@ import {
   PRODUCT_UPDATE_ACTION,
   type RecordProductEvent,
 } from "@luke/features/analytics";
-import { jsonStateFile } from "@luke/host";
+import { jsonStateFile } from "@luke/host/node";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "@luke/host/update-service";
 import type { UpdateSnapshot } from "@luke/settings/update";
 import { text } from "@luke/wire";
@@ -127,6 +127,7 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
           lastRunVersionFile.update(() => ({ version }));
         },
       },
+      report: config.report,
     });
 
     // The timed check and the first check are handles the quit takes back: a check firing into a process already draining reads the

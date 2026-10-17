@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
@@ -33,9 +34,14 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import {
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_OUTCOME,
+} from "@luke/features/pull-request-write-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 
@@ -49,6 +55,18 @@ const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
+const MEMBER_ID = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
+
+/** A workspace's chat as the service answers it: the reader alone, nothing posted yet. */
+const CHAT = {
+  self: MEMBER_ID,
+  readSeq: 0,
+  members: [{ id: MEMBER_ID, kind: MEMBER_KIND.HUMAN, handle: "ada", left: false }],
+  channels: [],
+  messages: [],
+  cursor: "1",
+};
 
 const AGENT: CodingAgentSummary = {
   id: AGENT_ID,
@@ -61,7 +79,7 @@ const AGENT: CodingAgentSummary = {
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
-/** The agent as its own page reads it, with no plan, as an automation's run leaves one. */
+/** The agent as its own page reads it, with no task, as an automation's run leaves one. */
 const PAGE: CodingAgentPage = {
   ...AGENT,
   planId: null,
@@ -114,26 +132,26 @@ const CHANGES = {
   },
 };
 
-/** That pull request as its Pull request tab draws it. */
+/** That pull request itself, its checks, and its conversation, as its Pull request tab's overview reads them. */
 const OVERVIEW = {
   pullRequest: {
-    number: 123,
-    title: "Send the invite once",
-    url: "https://github.com/acme/relay/pull/123",
-    state: PULL_REQUEST_STATE.OPEN,
-    html: "<p>Sends the invite once.</p>",
-    cut: false,
-    base: "main",
-    head: "luke/invite-once",
-    createdAt: 1_800_000_000_000,
-    mergedAt: null,
-    merge: MERGE_STATE.CLEAN,
-    checks: [],
-    reviewers: [],
-    conversation: [],
-    earlier: 0,
+    pullRequest: {
+      number: 123,
+      title: "Send the invite once",
+      url: "https://github.com/acme/relay/pull/123",
+      state: PULL_REQUEST_STATE.OPEN,
+      html: "<p>Sends the invite once.</p>",
+      base: "main",
+      head: "luke/invite-once",
+      createdAt: 1_800_000_000_000,
+      mergedAt: null,
+      merge: MERGE_STATE.CLEAN,
+      requested: [],
+    },
   },
-};
+  checks: { pullRequest: { checks: [] } },
+  conversation: { pullRequest: { reviewers: [], conversation: [], earlier: 0 } },
+} as const;
 
 /** A synthetic key, as Settings carries it once; nothing below may answer it back. */
 const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
@@ -285,10 +303,25 @@ function fakeService() {
         asked.push(`changes:${agentId}`);
         return CHANGES;
       }),
-    overview: (agentId) =>
+    overviewPullRequest: (agentId) =>
       Effect.sync(() => {
-        asked.push(`overview:${agentId}`);
-        return OVERVIEW;
+        asked.push(`overview-pull-request:${agentId}`);
+        return OVERVIEW.pullRequest;
+      }),
+    overviewChecks: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`overview-checks:${agentId}`);
+        return OVERVIEW.checks;
+      }),
+    overviewConversation: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`overview-conversation:${agentId}`);
+        return OVERVIEW.conversation;
+      }),
+    pullRequestAction: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`pull-request-action:${agentId}:${request.action}`);
+        return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
       }),
     githubImage: (agentId, src) =>
       Effect.sync(() => {
@@ -384,6 +417,16 @@ function fakeService() {
         asked.push(`account-inbox:${after}`);
         return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
       }),
+    chat: (workspaceId, after) =>
+      Effect.sync(() => {
+        asked.push(`chat:${workspaceId}:${after}`);
+        return CHAT;
+      }),
+    chatPost: (workspaceId, write) =>
+      Effect.sync(() => {
+        asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
+        return { readSeq: 4 };
+      }),
   };
   return { client, asked };
 }
@@ -395,7 +438,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-    });
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
@@ -526,8 +569,16 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW, { agentId: AGENT_ID }),
-      OVERVIEW,
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
+      OVERVIEW.pullRequest,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: AGENT_ID }),
+      OVERVIEW.checks,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, { agentId: AGENT_ID }),
+      OVERVIEW.conversation,
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, {
@@ -535,6 +586,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
         src: "https://camo.githubusercontent.com/abc",
       }),
       { contentType: GITHUB_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
+        agentId: AGENT_ID,
+        request: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
+      }),
+      { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
@@ -581,6 +639,20 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
       { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
+        workspaceId: WORKSPACE_ID,
+        after: CHAT_CURSOR_START,
+      }),
+      CHAT,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
+        workspaceId: WORKSPACE_ID,
+        write: { readTo: 4 },
+      }),
+      { readSeq: 4 },
+    );
 
     assert.deepEqual(asked, [
       "models",
@@ -603,13 +675,18 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
-      `overview:${AGENT_ID}`,
+      `overview-pull-request:${AGENT_ID}`,
+      `overview-checks:${AGENT_ID}`,
+      `overview-conversation:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
+      `pull-request-action:${AGENT_ID}:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
       `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `account-inbox:${INBOX_CURSOR_START}`,
+      `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
+      `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
     ]);
   }),
 );

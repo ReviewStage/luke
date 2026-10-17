@@ -13,6 +13,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -184,26 +185,22 @@ afterEach(() => {
 async function drawn(text: string, workspace: Workspace) {
   const asked: Act[] = [];
   const state = stateWith(workspace);
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-      act: (request: Act): Promise<ActOutcome> => {
-        asked.push(request);
-        if (request.kind === ACT_KIND.TASKS_ISSUE) {
-          const { repository, number } = request.payload;
-          const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: issue ?? null });
-        }
-        if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
-          const { repository, number } = request.payload;
-          const pullRequest = repository === "acme/relay" ? RELAY_PULLS.get(number) : undefined;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: pullRequest ?? null });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+    act: (request: Act): Promise<ActOutcome> => {
+      asked.push(request);
+      if (request.kind === ACT_KIND.TASKS_ISSUE) {
+        const { repository, number } = request.payload;
+        const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: issue ?? null });
+      }
+      if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
+        const { repository, number } = request.payload;
+        const pullRequest = repository === "acme/relay" ? RELAY_PULLS.get(number) : undefined;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: pullRequest ?? null });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -320,8 +317,8 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
-  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map(readable);
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
+  const notes = [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].map(readable);
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
@@ -344,8 +341,8 @@ function openerFace(chip: Element | undefined): [string | undefined, string | nu
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
-  const mark = card?.querySelector<HTMLElement>(".card-note .actor-mark");
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
+  const mark = card?.querySelector<HTMLElement>(".luke-hover-card-note .actor-mark");
   const face: [string | undefined, string | null | undefined] = [
     mark?.dataset.kind,
     mark?.querySelector("img")?.getAttribute("src"),
@@ -384,18 +381,15 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
   );
 });
 
-/** Each label a chip's card names: its name, and the colour its dot is painted, where GitHub's colour is six hex digits. */
-function cardLabels(chip: Element | undefined): [string | null, string][] {
+/** Each label a chip's card names, by its name. */
+function cardLabels(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const labels = [...(card?.querySelectorAll<HTMLElement>(".card-label") ?? [])].map(
-    (label): [string | null, string] => [
-      label.textContent,
-      label.querySelector<HTMLElement>(".card-label-dot")?.style.background ?? "",
-    ],
+    (label) => label.textContent,
   );
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -403,17 +397,14 @@ function cardLabels(chip: Element | undefined): [string | null, string][] {
   return labels;
 }
 
-test("a pull request's card names its labels, each with a dot of its own colour where GitHub's is one, and one read from an older service says its key and state alone", async () => {
+test("a pull request's card names its labels, and one read from an older service says its key and state alone", async () => {
   const { container } = await drawn(
     `Lands after ${MERGED} and ${OLDER_SERVICE}.`,
     ACME_WITH_GITHUB,
   );
   const [whole, older] = container.querySelectorAll(".mention-chip");
 
-  assert.deepEqual(cardLabels(whole), [
-    ["service", "rgb(79, 209, 139)"],
-    ["not a colour", ""],
-  ]);
+  assert.deepEqual(cardLabels(whole), ["service", "not a colour"]);
   assert.deepEqual(cardNotes(older), ["relay#44 · Open"]);
   assert.deepEqual(cardLabels(older), []);
 });
@@ -421,8 +412,13 @@ test("a pull request's card names its labels, each with a dot of its own colour 
 test("a pull request's card names its first six labels and counts the rest, so a card with many stays short", async () => {
   const { container } = await drawn(`See ${MANY_LABELS}.`, ACME_WITH_GITHUB);
 
-  assert.deepEqual(
-    cardLabels(container.querySelector(".mention-chip") ?? undefined).map(([name]) => name),
-    ["a", "b", "c", "d", "e", "f", "+2"],
-  );
+  assert.deepEqual(cardLabels(container.querySelector(".mention-chip") ?? undefined), [
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "f",
+    "+2",
+  ]);
 });

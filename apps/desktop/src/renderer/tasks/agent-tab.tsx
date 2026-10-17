@@ -16,7 +16,13 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon } from "@luke/ui";
+import {
+  DocumentIcon,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  HoverCard,
+  HoverCardHead,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
@@ -40,12 +46,11 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/task";
 import { TOOL_STATE } from "../ai-elements/tool";
+import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
-import { CardHead, HoverCard } from "../hover-card";
 import { useMemberDirectory, usePerson } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
@@ -77,6 +82,7 @@ import {
   delegates,
   dockedTodos,
   endLine,
+  endLineContinues,
   endLineReason,
   lineSender,
   macOwnerOf,
@@ -93,7 +99,10 @@ import {
   workerStatusOf,
   workerToolState,
 } from "./coding-agent-model";
+import { ContinueAgent } from "./continue-agent";
 import { CopyMessageAction } from "./copy-message";
+import { ForkedToLine } from "./fork-action";
+import { openReply } from "./fork-model";
 import { linkChip } from "./mention-chip";
 import { MentionedAgentCard } from "./mentioned-agent-card";
 import {
@@ -104,6 +113,8 @@ import {
 } from "./message-links";
 import { useMentionDoors } from "./plan-mentions";
 import { PlanPictures } from "./plan-pictures";
+import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
+import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
@@ -148,7 +159,7 @@ import { useOpenPlace } from "./use-open-link";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
- * agent-tab.tsx -- one coding agent's tab in the plan's column: its transcript live, and the message box under it wearing what it runs on and what it published.
+ * agent-tab.tsx -- one coding agent's tab in the task's column: its transcript live, and the message box under it wearing what it runs on and what it published.
  *
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
  * over `../ai-elements/`), the Call tab alike, from the
@@ -205,7 +216,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * worker's transcript the same way, under the agent and the call that
  * started it, with the task it was handed in the plan card's place and no
  * composer, since nothing is sent to a worker. Either tab says what it
- * holds to the plan's page each time it moves (`onHeld`), which its tab's hover
+ * holds to the task's page each time it moves (`onHeld`), which its tab's hover
  * card previews (`agent-tab-card.tsx`).
  */
 
@@ -218,7 +229,7 @@ interface TranscriptLead {
   startingLine: string;
 }
 
-/** An agent's transcript: the plan it was handed, and the agent starting; the planning model's turns on the Call tab, which open on no card, alike. */
+/** An agent's transcript: the plan it was handed, and the agent starting; the brain's turns on the Call tab, which open on no card, alike. */
 export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
   icon: (
@@ -464,9 +475,11 @@ function DelegationRow({
 function TodosRow({
   part,
   open,
+  live,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   open: boolean;
+  live: boolean;
 }): ReactNode {
   const todos = todosView(part.input);
   if (todos === undefined) return <ToolCallView part={part} />;
@@ -479,24 +492,30 @@ function TodosRow({
       subject={todosSummary(todos)}
       todos={todos}
       errorText={part.errorText}
+      live={live}
     />
   );
 }
 
-/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, and the call whose list is drawn open, none while the list is docked above the composer. */
+/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, the call whose list is drawn open, none while the list is docked above the composer, and the call whose list the agent is at, none once it stops. */
 interface TodosPlace {
   readonly kept: string | undefined;
   readonly open: string | undefined;
+  readonly live: string | undefined;
 }
 
-/** A transcript that holds no to-do list, as the planning model's does not. */
-const NO_TODOS: TodosPlace = { kept: undefined, open: undefined };
+/** A transcript that holds no to-do list, as the brain's does not. */
+const NO_TODOS: TodosPlace = { kept: undefined, open: undefined, live: undefined };
 
-/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it. */
+/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it, and live while the agent works. */
 function todosPlace(messages: readonly CodingAgentMessage[], working: boolean): TodosPlace {
   const standing = newestTodos(messages);
   const docked = dockedTodos(standing, working);
-  return { kept: standing?.callId, open: docked === undefined ? standing?.callId : undefined };
+  return {
+    kept: standing?.callId,
+    open: docked === undefined ? standing?.callId : undefined,
+    live: working ? standing?.callId : undefined,
+  };
 }
 
 /** The list the agent is working through, docked above the composer; nothing where none is (`dockedTodos`). */
@@ -524,7 +543,7 @@ function TodosDock({
 /**
  * A call that loaded a skill: the one button that opens the skill's
  * `SKILL.md`, hanging the card a sent message's chip of the skill hangs
- * (`skill-ref.tsx`), where it is one of the plan's skills, and a call's row
+ * (`skill-ref.tsx`), where it is one of the task's skills, and a call's row
  * otherwise. Note that a load that failed keeps the call's row, because the
  * row is where its error is read.
  */
@@ -605,7 +624,10 @@ function AgentPartView({
       }
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
-      const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      // A chat call opens Chat only while the window offers it; otherwise its row folds open as any call's does.
+      const called = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      const target =
+        called?.kind === TOOL_TARGET.CHAT && delegation?.chatOn !== true ? undefined : called;
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
         return (
@@ -619,7 +641,13 @@ function AgentPartView({
         );
       }
       if (part.tool === AGENT_TOOL.WRITE_TODOS) {
-        return <TodosRow part={part} open={part.callId === todos.open} />;
+        return (
+          <TodosRow
+            part={part}
+            open={part.callId === todos.open}
+            live={part.callId === todos.live}
+          />
+        );
       }
       return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
         <LoadedSkillView part={part} />
@@ -928,7 +956,7 @@ function SendingAgent({
   // Its own card stands while the agent is read, and where the read answers nothing.
   const fallback = (
     <HoverCard>
-      <CardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
+      <HoverCardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
     </HoverCard>
   );
   const card = (
@@ -1019,8 +1047,11 @@ export function AgentMessage({
   origin,
   arrived = NO_ARRIVED,
   planId,
+  forkable = true,
 }: {
   message: CodingAgentMessage;
+  /** Whether its tab may offer to fork at it: not the reply a running turn may still be writing (`openReply`). */
+  forkable?: boolean;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
@@ -1151,12 +1182,14 @@ export function AgentMessage({
                 <CopyMessageAction
                   words={words}
                   messageId={message.id}
+                  forkable={forkable}
                   className={SENT_ACTIONS_CLASS}
                 />
               )
             }
           />
         )}
+        {ends ? <ForkedToLine messageId={message.id} /> : null}
       </Message>
     );
   });
@@ -1185,6 +1218,8 @@ function AgentTranscriptView({
   origin,
   readerId,
   planId,
+  replay,
+  endTrail,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
@@ -1214,7 +1249,7 @@ function AgentTranscriptView({
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
   earlierOmitted?: boolean;
-  /** The plan's or task's card line, where it is named otherwise than by its first line, as a planning worker is by its job. */
+  /** The plan's or task's card line, where it is named otherwise than by its first line, as a brain's worker is by its job. */
   briefTitle?: string | undefined;
   /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
   briefSender?: Actor | undefined;
@@ -1224,6 +1259,10 @@ function AgentTranscriptView({
   readerId?: string | undefined;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
   planId?: string | undefined;
+  /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
+  replay?: ReplayPlace | undefined;
+  /** What the end line ends on after its words: Continue in new agent, or the agents that continued it (`continue-agent.tsx`). */
+  endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   if (messages.length > 0) {
@@ -1238,8 +1277,11 @@ function AgentTranscriptView({
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
     const task = carded ? undefined : first;
+    // An agent started from another opens on the brief as its source's did, then the replay's card, then the note.
+    const opening = replay === undefined || first === undefined ? undefined : replayOpening(first);
     // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
     const placed = placedMessages(messages);
+    const open = openReply(messages, working);
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
@@ -1253,11 +1295,12 @@ function AgentTranscriptView({
           {placed.map(({ message, arrived }, index) => (
             <Fragment key={message.id}>
               <AgentMessage
-                message={message}
+                message={message === first && opening !== undefined ? opening.brief : message}
                 plan={message === plan}
                 planId={message === plan ? planId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
+                forkable={message.id !== open}
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
@@ -1272,6 +1315,21 @@ function AgentTranscriptView({
                   sender: lineSender(line.sentBy, readerId, members, former),
                 }))}
               />
+              {message === first && opening !== undefined && replay !== undefined ? (
+                <>
+                  <ReplayCard replay={opening.replay} place={replay} planId={planId} />
+                  {opening.note === undefined ? null : (
+                    <AgentMessage
+                      message={opening.note}
+                      plan={false}
+                      lead={lead}
+                      moving={false}
+                      delegation={delegation}
+                      sender={briefSender}
+                    />
+                  )}
+                </>
+              ) : null}
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
               ) : null}
@@ -1292,28 +1350,31 @@ function AgentTranscriptView({
           ) : (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
+              {endTrail}
             </p>
           )}
           {footer}
-          {failed ? <ReadFailure line={TRANSCRIPT_FAILED_LINE} onRetry={onRetry} /> : null}
+          {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
     );
   }
+  if (failed) {
+    return (
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {TRANSCRIPT_FAILED_LINE}
+      </ErrorState>
+    );
+  }
   return (
     <ConversationEmptyState>
-      {failed ? (
-        <ReadFailure
-          line={TRANSCRIPT_FAILED_LINE}
-          onRetry={onRetry}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
-      ) : reading && ended === undefined ? (
+      {reading && ended === undefined ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
         <p className="m-0" data-ended={ended === undefined ? undefined : ""}>
           {ended ?? lead.startingLine}
+          {ended === undefined ? null : endTrail}
         </p>
       )}
     </ConversationEmptyState>
@@ -1323,7 +1384,7 @@ function AgentTranscriptView({
 /**
  * The tab as drawn from what it holds: the transcript with the lines sent
  * and not yet read back at its end, and the composer under it, or, while
- * the plan is archived, the note that offers Unarchive in its place, with
+ * the task is archived, the note that offers Unarchive in its place, with
  * the Stop of a turn still running.
  */
 function AgentTabView({
@@ -1351,8 +1412,13 @@ function AgentTabView({
   starter,
   readerId,
   run,
+  replay,
+  endTrail,
+  closedRemedy,
 }: {
   agent: CodingAgentSummary;
+  /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
+  replay?: ReplayPlace | undefined;
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
   run?: CodingAgentOrigin | undefined;
   models: readonly CatalogModel[] | undefined;
@@ -1369,7 +1435,7 @@ function AgentTabView({
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
-  /** Brings the plan back from the archive; present exactly while it is archived, when no message is sent. */
+  /** Brings the task back from the archive; present exactly while it is archived, when no message is sent. */
   onUnarchive?: (() => void) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
@@ -1390,6 +1456,10 @@ function AgentTabView({
   starter?: string | undefined;
   /** The reader's own account id, whose messages the transcript names nobody over, and whose Mac its Mac commands say is theirs. */
   readerId?: string | undefined;
+  /** What a failed turn's end line ends on (`continue-agent.tsx`); none where it ends on its words. */
+  endTrail?: ReactNode;
+  /** What mends the box once it closed for good (`continue-agent.tsx`). */
+  closedRemedy?: ReactNode;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const chatOn = useChatOn();
@@ -1402,7 +1472,8 @@ function AgentTabView({
   // The door the box hands Reply, which lays a quote in at its caret.
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const origin = agentOrigin({
-    agent,
+    // An agent started from an automation's run opens on the run's prompt under the automation.
+    agent: replay === undefined ? agent : briefAgent(agent, replay.agents),
     run,
     task: cards?.task,
     onOpenTask: onOpenTarget === undefined ? undefined : () => onOpenTarget(TASK_TARGET),
@@ -1425,6 +1496,7 @@ function AgentTabView({
               origin={origin}
               readerId={readerId}
               planId={agent.planId ?? undefined}
+              replay={replay}
               delegation={{
                 models,
                 own: { model: agent.model, effort: agent.effort },
@@ -1444,6 +1516,7 @@ function AgentTabView({
               ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
               endReason={endLineReason(transcript.failure, starter)}
               onOpenApiKeys={onOpenApiKeys}
+              endTrail={endTrail}
               onRetry={transcript.onRetry}
               footer={
                 showsPublishedRow(agent.status, published) ? (
@@ -1488,6 +1561,7 @@ function AgentTabView({
             keywords={keywords}
             skills={skills}
             replyDoor={replyDoor}
+            closedRemedy={closedRemedy}
           />
         )}
       </footer>
@@ -1516,7 +1590,7 @@ export function AgentTab({
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
   run?: CodingAgentOrigin | undefined;
   control: CodingAgentsControl;
-  /** Whether the tab is on screen: the plan's column showing it, on the Plans tab. */
+  /** Whether the tab is on screen: the task's column showing it, on the Tasks tab. */
   shown: boolean;
   /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
@@ -1593,7 +1667,7 @@ export function AgentTab({
     read: control.readPullRequest,
   });
   const copyWithToast = useCopyToast();
-  const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  const openGitHub = (url: string) => appPlatform().openGitHub(url);
   // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
   const toast = useToast();
   useMessageReveal({
@@ -1605,6 +1679,11 @@ export function AgentTab({
     drawn: (messageId) => messages.some((message) => message.id === messageId),
     gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
   });
+  const starter = teammateStarter(agent.startedBy, control.me);
+  const openAgent =
+    onOpenTarget === undefined
+      ? undefined
+      : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
   return (
     <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
       <AgentTabView
@@ -1634,9 +1713,40 @@ export function AgentTab({
         onOpenApiKeys={control.onOpenApiKeys}
         keywords={control.keywords}
         skills={control.readSkills}
-        starter={teammateStarter(agent.startedBy, control.me)}
+        starter={starter}
         readerId={control.me}
         run={run}
+        replay={replayPlace({
+          agent,
+          control,
+          tile: cards?.agent,
+          target: cards?.target,
+          onOpenTarget,
+          openGitHub,
+        })}
+        endTrail={
+          endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
+            // Note that a box closed on an ended agent offers the press itself, carrying its words.
+            <ContinueAgent
+              agentId={agent.id}
+              control={control}
+              onOpenAgent={openAgent}
+              offers={composer.closed === undefined}
+            />
+          ) : undefined
+        }
+        closedRemedy={
+          <ContinueAgent
+            agentId={agent.id}
+            control={control}
+            onOpenAgent={openAgent}
+            carry={{
+              words: composer.draft,
+              attachments: composer.attachments,
+              planId: agent.planId,
+            }}
+          />
+        }
       />
     </MessagePlaceProvider>
   );

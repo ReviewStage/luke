@@ -26,6 +26,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { MemberDirectory } from "../member-directory";
@@ -153,19 +154,15 @@ afterEach(() => {
 
 /** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`, every place a press opened kept in `opened`. */
 async function drawnFor(reader: string, opened: LinkPlace[] = []): Promise<readonly Element[]> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : request.kind === ACT_KIND.CODING_AGENTS_LIST
-              ? { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [SENDER_NOW] } }
-              : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        ),
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : request.kind === ACT_KIND.CODING_AGENTS_LIST
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [SENDER_NOW] } }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      ),
   });
   // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
   let reads = 0;
@@ -232,7 +229,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
   const deanSees = await sendersFor(DEAN.userId);
   act(() => root?.unmount());
   const charlesSees = await sendersFor(CHARLES.userId);
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 
   // Neither the task nor the line from before senders were kept is named for Dean, nor Dean's own line.
   const others: readonly Seen[] = [
@@ -279,7 +276,7 @@ test("another agent's message wears the mark of the harness its model runs in, a
   // Claude Code's mark is its Clawd, drawn as an SVG.
   assert.equal(harnessOf("claude-agent"), "svg");
   assert.equal(harnessOf("agent"), undefined);
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });
 
 /** What a sent message draws, in the order a reader meets it: its words, its Copy, who sent it, and when. */
@@ -313,7 +310,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
     sender.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const card = document.querySelector(".tooltip-card")?.textContent ?? "";
+  const card = document.querySelector(".luke-tooltip-card")?.textContent ?? "";
   act(() => {
     sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
@@ -323,7 +320,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   // The line still wears Claude Code's mark it was sent under, though the agent runs on Codex now.
   assert.equal(sender.querySelector(".harness-mark")?.tagName.toLowerCase(), "svg");
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: SENDER_TASK, agentId: SENDER_ID }]);
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });
 
 test("a sent message keeps its bubble on top, with its Copy, who sent it, and when on the line under it", async () => {
@@ -339,5 +336,5 @@ test("a sent message keeps its bubble on top, with its Copy, who sent it, and wh
   );
   // The reader's own message names nobody, and still offers its Copy under the bubble; one from a service older than the time names none.
   assert.deepEqual(readingOrder(own, "Use seven days."), ["words", "Copy"]);
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });

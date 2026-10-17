@@ -2,6 +2,17 @@ import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-ag
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
@@ -15,15 +26,12 @@ import {
   MessageCircleQuestionIcon,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -35,7 +43,7 @@ import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import {
   agentMovedAt,
   FACTORY_BLOCK,
@@ -295,7 +303,7 @@ function FactoryRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useRowLinkItem()(link);
   return (
     <li className="sidebar-task-item home-row inbox-row factory-row" data-factory-row={slide}>
@@ -364,10 +372,20 @@ function Station({
     >
       <h2 className="factory-head">
         <Icon className="factory-glyph" aria-hidden="true" />
-        <span className="factory-name">{name}</span>
-        {held > 0 ? <span className="factory-count">{held}</span> : null}
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+          {name}
+        </Text>
+        {held > 0 ? (
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            {held}
+          </Text>
+        ) : null}
       </h2>
-      {held === 0 ? <p className="factory-idle">{idle}</p> : null}
+      {held === 0 ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {idle}
+        </Text>
+      ) : null}
       {needs.length === 0 ? null : (
         <ul className="sidebar-tasks factory-rows" data-needs="">
           {needs}
@@ -624,27 +642,42 @@ function Line({
   );
 }
 
+/** The dot between the summary's parts, kept from a reader. */
+function Separator(): React.JSX.Element {
+  return (
+    <span aria-hidden="true">
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+        ·
+      </Text>
+    </span>
+  );
+}
+
 /** The line over the stations: how many things wait on the developer, how many agents work, and how much shipped today. */
 function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
   const waiting = board.stopped.length + board.blocked.length;
   return (
     <p className="factory-summary">
       {waiting === 0 ? (
-        <span>{NEEDS_YOU.NONE}</span>
+        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+          {NEEDS_YOU.NONE}
+        </Text>
       ) : (
         <span className="factory-needs">
           <span className="inbox-row-dot factory-head-dot" aria-hidden="true" />
-          {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+            {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+          </Text>
         </span>
       )}
-      <span className="factory-sep" aria-hidden="true">
-        ·
-      </span>
-      <span>{count(board.agentsWorking, "agent working", "agents working")}</span>
-      <span className="factory-sep" aria-hidden="true">
-        ·
-      </span>
-      <span>{`${board.shipped.length} shipped today`}</span>
+      <Separator />
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {count(board.agentsWorking, "agent working", "agents working")}
+      </Text>
+      <Separator />
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {`${board.shipped.length} shipped today`}
+      </Text>
     </p>
   );
 }
@@ -655,7 +688,7 @@ const UNREAD_LINE = "Your tasks could not be read.";
 /** What Factory says where a task's questions could not be read, as Home says it of its items. */
 const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
 
-/** The window's Factory, in the plan's place: the line as it stands now. */
+/** The window's Factory, in the task's place: the line as it stands now. */
 export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
   const now = useMinute();
@@ -685,21 +718,19 @@ export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React
       <div className="factory-scroll scroll-fade-top">
         {/* A question that could not be read is not shown as though none waits. */}
         {questions.failed ? (
-          <ReadFailure line={QUESTIONS_UNREAD_LINE} onRetry={questions.onRetry} />
+          <ErrorState onRetry={questions.onRetry}>{QUESTIONS_UNREAD_LINE}</ErrorState>
         ) : null}
         {/* Until the list is read nothing stands, since what the line says hangs on it. A read that failed with nothing listed says so in the line's place; one that failed over a list read before says so above it. */}
         {plans.listFailed && empty ? (
-          <ReadFailure
-            line={UNREAD_LINE}
-            onRetry={plans.onRetryList}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
+          <ErrorState onRetry={plans.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_LINE}
+          </ErrorState>
         ) : !plans.listRead && !plans.listFailed ? null : empty ? (
           <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
         ) : (
           <>
             {plans.listFailed ? (
-              <ReadFailure line={UNREAD_LINE} onRetry={plans.onRetryList} />
+              <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
             ) : null}
             <Summary board={board} />
             {/* A teammate's task names its creator against the listed workspace's members. */}

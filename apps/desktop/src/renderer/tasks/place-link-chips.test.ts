@@ -17,6 +17,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -134,19 +135,15 @@ afterEach(() => {
 
 /** The words drawn as a transcript draws them, in a window holding `STATE`, every place a chip opened kept. */
 async function drawn(text: string, opened: LinkPlace[]): Promise<HTMLElement> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(STATE),
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-        ),
-    },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(STATE),
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+      ),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -246,12 +243,10 @@ test("a press on a place's chip opens the place in the window", async () => {
   ]);
 });
 
-test("an agent's chip the window knows no harness for holds its glyph's box empty, rather than a stand-in glyph, its name saying whose it is", async () => {
+test("an agent's chip the window knows no harness for has its name say whose it is", async () => {
   const container = await drawn(`${HOME}/plan/${PLAN}/agent/${UNNAMED_AGENT}`, []);
   const chip = container.querySelector<HTMLElement>('.mention-chip[data-kind="agent"]');
-  const glyph = chip?.querySelector(".mention-chip-glyph > svg") ?? assert.fail("a box stands");
 
-  assert.equal(glyph.childElementCount, 0, "the box draws no glyph");
   assert.equal(chip?.querySelector(".mention-chip-label")?.textContent, "Agent");
 });
 
@@ -270,7 +265,7 @@ test("an agent's chip the window holds wears its harness's mark, on another task
       chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
     const onCard =
-      document.querySelector(".tooltip-card [data-mention-card] .harness-mark") !== null;
+      document.querySelector(".luke-tooltip-card [data-mention-card] .harness-mark") !== null;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });

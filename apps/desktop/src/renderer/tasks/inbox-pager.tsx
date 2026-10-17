@@ -1,6 +1,7 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
+import { IconButton } from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
@@ -128,26 +129,20 @@ export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.
         </span>
       )}
       <Tooltip label="Previous item" command={APP_COMMAND.PREVIOUS_INBOX_ITEM}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Previous item"
+        <IconButton
+          icon={<ChevronUpIcon />}
+          label="Previous item"
           disabled={pager.onPrevious === undefined}
           onClick={pager.onPrevious}
-        >
-          <ChevronUpIcon className="icon-button-glyph" />
-        </button>
+        />
       </Tooltip>
       <Tooltip label="Next item" command={APP_COMMAND.NEXT_INBOX_ITEM}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Next item"
+        <IconButton
+          icon={<ChevronDownIcon />}
+          label="Next item"
           disabled={pager.onNext === undefined}
           onClick={pager.onNext}
-        >
-          <ChevronDownIcon className="icon-button-glyph" />
-        </button>
+        />
       </Tooltip>
     </div>
   );

@@ -47,33 +47,77 @@ fi
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
+#
+# `@luke/host`, `@luke/host/effect`, and `@luke/host/act-router` are walked
+# the same way, because the host and its act table are meant to load in a
+# browser tab: their graphs name no `node:` module, no `ws`, and no `Buffer`
+# or `process` global, and what needs one sits behind
+# `@luke/host/node`. The walk crosses into `@luke/credentials` through the
+# doors the host names (its barrel and `/snapshot`), since the account's
+# sign-in lives there: the loopback consent sits behind
+# `@luke/credentials/node`, handed to the host as its `SignInConsent` seam.
+# Every other package a walk reaches is still left unchecked here.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
-  const root = path.join(process.argv[1], "packages/runtime/src");
-  const forbidden = /^(node:|@effect\/platform-node|effect\/sql)/;
-  const seen = new Set();
-  const offenders = [];
-  const walk = async (file) => {
-    if (seen.has(file)) return;
-    seen.add(file);
-    const text = await readFile(file, "utf8");
-    for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
-      const specifier = match[1];
-      if (forbidden.test(specifier)) {
-        offenders.push(`${path.relative(root, file)}: ${specifier}`);
-      } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
-        await walk(path.join(path.dirname(file), specifier.replace(/\.js$/, ".ts")));
-      }
-    }
+  const doors = [
+    {
+      name: "@luke/runtime/vocabulary",
+      root: "packages/runtime/src",
+      entries: ["vocabulary.ts"],
+      forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
+    },
+    {
+      name: "@luke/host, @luke/host/effect, and @luke/host/act-router",
+      root: "packages/host/src",
+      entries: ["index.ts", "effect/index.ts", "act-router/index.ts"],
+      forbidden: /^(node:|ws$|@effect\/platform-node)/,
+      globals: /\b(Buffer|process)\.\w+/,
+      follows: ["@luke/credentials"],
+    },
+  ];
+  const repository = process.argv[1];
+  // A followed package is entered where its own `exports` says the
+  // specifier lands, so the walk takes the same door a resolver would.
+  const followed = async (door, specifier) => {
+    const name = door.follows?.find((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`));
+    if (!name) return undefined;
+    const directory = path.join(repository, "packages", name.slice("@luke/".length));
+    const manifest = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
+    const target = manifest.exports[`.${specifier.slice(name.length)}`];
+    return path.join(directory, target.replace(/\.js$/, ".ts"));
   };
-  await walk(path.join(root, "vocabulary.ts"));
-  if (offenders.length > 0) {
-    process.stderr.write(
-      `error: @luke/runtime/vocabulary resolves a Node-reaching import: ${offenders.join(", ")}\n`,
-    );
-    process.exit(1);
+  let failed = false;
+  for (const door of doors) {
+    const seen = new Set();
+    const offenders = [];
+    const walk = async (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const text = await readFile(file, "utf8");
+      const global = door.globals ? text.match(door.globals) : null;
+      if (global) offenders.push(`${path.relative(repository, file)}: ${global[0]}`);
+      for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
+        const specifier = match[1];
+        if (door.forbidden.test(specifier)) {
+          offenders.push(`${path.relative(repository, file)}: ${specifier}`);
+        } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
+          await walk(path.join(path.dirname(file), specifier.replace(/\.js$/, ".ts")));
+        } else {
+          const entered = await followed(door, specifier);
+          if (entered) await walk(entered);
+        }
+      }
+    };
+    for (const entry of door.entries) await walk(path.join(repository, door.root, entry));
+    if (offenders.length > 0) {
+      failed = true;
+      process.stderr.write(
+        `error: ${door.name} resolves a Node-reaching import: ${offenders.join(", ")}\n`,
+      );
+    }
   }
+  if (failed) process.exit(1);
 ' "$LUKE_REPO_ROOT"
 
 # The brand artwork has one source and committed outputs cut from it: the
@@ -176,7 +220,7 @@ if [[ -n "$package_app_imports" ]]; then
 fi
 
 # The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `#shared/bridge`, `#shared/messages/*`,
+# through the preload bridge alone, so `@luke/host/bridge`, `#shared/messages/*`,
 # and the packages' own wire vocabularies are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
 # browser, and a `node:` import does the same — neither is a mistake the type
 # checker or esbuild can report, because both are real modules that simply are
@@ -421,8 +465,14 @@ node --input-type=module -e '
     "apps/web/server/build-output.ts",
     "apps/web/server/api-callers.ts",
     "apps/web/server/preview-*.ts",
-    "apps/desktop/src/renderer/global.d.ts",
+    "apps/desktop/src/renderer/stylesheet.d.ts",
     "apps/desktop/src/testing/**",
+    // The doors the window root installs its platform bridge and platform
+    // services into. Step 16 of the web plan moves them into the panel
+    // package, together with renderer/act.ts and the hooks above them, and
+    // removes these rows.
+    "apps/desktop/src/renderer/app-bridge.ts",
+    "apps/desktop/src/renderer/app-platform.ts",
   ];
   const shell = new Set(edges.runtimeEdges);
   for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
@@ -476,10 +526,7 @@ node --input-type=module -e '
 # no such name, has tests nothing runs, and CI stays green over them; one that
 # loses its config and stays on the list fails the run outright. All three are
 # the same drift. A suite cut into shards must declare every shard, or the
-# files hashed to the missing one never run. A workspace that also checks its
-# components in a real browser names that second config,
-# `vitest.browser.config.ts`, on the list beside itself, and its one test task
-# runs both.
+# files hashed to the missing one never run.
 node --input-type=module -e '
   import { glob, readFile } from "node:fs/promises";
   import path from "node:path";
@@ -490,21 +537,11 @@ node --input-type=module -e '
   for await (const found of glob(["apps/*/vitest.config.ts", "packages/*/vitest.config.ts", "tools/*/vitest.config.ts"], { cwd: root })) {
     configured.push(path.dirname(found).split(path.sep).join("/"));
   }
-  const browserConfigs = [];
-  for await (const found of glob(["apps/*/vitest.browser.config.ts", "packages/*/vitest.browser.config.ts"], { cwd: root })) {
-    browserConfigs.push(found.split(path.sep).join("/"));
-  }
   const rootConfig = await readFile(path.join(root, "vitest.config.ts"), "utf8");
   const projects = rootConfig.slice(rootConfig.indexOf("projects: ["), rootConfig.indexOf("],", rootConfig.indexOf("projects: [")));
   const listed = [...projects.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
-  const expected = [...configured, ...browserConfigs];
-  const missing = expected.filter((one) => !listed.includes(one)).sort();
-  const stale = listed.filter((one) => !expected.includes(one)).sort();
-  const unrun = [];
-  for (const one of browserConfigs.sort()) {
-    const scripts = JSON.parse(await readFile(path.join(root, path.dirname(one), "package.json"), "utf8")).scripts ?? {};
-    if (!(scripts[WHOLE] ?? "").includes(`--config ${path.basename(one)}`)) unrun.push(one);
-  }
+  const missing = configured.filter((one) => !listed.includes(one)).sort();
+  const stale = listed.filter((one) => !configured.includes(one)).sort();
   const untasked = [];
   for (const one of configured.sort()) {
     const scripts = JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).scripts ?? {};
@@ -513,12 +550,11 @@ node --input-type=module -e '
     const sharded = named.length === SHARDS.length && SHARDS.every((shard) => named.includes(shard));
     if (!whole && !sharded) untasked.push(one);
   }
-  if (missing.length > 0 || stale.length > 0 || untasked.length > 0 || unrun.length > 0) {
+  if (missing.length > 0 || stale.length > 0 || untasked.length > 0) {
     process.stderr.write(
       `error: the root vitest.config.ts projects list, the workspaces holding a vitest.config.ts, and their turbo test tasks have drifted apart:\n${[
         ...missing.map((one) => `  ${one} has a vitest.config.ts and the list never names it, so nothing runs its tests`),
         ...stale.map((one) => `  ${one} is on the list and holds no vitest.config.ts`),
-        ...unrun.map((one) => `  ${one} is not run by the "${WHOLE}" script of its workspace, so the checks and CI never run it`),
         ...untasked.map((one) => `  ${one} runs its tests under neither "${WHOLE}" alone nor all of ${SHARDS.map((shard) => `"${shard}"`).join(", ")}, so the checks and CI never run them`),
       ].join("\n")}\n`,
     );

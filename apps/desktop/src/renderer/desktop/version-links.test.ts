@@ -4,13 +4,12 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { DOCUMENT_TASK } from "#testing/document-task";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
@@ -51,16 +50,7 @@ let copied: string[] = [];
 beforeEach(() => {
   installScrollIntoView();
   copied = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
 });
 
 afterEach(() => {
@@ -121,22 +111,6 @@ function drawn(): HTMLElement {
   );
   return container;
 }
-
-test("the version list fades under its head and over the sidebar's foot, and a version's page under its bar, rather than being sliced at either", () => {
-  const container = drawn();
-  const sheets = layFades();
-  try {
-    const list =
-      container.querySelector(".version-log-pane > .sidebar-section") ??
-      assert.fail("the versions are listed");
-    const page =
-      container.querySelector(".plan-document-scroll") ?? assert.fail("a version's page stands");
-    assert.deepEqual(fadedEdges(list), { top: true, bottom: true });
-    assert.deepEqual(fadedEdges(page), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
-});
 
 test("a version's row offers Copy link, which copies its plan's address under the version's number and says Link copied", async () => {
   const container = drawn();

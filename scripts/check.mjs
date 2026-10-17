@@ -105,15 +105,7 @@ if (parsed.error) {
   process.stderr.write(`${parsed.error}\n`);
   process.exit(2);
 }
-// The catalog's tests are its visual comparison, whose goldens are recorded
-// in Linux Chromium, CI's machine: a Mac rasterizes the same faces to other
-// pixels, so elsewhere the suite is left to CI and the run says so. Note that
-// we leave it out of turbo's run rather than have it pass without comparing,
-// because a pass is cached, and a Linux run would replay a Mac's.
-const VISUAL_WORKSPACE = "@luke/catalog";
-const comparesVisuals = process.platform === "linux";
 const scope = parsed.affected ? affectedFilters() : [];
-const testScope = comparesVisuals ? scope : [...scope, `--filter=!${VISUAL_WORKSPACE}`];
 const anyWorkspace = !parsed.affected || scope.length > 0;
 if (!anyWorkspace) {
   process.stdout.write(`No workspace changed since ${affectedBase(process.env) ?? "main"}.\n`);
@@ -128,12 +120,7 @@ if (anyWorkspace && workspaceTasks.length > 0) {
   runs.push({ label: workspaceTasks.join(", "), args: [...workspaceTasks, ...scope] });
 }
 if (anyWorkspace && !parsed.without.includes("test")) {
-  runs.push({ label: "test", args: [...TEST_TASKS, "--concurrency=1", ...testScope] });
-  if (!comparesVisuals) {
-    process.stdout.write(
-      `Visual comparison skipped: ${VISUAL_WORKSPACE}'s goldens are recorded and compared on Linux only (CI runs them).\n`,
-    );
-  }
+  runs.push({ label: "test", args: [...TEST_TASKS, "--concurrency=1", ...scope] });
 }
 
 // Note that we set exitCode rather than call process.exit, because on macOS a

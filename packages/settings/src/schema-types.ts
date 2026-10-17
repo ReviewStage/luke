@@ -1,6 +1,7 @@
 import type { ProductSettingValue } from "@luke/features/analytics";
 import type { UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
+import type { HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";
 import type { RuntimeStatus } from "./status.js";
 
@@ -12,7 +13,7 @@ export const SETTINGS_PAGE = {
   APPEARANCE: "appearance",
   /** The window's own shortcuts, listed to be found rather than changed. */
   SHORTCUTS: "shortcuts",
-  /** The Markdown the account's new plans start from, which is the account's on the service rather than a stored setting. */
+  /** The Markdown the account's new tasks start from, which is the account's on the service rather than a stored setting. */
   PLAN_TEMPLATE: "plan-template",
   /**
    * The coding agents' default model and effort and the account's own provider API keys, which are the account's on
@@ -48,6 +49,8 @@ export const SETTING_SECTION = {
   CONTROLS: "controls",
   /** The Video calls experiment's own rows, drawn beneath its switch on the Experimental page. */
   VIDEO_CALLS: "video-calls",
+  /** How code and diffs are drawn, a group of its own under Appearance's own rows. */
+  DIFFS: "diffs",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];
@@ -113,6 +116,8 @@ export interface SettingsVisibility {
   voiceControlsDrawn: boolean;
   /** Whether the Account section stands. */
   accountDrawn: boolean;
+  /** What the platform offers, which a platform feature's row stands on. */
+  capabilities: readonly HostCapability[];
 }
 
 /** One option a row's control draws: the token it stores by, the words it shows, and the picture beside them where it has one. */
@@ -133,6 +138,8 @@ export interface SettingOption {
 export interface SettingControl<Value> {
   /** The token the control draws for the value stored now. */
   value: (stored: Value) => string;
+  /** The words the control's search field holds while empty, for a list long enough to search; none draws no search. */
+  search?: string | undefined;
   options: (view: SettingsVisibility) => readonly SettingOption[];
   /** What one of those tokens means as a stored value; nothing means cleared. */
   stored: (token: string, view: SettingsVisibility) => Value | undefined;

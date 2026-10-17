@@ -52,13 +52,13 @@ cut off.**
 exchange stands on the voice service: every spoken ask is admitted through
 `acceptAsk` there, every reply is appended there over the same socket the
 relay pipes, and the account's record is the service's. What this package
-keeps is `LiveSessionHolder`, which creates the planning call about the open
-plan for the peer's offer, ends it on the peer's hang-up or the
+keeps is `LiveSessionHolder`, which creates the task call about the open
+task for the peer's offer, ends it on the peer's hang-up or the
 drain, and carries the peer's idle and the stop key to the service as
 `session.activity` and `session.stop`, since the idle decision is made against
 appends only the service made and the stop's instruction is the service's to
 append. It appends nothing at all, and nothing on this side speaks unprompted:
-a call is only ever opened by a press about a plan. The sessions route closes a
+a call is only ever opened by a press about a task. The sessions route closes a
 desktop socket that sends any other frame, so a re-wired local exchange is
 refused at the relay rather than heard twice.
 
@@ -68,14 +68,16 @@ its next answer.
 
 ## One door that exists for the graph
 
-`account-preferences-client.ts` would belong beside the plan client in
+`account-preferences-client.ts` would belong beside the task client in
 `@luke/features`, but the snapshot it carries is `@luke/settings` vocabulary
 and `settings` already reaches `features`. This is the lowest package holding both.
 
-## Two doors the renderer reads
+## Three doors the renderer reads
 
 `@luke/host/acts` and `@luke/host/app-state` are the desktop's
 renderer-and-main vocabulary, kept here because this is the lowest package that
 reaches every package they name (`@luke/gateway` cannot, since `@luke/voice`
-already depends on it); the renderer may import only these two doors from this
+already depends on it), and `@luke/host/bridge` is the window's bridge contract
+built from those two, which the preload builds its bridge from and a web
+bridge will too. The renderer may import only these three doors from this
 package, so they and everything they import stay free of Node.

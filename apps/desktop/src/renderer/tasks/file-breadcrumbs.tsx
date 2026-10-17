@@ -1,12 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
+import { MENU_DROP } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MENU_DROP } from "../desktop/action-menu";
+import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 import type { ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
-import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
 
 /**
  * file-breadcrumbs.tsx -- a File tab's path as breadcrumbs: the repository, then each folder the file stands in, then the file, each a press that opens the tree where it stands.
@@ -88,7 +88,7 @@ function CrumbTree({
   onOpen: (path: string, newTab: boolean) => void;
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {
-  const loaded = useAtomValue(fileTreeModuleAtom);
+  const loaded = useAtomValue(useSideBundles().fileTree);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
@@ -254,7 +254,7 @@ export function FileBreadcrumbs({
   listFolder,
   onOpen,
 }: {
-  /** The plan's repository, `owner/name`, the first crumb. */
+  /** The task's repository, `owner/name`, the first crumb. */
   repository: string;
   /** The tab's file, from the repository's root. */
   path: string;

@@ -30,8 +30,10 @@ import * as planCommentWire from "./plan-comment-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as providerKeyWire from "./provider-key-wire.js";
+import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
+import * as taskSectionWire from "./task-section-wire.js";
 import * as taskWire from "./task-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
 import * as workspaceWire from "./workspace-wire.js";
@@ -55,6 +57,7 @@ const EFFECT_MODULE_SCHEMAS = {
     accountTasklessEntrySchema: accountInboxWire.accountTasklessEntrySchema,
     accountInboxAutomationSchema: accountInboxWire.accountInboxAutomationSchema,
     accountFailedRunSchema: accountInboxWire.accountFailedRunSchema,
+    accountChatEntrySchema: accountInboxWire.accountChatEntrySchema,
     accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
   "board-wire": {
@@ -94,7 +97,15 @@ const EFFECT_MODULE_SCHEMAS = {
     chatMessageAskSchema: chatWire.chatMessageAskSchema,
     chatMessageSchema: chatWire.chatMessageSchema,
     chatCursorSchema: chatWire.chatCursorSchema,
+    chatChannelReadSchema: chatWire.chatChannelReadSchema,
     chatAnswerSchema: chatWire.chatAnswerSchema,
+    chatPostRequestSchema: chatWire.chatPostRequestSchema,
+    chatAnswerRequestSchema: chatWire.chatAnswerRequestSchema,
+    chatResolveRequestSchema: chatWire.chatResolveRequestSchema,
+    chatReadToRequestSchema: chatWire.chatReadToRequestSchema,
+    chatWriteRequestSchema: chatWire.chatWriteRequestSchema,
+    chatReceiptSchema: chatWire.chatReceiptSchema,
+    chatWriteAnswerSchema: chatWire.chatWriteAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof chatWire>,
   "coding-agent-wire": {
     contextWindowSchema: codingAgentWire.contextWindowSchema,
@@ -121,7 +132,11 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestSchema: codingAgentWire.codingAgentPullRequestSchema,
     codingAgentPullRequestAnswerSchema: codingAgentWire.codingAgentPullRequestAnswerSchema,
     codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
-    codingAgentOverviewAnswerSchema: codingAgentWire.codingAgentOverviewAnswerSchema,
+    codingAgentOverviewPullRequestAnswerSchema:
+      codingAgentWire.codingAgentOverviewPullRequestAnswerSchema,
+    codingAgentOverviewChecksAnswerSchema: codingAgentWire.codingAgentOverviewChecksAnswerSchema,
+    codingAgentOverviewConversationAnswerSchema:
+      codingAgentWire.codingAgentOverviewConversationAnswerSchema,
     codingAgentCallIdSchema: codingAgentWire.codingAgentCallIdSchema,
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
@@ -132,6 +147,7 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxKeySchema: inboxWire.inboxKeySchema,
     inboxImageTypeSchema: inboxWire.inboxImageTypeSchema,
     inboxBlockSchema: inboxWire.inboxBlockSchema,
+    inboxWordBlockSchema: inboxWire.inboxWordBlockSchema,
     inboxBlocksSchema: inboxWire.inboxBlocksSchema,
     inboxPostBlockSchema: inboxWire.inboxPostBlockSchema,
     inboxPostBlocksSchema: inboxWire.inboxPostBlocksSchema,
@@ -147,6 +163,7 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxReplySchema: inboxWire.inboxReplySchema,
     inboxReadBlockSchema: inboxWire.inboxReadBlockSchema,
     inboxReadResponseSchema: inboxWire.inboxReadResponseSchema,
+    inboxAnswerFileSchema: inboxWire.inboxAnswerFileSchema,
     inboxItemSchema: inboxWire.inboxItemSchema,
     inboxCursorSchema: inboxWire.inboxCursorSchema,
     inboxAnswerSchema: inboxWire.inboxAnswerSchema,
@@ -188,7 +205,16 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
-    codingAgentOverviewAnswerViewSchema: codingAgentView.codingAgentOverviewAnswerViewSchema,
+    codingAgentOverviewPullRequestAnswerViewSchema:
+      codingAgentView.codingAgentOverviewPullRequestAnswerViewSchema,
+    codingAgentOverviewChecksAnswerViewSchema:
+      codingAgentView.codingAgentOverviewChecksAnswerViewSchema,
+    codingAgentOverviewConversationAnswerViewSchema:
+      codingAgentView.codingAgentOverviewConversationAnswerViewSchema,
+    codingAgentPullRequestActionParamsSchema:
+      codingAgentView.codingAgentPullRequestActionParamsSchema,
+    codingAgentPullRequestWriteAnswerViewSchema:
+      codingAgentView.codingAgentPullRequestWriteAnswerViewSchema,
     codingAgentGitHubImageParamsSchema: codingAgentView.codingAgentGitHubImageParamsSchema,
     githubImageTypeSchema: codingAgentView.githubImageTypeSchema,
     codingAgentGitHubImageViewSchema: codingAgentView.codingAgentGitHubImageViewSchema,
@@ -202,6 +228,10 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAttachmentParamsSchema: codingAgentView.codingAgentInboxAttachmentParamsSchema,
     codingAgentPictureParamsSchema: codingAgentView.codingAgentPictureParamsSchema,
     codingAgentInboxAttachmentViewSchema: codingAgentView.codingAgentInboxAttachmentViewSchema,
+    codingAgentChatParamsSchema: codingAgentView.codingAgentChatParamsSchema,
+    codingAgentChatAnswerViewSchema: codingAgentView.codingAgentChatAnswerViewSchema,
+    codingAgentChatPostParamsSchema: codingAgentView.codingAgentChatPostParamsSchema,
+    codingAgentChatWriteAnswerViewSchema: codingAgentView.codingAgentChatWriteAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
   "dictation-wire": {
     dictationRequestSchema: dictationWire.dictationRequestSchema,
@@ -332,6 +362,13 @@ const EFFECT_MODULE_SCHEMAS = {
     planCommentThreadAnswerSchema: planCommentWire.planCommentThreadAnswerSchema,
     planCommentAnchorsSchema: planCommentWire.planCommentAnchorsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planCommentWire>,
+  "task-section-wire": {
+    taskSectionIconSchema: taskSectionWire.taskSectionIconSchema,
+    taskSectionSchema: taskSectionWire.taskSectionSchema,
+    taskSectionEntrySchema: taskSectionWire.taskSectionEntrySchema,
+    taskSectionsAnswerSchema: taskSectionWire.taskSectionsAnswerSchema,
+    taskSectionWriteSchema: taskSectionWire.taskSectionWriteSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof taskSectionWire>,
   "task-wire": {
     workspaceIdSchema: taskWire.workspaceIdSchema,
     agentEditLineSchema: taskWire.agentEditLineSchema,
@@ -381,6 +418,10 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
+  "pull-request-write-wire": {
+    pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,
+    pullRequestWriteAnswerSchema: pullRequestWriteWire.pullRequestWriteAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pullRequestWriteWire>,
   "repository-reach-wire": {
     repositoryUnreachedSchema: repositoryReachWire.repositoryUnreachedSchema,
     repositoryNotReachableSchema: repositoryReachWire.repositoryNotReachableSchema,

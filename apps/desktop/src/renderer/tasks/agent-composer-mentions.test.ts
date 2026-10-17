@@ -37,10 +37,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   QUIET_COMPOSER,
@@ -64,12 +66,12 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 import { OpenLinkProvider } from "./use-open-link";
 
 /**
- * `@` in an agent's message box and its transcript, on a plan's page and
+ * `@` in an agent's message box and its transcript, on a task's page and
  * off it, over the real editor bundle: the word typed opens the list of the
  * plan's sections and the repository's files, the row chosen is written
  * into the message as its link and drawn in the box as its chip, the link
  * is what is sent, and a sent message's mention is drawn as the chip that
- * opens it. Off a plan's page an `@` is a letter, and a sent mention is
+ * opens it. Off a task's page an `@` is a letter, and a sent mention is
  * still its chip, opened through the window's own doors.
  * Synthetic plan and repository.
  */
@@ -190,7 +192,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 /** Every act the panel told the main process, in order. */
 const told: Act[] = [];
 
-/** The repository the plan's tree is read from now. */
+/** The repository the task's tree is read from now. */
 let standing = "acme/relay";
 
 const noSkills: SkillSource = () => Promise.resolve({ skills: [] });
@@ -202,69 +204,66 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   standing = "acme/relay";
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        told.push(request);
-        return Promise.resolve(
-          request.kind === ACT_KIND.INTEGRATIONS_STATUS
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      told.push(request);
+      return Promise.resolve(
+        request.kind === ACT_KIND.INTEGRATIONS_STATUS
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                integrations: LINEAR_CONNECTED,
+              },
+            }
+          : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
-                  integrations: LINEAR_CONNECTED,
+                  tools: [
+                    { name: "list_issues", description: "List the team's issues." },
+                    { name: "get_issue", description: "Read one issue." },
+                    { name: "list/issues", description: "A name no mention can carry." },
+                    {
+                      name: "list\ud800",
+                      description: "A name that is no string of characters.",
+                    },
+                    { name: "..", description: "A name an address resolves away." },
+                  ],
                 },
               }
-            : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
-              ? {
-                  status: ACT_OUTCOME_STATUS.DONE,
-                  value: {
-                    tools: [
-                      { name: "list_issues", description: "List the team's issues." },
-                      { name: "get_issue", description: "Read one issue." },
-                      { name: "list/issues", description: "A name no mention can carry." },
-                      {
-                        name: "list\ud800",
-                        description: "A name that is no string of characters.",
-                      },
-                      { name: "..", description: "A name an address resolves away." },
-                    ],
-                  },
-                }
-              : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-                ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-                : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+            : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+              ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+              : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+                ? {
+                    status: ACT_OUTCOME_STATUS.DONE,
+                    value: {
+                      agents: workspaceAnswer(request.payload),
+                    },
+                  }
+                : request.kind === ACT_KIND.TASKS_TREE
                   ? {
                       status: ACT_OUTCOME_STATUS.DONE,
                       value: {
-                        agents: workspaceAnswer(request.payload),
+                        folder: {
+                          path: "",
+                          repository: standing,
+                          branch: "main",
+                          entries: TREES.get(standing) ?? [],
+                          truncated: false,
+                        },
                       },
                     }
-                  : request.kind === ACT_KIND.TASKS_TREE
-                    ? {
-                        status: ACT_OUTCOME_STATUS.DONE,
-                        value: {
-                          folder: {
-                            path: "",
-                            repository: standing,
-                            branch: "main",
-                            entries: TREES.get(standing) ?? [],
-                            truncated: false,
-                          },
-                        },
-                      }
-                    : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-        );
-      },
-      recordSurfaceEvent: ignore,
+                  : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      );
     },
   });
 });
@@ -281,7 +280,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** What a plan's page hands its places, every mention a chip was asked to open kept. */
+/** What a task's page hands its places, every mention a chip was asked to open kept. */
 function planPage(opened: Mention[], repository = "acme/relay"): PlanMentionsValue {
   return {
     taskId: TASK_ID,
@@ -333,7 +332,7 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
   return createElement(AgentComposer, { ...QUIET_COMPOSER, agentId: SELF_ID, composer, skills });
 }
 
-/** The node drawn on a plan's page, or off any page where none is given; `redraw` draws it on the page given. */
+/** The node drawn on a task's page, or off any page where none is given; `redraw` draws it on the page given. */
 function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -355,7 +354,7 @@ function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
   return { container, redraw };
 }
 
-/** The node drawn on a plan's page, or off any page where none is given. */
+/** The node drawn on a task's page, or off any page where none is given. */
 function drawn(node: ReactNode, page: PlanMentionsValue | undefined): HTMLElement {
   return drawing(node, page).container;
 }
@@ -908,7 +907,7 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const card = document.querySelector(".tooltip-card [data-mention-card]");
+    const card = document.querySelector(".luke-tooltip-card [data-mention-card]");
     const words = card?.textContent ?? "";
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -943,19 +942,16 @@ test("a section's address pasted whole into the box on a plan's page is drawn as
 });
 
 test("a page's address pasted in the app's own scheme is called by the name the window holds, an agent's it holds none for by its kind, and a file of the plan's repository pastes as words", async () => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      onAppState: () => () => undefined,
-      requestAppState: () =>
-        Promise.resolve(
-          stateWith(
-            {},
-            { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
-          ),
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    onAppState: () => () => undefined,
+    requestAppState: () =>
+      Promise.resolve(
+        stateWith(
+          {},
+          { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
         ),
-    },
+      ),
   });
   const { container, sent } = await box(planPage([]));
   const page = encodeMention({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id }, PLACE);

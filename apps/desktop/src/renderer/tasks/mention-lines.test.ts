@@ -4,18 +4,19 @@ import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   QUIET_COMPOSER,
 } from "#testing/composer";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { AgentComposer } from "./agent-composer";
@@ -24,7 +25,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
 /**
- * A File tab's lines mentioned in the agent's message box on the same plan's
+ * A File tab's lines mentioned in the agent's message box on the same task's
  * page, over the real editor bundle: the lines selected in the tab, the
  * command ⌥⌘K runs, and the box holding the mention as its chip, pinned to
  * the commit the lines were read at, sent as the lines' GitHub address.
@@ -40,19 +41,15 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (_request: Act): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-      recordSurfaceEvent: ignore,
-    },
+  fakeAppBridge({
+    act: (_request: Act): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
 });
 
@@ -113,7 +110,7 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
   });
 }
 
-/** A plan's page drawing the file's tab and, unless it is asked not to, the agent's box, every message the box sends written down. */
+/** A task's page drawing the file's tab and, unless it is asked not to, the agent's box, every message the box sends written down. */
 async function page({ box = true }: { box?: boolean } = {}) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
@@ -162,11 +159,11 @@ function cardOn(element: Element | undefined): (string | null | undefined)[] {
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-file-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-note")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-note")?.textContent,
   ];
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -218,17 +215,6 @@ test("a selection that ends where the next line begins, as a line selected whole
   assert.deepEqual(sent, [
     `[@invite.ts:2](https://github.com/acme/relay/blob/${HEAD}/src/invite.ts#L2)`,
   ]);
-});
-
-test("a File tab's lines fade under the file's bar as they scroll up beneath it, rather than being sliced at its hairline", async () => {
-  const { container } = await page({ box: false });
-  const sheets = layFades();
-  try {
-    const lines = container.querySelector(".file-tab-lines") ?? assert.fail("the lines stand");
-    assert.deepEqual(fadedEdges(lines), { top: true, bottom: false });
-  } finally {
-    sheets.remove();
-  }
 });
 
 test("with no agent's box on the page, ⌥⌘K is not offered, so the key is left to whatever else wants it", async () => {

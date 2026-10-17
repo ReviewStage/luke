@@ -6,14 +6,25 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
+import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+import { appSettingsWire, settingsView } from "@luke/settings/testing";
+import type { AppSettingsView } from "@luke/settings/wire";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
+import { appBridge } from "../app-bridge";
+import type { SideBundles } from "../bundle-loader";
 import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
 
 /**
@@ -23,9 +34,10 @@ import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
  * otherwise, split once Split view is chosen in its ⋯, tinted whole once
  * Highlight changed words is turned off, each choice kept for the next
  * view; a diff too narrow to split is drawn unified, Split view dimmed, the
- * choice kept for a wider one. A kept setting that no longer reads costs
- * none of the others. The bundle, a script of its own the panel loads, is
- * stood in for at its global, which records what it was handed. Synthetic
+ * choice kept for a wider one. The settings are the app's own, read off the
+ * document main hands the window and written back through it
+ * (`handSettings`). The bundle, a chunk of its own the panel imports, is
+ * stood in for at its importer, which records what it was handed. Synthetic
  * files only.
  */
 
@@ -75,6 +87,42 @@ const control = codingAgentsControl({
     }),
 });
 
+/**
+ * Hands the window main's document with its settings as given, and answers
+ * each settings write as main does: stored, then the document delivered
+ * again to every listener, so a surface draws the setting it wrote and the
+ * next surface drawn reads it, the write answered as accepted. Any other act
+ * is refused.
+ */
+function handSettings(settings: Partial<AppSettingsView> = {}): void {
+  let view: AppSettingsView = Object.assign(settingsView(), settings);
+  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
+  const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(snapshot()),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.SETTING_UPDATE) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: "Not in this test.",
+        });
+      }
+      view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
+      const next = snapshot();
+      for (const listener of listeners) listener(next);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(view) },
+      });
+    },
+  });
+}
+
 /** What the stand-in bundle was handed, mount first, each draw after it. */
 let drawn: DiffViewProps[] = [];
 /** How wide the box the diff is drawn in lays out, in pixels. */
@@ -88,34 +136,29 @@ const standIn: DiffViewModule = {
   },
 };
 
+let bundles: SideBundles;
+
+beforeAll(async () => {
+  bundles = await Effect.runPromise(landedBundles({ diffView: () => Promise.resolve(standIn) }));
+});
+
 beforeEach(() => {
-  // Note that the settings are held by their module for the window's life, so each test loads it afresh.
-  vi.resetModules();
-  window.localStorage.clear();
   drawn = [];
   boxWidth = 900;
-  window.lukeDiffView = standIn;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
     const width = this.classList.contains("diff-view") ? boxWidth : 0;
     return new DOMRect(0, 0, width, 0);
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: () =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
-    },
-  });
+  fakeAppBridge({});
+  handSettings();
 });
 
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  delete window.lukeDiffView;
   vi.restoreAllMocks();
 });
 
@@ -130,13 +173,16 @@ async function drawTab(): Promise<DiffViewProps> {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(AgentChangesTab, {
-          agentId: AGENT.id,
-          control,
-          shown: true,
-          repository: "acme/relay",
-          tree: { open: false, onToggle: () => undefined },
-        }),
+        onSideBundles(
+          bundles,
+          createElement(AgentChangesTab, {
+            agentId: AGENT.id,
+            control,
+            shown: true,
+            repository: "acme/relay",
+            tree: { open: false, onToggle: () => undefined },
+          }),
+        ),
       ),
     ),
   );
@@ -160,31 +206,88 @@ function menuItem(label: string): HTMLButtonElement {
   return item ?? assert.fail(`the ⋯ offers ${label}`);
 }
 
-/** Chooses a setting in the view's ⋯. */
-function choose(label: string): void {
-  const item = menuItem(label);
-  act(() => item.click());
+/** Lets the document a settings write sends back land and be drawn. */
+async function flush(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
 }
 
-test("a diff is handed over whole as git writes it, unified with its changed words marked, numbered and wrapped", async () => {
+/** Chooses a setting in the view's ⋯, and lets it be drawn. */
+async function choose(label: string): Promise<void> {
+  const item = menuItem(label);
+  act(() => item.click());
+  await flush();
+}
+
+/** How a diff is drawn until told otherwise: today's File tab look, and stage-cli's for what is new. */
+const DEFAULT_LOOK = {
+  layout: "unified",
+  indicators: "bars",
+  inlineDiff: "word-alt",
+  backgrounds: true,
+  lineNumbers: true,
+  wrap: true,
+  themes: { dark: "github-dark-default", light: "github-light-default" },
+  font: "sf-mono",
+  fontSize: "11.5",
+  lineHeight: "normal",
+  ligatures: false,
+};
+
+/** Opens the bar's diff settings, answering the popover. */
+function openSettings(): HTMLElement {
+  const button = document.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]');
+  act(() => button?.click());
+  return (
+    document.querySelector<HTMLElement>('[role="dialog"][aria-label="Diff settings"]') ??
+    assert.fail("the diff settings open")
+  );
+}
+
+/** The popover's control of a name: a segment by its words, or a switch by its label. */
+function settingControl(popover: HTMLElement, selector: string, name: string): HTMLButtonElement {
+  const found = [...popover.querySelectorAll<HTMLButtonElement>(selector)].find(
+    (each) => each.textContent === name || each.getAttribute("aria-label") === name,
+  );
+  return found ?? assert.fail(`the settings offer ${name}`);
+}
+
+test("a diff is handed over whole as git writes it, drawn as today's File tab look until told otherwise", async () => {
   const props = await drawTab();
 
   assert.equal(
     props.patch,
     `diff --git a/src/seats.ts b/src/seats.ts\n--- a/src/seats.ts\n+++ b/src/seats.ts\n${PATCH}\n`,
   );
-  assert.deepEqual(props.look, {
-    layout: "unified",
-    changedWords: true,
-    lineNumbers: true,
-    wrap: true,
-  });
+  assert.deepEqual(props.look, DEFAULT_LOOK);
+});
+
+test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {
+  await drawTab();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  act(() => settingControl(popover, '[role="radio"]', "Classic (+/-)").click());
+  act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  act(() => settingControl(popover, '[role="switch"]', "Backgrounds").click());
+  await flush();
+
+  const expected = {
+    ...DEFAULT_LOOK,
+    layout: "split",
+    indicators: "classic",
+    ligatures: true,
+    backgrounds: false,
+  };
+  assert.deepEqual(lastDrawn().look, expected);
+  assert.deepEqual((await drawTab()).look, expected);
 });
 
 test("Split view draws the diff side by side, which the next view keeps", async () => {
   await drawTab();
 
-  choose("Split view");
+  await choose("Split view");
   assert.equal(lastDrawn().look.layout, "split");
 
   assert.equal((await drawTab()).look.layout, "split");
@@ -193,17 +296,14 @@ test("Split view draws the diff side by side, which the next view keeps", async 
 test("with Highlight changed words turned off a changed line is tinted whole, for this view and the next", async () => {
   await drawTab();
 
-  choose("Highlight changed words");
-  assert.equal(lastDrawn().look.changedWords, false);
+  await choose("Highlight changed words");
+  assert.equal(lastDrawn().look.inlineDiff, "none");
 
-  assert.equal((await drawTab()).look.changedWords, false);
+  assert.equal((await drawTab()).look.inlineDiff, "none");
 });
 
-test("a diff too narrow to split is drawn unified with Split view dimmed, and split again once there is room", async () => {
-  window.localStorage.setItem(
-    "luke.file-view",
-    JSON.stringify({ lineNumbers: true, wordWrap: true, diffLayout: "split", changedWords: true }),
-  );
+test("a diff too narrow to split is drawn unified with Split view dimmed and its settings saying so, and split again once there is room", async () => {
+  handSettings({ diffLayout: DIFF_LAYOUT.SPLIT });
   await drawTab();
   assert.equal(lastDrawn().look.layout, "split");
 
@@ -214,24 +314,71 @@ test("a diff too narrow to split is drawn unified with Split view dimmed, and sp
   assert.equal(item.getAttribute("aria-disabled") ?? String(item.disabled), "true");
   assert.equal(item.getAttribute("aria-checked"), "false");
   act(() => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+  assert.match(openSettings().textContent ?? "", /Needs a wider panel/u);
 
   boxWidth = 900;
   act(() => relayout());
   assert.equal(lastDrawn().look.layout, "split");
 });
 
-test("a kept setting that no longer reads takes its default and leaves the others as they were kept", async () => {
-  window.localStorage.setItem(
-    "luke.file-view",
-    JSON.stringify({ lineNumbers: false, wordWrap: false, diffLayout: "sideways" }),
-  );
+test("a setting is drawn as written while its write is out, so a press reads the one before it", async () => {
+  await drawTab();
 
-  const { look } = await drawTab();
+  const item = menuItem("Highlight changed words");
+  act(() => item.click());
 
-  assert.deepEqual(look, {
-    layout: "unified",
-    changedWords: true,
-    lineNumbers: false,
-    wrap: false,
+  assert.equal(lastDrawn().look.inlineDiff, "none", "drawn before the document comes back");
+  await flush();
+  assert.equal(lastDrawn().look.inlineDiff, "none");
+});
+
+/** Holds every settings write unanswered, and the window's document unchanged, until a test answers one. */
+function holdSettingWrites(): Array<(outcome: ActOutcome) => void> {
+  const held: Array<(outcome: ActOutcome) => void> = [];
+  const before = appBridge().act;
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) =>
+      request.kind === ACT_KIND.SETTING_UPDATE
+        ? new Promise((resolve) => held.push(resolve))
+        : before(request),
   });
+  return held;
+}
+
+test("a write answered while a later one to the same setting is out leaves the later one drawn", async () => {
+  await drawTab();
+  const held = holdSettingWrites();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  act(() => settingControl(popover, '[role="radio"]', "Unified").click());
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+  await flush();
+
+  assert.equal(lastDrawn().look.layout, "split");
+});
+
+test("a refused write is said under its row, and the row can be pressed again", async () => {
+  await drawTab();
+  const held = holdSettingWrites();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not save that setting." });
+  await flush();
+
+  const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
+  assert.equal(ligatures.getAttribute("aria-invalid"), "true", "the refusal is said");
+  assert.match(
+    (ligatures.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" "),
+    /Could not save that setting/u,
+    "under its own row",
+  );
+  assert.equal(ligatures.disabled, false);
+  assert.equal(lastDrawn().look.ligatures, false);
 });

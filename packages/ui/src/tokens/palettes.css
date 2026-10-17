@@ -103,6 +103,16 @@
   --luke-shadow-switch-thumb:
     0 1px 2px light-dark(rgba(0, 0, 0, 0.25), transparent),
     0 0 0 0.5px light-dark(rgba(0, 0, 0, 0.08), transparent);
+
+  /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
+     holding its white letter at AA on either ground. */
+  --luke-color-identity-1: #4f63b8;
+  --luke-color-identity-2: #2b7f78;
+  --luke-color-identity-3: #9a6a1e;
+  --luke-color-identity-4: #a24a63;
+  --luke-color-identity-5: #6c55b3;
+  --luke-color-identity-6: #477a3a;
+  --luke-color-on-identity: #fff;
 }
 
 /* The site's light ground is shadcn/ui's stock light theme warmed off pure
@@ -120,10 +130,13 @@
   --luke-color-ground: #fbfbfa;
   --luke-color-surface: oklch(1 0 0);
   --luke-color-overlay: oklch(1 0 0);
+  /* The site had one fill, its muted ground; a control's states need a
+     step each past it, the desktop's light steps, so a chosen segment or a
+     pressed button reads apart from one merely hovered. */
   --luke-color-fill-hover: oklch(0.97 0 0);
-  --luke-color-fill-strong: oklch(0.97 0 0);
-  --luke-color-fill-selected: oklch(0.97 0 0);
-  --luke-color-fill-pressed: oklch(0.97 0 0);
+  --luke-color-fill-strong: rgba(0, 0, 0, 0.06);
+  --luke-color-fill-selected: rgba(0, 0, 0, 0.07);
+  --luke-color-fill-pressed: rgba(0, 0, 0, 0.11);
   --luke-color-border: oklch(0.922 0 0);
   --luke-color-border-strong: oklch(0.922 0 0);
   --luke-color-border-selected: oklch(0.145 0 0);
@@ -163,6 +176,16 @@
   --luke-color-shadow: rgba(0, 0, 0, 0.12);
   --luke-color-shadow-deep: rgba(0, 0, 0, 0.2);
   --luke-shadow-switch-thumb: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+
+  /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
+     holding its white letter at AA on either ground. */
+  --luke-color-identity-1: #4f63b8;
+  --luke-color-identity-2: #2b7f78;
+  --luke-color-identity-3: #9a6a1e;
+  --luke-color-identity-4: #a24a63;
+  --luke-color-identity-5: #6c55b3;
+  --luke-color-identity-6: #477a3a;
+  --luke-color-on-identity: #fff;
 }
 
 /* The admin dashboard's and the OAuth cards' dark ground, the product's state
@@ -180,9 +203,9 @@
   --luke-color-surface: #101114;
   --luke-color-overlay: #101114;
   --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
-  --luke-color-fill-strong: rgba(255, 255, 255, 0.05);
-  --luke-color-fill-selected: rgba(255, 255, 255, 0.05);
-  --luke-color-fill-pressed: rgba(255, 255, 255, 0.05);
+  --luke-color-fill-strong: rgba(255, 255, 255, 0.09);
+  --luke-color-fill-selected: rgba(255, 255, 255, 0.2);
+  --luke-color-fill-pressed: rgba(255, 255, 255, 0.26);
   --luke-color-border: rgba(255, 255, 255, 0.08);
   --luke-color-border-strong: rgba(255, 255, 255, 0.08);
   --luke-color-border-selected: rgba(255, 255, 255, 0.92);
@@ -220,4 +243,14 @@
   --luke-color-shadow: rgba(0, 0, 0, 0.5);
   --luke-color-shadow-deep: rgba(0, 0, 0, 0.6);
   --luke-shadow-switch-thumb: none;
+
+  /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
+     holding its white letter at AA on either ground. */
+  --luke-color-identity-1: #4f63b8;
+  --luke-color-identity-2: #2b7f78;
+  --luke-color-identity-3: #9a6a1e;
+  --luke-color-identity-4: #a24a63;
+  --luke-color-identity-5: #6c55b3;
+  --luke-color-identity-6: #477a3a;
+  --luke-color-on-identity: #fff;
 }

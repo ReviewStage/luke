@@ -62,12 +62,23 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  AnchoredPopover,
+  BUTTON_VARIANT,
+  ConfirmDialog,
+  EllipsisIcon,
+  POPOVER_ALIGN,
+  ProviderMark,
+  SidePanelIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
@@ -76,7 +87,6 @@ import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
-import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
 import { SettingsGroup } from "../settings/settings-group";
@@ -90,9 +100,7 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
@@ -103,7 +111,7 @@ import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choic
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
  *
- * It stands where the list stood, in the plan's place, and the first crumb
+ * It stands where the list stood, in the task's place, and the first crumb
  * goes back to the list. Its form is drawn as a Settings page is, from
  * Settings' own rows: a group per part, each a card of rows naming a
  * setting and why on the left and its control on the right, every pick a
@@ -270,21 +278,14 @@ function OwnerRow({
   onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
   const parse = optionValue(owners);
-  const detailId = useId();
   return (
     <PickerRow
-      copy={
-        <>
-          <strong>Owner</strong>
-          <small id={detailId}>
-            {owner === AUTOMATION_SCOPE.WORKSPACE
-              ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
-              : "Only you see and change it. Owners and admins can see it and turn it off."}
-          </small>
-        </>
-      }
       label="Owner"
-      describedBy={detailId}
+      detail={
+        owner === AUTOMATION_SCOPE.WORKSPACE
+          ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
+          : "Only you see and change it. Owners and admins can see it and turn it off."
+      }
       value={owner}
       valueLabel={ownerName(owner, workspace)}
       valueIcon={
@@ -534,7 +535,6 @@ function ScheduleRows({
       )}
       <PickerRow
         label="Time zone"
-        copy={<strong>Time zone</strong>}
         value={timezone}
         valueLabel={zoneLabel(timezone)}
         rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
@@ -557,7 +557,7 @@ function AutomationActions({
   automation: AutomationSummary;
   onDelete: () => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",
@@ -641,7 +641,7 @@ function EditorToolbar({
       <div className="automation-toolbar">
         <div className="desktop-toolbar-heading">
           <nav className="automation-crumbs" aria-label="Path">
-            <FoldingButton label="Automations" glyph={<ZapIcon />} onClick={onBack} />
+            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
             <ChevronRightIcon aria-hidden="true" />
             <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
           </nav>
@@ -655,16 +655,11 @@ function EditorToolbar({
           {automation === undefined ? null : (
             <FoldingButton
               label="Run now"
-              glyph={<PlayIcon />}
+              icon={<PlayIcon />}
+              variant={BUTTON_VARIANT.OUTLINE}
               busy={running ? "Running" : undefined}
-              className="toolbar-button bordered-button"
-              disabled={running}
               onClick={onRunNow}
-            >
-              <BusyLabel busy={running} label="Running">
-                Run now
-              </BusyLabel>
-            </FoldingButton>
+            />
           )}
           <button
             type="button"
@@ -1154,6 +1149,10 @@ function agentLabel(agent: { title: string | null }): string {
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
+/** What the agent row says under its name. */
+const AGENT_DETAIL =
+  "Each run is sent to that agent as a message, even mid-turn. It keeps its own model and effort.";
+
 /**
  * The agent each run goes to, chosen from the workspace's agents on the
  * repository. The agent it goes to as saved is kept first in the menu where
@@ -1172,20 +1171,12 @@ function AgentRow({
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const copy = (
-    <>
-      <strong>Agent</strong>
-      <small>
-        Each run is sent to that agent as a message, even mid-turn. It keeps its own model and
-        effort.
-      </small>
-    </>
-  );
   if (agents !== undefined && "failed" in agents) {
     return (
       <div className="settings-row">
         <span className="settings-copy">
-          {copy}
+          <strong>Agent</strong>
+          <small>{AGENT_DETAIL}</small>
           <small className="error-message">The workspace's agents could not be read.</small>
         </span>
       </div>
@@ -1208,7 +1199,7 @@ function AgentRow({
   return (
     <PickerRow
       label="Agent"
-      copy={copy}
+      detail={AGENT_DETAIL}
       value={draft.agentId ?? ""}
       valueLabel={
         chosen !== undefined

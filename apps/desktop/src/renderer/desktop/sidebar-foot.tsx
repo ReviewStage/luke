@@ -1,9 +1,23 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
-import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon } from "@luke/ui";
+import {
+  ConfirmDialog,
+  DIALOG_TONE,
+  ExternalIcon,
+  GearIcon,
+  IconButton,
+  KeyboardIcon,
+  ProviderMark,
+  riseAbove,
+  UpdateIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -16,14 +30,14 @@ import {
   NewspaperIcon,
   UserRoundIcon,
 } from "lucide-react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { useOpenPerson } from "../person-door";
-import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
+import { useCapability } from "../use-app-state";
+import { ActionMenu, type MenuEntry } from "./action-menu";
 
 /**
  * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, a release on its way in, and Settings' gear.
@@ -64,7 +78,8 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
-  if (!updateInSidebar(update)) return null;
+  const offered = useCapability(HOST_CAPABILITY.UPDATES);
+  if (!offered || !updateInSidebar(update)) return null;
   if (update.status === UPDATE_STATUS.READY) {
     return (
       <Tooltip label={`Restart to update to ${update.latestVersion}`}>
@@ -200,7 +215,7 @@ function AccountMenu({
 }): React.JSX.Element {
   const { tell } = useAct();
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  const { drawn, close, trigger } = useActionMenu(shown);
+  const { drawn, close, trigger } = useMenu(shown);
   const logOut = useConfirmDialog(
     { subject: signedIn, surfaceOpen: shown },
     // A sign-out main refused keeps the dialog up saying so, rather than
@@ -224,7 +239,7 @@ function AccountMenu({
       openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
     onSettings,
     onOpenChangelog: () => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG),
-    onOpenIssues: () => tell(ACT_KIND.GITHUB_OPEN, { url: ISSUES_URL }),
+    onOpenIssues: () => appPlatform().openGitHub(ISSUES_URL),
     onEmail: () => tell(ACT_KIND.CONTACT_EMAIL),
     onLogOut: logOut.ask,
   });
@@ -284,15 +299,12 @@ export function SidebarFoot({
       <AccountMenu account={account} shown={shown} onSettings={onSettings} onSignOut={onSignOut} />
       <SidebarUpdate updates={updates} />
       <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
-        <button
-          type="button"
-          className="icon-button sidebar-settings"
-          aria-label="Settings"
+        <IconButton
+          icon={<GearIcon />}
+          label="Settings"
           aria-current={settingsOpen ? "page" : undefined}
           onClick={onSettings}
-        >
-          <GearIcon />
-        </button>
+        />
       </Tooltip>
     </div>
   );

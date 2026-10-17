@@ -13,13 +13,14 @@ import type {
 } from "../plan-editor/contract";
 
 /**
- * composer-field.tsx -- the agent's message box's field: the editor bundle's composer mounted in the card, the words it hands back, and the commands that change them from outside.
+ * composer-field.tsx -- the field of a box written to an agent, its message box's or the Inbox's answer box's: the editor bundle's composer mounted in the card, the words it hands back, and the commands that change them from outside.
  *
  * The field is TipTap (`../plan-editor/composer-editor.ts`), from the editor
- * bundle the panel starts loading as it first paints (`../editor-bundle.ts`).
+ * bundle the panel starts loading as it first paints (`../bundle-loader.ts`).
  * In the rare frame before it lands, the field is drawn at its own size with
  * its placeholder, inert and out of the Tab order, and the editor takes the
- * caret as it mounts, unless the developer is typing somewhere else.
+ * caret as it mounts, unless the developer is typing somewhere else or the
+ * box asks it not to, as the Inbox's does, where K and J step the list.
  *
  * The editor owns the words. Each change hands them back as the draft
  * string, and the draft is never written back into the editor as a render
@@ -82,6 +83,7 @@ export function ComposerField({
   chip,
   quote,
   mentions,
+  takesFocus = true,
   children,
 }: {
   /** The editor bundle; nothing until it has loaded, while the field stands inert. */
@@ -108,6 +110,8 @@ export function ComposerField({
   quote?: ((quote: ComposerQuote) => ReactNode) | undefined;
   /** What the box's mentions are picked and drawn with; none where the box takes no mentions, read as it mounts. */
   mentions?: ComposerFieldMentions | undefined;
+  /** Whether the editor takes the caret as it mounts, unless the developer is typing elsewhere; a box that stands beside a list the keys step through takes none. */
+  takesFocus?: boolean;
   /** What stands over the field, a list it opened. */
   children?: ReactNode;
 }): React.JSX.Element {
@@ -126,8 +130,19 @@ export function ComposerField({
     onPasteFiles,
     onTrigger,
     mentions,
+    takesFocus,
   });
-  latest.current = { draft, setDraft, skills, onKey, onEnter, onPasteFiles, onTrigger, mentions };
+  latest.current = {
+    draft,
+    setDraft,
+    skills,
+    onKey,
+    onEnter,
+    onPasteFiles,
+    onTrigger,
+    mentions,
+    takesFocus,
+  };
 
   /** A chip the editor asked for, drawn into its node's element until the node goes. */
   const draw = (element: HTMLElement, drawnChip: DrawnChip["chip"]) => {
@@ -146,7 +161,7 @@ export function ComposerField({
       maxLength,
       label,
       className: fieldClass,
-      focus: !typingElsewhere(),
+      focus: now.takesFocus && !typingElsewhere(),
       onDraft: (text) => {
         emitted.current = text;
         latest.current.setDraft(text);

@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { sqlClientOverUrl } from "@luke/database/core/sql-client";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { ensurePlanChannel, history, roster } from "@luke/database/models/chat-store";
 import { toolSetHashOf } from "@luke/database/models/content-addressed";
 import { hostTurnId } from "@luke/database/models/ids";
 import { openTaskConversation, readTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
 import { readMessagesByConversationTyped, readTurnById, startTask } from "@luke/database/testing";
+import { CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
 import { BRAIN_DELEGATE_TOOL, brainToolDeclarations } from "@luke/service/agents/brain-host/brain";
 import { REPOSITORY_SHELL_REFUSAL } from "@luke/service/agents/repository-shell";
@@ -14,8 +17,11 @@ import {
   SCRIPTED_BRAIN_REPLY,
   SCRIPTED_DELEGATE,
   SCRIPTED_NOT_READ_REPLY,
+  SCRIPTED_POST,
+  SCRIPTED_POSTED_REPLY,
   SCRIPTED_READ,
 } from "@luke/service/testing/eve-scripted-model";
+import { EXPERIMENT } from "@luke/settings";
 import {
   EXCESS_KEYS,
   MESSAGE_AUTHOR,
@@ -34,12 +40,14 @@ import { defineEval } from "eve/evals";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask in a
- * plan's conversation under the scripted fixture model, which is handed the
+ * task's conversation under the scripted fixture model, which is handed the
  * saved document in its standing context and answers in words, leaving the
  * document as the notetaker saved it, and the relay writes the turn into the
- * store through the writer. A read of the repository on a plan that has none
+ * store through the writer. A read of the repository on a task that has none
  * is refused ahead of any sandbox, in words the model repeats, so the eval
- * opens no Vercel Sandbox and needs no GitHub. The eve server runs in this process with the database the
+ * opens no Vercel Sandbox and needs no GitHub. Asked to post, the model
+ * posts in the plan's chat as `@luke`, and the message stands in the plan's
+ * channel. The eve server runs in this process with the database the
  * environment names, so the eval reads the rows back from the same Postgres.
  * Where no database is named the eval skips rather than pretending: the
  * relay and the writer meet PGlite in the store tests, and this is where
@@ -53,7 +61,7 @@ const LOCAL_DEV_PRINCIPAL = "local-dev";
 
 const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 
-/** The plan the planning scenario runs against, and the words its two sessions open with. */
+/** The task the brain's scenario runs against, and the words its two sessions open with. */
 const TASK = {
   name: "Teammate invitations",
 } as const;
@@ -62,6 +70,7 @@ const PLAN_TEXT =
 const PLAN_SAVED = { body: PLAN_TEXT, assumptions: [] } as const;
 const PLAN_WORDS = {
   FIRST: "Any member should be able to invite, not only admins.",
+  POSTED: "The invite table's schema is frozen until Friday.",
 } as const;
 
 /** What eve answers a session's opening with, read for the one field the eval continues from. */
@@ -110,14 +119,14 @@ function readMessagesByTurn(run: Run, conversationId: string, turnId: string) {
   );
 }
 
-/** The id of the plan's conversation, opened on its first call; the plan must stand. */
+/** The id of the task's conversation, opened on its first call; the task must stand. */
 async function taskConversation(run: Run, planId: string): Promise<string> {
   const opened = await run(openTaskConversation(LOCAL_DEV_PRINCIPAL, planId));
   assert.ok(Option.isSome(opened));
   return opened.value.conversationId;
 }
 
-/** The document the plan holds now, failing the eval where it does not read. */
+/** The document the task holds now, failing the eval where it does not read. */
 async function planDocument(run: Run, taskId: string) {
   const stored = await run(readTask(LOCAL_DEV_PRINCIPAL, taskId));
   assert.ok(Option.isSome(stored));
@@ -136,6 +145,12 @@ export default defineEval({
     const run: Run = (effect) => runtime.runPromise(effect);
     try {
       await ensureLocalDevUser(run);
+      // Chat starts off for the account, as an account that never turned it on has it.
+      const chatChosen = (on: boolean) =>
+        run(
+          writeAccountPreferences(LOCAL_DEV_PRINCIPAL, { experiments: { [EXPERIMENT.CHAT]: on } }),
+        );
+      await chatChosen(false);
 
       /** A typed ask opening a new session over the conversation, answered once the session is its record. */
       const openSession = async (conversationId: string, message: string) => {
@@ -166,7 +181,7 @@ export default defineEval({
         return accepted;
       };
 
-      // The planning model is handed the saved document and answers in words;
+      // The brain is handed the saved document and answers in words;
       // the notetaker beside the call writes the plan, so the turn leaves the
       // document as it stood.
       const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
@@ -187,7 +202,8 @@ export default defineEval({
       // durable state to the turn row: the prompt's fingerprint and the tool
       // set's, neither naming a row, since nothing of either is kept.
       assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
-      assert.equal(turn.toolSetHash, toolSetHashOf(brainToolDeclarations()));
+      // With Chat off, the turn ran under the tools without the chat's, and its row names that set.
+      assert.equal(turn.toolSetHash, toolSetHashOf(brainToolDeclarations(false)));
 
       const tasksRows = await readMessagesByTurn(run, taskConversationId, turnId);
       assert.deepEqual(
@@ -207,7 +223,7 @@ export default defineEval({
       assert.equal(runtimeSessionId, tasks.sessionId);
 
       // Research handed to the worker subagent returns a receipt at once, and
-      // the planning turn stays open until the worker's result reaches the
+      // the brain's turn stays open until the worker's result reaches the
       // model inside it: one turn on record, settled, holding the call, the
       // words before the wait, and the words after it.
       const researchTask = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
@@ -247,7 +263,7 @@ export default defineEval({
       // The words before the wait and the words after it, in one answer.
       assert.ok(researchAnswer.parts.filter((part) => isTextUIPart(part)).length >= 2);
 
-      // A repository read on a plan with no repository yet runs nothing and
+      // A repository read on a task with no repository yet runs nothing and
       // says so: the refusal reaches the model as the tool's result, ahead of
       // any sandbox, and the model repeats why.
       const readingTask = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
@@ -267,6 +283,41 @@ export default defineEval({
           (part) =>
             isTextUIPart(part) &&
             part.text === `${SCRIPTED_NOT_READ_REPLY} ${REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY}`,
+        ),
+      );
+
+      await chatChosen(true);
+      // Asked to post, the model posts in the plan's channel as the plan's
+      // Luke, and says where it landed.
+      const chatPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
+      const chatConversationId = await taskConversation(run, chatPlan.id);
+      const posting = await openSession(chatConversationId, `${SCRIPTED_POST}${PLAN_WORDS.POSTED}`);
+      const postingSession = await t.target.attachSession(posting.sessionId);
+      postingSession.succeeded();
+      const channel = await run(ensurePlanChannel(LOCAL_DEV_PRINCIPAL, chatPlan.id));
+      assert.ok(Option.isSome(channel));
+      const { organizationId } = channel.value;
+      const members = await run(roster(LOCAL_DEV_PRINCIPAL, organizationId));
+      const luke = members.find(
+        (member) => member.kind === MEMBER_KIND.PLANNER && member.planId === chatPlan.id,
+      );
+      assert.ok(luke);
+      const said = await run(
+        history(LOCAL_DEV_PRINCIPAL, organizationId, luke.id, { channelId: channel.value.id }),
+      );
+      assert.ok(Option.isSome(said));
+      const [posted] = said.value;
+      assert.ok(posted);
+      assert.equal(posted.authorMemberId, luke.id);
+      assert.deepEqual(posted.blocks, [{ type: CHAT_BLOCK.MARKDOWN, text: PLAN_WORDS.POSTED }]);
+      const postingRows = await readMessagesByTurn(
+        run,
+        chatConversationId,
+        hostTurnId(posting.sessionId, "turn_0"),
+      );
+      assert.ok(
+        postingRows[1]?.parts.some(
+          (part) => isTextUIPart(part) && part.text === `${SCRIPTED_POSTED_REPLY} ${posted.seq}.`,
         ),
       );
     } finally {

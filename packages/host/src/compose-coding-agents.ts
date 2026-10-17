@@ -4,6 +4,8 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
@@ -12,12 +14,17 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   codingAgentAccountInboxParamsSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
+  codingAgentChatParamsSchema,
+  codingAgentChatPostParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
   codingAgentGitHubImageParamsSchema,
@@ -30,6 +37,7 @@ import {
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
   codingAgentPinParamsSchema,
+  codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
@@ -52,21 +60,21 @@ import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema, type Scope } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
+ * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
  *
  * Nothing is held here. The window holds the agents it draws and the
- * cursor it reads from, asks when a plan opens, when it starts or stops an
+ * cursor it reads from, asks when a task opens, when it starts or stops an
  * agent, and while an agent's tab shows its running transcript, and every
  * ask is one call of the service answered whole. The transcript read is
  * one the service holds open while the agent runs and nothing new stands,
- * and the inbox read another, held while nothing in it changed, so each of
+ * and the inbox read another, held while nothing in it changed, and the
+ * chat read a third, held while nothing in the workspace's chat moved, so each of
  * the window's loops is one held read after another rather than a clock of
  * its own, and a loop ends when the window stops asking. What waits across
  * the account is held the same way, and asked by main's own loop rather
@@ -97,8 +105,11 @@ export type CodingAgentClient = Pick<
   | "agentInbox"
   | "pullRequest"
   | "changes"
-  | "overview"
+  | "overviewPullRequest"
+  | "overviewChecks"
+  | "overviewConversation"
   | "githubImage"
+  | "pullRequestAction"
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
@@ -113,6 +124,8 @@ export type CodingAgentClient = Pick<
   | "accountInbox"
   | "inboxAttachment"
   | "agentPicture"
+  | "chat"
+  | "chatPost"
 >;
 
 export interface CodingAgentsDependencies {
@@ -127,20 +140,25 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 export function composeCodingAgents(
   dependencies: CodingAgentsDependencies,
-): Effect.Effect<CodingAgentsComposer, never, Scope.Scope> {
-  return Effect.sync(() => composed(dependencies));
+): Effect.Effect<CodingAgentsComposer, never, Scope.Scope | HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    return composed(dependencies, yield* HttpClient.HttpClient);
+  });
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything. */
-function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer {
+function composed(
+  dependencies: CodingAgentsDependencies,
+  http: HttpClient.HttpClient,
+): CodingAgentsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
-  /** The service asked behind the gate, over the ambient fetch client. */
+  /** The service asked behind the gate, over the host's own HTTP client. */
   const asked = <Answer>(
     call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
   ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provide(call, FetchHttpClient.layer) : Effect.succeed(UNANSWERED);
+    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(
@@ -388,15 +406,45 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.changes(agentId));
         return carried<CodingAgentChangesAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW]: (params) =>
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(
           codingAgentPullRequestParamsSchema,
           params,
           "reading an agent's pull request names one agent",
         );
-        const answer = yield* asked(client.overview(agentId));
-        return carried<CodingAgentOverviewAnswerView>(answer);
+        const answer = yield* asked(client.overviewPullRequest(agentId));
+        return carried<CodingAgentOverviewPullRequestAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's pull request's checks names one agent",
+        );
+        const answer = yield* asked(client.overviewChecks(agentId));
+        return carried<CodingAgentOverviewChecksAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's pull request's conversation names one agent",
+        );
+        const answer = yield* asked(client.overviewConversation(agentId));
+        return carried<CodingAgentOverviewConversationAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, request } = yield* read(
+          codingAgentPullRequestActionParamsSchema,
+          params,
+          "changing an agent's pull request names the agent and the change",
+        );
+        const answer = yield* asked(client.pullRequestAction(agentId, request));
+        return carried<CodingAgentPullRequestWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE]: (params) =>
       Effect.gen(function* () {
@@ -457,6 +505,26 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.answerInbox(itemId, request));
         return carried<CodingAgentInboxAnsweredView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHAT]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId, after } = yield* read(
+          codingAgentChatParamsSchema,
+          params,
+          "reading a workspace's chat names the workspace and a cursor",
+        );
+        const answer = yield* asked(client.chat(workspaceId, after));
+        return carried<CodingAgentChatAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHAT_POST]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId, write } = yield* read(
+          codingAgentChatPostParamsSchema,
+          params,
+          "writing to a workspace's chat names the workspace and one post, answer, resolve, or read",
+        );
+        const answer = yield* asked(client.chatPost(workspaceId, write));
+        return carried<CodingAgentChatWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX]: (params) =>
       Effect.gen(function* () {

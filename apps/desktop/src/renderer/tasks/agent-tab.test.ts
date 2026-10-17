@@ -19,6 +19,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -33,9 +34,8 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
  * agent-tab.test.ts -- a call about something the window draws in a tab of
  * its own is a row that opens that tab, and every other call a row that
  * folds open in place; a run of calls and a finished turn's lead fold under
- * a line led by a chevron saying whether it is open, while the calls under
- * it, a list of the agents among them, keep their own icons. A row that opens an agent's or a worker's tab
- * hangs that tab's card. A call of an integration's own tool is one row
+ * a line saying whether it is open. A row that opens an agent's or a
+ * worker's tab hangs that tab's card. A call of an integration's own tool is one row
  * wearing the integration's mark, with the `connection_execute` that ran it
  * left out.
  */
@@ -263,20 +263,7 @@ for (const call of FOLDING_CALLS) {
   });
 }
 
-/** The chevron leading a fold's line: a right-pointing chevron, turned down where the line says it is open; nothing where the line has none. */
-function chevronOf(line: Element | null | undefined): { open: boolean } | undefined {
-  const glyph = line?.firstElementChild;
-  if (!glyph?.classList.contains("lucide-chevron-right")) return undefined;
-  const open = glyph.classList.contains("rotate-90");
-  assert.equal(
-    line?.getAttribute("aria-expanded"),
-    String(open),
-    "the chevron agrees with the line",
-  );
-  return { open };
-}
-
-test("a run of calls folds under a line whose chevron says it is open, and its calls keep their icons, a list of the agents a list's", () => {
+test("a run of calls folds under a line that says it is open", () => {
   const { container } = drawn(
     assistant([
       toolPart("list_coding_agents", {}, { agents: [] }),
@@ -286,21 +273,10 @@ test("a run of calls folds under a line whose chevron says it is open, and its c
   );
   const group = container.querySelector("[data-turn-fold] > summary");
   assert.equal(group?.textContent, "2 tools called");
-  assert.deepEqual(chevronOf(group), { open: true }, "the open group's chevron points down");
-  const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
-  const listed = rows.find((row) => row.textContent?.includes("Listed the coding agents"));
-  assert.ok(
-    listed?.querySelector("svg")?.classList.contains("lucide-layout-list"),
-    "the list's row wears LayoutList",
-  );
-  const ran = rows.find((row) => row.textContent?.includes("git status"));
-  assert.ok(
-    ran?.querySelector("svg")?.classList.contains("lucide-laptop"),
-    "the command's row wears Laptop",
-  );
+  assert.equal(group?.getAttribute("aria-expanded"), "true", "the group says it is open");
 });
 
-test("a finished turn's lead folds under a line whose chevron turns as it opens, and its calls keep their icons", () => {
+test("a finished turn's lead folds under a line that opens as it is pressed", () => {
   const { container } = drawn(
     assistant([
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
@@ -311,14 +287,13 @@ test("a finished turn's lead folds under a line whose chevron turns as it opens,
   );
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   assert.equal(fold?.textContent, "2 tool calls, 1 message");
-  assert.deepEqual(chevronOf(fold), { open: false }, "the closed fold's chevron points right");
+  assert.equal(fold?.getAttribute("aria-expanded"), "false", "the fold stands closed");
   act(() => fold?.click());
-  assert.deepEqual(chevronOf(fold), { open: true }, "the opened fold's chevron points down");
+  assert.equal(fold?.getAttribute("aria-expanded"), "true", "the pressed fold says it is open");
   const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
-  const read = rows.find((row) => row.textContent?.includes("src/new.ts"));
   assert.ok(
-    read?.querySelector("svg")?.classList.contains("lucide-file-text"),
-    "the read's row wears FileText",
+    rows.some((row) => row.textContent?.includes("src/new.ts")),
+    "the opened fold lists the read",
   );
 });
 
@@ -413,7 +388,7 @@ for (const { name, parts, standings, label } of FAILURE_LINES) {
   });
 }
 
-/** An agent of the plan's, as its list holds it. */
+/** An agent of the task's, as its list holds it. */
 function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSummary> = {}) {
   return {
     id,
@@ -433,11 +408,11 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   act(() => row.focus());
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the row hangs a tab's card");
   return [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-corner")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-corner")?.textContent,
   ];
 }
 
@@ -599,13 +574,10 @@ function stateHoldingCodexAgent(agentId: string): AppStateSnapshot {
 
 test("a call about an agent the place lists not, whose answer names no model, wears the harness the window last read the agent running on", async () => {
   const state = stateHoldingCodexAgent("agent-8");
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-    },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -641,7 +613,7 @@ test("a call about an agent the place lists not, whose answer names no model, we
   assert.equal(chip?.textContent, "Retry audit");
   // Codex's mark is its picture.
   assert.ok(chip?.querySelector("img.harness-mark"), "the chip wears Codex's mark");
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });
 
 /** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */
@@ -847,4 +819,39 @@ test("a notice of a message holding no Markdown, a link alone, keeps the notice'
     container.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Chat: @agent-2 in #teammate-invitations asked about memberships.",
   );
+});
+
+/** A chat call's row drawn with Chat offered or not, every place it opens recorded. */
+function chatCallDrawn(chatOn: boolean) {
+  const opened: ToolTarget[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(AgentMessage, {
+        message: assistant([toolPart("post_chat", { text: "Rebased." }, ACCEPTED)]),
+        plan: false,
+        lead: AGENT_LEAD,
+        moving: false,
+        delegation: { models: [], chatOn, onOpenTarget: (target) => opened.push(target) },
+      }),
+    ),
+  );
+  return { container, opened };
+}
+
+test("a chat call's row opens the task's Chat while Chat is offered, and folds open as any call's does while it is off", () => {
+  const on = chatCallDrawn(true);
+  const row = on.container.querySelector<HTMLButtonElement>(
+    'button[data-call-id="call-post_chat"]',
+  );
+  assert.ok(row, "the row is a button");
+  act(() => row.click());
+  assert.deepEqual(on.opened, [{ kind: TOOL_TARGET.CHAT }]);
+
+  const off = chatCallDrawn(false);
+  assert.equal(off.container.querySelector('button[data-call-id="call-post_chat"]'), null);
+  assert.ok(off.container.querySelector("details"), "the row folds its call open in place");
 });

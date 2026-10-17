@@ -1,6 +1,6 @@
 {
   "name": "@luke/settings",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "The app settings schema: every setting's id, section, side effect, and how a change is counted",
@@ -11,7 +11,9 @@
     "./settings-views": "./src/settings-views.js",
     "./settings-anchors": "./src/settings-anchors.js",
     "./update": "./src/update.js",
-    "./update-row": "./src/update-row.js"
+    "./update-row": "./src/update-row.js",
+    "./diff-view": "./src/diff-view.js",
+    "./shortcuts": "./src/shortcuts.js"
   },
   "types": "./src/index.ts",
   "scripts": {

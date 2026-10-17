@@ -5,8 +5,8 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "@luke/features/issue-wire";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { useId, useRef, useState } from "react";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { ModalShell } from "../modal-shell";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
@@ -38,14 +38,16 @@ export interface IssueDraft {
 
 /** The card with its own state, mounted afresh on each opening so a cancelled title is never offered again. */
 function NewIssueCard({
+  status: chosen,
   onCreate,
   onClose,
 }: {
+  status: IssueStatus;
   onCreate: (draft: IssueDraft) => Promise<boolean>;
   onClose: () => void;
 }): React.JSX.Element {
   const [title, setTitle] = useState("");
-  const [status, setStatus] = useState<IssueStatus>(ISSUE_STATUS.BACKLOG);
+  const [status, setStatus] = useState<IssueStatus>(chosen);
   const [priority, setPriority] = useState<IssuePriority>(ISSUE_PRIORITY.NONE);
   const [creating, setCreating] = useState(false);
   const [refused, setRefused] = useState(false);
@@ -129,16 +131,19 @@ function NewIssueCard({
   );
 }
 
-/** The card over the window while a new issue is asked for; nothing otherwise. */
+/** The card over the window while a new issue is asked for, its Status chip on the status asked with or Backlog; nothing otherwise. */
 export function NewIssueDialog({
   open,
+  status = ISSUE_STATUS.BACKLOG,
   onCreate,
   onClose,
 }: {
   open: boolean;
+  /** The status the card opens on: the column's whose + opened it. */
+  status?: IssueStatus | undefined;
   onCreate: (draft: IssueDraft) => Promise<boolean>;
   onClose: () => void;
 }): React.JSX.Element | null {
   if (!open) return null;
-  return <NewIssueCard onCreate={onCreate} onClose={onClose} />;
+  return <NewIssueCard status={status} onCreate={onCreate} onClose={onClose} />;
 }

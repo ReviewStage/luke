@@ -1,10 +1,12 @@
-import type {
-  AccountFailedRun,
-  AccountInboxAnswer,
-  AccountInboxAutomation,
-  AccountInboxEntry,
-  AccountInboxTask,
-  AccountTasklessEntry,
+import {
+  ACCOUNT_CHAT_REASON,
+  type AccountChatEntry,
+  type AccountFailedRun,
+  type AccountInboxAnswer,
+  type AccountInboxAutomation,
+  type AccountInboxEntry,
+  type AccountInboxTask,
+  type AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { failedRunText } from "@luke/features/automation-list-model";
 import {
@@ -28,6 +30,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
+import type { ChatShown } from "./acts.js";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 
 /**
@@ -37,7 +40,7 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * main keeps a ledger of its own, fed by every coding-agent answer that
  * passes through the acts (a list, a Start, a Stop, a transcript page) and
  * by one read of its own: while any agent in the ledger is starting or
- * running, its plan's agents are listed again every `WATCH_INTERVAL`, the
+ * running, its task's agents are listed again every `WATCH_INTERVAL`, the
  * panel's own list read on a clock rather than a second kind of read, so an
  * agent on a plan the developer has left is still watched. An agent an
  * automation started with no plan is held from the plan list, which carries
@@ -56,7 +59,7 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * to an agent that had ended reads it running under the ended turn's id
  * until eve opens the next turn, which is the old run read again and not
  * a new one: the ledger keeps the end it announced, and on the message's
- * own answer keeps the plan watched until the new turn's id arrives, whose
+ * own answer keeps the task watched until the new turn's id arrives, whose
  * own end is the next notice. A list that landed late, describing a turn
  * the agent has left behind, says nothing newer. A Stop is the developer's
  * own and announces nothing. The ledger
@@ -80,32 +83,38 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * read found nothing, or could not be made, says finished as before. The
  * agent's unseen dot is set as the end is seen, ahead of the read.
  *
- * The sidebar's plan rows say which plans have an agent at work and which
- * a pull request, from the plan list, which is read on no clock. So the
+ * The sidebar's task rows say which tasks have an agent at work and which
+ * a pull request, from the task list, which is read on no clock. So the
  * ledger asks for the list again whenever it sees an agent start or end,
  * and whenever a read of what an agent published, the panel's or the
  * notice's own, finds a pull request other than the one it last saw for
  * that agent, since that read is what the service keeps for the list.
  *
  * The notices hold one more read of their own: what waits on the developer
- * across the account's plans, every open inbox item, on the service's held
+ * across the account's tasks, every open inbox item, on the service's held
  * read, for as long as an account is signed in, so an item an agent posts
- * is heard whichever plan is open, or none, and whichever Mac started the
+ * is heard whichever task is open, or none, and whichever Mac started the
  * agent. Of those, only the items of agents the account started wait on
  * it, since an agent runs on its starter's keys and asks its starter: each
- * answer is written whole as each plan's open items of those, which the
- * sidebar counts, and the Dock's badge is their number, while every plan
+ * answer is written whole as each task's open items of those, which the
+ * sidebar counts, and the Dock's badge is their number, while every task
  * holding any member's item is listed for the Inbox. The first answer
  * for an account is where it stands and announces nothing; after it, an
  * item that opens, newly posted or posted again under the key of one the
  * developer answered or the agent closed, is announced once, by the same
  * doors and the same gates as a turn's end: nowhere while the window is
- * focused on that plan's Inbox tab, in the window's toast while it is
+ * focused on that task's Inbox tab, in the window's toast while it is
  * focused on anything else, and as a notification while it is behind,
  * unless the developer turned notifications off. An item the agent posts
  * again while it is still open is the same ask kept current, and announces
- * nothing, and so does one whose plan comes back from the archive, which
- * changed before the last answer was read. Another account, or nobody,
+ * nothing, and so does one whose task comes back from the archive, which
+ * changed before the last answer was read. What waits in chat rides on the
+ * same read (`chat`): an ask someone else posted, or a direct message or a
+ * mention of the developer's, each announced once as it first waits, by
+ * the same doors and gates, nowhere while the window is focused on its
+ * Chat, and counted in the Dock's badge beside the items. A chat
+ * announcement says who and why, "@agent-2 messaged you", under the task of
+ * the channel it stands in, and nothing of what was said. Another account, or nobody,
  * ends the read held for the last, and lets go of its items, its counts,
  * and its badge before anything of the next is read. A read that did not
  * answer is asked again on the watch's clock.
@@ -119,7 +128,7 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * run, in its automation's workspace; nothing is said while the account has Automations off.
  */
 
-/** How often a plan with an agent still writing has its agents listed again. */
+/** How often a task with an agent still writing has its agents listed again. */
 const WATCH_INTERVAL = Duration.seconds(30);
 
 /**
@@ -129,10 +138,10 @@ const WATCH_INTERVAL = Duration.seconds(30);
  */
 const READ_SKEW = Duration.minutes(1);
 
-/** What the notification is titled for a plan main holds no name for. */
+/** What the notification is titled for a task main holds no name for. */
 const UNNAMED_TASK_TITLE = "Luke";
 
-/** The statuses under which an agent may still write, which is when its plan is watched. */
+/** The statuses under which an agent may still write, which is when its task is watched. */
 const WRITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.STARTING,
   CODING_AGENT_STATUS.RUNNING,
@@ -151,7 +160,7 @@ export interface AgentNotice {
   onClick: () => void;
 }
 
-/** Where a notification's click takes the developer: the plan, on the agent's tab, or the agent's own page for one with no plan. */
+/** Where a notification's click takes the developer: the task, on the agent's tab, or the agent's own page for one with no task. */
 export interface AgentPlace {
   taskId: string | null;
   agentId: string;
@@ -179,7 +188,28 @@ export interface FailedRunToast {
   detail: string;
 }
 
-/** An inbox item that opened as the window's own toast says it: the plan and the item, the words, and the plan's name under them. */
+/** What a chat announcement says of who and why, by the reason the message waits. */
+const CHAT_NOTICE_WORDS = {
+  [ACCOUNT_CHAT_REASON.ASK]: "asked you",
+  [ACCOUNT_CHAT_REASON.DIRECT]: "messaged you",
+  [ACCOUNT_CHAT_REASON.MENTION]: "mentioned you",
+} as const;
+
+/** What a chat announcement is titled where its channel stands in no plan main holds a name for. */
+const CHAT_NOTICE_TITLE = "Chat";
+
+/** A chat message that came to wait as the window's own toast says it: the message, the words, and the plan's name under them. */
+export interface ChatMessageToast {
+  messageId: string;
+  /** The workspace whose chat it waits in, whose Chat on screen withdraws the toast. */
+  workspaceId: string;
+  /** The plan whose channel it waits in, none outside one: that task's Chat tab on screen withdraws it too. */
+  planId: string | null;
+  words: string;
+  detail: string;
+}
+
+/** An inbox item that opened as the window's own toast says it: the task and the item, the words, and the task's name under them. */
 export interface InboxItemToast {
   taskId: string;
   itemId: string;
@@ -199,7 +229,8 @@ export interface AgentNoticeDoorsSurface {
   toast(end: AgentEndToast): void;
   toastInbox(item: InboxItemToast): void;
   toastFailedRun(run: FailedRunToast): void;
-  /** How many inbox items wait across the account, which the Dock's badge counts; none clears it. */
+  toastChat(message: ChatMessageToast): void;
+  /** How many inbox items and chat messages wait across the account, which the Dock's badge counts; none clears it. */
   badge(count: number): void;
 }
 
@@ -214,9 +245,9 @@ export interface AgentNoticesDependencies {
   readAgent: (agentId: string) => Effect.Effect<CodingAgentPageAnswerView>;
   /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
   readPullRequest: (agentId: string) => Effect.Effect<CodingAgentPullRequestAnswerView>;
-  /** The plan as a notice's title names it (`noticeTaskTitle`), or nothing for a plan main holds no name for. */
+  /** The task as a notice's title names it (`noticeTaskTitle`), or nothing for a task main holds no name for. */
   taskName: (taskId: string) => string | undefined;
-  /** Brings Luke forward on the plan with the agent's tab open: the click's whole effect. */
+  /** Brings Luke forward on the task with the agent's tab open: the click's whole effect. */
   open: (place: AgentPlace) => void;
   /** Where the unseen agents are written, for the tabs to draw. */
   onUnseenChanged: (unseen: readonly string[]) => void;
@@ -230,17 +261,17 @@ export interface AgentNoticesDependencies {
   accountId: () => string | undefined;
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
-  /** An agent started or ended, or a read found it published something new: the plan list is read again, so its rows say so. */
+  /** An agent started or ended, or a read found it published something new: the task list is read again, so its rows say so. */
   onTaskAgentsMoved: () => void;
   /** What waits across the account past a cursor, as the host answers it: the inbox read's one read. */
   readAccountInbox: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
   accounts: Stream.Stream<string | undefined>;
-  /** Where each plan's waiting items, and every plan holding an item, are written, for the window's Inbox. */
+  /** Where each task's waiting items, and every task holding an item, are written, for the window's Inbox. */
   onInboxChanged: (inbox: AppInboxSlice) => void;
-  /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
+  /** Brings Luke forward on the task with its Inbox tab open: an inbox notification's click. */
   openInbox: (taskId: string) => void;
-  /** Brings Luke forward on the window's Inbox with an item of an agent with no plan chosen: that item's notification's click. */
+  /** Brings Luke forward on the window's Inbox with an item of an agent with no task chosen: that item's notification's click. */
   /** Brings Luke forward on a failed run, in its automation's workspace: its notification's click. */
   openFailedRun: (place: FailedRunPlace) => void;
   /** Whether the account has Automations on, without which no failed run is announced. */
@@ -251,12 +282,16 @@ export interface AgentNoticesDependencies {
     /** The workspace whose list holds the item, which the window lists first; absent from a service before it. */
     readonly workspaceId?: string;
   }) => void;
+  /** Brings Luke forward on the Chat of the workspace a message waits in: a chat notification's click. */
+  openChat: (workspaceId: string) => void;
+  /** Whether the window offers Chat, without which nothing waiting in chat is counted or announced. */
+  chatOn: () => boolean;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
 
 export interface AgentNotices {
-  /** Agents as an answer carried them: a plan's list, or the one a Start or a Stop answered. */
+  /** Agents as an answer carried them: a task's list, or the one a Start or a Stop answered. */
   observeAgents(agents: readonly CodingAgentSummary[]): void;
   /** The agents with no plan as the plan list last carried them: the account's own are held, each with its automation's name. */
   observeTaskless(agents: readonly TasklessAgent[]): void;
@@ -264,18 +299,20 @@ export interface AgentNotices {
   observeStatus(agentId: string, status: CodingAgentStatus): void;
   /** One agent's title as a transcript page carried it, which the list that named the agent may have read before the title landed; said whatever the agent's standing. */
   observeTitle(agentId: string, title: string | null): void;
-  /** The agent as the answer to a message carried it: running, and with a line awaiting the turn it opens, which keeps its plan watched for that turn. */
+  /** The agent as the answer to a message carried it: running, and with a line awaiting the turn it opens, which keeps its task watched for that turn. */
   observeMessaged(agent: CodingAgentSummary): void;
   /** The catalog as the panel last read it, for the model's name. */
   observeModels(models: readonly CatalogModel[]): void;
   /** What one agent published, as a read of it answered: the pull request, or none. */
   observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void;
-  /** A plan the host no longer holds: its agents are forgotten. */
+  /** A task the host no longer holds: its agents are forgotten. */
   observeTaskGone(taskId: string): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
-  /** The panel said which plan's Inbox tab it shows, or none. */
+  /** The panel said which task's Inbox tab it shows, or none. */
   shownInbox(taskId: string | null): void;
+  /** The panel said which Chat it has on screen, or none. */
+  shownChat(shown: ChatShown | null): void;
 }
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
@@ -290,17 +327,17 @@ interface HeldAgent {
   status: CodingAgentStatus;
   /** The turn the status is read from; none before the first. */
   turnId: string | null;
-  /** Whether a message of the developer's awaits a turn not yet opened, which keeps the plan watched past the end already announced. */
+  /** Whether a message of the developer's awaits a turn not yet opened, which keeps the task watched past the end already announced. */
   awaiting: boolean;
   /** The turns the agent has left behind, which a list that landed late may still describe. */
   pastTurns: ReadonlySet<string>;
 }
 
 /**
- * The plan a notice is about, as its title names it: the plan's name, led by
+ * The task a notice is about, as its title names it: the task's name, led by
  * its workspace's where the account is in more than one, "Acme · Billing
  * export", so a notice from a workspace the window is not listing says
- * whose it is; nothing for a plan main holds no name for.
+ * whose it is; nothing for a task main holds no name for.
  */
 export function noticeTaskTitle(
   tasks: Pick<TasksView, "tasks" | "workspaces" | "document">,
@@ -326,7 +363,7 @@ function stillWriting(status: CodingAgentStatus): boolean {
   return WRITING_STATUSES.has(status);
 }
 
-/** Whether two reads of what an agent published say the same of it in a plan's row: the same pull request, standing the same, of the same size. */
+/** Whether two reads of what an agent published say the same of it in a task's row: the same pull request, standing the same, of the same size. */
 function samePublished(
   a: CodingAgentPullRequest | null,
   b: CodingAgentPullRequest | null,
@@ -371,7 +408,7 @@ function noticeText(input: {
 }
 
 /**
- * What an inbox item's announcement says: the plan's name over the agent,
+ * What an inbox item's announcement says: the task's name over the agent,
  * by its title or else its model's name, and the item's title, a link in
  * it said by its name rather than its address (`linkLabels`), and nothing
  * of what the item details.
@@ -387,8 +424,8 @@ function inboxNoticeText(
 
 /**
  * The answer as it waits on the account: the items of the agents it
- * started, a plan's and one with no plan alike, since an agent runs on its starter's keys and asks its starter,
- * and the plans holding any item whole, since every member's Inbox lists
+ * started, a task's and one with no task alike, since an agent runs on its starter's keys and asks its starter,
+ * and the tasks holding any item whole, since every member's Inbox lists
  * them. An item whose starter the service does not say, or an account whose
  * id is not known, is the account's own, as every item was before.
  */
@@ -403,7 +440,24 @@ function startedBy(answer: AccountInboxAnswer, accountId: string | undefined): A
   };
 }
 
-/** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
+/** What a chat message's announcement says: who and why, under the plan of its channel, and nothing of what was said. */
+function chatNoticeText(
+  entry: AccountChatEntry,
+  planName: string | undefined,
+): Pick<AgentNotice, "title" | "body"> {
+  return {
+    title: planName ?? CHAT_NOTICE_TITLE,
+    body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
+  };
+}
+
+/** Whether a waiting message is on the Chat shown: anywhere in a workspace's whole Chat, or in its plan's channel on a task's Chat tab. */
+function chatShows(shown: ChatShown | null, entry: AccountChatEntry): boolean {
+  if (shown === null || shown.workspaceId !== entry.workspaceId) return false;
+  return shown.planId === null || shown.planId === entry.planId;
+}
+
+/** The items each task holds waiting, the task whose item changed latest first, as the read answered them latest first. */
 function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiting"] {
   const tasks = new Map<string, AppInboxWaitingItem[]>();
   for (const item of items) {
@@ -420,7 +474,7 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
   return [...tasks].map(([taskId, held]) => ({ taskId, items: held }));
 }
 
-/** The open items of agents with no plan as the window holds them: each with its agent and the automation and repository standing in a plan's place. */
+/** The open items of agents with no task as the window holds them: each with its agent and the automation and repository standing in a task's place. */
 function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice["taskless"] {
   return items.map((item) => ({
     id: item.id,
@@ -437,9 +491,9 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
 }
 
 /**
- * What an announcement of an item of an agent with no plan says: the
+ * What an announcement of an item of an agent with no task says: the
  * automation's name, or the repository where the reader may not read it,
- * over the agent and the item's title, as a plan's item says its plan.
+ * over the agent and the item's title, as a task's item says its task.
  */
 function tasklessNoticeText(
   item: AccountTasklessEntry,
@@ -455,10 +509,10 @@ function tasklessNoticeText(
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<
   AccountInboxAnswer,
-  "items" | "plans" | "planless" | "automations" | "failedRuns"
+  "items" | "plans" | "planless" | "automations" | "failedRuns" | "chat"
 >;
 
-/** Whether two answers say alike everything the window draws of each item of an agent with no plan: its agent's title and model, the automation and repository standing in a plan's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
+/** Whether two answers say alike everything the window draws of each item of an agent with no task: its agent's title and model, the automation and repository standing in a task's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
 function sameTaskless(
   one: readonly AccountTasklessEntry[],
   other: readonly AccountTasklessEntry[],
@@ -500,7 +554,7 @@ function sameAutomations(
   );
 }
 
-/** Whether two answers list the same plans holding items, alike in order, count, and instant. */
+/** Whether two answers list the same tasks holding items, alike in order, count, and instant. */
 function sameTasks(one: readonly AccountInboxTask[], other: readonly AccountInboxTask[]): boolean {
   return (
     one.length === other.length &&
@@ -540,13 +594,19 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     let focused = false;
     /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
     let holder: string | undefined;
-    /** The inbox read's last answer for the account signed in, and its items by id; none before its first. */
+    /** The inbox read's last answer for the account signed in, and its items and chat messages by id; none before its first. */
     let waiting:
-      | { readonly answer: AccountInboxAnswer; readonly items: ReadonlySet<string> }
+      | {
+          readonly answer: AccountInboxAnswer;
+          readonly items: ReadonlySet<string>;
+          readonly chat: ReadonlySet<string>;
+        }
       | undefined;
     /** The highest revision any answer for the account held of each item, so one back unchanged is known. */
     const seenRevision = new Map<string, number>();
     let shownInbox: string | null = null;
+    /** The Chat the panel has on screen, none where no Chat is: a message waiting there is read there. */
+    let shownChat: ChatShown | null = null;
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -632,7 +692,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
 
-    /** What the window holds of an answer: each plan's items and every plan holding one, and beside them the items of agents with no plan and the automations holding them. */
+    /** What the window holds of an answer: each task's items and every task holding one, and beside them the items of agents with no task and the automations holding them. */
     function sliceOf(answer: InboxAnswered): AppInboxSlice {
       return {
         waiting: waitingTasks(answer.items),
@@ -643,13 +703,18 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       };
     }
 
-    /** Writes what waits for the window, and its number, a plan's items and an agent's with no plan alike, for the Dock. */
-    function publishWaiting(answer: InboxAnswered): void {
-      dependencies.onInboxChanged(sliceOf(answer));
-      doors.badge(answer.items.length + (answer.planless?.length ?? 0));
+    /** What waits in chat that the window offers, none while Chat is off. */
+    function chatOf(answer: InboxAnswered): readonly AccountChatEntry[] {
+      return dependencies.chatOn() ? (answer.chat ?? []) : [];
     }
 
-    /** An item of an agent with no plan opened: told nowhere in front, since the window's toast opens a plan and the window's Inbox lists it, and as a notification behind, which opens the window's Inbox on the item, where it is answered. */
+    /** Writes what waits for the window, and its number, a task's items, an agent's with no task, and chat messages alike, for the Dock. */
+    function publishWaiting(answer: InboxAnswered): void {
+      dependencies.onInboxChanged(sliceOf(answer));
+      doors.badge(answer.items.length + (answer.planless?.length ?? 0) + chatOf(answer).length);
+    }
+
+    /** An item of an agent with no task opened: told nowhere in front, since the window's toast opens a task and the window's Inbox lists it, and as a notification behind, which opens the window's Inbox on the item, where it is answered. */
     function announceTaskless(item: AccountTasklessEntry): void {
       if (focused) return;
       if (dependencies.notifying()) {
@@ -684,7 +749,29 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       }
     }
 
-    /** An item opened: told nowhere on its plan's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
+    /** A chat message came to wait: told nowhere on Chat in front, in the toast elsewhere in front, and as a notification behind. */
+    function announceChat(entry: AccountChatEntry): void {
+      if (focused && chatShows(shownChat, entry)) return;
+      const text = chatNoticeText(
+        entry,
+        entry.planId === null ? undefined : taskName(entry.planId),
+      );
+      if (focused) {
+        doors.toastChat({
+          messageId: entry.messageId,
+          workspaceId: entry.workspaceId,
+          planId: entry.planId,
+          words: text.body,
+          detail: text.title,
+        });
+        return;
+      }
+      if (dependencies.notifying()) {
+        doors.post({ ...text, onClick: () => dependencies.openChat(entry.workspaceId) });
+      }
+    }
+
+    /** An item opened: told nowhere on its task's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
     function announceItem(item: AccountInboxEntry): void {
       if (focused && shownInbox === item.planId) return;
       const text = inboxNoticeText(item, taskName(item.planId), models);
@@ -707,7 +794,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      * since the last answer announced, unless this is the first. Note that
      * an item opened since is one the last answer did not hold, at a
      * revision no answer for the account held, that changed after the last
-     * answer was read, because a plan brought back from the archive brings
+     * answer was read, because a task brought back from the archive brings
      * its items back unchanged, and they are not news; an item posted again
      * after it was answered or closed moves its revision on, and is.
      */
@@ -719,7 +806,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         was.answer.items.length === answer.items.length &&
         (was.answer.planless?.length ?? 0) === (answer.planless?.length ?? 0)
       ) {
-        // Note that the plans and automations holding items, and what an item with no plan is named
+        // Note that the tasks and automations holding items, and what an item with no task is named
         // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
           sameTasks(was.answer.plans, answer.plans) &&
@@ -739,10 +826,24 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       const taskless = answer.planless ?? [];
-      waiting = { answer, items: new Set([...answer.items, ...taskless].map((item) => item.id)) };
+      const chat = chatOf(answer);
+      waiting = {
+        answer,
+        items: new Set([...answer.items, ...taskless].map((item) => item.id)),
+        chat: new Set(chat.map((entry) => entry.messageId)),
+      };
       publishWaiting(answer);
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
+      // A chat message is news once, as it first waits: the first answer is where the account stands.
+      // Note that an ask changed before the last answer was read, as an open one of a workspace just
+      // joined, is no news, where a direct message or a mention is: it waits only once its person was
+      // stamped, which may be well after it was posted, and a stamp is always news.
+      for (const entry of chat) {
+        if (since === undefined || was?.chat.has(entry.messageId) === true) continue;
+        if (entry.reason !== ACCOUNT_CHAT_REASON.ASK || entry.updatedAt > since)
+          announceChat(entry);
+      }
       for (const item of answer.items) {
         const known = seenRevision.get(item.id);
         seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
@@ -935,7 +1036,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         if (!heldHere(agent)) return;
         noteSubject(agent);
         observe(agent.id, heldOf(agent));
-        // The line awaits the turn it opens: the plan is watched until that turn names itself.
+        // The line awaits the turn it opens: the task is watched until that turn names itself.
         const held = ledger.get(agent.id);
         if (held !== undefined && !stillWriting(held.status) && !held.awaiting) {
           ledger.set(agent.id, { ...held, awaiting: true });
@@ -959,6 +1060,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       shown: (agentId) => {
         shownAgent = agentId;
         seen(agentId);
+      },
+      shownChat: (shown) => {
+        shownChat = shown;
       },
       shownInbox: (taskId) => {
         shownInbox = taskId;

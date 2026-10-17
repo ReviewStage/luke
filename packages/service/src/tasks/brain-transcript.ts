@@ -34,25 +34,25 @@ import {
 } from "./task-work-store.js";
 
 /**
- * brain-transcript.ts -- a plan's planning conversation read as a coding agent's transcript is: its turns' journals past a cursor, held open while a turn or a worker runs.
+ * brain-transcript.ts -- a task's brain conversation read as a coding agent's transcript is: its turns' journals past a cursor, held open while a turn or a worker runs.
  *
- * The Call tab draws each planning turn with the agent tab's own component,
- * so it reads the planner's conversation on the agent tab's own wire
+ * The Call tab draws each brain turn with the agent tab's own component,
+ * so it reads the brain's conversation on the agent tab's own wire
  * (`coder-host/transcript.ts`): a page of messages and the cursor to read on
  * from, held while more may land and answered the moment something does.
- * Three things are the planner's own. A planning conversation holds many
+ * Three things are the brain's own. A brain conversation holds many
  * turns and the voice's rows between them, which the Call tab draws from
  * the call's transcript, so the page carries the turns' journals alone, each
- * as the plan's work projects it (`tasks/task-work.ts`): its newest parts,
+ * as the task's work projects it (`tasks/task-work.ts`): its newest parts,
  * every string cut to the bound and no page's HTML, with the spoken lines
- * the turn took as its ask. A plan may have planned on for a long time, so a
+ * the turn took as its ask. A task may have been planned on for a long time, so a
  * reader opens on its newest turns and pages back a turn page at a time
  * (`earlier`), then follows from the cursor its first page answered. And a
- * planner's workers are recorded in no delegation row, so each page says
+ * brain's workers are recorded in no delegation row, so each page says
  * where the workers of the turns it carries and of the newest turns stand,
  * read from each worker's own session; the hold waits on a running worker
  * too, since its call answered the moment it started. The poll is the
- * voice's own, so a call reads as live as the frame it replaces. The plan's
+ * voice's own, so a call reads as live as the frame it replaces. The task's
  * `task.work` frame and its work page stand beside this read, unchanged,
  * until no desktop reads them.
  */
@@ -66,7 +66,7 @@ const STANDING_TURNS = 3;
 /** The most raw pages one look reads past a run of the voice's rows to find a turn's journal behind them. */
 const DRAIN_PAGES = 10;
 
-/** A page of the planner's conversation as the route answers it, the agent transcript's own shape with the turn the page before is read before. */
+/** A page of the brain's conversation as the route answers it, the agent transcript's own shape with the turn the page before is read before. */
 export interface BrainPage {
   readonly messages: readonly CodingAgentMessage[];
   readonly cursor: MessageCursor;
@@ -78,7 +78,7 @@ export interface BrainPage {
 
 type BrainEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
-/** How a worker's standing on the plan's work reads as an agent's worker's does. */
+/** How a worker's standing on the task's work reads as an agent's worker's does. */
 const STATUS_OF_WORK_STATE = {
   [TASK_WORK_STATE.RUNNING]: CODING_AGENT_STATUS.RUNNING,
   [TASK_WORK_STATE.DONE]: CODING_AGENT_STATUS.COMPLETED,
@@ -155,11 +155,11 @@ function standingsOf(works: readonly TaskWorkTurn[]) {
 }
 
 /**
- * The planner's status as a page says it: running while its newest turn is
+ * The brain's status as a page says it: running while its newest turn is
  * queued or runs, or while a worker's session does, since a worker in the
  * background outlives the turn that started it and a reader follows on
  * while it runs; failed where that turn failed, and completed otherwise, a
- * plan never planned on included.
+ * task never planned on included.
  */
 export const brainStatusNow = (target: ConversationTarget): BrainEffect<CodingAgentStatus> =>
   Effect.gen(function* () {
@@ -294,7 +294,7 @@ function sameTurns(left: readonly string[], right: readonly string[]): boolean {
 }
 
 /**
- * The planner's conversation past the cursor: the turns whose journals
+ * The brain's conversation past the cursor: the turns whose journals
  * moved, or, while a turn runs or a worker does and nothing moved yet, the
  * first look inside the hold that finds one or finds a worker started or
  * ended since the hold began, so a worker that ends beside one still
@@ -334,8 +334,8 @@ export function brainPagePast(
 
 /**
  * The call whose child conversation records the session of the worker a
- * planning call names: its own where it started the worker, and the call
- * that started the task where it sent the task more work, as the plan's work
+ * brain call names: its own where it started the worker, and the call
+ * that started the task where it sent the task more work, as the task's work
  * reads it (`workerSessionCallsOf`); nothing where no delegation of the
  * conversation's made the call, so no other child of it is read through one.
  */
@@ -353,7 +353,7 @@ export function brainWorkerSession(
 }
 
 /**
- * Whether a planning worker's title may still land: the worker untitled,
+ * Whether a brain worker's title may still land: the worker untitled,
  * and its newest turn settled inside the title call's bound, past which the
  * call that would fill it has given up. A worker's title is generated as it
  * starts, so a short one can settle first.

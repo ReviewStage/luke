@@ -6,15 +6,23 @@ import {
   noticeTaskTitle,
 } from "@luke/host/agent-notices";
 import {
+  type ClientCapability,
   type DuplicateGatewayMethod,
   HostAssemblyTag,
   type HostTag,
+  hostCapabilities,
   hostStandingLayer,
   layersInOrder,
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
-import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
+import {
+  APP_SETTING_SCHEMA,
+  EXPERIMENT,
+  experimentOn,
+  HOST_CAPABILITY,
+  NO_EXPERIMENTS,
+} from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer, Stream } from "effect";
 import { AppStateStore, initialAppState } from "../app-state";
@@ -65,6 +73,14 @@ export interface DesktopServices {
    */
   readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
 }
+
+/** What the desktop offers of its own, beside the platform concerns its host runs: every one of them. */
+const DESKTOP_CLIENT_CAPABILITIES: readonly ClientCapability[] = [
+  HOST_CAPABILITY.VOICE,
+  HOST_CAPABILITY.UPDATES,
+  HOST_CAPABILITY.MICROPHONE,
+  HOST_CAPABILITY.NOTIFICATIONS,
+];
 
 /** The desktop client as it stands once every step of the launch has run. */
 export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
@@ -122,9 +138,11 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
             windows.applyAppearance(),
             Effect.sync(() => {
               windows.publishAppState();
-              // A gated feature's menu items follow the account's experiments as the windows' surfaces do.
+              // A gated feature's menu items follow the account's experiments and the platform's capabilities as the windows' surfaces do.
+              const held = state.snapshot();
               config.showMenuBar({
-                experiments: state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
+                experiments: held.settings?.experiments ?? NO_EXPERIMENTS,
+                capabilities: held.run.capabilities,
               });
             }),
           ),
@@ -182,7 +200,11 @@ export function composeDesktop(
           ? createElectronUpdaterEngine()
           : undefined;
       const state = new AppStateStore(
-        initialAppState(config, updateEngine !== undefined),
+        initialAppState(
+          config,
+          updateEngine !== undefined,
+          hostCapabilities(host.concerns, DESKTOP_CLIENT_CAPABILITIES),
+        ),
         services,
       );
       const native = createNativeNode({ config, state });
@@ -229,9 +251,9 @@ export function composeDesktop(
           again: () => config.quit(),
         }),
       );
-      // The notices read the plans' names from the document and write the
+      // The notices read the tasks' names from the document and write the
       // unseen agents and the waiting inbox items back into it; a click
-      // brings the window forward and asks the panel to open the plan on the
+      // brings the window forward and asks the panel to open the task on the
       // agent's tab or its Inbox, and what the focused window should hear is
       // handed to the panels' toast. Whose inbox is read follows the
       // document's account, which the launch's bootstrap writes as well as
@@ -240,6 +262,7 @@ export function composeDesktop(
         toPanels: windows.toastAgentEnd,
         inboxToPanels: windows.toastInboxItem,
         failedRunToPanels: windows.toastFailedRun,
+        chatToPanels: windows.toastChatMessage,
         onAnswered: (status) => {
           if (state.snapshot().notifications.status !== status) {
             state.update({ notifications: { status } });
@@ -292,6 +315,12 @@ export function composeDesktop(
             state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
             EXPERIMENT.AUTOMATIONS,
           ),
+        openChat: (workspaceId) => {
+          windows.panels.focusExpanded();
+          windows.showChat(workspaceId);
+        },
+        chatOn: () =>
+          experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
       // The agents with no plan each list read carries are the notices' to

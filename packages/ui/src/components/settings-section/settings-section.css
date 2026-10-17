@@ -1,0 +1,33 @@
+/* settings-section.css -- a settings group: its heading a short step above
+   the card, and the card's edge, corner, and ground, with a hairline between
+   each row and the next. The rows' own padding is theirs
+   (`settings-row.css`); the room between sections is the page's. */
+
+@layer components {
+  .luke-settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-8);
+    min-width: 0;
+  }
+
+  /* The heading insets a hair, so its words sit just inside the card's
+     edge rather than flush with its border. */
+  .luke-settings-section-head {
+    padding: 0 var(--luke-space-2);
+  }
+
+  /* The card's corner is a control's, so a page draws one corner throughout. */
+  .luke-settings-section-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-surface);
+  }
+
+  .luke-settings-section-card > * + * {
+    border-top: 1px solid var(--luke-color-border);
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "@luke/desktop",
   "productName": "Luke",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "description": "Luke desktop application",
   "main": "dist/main.js",
@@ -99,6 +99,7 @@
     "streamdown": "2.7.0",
     "tailwindcss": "4.3.3",
     "typescript": "catalog:",
+    "unicode-emoji-json": "0.9.0",
     "vitest": "catalog:"
   },
   "dependencies": {

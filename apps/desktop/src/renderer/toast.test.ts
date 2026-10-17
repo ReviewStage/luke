@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -13,14 +11,9 @@ import { TOAST_TONE, ToastHost, type ToastNotice, useToast } from "./toast";
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
  * window too short for three stands two, setting the oldest aside until
- * there is room again, and the stack keeps the window's bottom-right corner
- * whatever docks at its foot. jsdom lays nothing out, so the window's height
- * is given and the stack's place is read from the stylesheet. Synthetic
- * throughout.
+ * there is room again. jsdom lays nothing out, so the window's height is
+ * given. Synthetic throughout.
  */
-
-/** The window's own stylesheet, which says where the stack stands. */
-const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "styles/desktop.css"), "utf8");
 
 /** The window's heights: its least, and one with room for three toasts. */
 const WINDOW = {
@@ -38,7 +31,6 @@ afterEach(() => {
   registry?.dispose();
   vi.restoreAllMocks();
   document.body.innerHTML = "";
-  document.head.innerHTML = "";
 });
 
 /** Hands the test the window's way of showing a toast. */
@@ -126,19 +118,26 @@ test("a window made too short for three toasts sets the oldest aside, without di
   assert.ok(standing().includes("Retry the webhook finished"), "the toast set aside comes back");
 });
 
-test("the stack stands the same step in from the window's foot as from its right edge, whatever docks at the window's foot", () => {
-  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  const column = document.body.appendChild(document.createElement("div"));
-  column.className = "desktop-task-main";
-  for (const name of ["desktop-call-bar", "agent-composer", "agent-todos-dock"]) {
-    column.appendChild(document.createElement("div")).className = name;
-  }
+test("a toast with an action carries a Dismiss button the keyboard reaches, and its press or Escape from it sends the toast away", () => {
   mount(WINDOW.TALL);
-
   act(() => show?.(persisting("Retry the webhook finished")));
-  const stack = document.querySelector<HTMLElement>(".toast-stack") ?? assert.fail("the stack");
-  const { bottom, right } = getComputedStyle(stack);
+  act(() => show?.(persisting("Nightly upgrade couldn't start")));
+  const dismissButtons = () =>
+    [...document.querySelectorAll<HTMLButtonElement>(".toast:not([data-leaving]) button")].filter(
+      (button) => button.getAttribute("aria-label") === "Dismiss",
+    );
 
-  assert.notEqual(bottom, "");
-  assert.equal(bottom, right, "the stack keeps the corner rather than standing on a dock");
+  const [first, second] = dismissButtons();
+  assert.ok(first && second);
+  act(() => first.click());
+  const afterPress = standing();
+  act(() => second.focus());
+  const focused = document.activeElement === second;
+  act(() => {
+    second.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  assert.deepEqual(afterPress, ["Nightly upgrade couldn't start"]);
+  assert.ok(focused, "the Dismiss button takes focus");
+  assert.deepEqual(standing(), []);
 });

@@ -22,6 +22,8 @@
         "src/main/index.ts",
         "src/preload/index.ts",
         "src/renderer/index.tsx",
+        "src/renderer/voice/index.tsx",
+        "src/renderer/call/index.tsx",
         "src/renderer/styles/index.css",
         "src/renderer/whiteboard/index.tsx",
         "src/renderer/whiteboard/index.css",
@@ -39,8 +41,7 @@
       "project": ["src/**", "scripts/**"]
     },
     "apps/catalog": {
-      "vitest": false,
-      "entry": ["src/main.tsx", "vitest.config.ts", "src/catalog.test.ts", "src/test-setup.ts"],
+      "entry": ["src/main.tsx"],
       "project": ["src/**"]
     },
     "apps/web": {

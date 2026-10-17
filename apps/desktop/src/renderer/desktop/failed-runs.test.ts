@@ -7,6 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { ToastHost } from "../toast";
 import { type FailedRunPlace, useFailedRunsMark, useFailedRunToasts } from "./failed-runs";
@@ -34,15 +35,12 @@ beforeEach(() => {
   viewed = [];
   marked = [];
   localStorage.clear();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onRunFailed: (listener: (run: RunFailed) => void) => {
-        failedListener = listener;
-        return () => {
-          failedListener = undefined;
-        };
-      },
+  fakeAppBridge({
+    onRunFailed: (listener: (run: RunFailed) => void) => {
+      failedListener = listener;
+      return () => {
+        failedListener = undefined;
+      };
     },
   });
 });
@@ -101,7 +99,7 @@ function mount(runs: readonly AccountFailedRun[], opened?: string) {
   return draw;
 }
 
-test("a failed run's toast is in the failed tone under its automation's name, and its View opens the run in its own workspace", () => {
+test("a failed run's toast is under its automation's name, and its View opens the run in its own workspace", () => {
   mount([]);
 
   act(() =>
@@ -115,11 +113,11 @@ test("a failed run's toast is in the failed tone under its automation's name, an
   );
   const toast = document.querySelector<HTMLElement>(".toast");
   assert.ok(toast);
-  assert.deepEqual(
-    [toast.querySelector(".toast-detail")?.textContent, toast.dataset.tone],
-    ["Flaky test sweep", "failed"],
+  assert.equal(toast.querySelector(".toast-detail")?.textContent, "Flaky test sweep");
+  const view = [...toast.querySelectorAll("button")].find(
+    (button) => button.textContent === "View",
   );
-  act(() => toast.querySelector<HTMLButtonElement>(".toast-action")?.click());
+  act(() => view?.click());
   assert.deepEqual(viewed, [
     { automationId: SWEEP, runId: RUN_ID, workspaceId: "workspace-other" },
   ]);

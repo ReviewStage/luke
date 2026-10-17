@@ -20,6 +20,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { MemberDirectory } from "../member-directory";
@@ -87,17 +88,13 @@ const PULL_REQUEST: CodingAgentPullRequest = {
 let root: Root | undefined;
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." },
-        ),
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." },
+      ),
   });
 });
 
@@ -132,7 +129,7 @@ function hover(element: Element): void {
 
 /** The cards standing in the window, the first hung first. */
 function cards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(".tooltip-card:not([data-leaving])")];
+  return [...document.querySelectorAll<HTMLElement>(".luke-tooltip-card:not([data-leaving])")];
 }
 
 /** The agent named where `readerId` reads it, as the Inbox's thread names it, its card hung once the pointer rests on it, and how many times it was opened. */
@@ -301,7 +298,8 @@ test("an agent's card wears its tile beside its name and its pull request at the
   const tile = card.querySelector<HTMLElement>(".actor-card-head > .actor-mark");
   assert.equal(tile?.dataset.kind, "agent");
   assert.equal(tile?.dataset.size, "card");
-  const corner = card.querySelector(".card-corner") ?? assert.fail("the head has a corner");
+  const corner =
+    card.querySelector(".luke-hover-card-corner") ?? assert.fail("the head has a corner");
   assert.ok(corner.querySelector("[data-pull-request-mark]"), "the pull request's mark leads it");
   assert.match(corner.textContent ?? "", /^#42 · Failed/u);
 
@@ -312,7 +310,7 @@ test("an agent's card wears its tile beside its name and its pull request at the
     "the card offers no way to the tab",
   );
   assert.equal(
-    card.querySelector(".card-rule")?.outerHTML,
+    card.querySelector(".luke-hover-card-rule")?.outerHTML,
     undefined,
     "nor a rule to stand one under",
   );

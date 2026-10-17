@@ -1,45 +1,41 @@
 /**
- * call-card.tsx -- the standing call as a small card: its plan and status, Luke's mark, and its controls.
+ * call-card.tsx -- the standing call as a small card: its task and status, Luke's mark, and its controls.
  *
  * One card, drawn in whichever one place the call is not otherwise on
  * screen: at the foot of the column standing at a Luke window's left while
- * that window shows anything but the call's plan, the plans' sidebar,
+ * that window shows anything but the call's task, the tasks' sidebar,
  * Settings' page list, and a version history's versions alike, floating in
- * the window's bottom-left corner while the plans' sidebar is folded, and
+ * the window's bottom-left corner while the tasks' sidebar is folded, and
  * alone in the floating window while no Luke window has the keyboard. It
  * carries no words of the conversation, and every press is an act main
  * validates and hands to the voice window, which holds the call.
  */
 
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ReturnIcon } from "@luke/ui";
-import { type CallCardModel, callCard, callCardVideoStatus } from "@luke/ui/call-card-model";
+import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
+import { useClipped } from "@luke/ui/use-clipped";
 import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
-import { type ActHandle, useAct } from "../act";
-import { useKeyboardModality } from "../keyboard-modality";
+import type { ActHandle } from "../act";
 import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts";
 import { Tooltip } from "../tooltip";
 import { useAppState, useExperiment } from "../use-app-state";
-import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
-import { useAvatarView } from "./avatar-view";
 import { CallVideoTile, VideoToggle } from "./call-video-tile";
-import { useStaleHoverAfterMove } from "./window-pointer";
 
-/** The way back's name, for a reader and its hover: the plan it opens. */
+/** The way back's name, for a reader and its hover: the task it opens. */
 function returnLabel(taskName: string): string {
   return `Open ${taskName}`;
 }
 
 /** Where a card is drawn, which decides how its title answers and how its controls are hinted. */
 export const CALL_CARD_SURFACE = {
-  /** At the foot of the column at a Luke window's left, above the plans' sidebar's account row (`ColumnFoot`). */
+  /** At the foot of the column at a Luke window's left, above the tasks' sidebar's account row (`ColumnFoot`). */
   SIDEBAR: "sidebar",
-  /** In a Luke window's bottom-left corner, while the plans' sidebar is folded. */
+  /** In a Luke window's bottom-left corner, while the tasks' sidebar is folded. */
   FLOATING: "floating",
   /** Alone in the floating window, over whatever app is in front. */
   WINDOW: "window",
@@ -101,8 +97,8 @@ export function cardVideo(
 
 /**
  * Each press as the act it is: the way back is main's to answer on the call's
- * own plan, and the three call controls are the voice window's, about the
- * call standing, so none of them names a plan.
+ * own task, and the three call controls are the voice window's, about the
+ * call standing, so none of them names a task.
  */
 export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): CallControls {
   const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
@@ -116,19 +112,19 @@ export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): Ca
 }
 
 /**
- * The card as drawn from what it is handed: the call's plan by name, with
+ * The card as drawn from what it is handed: the call's task by name, with
  * the way back to it beside the name, over the call bar itself, the same
- * component the plan's own page draws, so its status, its mutes, and its end
+ * component the task's own page draws, so its status, its mutes, and its end
  * are the bar's in every word, glyph, and colour, and restyling the bar
  * restyles the card. The way back is a button of its own everywhere, named
- * for the plan it opens. In the floating window the name is the drag handle,
+ * for the task it opens. In the floating window the name is the drag handle,
  * since macOS hands a press on a drag region to the drag, never the page.
  * There is no ×: End call is the way to put a call away, and a live call
  * nobody can see is what the card is for. On a video call the Call tab's
  * own tile stands over the name while the avatar does, with its Video off
  * and no end of its own, and Video on stands beside the name once it is down.
  */
-function CallCard({
+export function CallCard({
   card,
   speakerMuted,
   controls,
@@ -150,7 +146,7 @@ function CallCard({
     </span>
   );
   // The floating window is too small to hold a tooltip, so there the
-  // system's own hint names the plan the button opens.
+  // system's own hint names the task the button opens.
   const returnButton = (
     <button
       type="button"
@@ -194,7 +190,7 @@ function CallCard({
           <Tooltip label={returnLabel(card.taskName)}>{returnButton}</Tooltip>
         )}
       </div>
-      {/* A block of its own, as the plan's page holds it, so the bar spans the card. */}
+      {/* A block of its own, as the task's page holds it, so the bar spans the card. */}
       <div>
         <CallBar
           status={card.status}
@@ -243,11 +239,11 @@ export function CallCardDock({
 
 /**
  * The foot of the column standing at a Luke window's left, wherever the
- * window stands: the plans' sidebar, Settings' page list, or a version
+ * window stands: the tasks' sidebar, Settings' page list, or a version
  * history's versions, a plan's or the plan template's. Every one of them
  * docks the card here, above whatever the column keeps at its foot, so the
  * card is in the same place on every page and never stands over the
- * column's own rows. Only the plans' sidebar folds, so only it hands the
+ * column's own rows. Only the tasks' sidebar folds, so only it hands the
  * card to the window's corner (`desktop-shell.tsx`).
  */
 export function ColumnFoot({
@@ -262,30 +258,5 @@ export function ColumnFoot({
       <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
       {children}
     </div>
-  );
-}
-
-/**
- * The floating window's root: the card over the document it is handed. On
- * a video call it views the avatar's video from the panel, which runs the
- * avatar (`avatar-view.ts`), while its card draws the avatar live; main
- * grows the window to hold the tile on the same document.
- */
-export function CallWindowCard(): React.JSX.Element {
-  useKeyboardModality();
-  useStaleHoverAfterMove();
-  const { tell } = useAct();
-  const state = useAppState();
-  const { view } = useVoiceView();
-  const videoStatus = useCardVideoStatus();
-  const track = useAvatarView(videoStatus === AVATAR_STATUS.LIVE);
-  return (
-    <CallCard
-      card={callCard({ view, tasks: state?.tasks ?? IDLE_TASKS_VIEW })}
-      speakerMuted={view.speakerMuted}
-      controls={callControls(tell, view.speakerMuted)}
-      video={cardVideo(videoStatus, track, tell)}
-      surface={CALL_CARD_SURFACE.WINDOW}
-    />
   );
 }

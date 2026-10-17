@@ -3,7 +3,7 @@ import { codingAgentsApp } from "@luke/service/agents/coding-agents-app";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
-/** One plan's inbox: every item its coding agents posted for the developer, read past a cursor and held open while nothing changed (GET). The logic lives in `packages/service/src/agents/coding-agents-app.ts`; this file only hands it the deployment's real seams. */
+/** One task's inbox: every item its coding agents posted for the developer, read past a cursor and held open while nothing changed (GET). The logic lives in `packages/service/src/agents/coding-agents-app.ts`; this file only hands it the deployment's real seams. */
 export default routeFromHttpRouter(
   codingAgentsApp({ resolveUserId: resolveHostedUserId, eveOrigin: deploymentEveOrigin }),
 );

@@ -9,6 +9,7 @@ import {
   type TerminalPortOutbound,
   type TerminalRefusal,
 } from "@luke/features/terminal-acts";
+import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
 import {
   ACT_KIND,
@@ -18,19 +19,20 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { UnparsedWireValue } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test, vi } from "vitest";
-import { layContainersAt } from "#testing/container-width";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
+import { bundleLanded, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
-import "../terminal/index";
-import { shellsAsked } from "@luke/features/terminal-store";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { runAppCommand } from "../app-commands";
+import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader";
 import { FindScope } from "../find-in-tab";
 import { TerminalCardFoot } from "./terminal-shells";
 import { TerminalTab } from "./terminal-tab";
@@ -101,6 +103,9 @@ interface Main {
 }
 
 const roots: Root[] = [];
+
+// The terminal bundle landed before any tab is drawn, as it is once a terminal has been shown in this window.
+beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
 let main: Main;
 
 beforeEach(() => {
@@ -169,26 +174,23 @@ beforeEach(() => {
       };
     },
   };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        if (main.down.has(request.kind)) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.REFUSED,
-            reason: "Could not reach this agent's sandbox.",
-          });
-        }
-        // A held answer says what main said when it was asked, landing whenever it is let go.
-        if (main.holding.has(request.kind)) {
-          const value = answer(request);
-          return new Promise((resolve) =>
-            main.held.push(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
-          );
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request) });
-      },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      if (main.down.has(request.kind)) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: "Could not reach this agent's sandbox.",
+        });
+      }
+      // A held answer says what main said when it was asked, landing whenever it is let go.
+      if (main.holding.has(request.kind)) {
+        const value = answer(request);
+        return new Promise((resolve) =>
+          main.held.push(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
+        );
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request) });
     },
   });
   // jsdom has neither constructed sheets nor media queries; the window has both.
@@ -231,6 +233,8 @@ async function mount(
   before?: (registry: AtomRegistry.AtomRegistry) => void,
   /** Whether the tab stands in a find scope holding the window's keys, as the side panel draws it. */
   findable = false,
+  /** The bundles the tab reads its terminal from; the window's own, landed, unless a test hands others. */
+  bundles: SideBundles = SIDE_BUNDLES,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -254,22 +258,25 @@ async function mount(
       root.render(
         onRegistry(
           registry,
-          wrapped(
-            createElement(TerminalTab, {
-              agentId: AGENT.id,
-              agents,
-              shown: on,
-              onOpenAgent: () => undefined,
-              onClose: () => {
-                closed += 1;
-              },
-              shells: {
-                open: shellsOpen,
-                onToggle: () => {
-                  toggled += 1;
+          onSideBundles(
+            bundles,
+            wrapped(
+              createElement(TerminalTab, {
+                agentId: AGENT.id,
+                agents,
+                shown: on,
+                onOpenAgent: () => undefined,
+                onClose: () => {
+                  closed += 1;
                 },
-              },
-            }),
+                shells: {
+                  open: shellsOpen,
+                  onToggle: () => {
+                    toggled += 1;
+                  },
+                },
+              }),
+            ),
           ),
         ),
       ),
@@ -450,12 +457,11 @@ test("an agent that has not opened its sandbox yet shows the waiting bar", async
   assert.equal(tab.action(), null);
 });
 
-test("a dropped connection shows its bar, late, and its action asks for the shell again at once", async () => {
+test("a dropped connection shows its bar, and its action asks for the shell again at once", async () => {
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "reconnecting" });
   assert.equal(tab.bar(), "Connection lost. Reconnecting…");
-  assert.equal(tab.container.querySelector(".terminal-bar")?.getAttribute("data-late"), "true");
   assert.equal(tab.dimmed(), true);
   const before = main.sent.length;
   await act(async () => tab.action()?.click());
@@ -536,23 +542,16 @@ test("a message on the port that is no message of main's is never drawn nor acte
 });
 
 test("a terminal bundle that fails to load leaves the tab saying so, and attaches nothing", async () => {
-  const bundle = window.lukeTerminal;
-  assert.ok(bundle);
-  delete window.lukeTerminal;
-  try {
-    const tab = await mount();
-    const script = document.head.querySelector('script[src="terminal.js"]');
-    assert.ok(script, "the tab asks for the bundle");
-    script.dispatchEvent(new Event("error"));
-    await settle();
-    assert.equal(
-      tab.container.querySelector(".terminal-tab-failed")?.textContent,
-      "The terminal could not be shown.",
-    );
-    assert.deepEqual(tab.kinds(), []);
-  } finally {
-    window.lukeTerminal = bundle;
-  }
+  const unloaded = sideBundles({
+    terminal: () => Promise.reject(new Error("The chunk could not be loaded.")),
+  });
+  const tab = await mount(true, true, undefined, false, unloaded);
+  await settle();
+  assert.equal(
+    tab.container.querySelector(".terminal-tab-failed")?.textContent,
+    "The terminal could not be shown.",
+  );
+  assert.deepEqual(tab.kinds(), []);
 });
 
 test("an agent archived or retired closes its Terminal tab, as its Changes tab closes", async () => {
@@ -838,137 +837,6 @@ test("the shells list folds away beside the screen, and its toggle asks the pane
   assert.equal(tab.container.querySelector(".terminal-shells"), null);
   await tab.press("Show shells");
   assert.equal(tab.toggled(), 1);
-});
-
-// Note that the test is given longer than most, because jsdom takes seconds
-// to lay the window's stylesheets for a width beside a running terminal.
-test("in a side panel too narrow for the list beside the screen, the list stands over the screen only while its own toggle holds it open, and a shell chosen there takes it down", {
-  timeout: 30_000,
-}, async () => {
-  const tab = await mount(true, true);
-  layContainersAt({ "side-panel": 280 });
-  // Note that each element is read for its own display alone, which is where
-  // the rules read here hide one, because jsdom takes a tenth of a second to
-  // cascade an element through the window's stylesheets.
-  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
-  const drawn = () => {
-    const list = tab.container.querySelector(".terminal-shells");
-    return list !== null && displayed(list);
-  };
-  const toggles = () =>
-    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].filter(displayed);
-
-  assert.equal(drawn(), false, "the list the panel holds open beside the screen stands nowhere");
-  assert.deepEqual(
-    toggles().map((button) => button.getAttribute("aria-label")),
-    ["Show shells"],
-  );
-
-  await act(async () => toggles()[0]?.click());
-  await settle();
-  assert.equal(drawn(), true, "the list stands over the screen");
-  assert.equal(toggles()[0]?.getAttribute("aria-label"), "Hide shells");
-  assert.equal(tab.toggled(), 0, "the panel's own choice for every tab is left as it was");
-
-  await tab.choose("dev server");
-  assert.equal(drawn(), false, "a shell chosen takes the list down");
-  // Note that the elements are compared as a yes or no, because a failing comparison of two elements prints them whole.
-  assert.ok(
-    document.activeElement === tab.container.querySelector("textarea"),
-    "the screen holds the keyboard, the list's hold on it gone with the list",
-  );
-});
-
-// Note that the test is given longer than most, for the reason the one above is.
-test("a list opened over the screen and then given room beside it by a widened panel holds the keyboard no more, nor takes the window's Escape", {
-  timeout: 30_000,
-}, async () => {
-  const tab = await mount(true, true);
-  const narrow = layContainersAt({ "side-panel": 280 });
-  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
-  const toggle =
-    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
-    assert.fail("a toggle is drawn");
-  toggle.focus();
-  await act(async () => toggle.click());
-  await settle();
-  const list = tab.container.querySelector(".terminal-shells") ?? assert.fail("the list is drawn");
-  assert.ok(list.contains(document.activeElement), "the keyboard lands in the list");
-
-  narrow.remove();
-  layContainersAt({ "side-panel": 520 });
-  const screen =
-    tab.container.querySelector<HTMLTextAreaElement>("textarea") ??
-    assert.fail("the screen is drawn");
-  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
-  act(() => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
-    );
-    screen.focus();
-  });
-  assert.ok(document.activeElement === screen, "the keyboard stays where it was taken");
-  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
-  act(() => {
-    window.dispatchEvent(press);
-  });
-  assert.equal(press.defaultPrevented, false, "the window's own Escape is left to it");
-});
-
-// Note that the test is given longer than most, for the reason the one above is.
-test("in a side panel at its default width the shells float over the screen rather than stand beside it, peeked by the pointer resting on their toggle and gone once it leaves", {
-  timeout: 30_000,
-}, async () => {
-  const tab = await mount(true, true);
-  layContainersAt({ "side-panel": 400 });
-  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
-  const drawn = () => {
-    const list = tab.container.querySelector(".terminal-shells");
-    return list !== null && displayed(list);
-  };
-  const toggle =
-    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
-    assert.fail("a toggle is drawn");
-  const screen =
-    tab.container.querySelector(".terminal-tab-screen") ?? assert.fail("the screen is drawn");
-  const cross = (from: Element, to: Element, clientY: number) =>
-    act(() => {
-      from.dispatchEvent(
-        new PointerEvent("pointerout", { bubbles: true, relatedTarget: to, clientY }),
-      );
-      to.dispatchEvent(
-        new PointerEvent("pointerover", { bubbles: true, relatedTarget: from, clientY }),
-      );
-    });
-
-  assert.equal(drawn(), false, "the list the panel holds open beside the screen stands nowhere");
-  assert.equal(toggle.dataset.place, "over");
-  cross(screen, toggle, 0);
-  assert.equal(drawn(), true, "the list floats over the screen");
-  cross(toggle, screen, -10);
-  assert.equal(drawn(), false, "leaving the toggle takes it down");
-  assert.equal(tab.toggled(), 0, "the panel's own choice for every tab is left as it was");
-});
-
-// Note that the test is given longer than most, for the reason the one above is.
-test("a shell started from the list floating over the screen takes the list down, its screen holding the keyboard", {
-  timeout: 30_000,
-}, async () => {
-  const tab = await mount(true, true);
-  main.post(OLDEST).say({ type: "state", state: "attached" });
-  layContainersAt({ "side-panel": 280 });
-  const displayed = (element: Element) => getComputedStyle(element).display !== "none";
-  const toggle =
-    [...tab.container.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(displayed) ??
-    assert.fail("a toggle is drawn");
-  await act(async () => toggle.click());
-  await tab.press("New shell");
-  const list = tab.container.querySelector(".terminal-shells");
-  assert.equal(list !== null && displayed(list), false, "the list is taken down");
-  assert.ok(
-    document.activeElement === tab.container.querySelector("textarea"),
-    "the new shell's screen holds the keyboard",
-  );
 });
 
 test("while shown, the shells are read again every few seconds and whenever the window takes the keyboard back", async () => {

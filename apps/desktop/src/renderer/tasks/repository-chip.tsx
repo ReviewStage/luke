@@ -4,6 +4,7 @@ import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { GearIcon, ProviderMark } from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
@@ -12,25 +13,24 @@ import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row";
 import { Spinner } from "../spinner";
-import { useDisclosure } from "../use-disclosure";
 
 /**
- * repository-chip.tsx -- the chip that names a plan's GitHub repository, and the menu that picks one.
+ * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
  *
- * Drawn along the composer card's foot for a plan about to start, the way a
+ * Drawn along the composer card's foot for a task about to start, the way a
  * branch or model chip is: the owner's picture and `owner/name`, or the
- * GitHub mark and the pick it is waiting on. In the open plan's toolbar it stands in the actions row,
- * reading `Choose repository` while the plan has none; once the plan names
+ * GitHub mark and the pick it is waiting on. In the open task's toolbar it stands in the actions row,
+ * reading `Choose repository` while the task has none; once the task names
  * one, the sidebar's row says which and the toolbar draws no chip, and the
- * menu alone is left, opened by the plan menu's Change repository and
+ * menu alone is left, opened by the task menu's Change repository and
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
  * repository the GitHub connected to the workspace reaches, the
- * repositories the account's plans were about lately first and the rest as
+ * repositories the account's tasks were about lately first and the rest as
  * GitHub last saw them change, each under its owner's picture. Nothing the
- * workspace's GitHub does not reach is offered, so a plan never starts on
+ * workspace's GitHub does not reach is offered, so a task never starts on
  * a repository its workspace cannot work in; a pick the read finds out of
  * reach is handed back, and with nothing to offer the chip reads No
- * repository, which a plan can start with. With no
+ * repository, which a task can start with. With no
  * GitHub connected to the workspace, or one GitHub removed or suspended,
  * the menu says which in the list's place: an owner or an admin is offered
  * Open Settings at the workspace's GitHub repositories, the one place they
@@ -43,9 +43,9 @@ import { useDisclosure } from "../use-disclosure";
  * there, so it closes the menu and not the panel behind it.
  */
 
-/** What the chip's menu offers, read from the account's plans and the service. */
+/** What the chip's menu offers, read from the account's tasks and the service. */
 export interface RepositoryChooser {
-  /** The repositories the account's plans were about lately, the newest first, each once. */
+  /** The repositories the account's tasks were about lately, the newest first, each once. */
   recent: readonly string[];
   /** Reads the repositories the account reaches now, as the service answers them. */
   read: () => Promise<TasksRepositoriesAnswer>;
@@ -214,14 +214,14 @@ export function RepositoryChip(props: {
     return () => window.removeEventListener("focus", read);
   }, [read]);
 
-  // Each ask from elsewhere, such as the plan menu's Change repository, opens the menu.
+  // Each ask from elsewhere, such as the task menu's Change repository, opens the menu.
   useEffect(() => {
     if (openRequest === undefined || openRequest === 0) return;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setOpen(true);
   }, [openRequest]);
 
-  // Note that we hand focus back to where it came from, the chip or the plan
+  // Note that we hand focus back to where it came from, the chip or the task
   // menu's button, as a native menu returns it to its trigger, because
   // closing takes the focused field away with it.
   const close = () => {
@@ -250,7 +250,7 @@ export function RepositoryChip(props: {
     opener.current = trigger.current;
     setOpen(!open);
   };
-  // The toolbar's chip is drawn only while the plan has no repository; the sidebar names one it has.
+  // The toolbar's chip is drawn only while the task has no repository; the sidebar names one it has.
   const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
 
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);

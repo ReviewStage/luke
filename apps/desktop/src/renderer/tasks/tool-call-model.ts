@@ -1,4 +1,5 @@
 import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
@@ -546,7 +547,7 @@ function knownToolView(
   }
 }
 
-/** A repository command's answer as the planning model's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
+/** A repository command's answer as the brain's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
 function repositoryOutput(output: WireValue): ToolBlock {
   const reason = stringAt(output, "reason");
   if (stringAt(output, "status") === "not-run" && reason !== undefined) return textBlock(reason);
@@ -561,7 +562,7 @@ function shownLines(input: WireValue | undefined): string {
   return fileRefText({ path, startLine, endLine });
 }
 
-/** A planning call whose input is one field the row names it by, its answer as its JSON. */
+/** A brain call whose input is one field the row names it by, its answer as its JSON. */
 function namedCall(
   kind: CallKind,
   input: WireValue | undefined,
@@ -596,8 +597,8 @@ function stoppedTask(input: WireValue | undefined, jobs: WorkerJobs | undefined)
 }
 
 /**
- * A call of one of the planning model's own tools, or one eve gives a
- * planning session, drawn from its part as a coding agent's call is: its
+ * A call of one of the brain's own tools, or one eve gives a
+ * brain session, drawn from its part as a coding agent's call is: its
  * kind and the one input a reader looks for first. A look at the board
  * answers with an image of it, which is nothing to read, so it shows none;
  * a look at one of the plan's pictures is kept as whether it looked alone,
@@ -722,20 +723,25 @@ export function toolCallView(input: {
   );
 }
 
+/** The tools a member talks in chat with, by name. */
+type ChatTool = (typeof CHAT_TOOL)[keyof typeof CHAT_TOOL];
+
 /** What a call's row may open: something the window already draws in a tab of its own. */
 export const TOOL_TARGET = {
-  /** A coding agent's tab in the plan's column. */
+  /** A coding agent's tab in the task's column. */
   AGENT: "agent",
   /** A page's tab in the side panel. */
   PAGE: "page",
   /** The side panel's Board tab. */
   BOARD: "board",
-  /** The plan's own tab, its document. */
+  /** The task's own tab, its document. */
   PLAN: "plan",
   /** The File tab of a file Luke showed, its lines lit as the call showed them. */
   SHOWN_CODE: "shown-code",
-  /** The plan's Inbox tab. */
+  /** The task's Inbox tab. */
   INBOX: "inbox",
+  /** The plan's Chat tab, its channel of the workspace's chat. */
+  CHAT: "chat",
 } as const;
 
 export type ToolTarget =
@@ -744,7 +750,8 @@ export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
   | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
-  | { readonly kind: typeof TOOL_TARGET.INBOX };
+  | { readonly kind: typeof TOOL_TARGET.INBOX }
+  | { readonly kind: typeof TOOL_TARGET.CHAT };
 
 /** What the hover over a row says it opens, by its target's kind. */
 export const TARGET_HINT = {
@@ -754,6 +761,7 @@ export const TARGET_HINT = {
   [TOOL_TARGET.PLAN]: "Open the plan",
   [TOOL_TARGET.SHOWN_CODE]: "Open the file",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
+  [TOOL_TARGET.CHAT]: "Open the plan's chat",
 } as const satisfies Record<ToolTarget["kind"], string>;
 
 /** A call as its target is read from it: the tool, the call's id, and its input and answer. */
@@ -767,6 +775,19 @@ interface TargetedCall {
 const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
+const CHAT_TARGET: ToolTarget = { kind: TOOL_TARGET.CHAT };
+
+/**
+ * A post into the poster's plan channel, where its plan's Chat tab shows it:
+ * one naming neither a `to` nor a message it replies to. Note that a post
+ * elsewhere, a read, and a resolve open nothing and fold open instead,
+ * because the channel each reaches is named in words the window cannot
+ * place on a channel, or not named at all.
+ */
+function plansOwnPost(call: TargetedCall): ToolTarget | undefined {
+  if (!isRecord(call.input) || "to" in call.input || "replyTo" in call.input) return undefined;
+  return CHAT_TARGET;
+}
 
 /** The agent a call names in its input, as a read of or a message to one does. */
 function namedAgent(call: TargetedCall): ToolTarget | undefined {
@@ -826,13 +847,14 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * worker's own delegation and a loaded skill open their tabs through their
  * own rows (`DelegationRow`, `LoadedSkillView`), and a command, a search, or
  * a file's read, write, or patch, or a web read is read in its row's body,
- * so none is listed. Note that a coding agent's file calls stay in their
+ * so none is listed. A chat tool's call opens the plan's Chat tab, where
+ * what it posted or read stands. Note that a coding agent's file calls stay in their
  * bodies, because a File tab and the Changes tab read the repository and
  * the pull request on GitHub rather than the agent's checkout, so what the
  * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
-  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
+  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL] | ChatTool,
   (call: TargetedCall) => ToolTarget | undefined
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
@@ -852,6 +874,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
   [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
+  [CHAT_TOOL.POST, plansOwnPost],
 ]);
 
 /**
@@ -913,7 +936,7 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   return model === undefined ? { id, title } : { id, title, model };
 }
 
-/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the planning model's worker is handed in the task's place. */
+/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the brain's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
   MESSAGE: "message",

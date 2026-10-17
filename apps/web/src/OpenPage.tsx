@@ -1,6 +1,6 @@
 import { LINK_PLACE, type LinkPlaceKind } from "@luke/features/luke-link";
 import { openTargetOf } from "@luke/features/open-address";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { AuthPage, BUTTON_VARIANT, ButtonLink } from "@luke/ui";
 import { useState } from "react";
 import { LukeMark } from "./SiteChrome";
 
@@ -58,56 +58,63 @@ const TITLE = {
   [LINK_PLACE.FACTORY]: "Open Factory in Luke",
   [LINK_PLACE.SETTINGS]: "Open these settings in Luke",
   [LINK_PLACE.PERSON]: "Open this profile in Luke",
+  [LINK_PLACE.ISSUE]: "Open this issue in Luke",
 } as const satisfies Record<LinkPlaceKind, string>;
 
 /** The landing page, on whichever host served this one. */
 const LANDING_URL = "/";
 
-const OPEN_BUTTON =
-  "mt-6 flex min-h-[46px] items-center justify-center rounded-md bg-foreground px-5 font-semibold text-background transition-transform duration-150 hover:-translate-y-px motion-reduce:transition-none";
-
 const QUIET_LINK = "underline underline-offset-2";
 
-/** The page's address read as a link: a press opens what it names in the app, and a moment later says what to check where nothing did. */
+/**
+ * The page's address read as a link: a press opens what it names in the app, and a moment later says what to check where nothing did.
+ *
+ * One AuthPage card under Luke's mark: the title names the kind of thing the
+ * link opens, and the card's body holds the press, the way to Luke, and the
+ * line that follows a press, centred as the card's words are.
+ */
 export function OpenPage(): React.JSX.Element {
   const [target] = useState(() => openTargetOf(window.location.pathname, window.location.hash));
   const [pressed, setPressed] = useState(false);
   return (
-    <main className={AUTH_SHELL}>
-      <section className={AUTH_CARD} aria-labelledby="open-title">
-        <div className="inline-flex w-13" aria-hidden="true">
+    <AuthPage
+      mark={
+        <span className="inline-flex w-13">
           <LukeMark className="h-auto w-full" />
-        </div>
-        <h1 id="open-title" className={AUTH_TITLE}>
-          {target === undefined ? WORDS.NOT_A_LINK : TITLE[target.kind]}
-        </h1>
-        {target === undefined ? null : (
-          <a className={OPEN_BUTTON} href={target.appLink} onClick={() => setPressed(true)}>
-            {WORDS.OPEN}
-          </a>
-        )}
-        <p className="mt-4 mb-0 text-muted-foreground">
-          {WORDS.NO_APP}{" "}
-          <a className={QUIET_LINK} href={LANDING_URL}>
-            {WORDS.GET}
-          </a>
-        </p>
-        {/* Note that the line's room stands from the first paint, two lines where the card is narrow enough to wrap it, because a card growing under a press would move the button from under the pointer. */}
-        <p
-          className="mt-3 mb-0 min-h-10 text-muted-foreground text-sm min-[480px]:min-h-5"
-          role="status"
+        </span>
+      }
+      title={target === undefined ? WORDS.NOT_A_LINK : TITLE[target.kind]}
+    >
+      {target === undefined ? null : (
+        <ButtonLink
+          variant={BUTTON_VARIANT.PRIMARY}
+          href={target.appLink}
+          onClick={() => setPressed(true)}
         >
-          {pressed ? (
-            <span className="animate-arrive-late">
-              {WORDS.DID_NOT_OPEN}{" "}
-              <a className={QUIET_LINK} href={LANDING_URL}>
-                {WORDS.INSTALLED}
-              </a>
-              .
-            </span>
-          ) : null}
-        </p>
-      </section>
-    </main>
+          {WORDS.OPEN}
+        </ButtonLink>
+      )}
+      <p className="m-0 text-center text-muted-foreground">
+        {WORDS.NO_APP}{" "}
+        <a className={QUIET_LINK} href={LANDING_URL}>
+          {WORDS.GET}
+        </a>
+      </p>
+      {/* Note that the line's room stands from the first paint, two lines where the card is narrow enough to wrap it, because a card growing under a press would move the button from under the pointer. */}
+      <p
+        className="m-0 min-h-10 text-center text-muted-foreground text-sm min-[480px]:min-h-5"
+        role="status"
+      >
+        {pressed ? (
+          <span className="animate-arrive-late">
+            {WORDS.DID_NOT_OPEN}{" "}
+            <a className={QUIET_LINK} href={LANDING_URL}>
+              {WORDS.INSTALLED}
+            </a>
+            .
+          </span>
+        ) : null}
+      </p>
+    </AuthPage>
   );
 }

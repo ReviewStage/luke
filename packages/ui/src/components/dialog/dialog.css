@@ -1,0 +1,70 @@
+/* dialog.css -- the dimmed window and the card over it. Over the menu and
+   the window's drag strip alike, so it claims its own presses back from the
+   frame. Its motion is spent from the motion tokens, which reduced motion
+   and a capture run already hold still. The card is never taller than the
+   window less its margins: what it holds is what gives way and scrolls. */
+
+@layer components {
+  .luke-dialog-backdrop {
+    box-sizing: border-box;
+    position: fixed;
+    z-index: var(--z-dialog, 30);
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: var(--luke-space-24);
+    background: var(--luke-color-scrim);
+    animation: luke-dialog-fade var(--duration-quick, 0s) ease-out;
+    -webkit-app-region: no-drag;
+  }
+
+  .luke-dialog {
+    box-sizing: border-box;
+    display: flex;
+    width: min(var(--luke-dialog-confirm-width), 100%);
+    max-height: calc(100vh - 2 * var(--luke-space-24));
+    flex-direction: column;
+    gap: var(--luke-space-8);
+    padding: var(--luke-dialog-inset);
+    border: 1px solid var(--luke-color-border-strong);
+    border-radius: var(--luke-dialog-radius);
+    background: var(--luke-color-overlay);
+    box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+    color: var(--luke-color-text);
+    font-size: var(--luke-type-body-size);
+    animation:
+      luke-dialog-fade var(--duration-quick, 0s) var(--motion-exit, ease-out),
+      luke-dialog-rise var(--duration-fast, 0s) var(--spring-fast, ease-out);
+    transition: box-shadow var(--duration-hover) ease;
+  }
+
+  /* A note being written wraps, so its card stands wider, its parts a
+     little further apart. */
+  .luke-dialog[data-size="wide"] {
+    width: min(var(--luke-dialog-wide-width), 100%);
+    gap: var(--luke-space-12);
+  }
+
+  /* A drag the dimmed window would take rings the card that will take it. */
+  .luke-dialog[data-dropping="true"] {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--luke-color-accent) 70%, transparent),
+      0 24px 64px var(--luke-color-shadow-deep);
+  }
+
+  .luke-dialog:focus {
+    outline: none; /* no ring: a dialog holding focus for its controls */
+  }
+
+  @keyframes luke-dialog-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-dialog-rise {
+    from {
+      transform: scale(0.96);
+    }
+  }
+}

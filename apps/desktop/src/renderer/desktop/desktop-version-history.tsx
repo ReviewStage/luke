@@ -5,21 +5,20 @@ import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { BackIcon, EllipsisIcon } from "@luke/ui";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import type { DialogConfirm } from "@luke/ui";
+import { BackIcon, EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
-import type { DialogConfirm } from "../settings/confirm-dialog";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
@@ -51,14 +50,14 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
 /**
  * desktop-version-history.tsx -- a plan's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.
  *
- * The left column is as wide as the plans' sidebar and resizes it from its
+ * The left column is as wide as the tasks' sidebar and resizes it from its
  * own edge, never folding, as Settings' page list does. At its head stand
  * back and forward and the Back row, which Escape presses too, then the
  * view's title, then the versions, newest first: who wrote each, drawn as
@@ -74,7 +73,7 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * arrows, draws that version beside the list (`version-view.tsx`), and older
  * versions are read a page at a time from the list's foot. A row's ⋯, which
  * stands in its time's place while the row is hovered or holds the
- * keyboard as a sidebar plan's Pin and Archive do, and its right-click offer
+ * keyboard as a sidebar task's Pin and Archive do, and its right-click offer
  * what applies to its version: Show changes, its Open, and its Restore. Show
  * changes, or the right arrow, slides the column one level over, as a nested
  * page of System Settings does, the title going with the list: All versions
@@ -88,13 +87,13 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * own shapes (`skeleton.tsx`).
  *
  * The view is one place in the window's history however many versions are
- * chosen in it, so Back returns to wherever it was opened from, the plan as
- * it was left, side panel and all; a restore that lands leaves for the plan
+ * chosen in it, so Back returns to wherever it was opened from, the task as
+ * it was left, side panel and all; a restore that lands leaves for the task
  * it restored, where the window's toast offers its Undo. Every row and the version beside them name what
  * the plan held, so both are left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  *
- * What the history is of is handed in as its subject: the open plan's
+ * What the history is of is handed in as its subject: the open task's
  * (`taskVersionSubject`), or the account's plan template's, whose versions
  * are the developer's alone (`../settings/plan-template-history.tsx`).
  */
@@ -109,7 +108,7 @@ export interface VersionSubject {
   /** What the versions are of, in the view's own words: "plan", or "template". */
   readonly noun: string;
   readonly title: string | undefined;
-  /** Whether a version may be restored: not an archived plan's. */
+  /** Whether a version may be restored: not an archived task's. */
   readonly restorable: boolean;
   /** Whether the view is on screen, which the restore's question stands on. */
   readonly shown: boolean;
@@ -119,11 +118,11 @@ export interface VersionSubject {
   readonly summary: (line: PlanRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
-  /** Whether every person's revision is the reader's own, as the account's template's are; a plan's are its members'. */
+  /** Whether every person's revision is the reader's own, as the account's template's are; a task's are its members'. */
   readonly own: boolean;
   /** The workspace whose members wrote the revisions, whose pictures their rows wear; none for the account's own template. */
   readonly workspace: Pick<Workspace, "id" | "memberCount"> | undefined;
-  /** The plan the versions are of, which their mentions are read against; none for the account's own template. */
+  /** The task the versions are of, which their mentions are read against; none for the account's own template. */
   readonly task?: MentionedTask | undefined;
 }
 
@@ -192,7 +191,7 @@ function RevisionRow({
   onOpenSections: (() => void) | undefined;
   /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
-  /** Chooses the version and asks to restore it; none for the plan as it stands, or an archived plan's. */
+  /** Chooses the version and asks to restore it; none for the plan as it stands, or an archived task's. */
   onRestore: (() => void) | undefined;
   /** Copies the version's link; none for a history with no link of its own. */
   onCopyLink: (() => void) | undefined;
@@ -200,7 +199,7 @@ function RevisionRow({
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const groups = [
     [
@@ -329,7 +328,7 @@ function SectionRow({
   source: SourceDoor | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   return (
     <li>
       <button
@@ -561,11 +560,9 @@ function VersionPage({
       <div className="desktop-drag-strip" />
       <div className="desktop-empty">
         {list.kind === HISTORY_READ.FAILED ? (
-          <ReadFailure
-            line="The history could not be read."
-            onRetry={versions.onRetry}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
+          <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            The history could not be read.
+          </ErrorState>
         ) : (
           <p>{NO_HISTORY_LINE}</p>
         )}
@@ -581,7 +578,7 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
   const workspace = tasks.workspaces.find((each) => each.id === task?.workspaceId);
   return {
     workspace,
-    // A version's mentions are read against the plan as it stands, as its page reads them.
+    // A version's mentions are read against the task as it stands, as its page reads them.
     task:
       task === undefined
         ? undefined
@@ -646,7 +643,7 @@ export function DesktopVersionHistory({
   const linked = subject.task;
   const former = useFormerMembers(subject.workspace);
   const reader = readerOf(account, members, former);
-  // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
+  // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, subject.shown, restorable, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {

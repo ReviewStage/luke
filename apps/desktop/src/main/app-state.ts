@@ -4,6 +4,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppState } from "@luke/host/app-state";
 import type { HostBootstrap } from "@luke/host/host-operator";
 import { idleUpdateSnapshot } from "@luke/host/update-service";
+import type { HostCapability } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -115,8 +116,8 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
 
 /**
  * The document as the hidden voice window and the call window are sent it: the
- * whole of it but the planning turns' work, as the plan's work page projects
- * it and as its planning conversation reads it. Note that both are kept from
+ * whole of it but the task turns' work, as the task's work page projects
+ * it and as its task conversation reads it. Note that both are kept from
  * those windows because they draw neither, and both carry the output of
  * commands run in the developer's repository and on the developer's Mac,
  * which nothing there needs.
@@ -145,7 +146,8 @@ export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {
 }
 
 /**
- * The document as a launch begins it: this process's own facts, and an empty
+ * The document as a launch begins it: this process's own facts, what the
+ * platform offers, and an empty
  * standing for everything the host has not answered yet. Nothing here reads
  * a device or the host — the first bootstrap and the events after it are
  * what fill the rest in.
@@ -156,6 +158,7 @@ export function initialAppState(
     "launch" | "runMode" | "appVersion" | "commit" | "packaged" | "platform"
   >,
   installSupported: boolean,
+  capabilities: readonly HostCapability[],
 ): Omit<AppState, "version"> {
   const { launch, runMode } = config;
   return {
@@ -163,6 +166,7 @@ export function initialAppState(
       profile: launch.profile,
       packaged: config.packaged,
       platform: config.platform,
+      capabilities,
       appVersion: config.appVersion,
       ...(config.commit ? { commit: config.commit } : undefined),
       captureMode: launch.captureMode,

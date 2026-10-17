@@ -3,13 +3,20 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE, type IssueListView } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMember,
+} from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
@@ -19,7 +26,7 @@ import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
 
 /**
- * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, and a read that did not land said with a retry.
+ * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed, and a read that did not land said with a retry.
  *
  * The service is a script at the act boundary; synthetic issues and words throughout.
  */
@@ -30,6 +37,28 @@ const WORKSPACE: Workspace = {
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+/** The moment the window's clock stands at in a test that reads how long ago something was. */
+const NOW = Date.UTC(2026, 9, 14, 12);
+
+/** The signed-in reader's account. */
+const READER = "user-grace";
+
+/** The workspace's members, as their read answers them. */
+const MEMBERS: readonly WorkspaceMember[] = [
+  {
+    userId: "user-ada",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+    pictureUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+  },
+  { userId: READER, name: "Grace Hopper", email: "grace@example.com", role: WORKSPACE_ROLE.OWNER },
+];
 
 function issue(number: number, patch: Partial<Issue> = {}): Issue {
   return {
@@ -73,9 +102,12 @@ let heldChanges: (() => void)[] | undefined;
 let heldCreates: (() => void)[] | undefined;
 /** Whether a change is refused. */
 let changeRefused = false;
+/** Every text copied, in order. */
+let copied: string[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
+  window.localStorage.clear();
   standing = [];
   lists = [];
   listed = [];
@@ -88,82 +120,86 @@ beforeEach(() => {
   heldChanges = undefined;
   heldCreates = undefined;
   changeRefused = false;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.ISSUES_LIST) {
-          listed.push(request.payload.workspaceId);
-          const value = lists.shift() ?? {
-            issues: standing.filter((each) => each.archivedAt === null),
-          };
+  copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.ISSUES_LIST) {
+        listed.push(request.payload.workspaceId);
+        const value = lists.shift() ?? {
+          issues: standing.filter((each) => each.archivedAt === null),
+        };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.ISSUES_CREATE) {
+        creates.push(request.payload);
+        if (createRefused) {
+          const value = { failure: ISSUE_CALL_FAILURE.INVALID };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
-        if (request.kind === ACT_KIND.ISSUES_CREATE) {
-          creates.push(request.payload);
-          if (createRefused) {
-            const value = { failure: ISSUE_CALL_FAILURE.INVALID };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-          }
-          const { title, status, priority } = request.payload;
-          const made = issue(standing.length + 1, {
-            title,
-            updatedAt: 1_000,
-            ...(status === undefined ? undefined : { status }),
-            ...(priority === undefined ? undefined : { priority }),
-          });
-          standing = [made, ...standing];
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
-          const held = heldCreates;
-          if (held === undefined) return Promise.resolve(done);
-          return new Promise((resolve) => held.push(() => resolve(done)));
-        }
-        if (request.kind === ACT_KIND.ISSUES_READ) {
-          reads.push(request.payload.issueId);
-          const found = standing.find((each) => each.id === request.payload.issueId);
-          const value =
-            found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.ISSUES_CHANGE) {
-          changes.push(request.payload);
-          const { issueId, change } = request.payload;
-          const was = standing.find((each) => each.id === issueId);
-          if (changeRefused) {
-            const refused = {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
-            };
-            const held = heldChanges;
-            if (held === undefined) return Promise.resolve(refused);
-            return new Promise((resolve) => held.push(() => resolve(refused)));
-          }
-          if (was === undefined) {
-            const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-          }
-          const { archived, ...fields } = change;
-          const changed: Issue = {
-            ...was,
-            ...fields,
-            archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
-            updatedAt: was.updatedAt + 1,
+        const { title, status, priority } = request.payload;
+        const made = issue(standing.length + 1, {
+          title,
+          updatedAt: 1_000,
+          ...(status === undefined ? undefined : { status }),
+          ...(priority === undefined ? undefined : { priority }),
+        });
+        standing = [made, ...standing];
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
+        const held = heldCreates;
+        if (held === undefined) return Promise.resolve(done);
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+      }
+      if (request.kind === ACT_KIND.ISSUES_READ) {
+        reads.push(request.payload.issueId);
+        const found = standing.find((each) => each.id === request.payload.issueId);
+        const value =
+          found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.ISSUES_CHANGE) {
+        changes.push(request.payload);
+        const { issueId, change } = request.payload;
+        const was = standing.find((each) => each.id === issueId);
+        if (changeRefused) {
+          const refused = {
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
           };
-          standing = standing.map((each) => (each.id === issueId ? changed : each));
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
           const held = heldChanges;
-          if (held === undefined) return Promise.resolve(done);
-          return new Promise((resolve) => held.push(() => resolve(done)));
+          if (held === undefined) return Promise.resolve(refused);
+          return new Promise((resolve) => held.push(() => resolve(refused)));
         }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        if (was === undefined) {
+          const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        const { archived, ...fields } = change;
+        const changed: Issue = {
+          ...was,
+          ...fields,
+          archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
+          updatedAt: was.updatedAt + 1,
+        };
+        standing = standing.map((each) => (each.id === issueId ? changed : each));
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
+        const held = heldChanges;
+        if (held === undefined) return Promise.resolve(done);
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   act(() => root?.unmount());
   root = undefined;
@@ -179,12 +215,19 @@ function Keymap(): null {
   return null;
 }
 
-/** The Issues pages over the workspace given, standing on the page each press opens. */
-function Pages({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  const [place, setPlace] = useState<IssuesPlace>({ kind: ISSUES_PAGE.LIST });
+/** The Issues pages over the workspace given, opened on `start`, standing on the page each press opens. */
+function Pages({
+  workspace,
+  start = { kind: ISSUES_PAGE.LIST },
+}: {
+  workspace: Workspace;
+  start?: IssuesPlace | undefined;
+}): React.JSX.Element {
+  const [place, setPlace] = useState<IssuesPlace>(start);
   const control = tasksControl({ workspace });
   const plans = tasksControl({
     workspace,
+    me: READER,
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -205,19 +248,19 @@ function Pages({ workspace }: { workspace: Workspace }): React.JSX.Element {
   );
 }
 
-/** The Issues page, standing in the plan's place over the workspace listed. */
-function mount(): HTMLElement {
+/** The Issues page, standing in the plan's place over the workspace listed, opened on `start` as a link opens it. */
+function mount(start?: IssuesPlace): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   registry = AtomRegistry.make();
-  list(WORKSPACE);
+  list(WORKSPACE, start);
   return container;
 }
 
 /** The pages drawn again in place, listing the workspace given. */
-function list(workspace: Workspace): void {
-  act(() => root?.render(onRegistry(registry, createElement(Pages, { workspace }))));
+function list(workspace: Workspace, start?: IssuesPlace): void {
+  act(() => root?.render(onRegistry(registry, createElement(Pages, { workspace, start }))));
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -231,7 +274,7 @@ async function settle(): Promise<void> {
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll(".home-section, [data-issue-column]")]
     .map((group): [string, string[]] => [
-      group.querySelector(".home-section-title, .factory-head")?.textContent ?? "",
+      group.querySelector("h2")?.textContent ?? "",
       [...group.querySelectorAll(".sidebar-task-item")].map(
         (row) =>
           `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
@@ -243,7 +286,7 @@ function groups(page: HTMLElement): [string, string[]][] {
 /** The board's columns, each its heading and its cards' identifiers, left to right. */
 function columns(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll("[data-issue-column]")].map((column) => [
-    column.querySelector(".factory-head")?.textContent ?? "",
+    column.querySelector("h2")?.textContent ?? "",
     [...column.querySelectorAll(".issue-row-identifier")].map((id) => id.textContent ?? ""),
   ]);
 }
@@ -268,6 +311,11 @@ async function openIssue(issueId: string): Promise<HTMLElement> {
 /** The issue's title as its page draws it. */
 function titleOf(page: HTMLElement): string | undefined {
   return page.querySelector("[aria-label='Issue title']")?.textContent ?? undefined;
+}
+
+/** What the line under the issue's title says, a phrase at a time, each face left out. */
+function bylineOf(page: HTMLElement): (string | undefined)[] {
+  return [...page.querySelectorAll(".issue-byline .actor-line")].map(lineWords);
 }
 
 /** The button whose words or name are `name`, wherever it is drawn. */
@@ -389,10 +437,11 @@ test("the listed workspace's issues stand under a heading for each status, the w
   ];
   const page = mount();
   await settle();
+  showList();
 
   assert.deepEqual(listed, [WORKSPACE.id]);
   assert.deepEqual(groups(page), [
-    ["In Progress1", ["ACME-3 Fix login"]],
+    ["In progress1", ["ACME-3 Fix login"]],
     ["Backlog2", ["ACME-4 Issue 4", "ACME-2 Issue 2"]],
     ["Done1", ["ACME-1 Issue 1"]],
   ]);
@@ -484,7 +533,10 @@ test("C pressed on the page opens the card, and a c typed into the card's title,
 });
 
 test("↓ and Return open the issue reached, read on its own page; Escape comes back to the list with its row holding the keyboard, and Escape again closes the page", async () => {
-  standing = [issue(1), issue(2, { status: ISSUE_STATUS.IN_PROGRESS, title: "Fix login" })];
+  standing = [
+    issue(1, { status: ISSUE_STATUS.DONE }),
+    issue(2, { status: ISSUE_STATUS.IN_PROGRESS, title: "Fix login" }),
+  ];
   const page = mount();
   await settle();
 
@@ -498,7 +550,7 @@ test("↓ and Return open the issue reached, read on its own page; Escape comes 
 
   assert.deepEqual(reads, [issue(2).id]);
   assert.equal(titleOf(page), "Fix login");
-  assert.equal(picked(page, "Status"), "In Progress");
+  assert.equal(picked(page, "Status"), "In progress");
 
   act(() => {
     runAppCommand(APP_COMMAND.EXIT_ISSUES);
@@ -585,15 +637,46 @@ test("Escape in the title puts back the title it opened on, sends nothing, and l
   assert.equal(closed, 0);
 });
 
-test("the list stands in the window's own frame: the Automations page's view and scroll, Home's sections and rows", async () => {
-  standing = [issue(1)];
-  const page = mount();
-  await settle();
-  showList();
+test("under the title an issue's page says who filed it, by their face as the members read them, and when it was filed and last changed, a task's own words", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  const filed = issue(1, {
+    creator: { userId: "user-ada", name: "Ada Lovelace" },
+    createdAt: NOW - 3 * DAY - HOUR,
+    updatedAt: NOW - 2 * HOUR - MINUTE,
+  });
+  standing = [filed];
+  const page = await openIssue(filed.id);
 
-  assert.ok(page.querySelector("section.automations-view > .automations-scroll .home-column"));
-  assert.ok(page.querySelector(".home-section > h2.home-section-title > .home-section-count"));
-  assert.ok(page.querySelector(".home-section > ul.sidebar-tasks > li.sidebar-task-item.home-row"));
+  assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
+  const picture = page.querySelector<HTMLImageElement>(".issue-byline img.actor-picture");
+  assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
+});
+
+test("an issue the reader filed names them as you", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  const filed = issue(1, {
+    creator: { userId: READER, name: "Grace Hopper" },
+    createdAt: NOW - 2 * DAY - HOUR,
+    updatedAt: NOW - 2 * DAY - HOUR,
+  });
+  standing = [filed];
+  const page = await openIssue(filed.id);
+
+  assert.deepEqual(bylineOf(page), ["Created by you · 2d ago"]);
+});
+
+test("an issue whose creator is gone and unchanged since it was filed says only when it was created, until a change lands", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  const filedAt = NOW - 5 * HOUR - MINUTE;
+  const filed = issue(1, { creator: null, createdAt: filedAt, updatedAt: filedAt });
+  standing = [filed];
+  const page = await openIssue(filed.id);
+
+  assert.deepEqual(bylineOf(page), ["Created · 5h ago"]);
+  pick(page, "Status", "Todo");
+  await settle();
+
+  assert.deepEqual(bylineOf(page), ["Created · 5h ago", "Last edited · 5h ago"]);
 });
 
 test("Archive asks first, then sends the archive and goes back to a list without the issue", async () => {
@@ -608,6 +691,17 @@ test("Archive asks first, then sends the archive and goes back to a list without
 
   assert.deepEqual(changes, [{ issueId: issue(1).id, change: { archived: true } }]);
   assert.deepEqual(groups(page), [["Backlog1", ["ACME-2 Issue 2"]]]);
+});
+
+test("an issue's ⋯ offers Copy link, copying its link under the listed workspace, and the issue's page stands", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = await openIssue(issue(1).id);
+
+  act(() => button("Issue actions").click());
+  await act(async () => menuItem("Copy link").click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/${WORKSPACE.id}/issue/${issue(1).id}`]);
+  assert.equal(titleOf(page), "Fix login");
 });
 
 test("a read that did not land is said with a retry, which asks again and draws the list", async () => {
@@ -651,6 +745,16 @@ test("an issue's page whose workspace is no longer the one listed says the issue
 
   assert.equal(page.querySelector("[aria-label='Issue title']"), null);
   assert.match(page.textContent ?? "", /not in this workspace/u);
+});
+
+test("an issue's page opened on an issue the service does not hand the reader, as a link to one opens it, says it is gone", async () => {
+  standing = [issue(1)];
+  const page = mount({ kind: ISSUES_PAGE.ISSUE, issueId: issue(9).id });
+  await settle();
+
+  assert.deepEqual(reads, [issue(9).id]);
+  assert.equal(page.querySelector("[aria-label='Issue title']"), null);
+  assert.match(page.textContent ?? "", /This issue is gone, or not in this workspace\./u);
 });
 
 test("two changes at once draw the newest's answer, though the older one is answered after it", async () => {
@@ -809,7 +913,7 @@ test("while a new issue is being filed its card's chips take no pick", async () 
   file("Flaky checkout test");
   await settle();
   const chips = [
-    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] .settings-picker-chip"),
+    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button[aria-haspopup=dialog]"),
   ];
   const lockedWhileOut = chips.length === 2 && chips.every((chip) => chip.disabled);
   act(() => held[0]?.());
@@ -838,7 +942,7 @@ test("a filing answered once another workspace is listed puts away no card of th
   assert.equal(composerField()?.value, "Meant for Initech");
 });
 
-test("the page opens as a board: a column for every status in the list's order, an empty one saying so, each counted and its cards sorted as the list sorts", async () => {
+test("the page opens as a board: a column for every status in the order work moves through them, an empty one saying so uncounted, each other counted and its cards sorted as the list sorts", async () => {
   standing = [
     issue(1, { status: ISSUE_STATUS.DONE }),
     issue(2, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.LOW }),
@@ -848,16 +952,13 @@ test("the page opens as a board: a column for every status in the list's order, 
   await settle();
 
   assert.deepEqual(columns(page), [
-    ["In Progress0", []],
+    ["Backlog", []],
     ["Todo2", ["ACME-3", "ACME-2"]],
-    ["Backlog0", []],
+    ["In progress", []],
     ["Done1", ["ACME-1"]],
-    ["Canceled0", []],
+    ["Canceled", []],
   ]);
-  assert.equal(
-    page.querySelector("[data-issue-column='in-progress'] .factory-idle")?.textContent,
-    "No issues",
-  );
+  assert.equal(page.querySelector("[data-issue-column='in-progress'] p")?.textContent, "No issues");
   assert.equal(page.querySelector(".home-section"), null, "no list stands beside the board");
 });
 
@@ -895,6 +996,73 @@ test("on the board ↓ and ↑ move down a column, ← and → to the nearest ca
   assert.ok(page.querySelector("[aria-label='Issue title']"));
 });
 
+/**
+ * The board laid out as a narrow window lays it: each column 300px wide,
+ * side by side from the scroller's start, in a scroller 700px wide that
+ * scrolls sideways. jsdom lays nothing out, so this answers the geometry the
+ * browser would. Answers each scroller's sideways scroll as it stands.
+ */
+function layBoardOut(): () => number {
+  const COLUMN = 300;
+  const scrolled = new WeakMap<Element, number>();
+  const scroller = () => document.querySelector(".issue-board-scroll");
+  vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (this: Element) {
+    return scrolled.get(this) ?? 0;
+  });
+  vi.spyOn(Element.prototype, "scrollLeft", "set").mockImplementation(function (
+    this: Element,
+    left: number,
+  ) {
+    scrolled.set(this, left);
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.matches(".issue-board-scroll") ? 700 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.matches("[data-issue-column]") ? COLUMN : 0;
+  });
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const columns = [...document.querySelectorAll("[data-issue-column]")];
+    const at = columns.indexOf(this);
+    const left = at < 0 ? 0 : at * COLUMN - (scrolled.get(scroller() ?? this) ?? 0);
+    return new DOMRect(left, 0, at < 0 ? 0 : COLUMN, 0);
+  });
+  return () => {
+    const board = scroller();
+    return board === null ? -1 : (scrolled.get(board) ?? 0);
+  };
+}
+
+test("on a board wider than the window, the column of the card reached stands whole in view, by an arrow and on the way back from its issue", async () => {
+  standing = [issue(1), issue(2, { status: ISSUE_STATUS.DONE })];
+  const page = mount();
+  await settle();
+  const scrolledTo = layBoardOut();
+
+  press("ArrowDown", window);
+  press("ArrowRight");
+  const byArrow = scrolledTo();
+  const card = document.activeElement;
+  assert.ok(card instanceof HTMLButtonElement);
+  act(() => card.click());
+  await settle();
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+
+  // Note that Done is the fourth column, so it ends at 1200px, 500px past the scroller's 700.
+  assert.equal(byArrow, 500);
+  assert.equal(
+    document.activeElement?.closest("[data-issue-id]")?.getAttribute("data-issue-id"),
+    issue(2).id,
+  );
+  assert.equal(scrolledTo(), 500, "the board drawn again brings the returned card's column in");
+  assert.ok(page.querySelector("[data-issue-column]"));
+});
+
 test("View options lays the page out as the list and back as the board, and an issue opened from either goes back to it", async () => {
   standing = [issue(1)];
   const page = mount();
@@ -918,18 +1086,46 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.equal(page.querySelector(".home-section"), null);
 });
 
+test("the page opens again in the layout last chosen, the list after List and the board after Board", async () => {
+  standing = [issue(1)];
+  mount();
+  await settle();
+  showList();
+  act(() => root?.unmount());
+
+  const reopened = mount();
+  await settle();
+  const listedAgain = reopened.querySelector(".home-section") !== null;
+  const boardAgain = reopened.querySelector("[data-issue-column]") !== null;
+  act(() => button("View options").click());
+  act(() => menuItem("Board").click());
+  act(() => root?.unmount());
+  const thirdTime = mount();
+  await settle();
+
+  assert.ok(listedAgain, "List chosen, the page opens as the list");
+  assert.equal(boardAgain, false);
+  assert.ok(thirdTime.querySelector("[data-issue-column]"), "Board chosen, it opens as the board");
+  assert.equal(thirdTime.querySelector(".home-section"), null);
+});
+
 test("a workspace with no issue yet still stands the board's columns, each saying it holds none", async () => {
   const page = mount();
   await settle();
 
   assert.deepEqual(columns(page), [
-    ["In Progress0", []],
-    ["Todo0", []],
-    ["Backlog0", []],
-    ["Done0", []],
-    ["Canceled0", []],
+    ["Backlog", []],
+    ["Todo", []],
+    ["In progress", []],
+    ["Done", []],
+    ["Canceled", []],
   ]);
-  assert.equal(page.querySelectorAll(".factory-idle").length, 5);
+  assert.equal(
+    [...page.querySelectorAll("[data-issue-column] p")].filter(
+      (idle) => idle.textContent === "No issues",
+    ).length,
+    5,
+  );
 });
 
 test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
@@ -943,4 +1139,207 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
 
   assert.ok(page.querySelector(".home-section"), "the list stands");
   assert.equal(document.activeElement?.closest("[data-issue-id]") ?? null, null);
+});
+
+test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
+  mount();
+  await settle();
+
+  act(() => button("New issue in Done").click());
+
+  assert.equal(document.activeElement, composerField(), "the title takes the keyboard");
+  assert.equal(picked(document.body, "Status"), "Done");
+  assert.equal(picked(document.body, "Priority"), "No priority");
+});
+
+test("Return on a card a column's + opened files the issue with that column's status, and it lands in that column", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.DONE })];
+  const page = mount();
+  await settle();
+
+  act(() => button("New issue in Done").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  typeInto(field, "Ship the changelog");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(creates, [
+    {
+      workspaceId: WORKSPACE.id,
+      title: "Ship the changelog",
+      status: ISSUE_STATUS.DONE,
+      priority: ISSUE_PRIORITY.NONE,
+    },
+  ]);
+  assert.equal(composerField(), null, "the card closes once the issue is kept");
+  assert.deepEqual(
+    columns(page).find(([head]) => head.startsWith("Done")),
+    ["Done2", ["ACME-2", "ACME-1"]],
+  );
+});
+
+test("the toolbar's New issue and C still open the card on Backlog", async () => {
+  mount();
+  await settle();
+
+  act(() => button("New issue").click());
+  const fromButton = picked(document.body, "Status");
+  press("Escape", composerField() ?? document.body);
+  await settle();
+  press("c", document.body);
+
+  assert.equal(fromButton, "Backlog");
+  assert.equal(picked(document.body, "Status"), "Backlog");
+});
+
+/** The button a card or row draws for the issue given. */
+function cardOf(page: HTMLElement, issueId: string): HTMLButtonElement {
+  const found = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issueId}"] > button`);
+  assert.ok(found, `no card for ${issueId}`);
+  return found;
+}
+
+/** A right-click on an element, at a point in the window, as the pointer makes one. */
+function rightClick(target: HTMLElement): void {
+  act(() => {
+    target.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }),
+    );
+  });
+}
+
+/** Opens the submenu named in the menu standing open and picks its item. */
+function pickFrom(submenu: string, item: string): void {
+  act(() => menuItem(submenu).click());
+  act(() => menuItem(item).click());
+}
+
+test("a status picked from a card's right-click menu, the current one checked, is sent and moves the card to its new column", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  act(() => menuItem("Status").click());
+  assert.equal(menuItem("Backlog").getAttribute("aria-checked"), "true");
+  assert.equal(menuItem("Done").getAttribute("aria-checked"), "false");
+  act(() => menuItem("Done").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page), [
+    ["Backlog", []],
+    ["Todo1", ["ACME-2"]],
+    ["In progress", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled", []],
+  ]);
+});
+
+test("a list row's menu opens from the keyboard with ⇧F10, and a priority picked there is sent and moves the row", async () => {
+  standing = [issue(1), issue(2, { priority: ISSUE_PRIORITY.LOW })];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = cardOf(page, issue(1).id);
+  act(() => row.focus());
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Priority", "Urgent");
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { priority: ISSUE_PRIORITY.URGENT } },
+  ]);
+  assert.deepEqual(groups(page), [["Backlog2", ["ACME-1 Issue 1", "ACME-2 Issue 2"]]]);
+});
+
+test("Archive from a card's menu asks first in the issue page's words, then sends the archive and takes the card off the board", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  act(() => menuItem("Archive").click());
+  assert.deepEqual(changes, [], "nothing is sent before the answer");
+  assert.match(
+    document.querySelector("[role=alertdialog]")?.textContent ?? "",
+    /Archive ACME-1\?/u,
+  );
+  act(() => dialogButton("Archive").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { archived: true } }]);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-2 Issue 2"]]]);
+  assert.equal(document.querySelector("[role=alertdialog]"), null, "the question is gone");
+});
+
+test("a card's menu offers Copy link, copying its issue's link under the listed workspace", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(2).id));
+  await act(async () => menuItem("Copy link").click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/${WORKSPACE.id}/issue/${issue(2).id}`]);
+  assert.deepEqual(changes, []);
+});
+
+test("a change from a card's menu the service refused leaves the card where it stood and says so", async () => {
+  standing = [issue(1)];
+  changeRefused = true;
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  pickFrom("Status", "Done");
+  await settle();
+
+  assert.equal(changes.length, 1);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
+});
+
+test("a card moved by a status picked from its menu keeps the keyboard in its new column", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+
+  const card = cardOf(page, issue(1).id);
+  act(() => card.focus());
+  act(() => {
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Status", "Done");
+  await settle();
+
+  const holding = document.activeElement?.closest<HTMLElement>("[data-issue-id]");
+  assert.equal(holding?.dataset.issueId, issue(1).id);
+  assert.equal(holding?.closest<HTMLElement>("[data-issue-column]")?.dataset.issueColumn, "done");
+});
+
+test("a card moved once the developer has gone on to New issue takes no keyboard from its card", async () => {
+  standing = [issue(1), issue(2)];
+  heldChanges = [];
+  const held = heldChanges;
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  pickFrom("Status", "Done");
+  act(() => button("New issue").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  act(() => field.focus());
+  act(() => held[0]?.());
+  await settle();
+
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+  assert.equal(document.activeElement, composerField());
 });

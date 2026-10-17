@@ -18,11 +18,19 @@ import {
   THEME,
 } from "@luke/settings";
 import {
+  DIFF_FONT,
+  DIFF_INDICATORS,
+  DIFF_LAYOUT,
+  DIFF_LINE_HEIGHT,
+  INLINE_DIFF,
+} from "@luke/settings/diff-view";
+import {
   type AppSettings,
   appSettingsView,
   type SettingsResetScope,
   type SettingsUpdateResult,
 } from "@luke/settings/wire";
+import { isRecord, unparsedWire } from "@luke/wire";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -56,19 +64,16 @@ const TEST_ACCOUNT = {
 function testCipher(available = true): SecretCipher {
   return {
     isAvailable: () => available,
-    encrypt: (plainText) => Buffer.from(`${CIPHER_PREFIX}${plainText}`, "utf8"),
+    encrypt: (plainText) => new TextEncoder().encode(`${CIPHER_PREFIX}${plainText}`),
     decrypt: (cipherText) => {
-      const value = cipherText.toString("utf8");
+      const value = new TextDecoder().decode(cipherText);
       if (!value.startsWith(CIPHER_PREFIX)) throw new Error("Unreadable ciphertext");
       return value.slice(CIPHER_PREFIX.length);
     },
   };
 }
 
-/**
- * Counts what reaches the cipher. Every call is a Keychain read on macOS, so
- // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-
+/** Text sealed by `testCipher` as an earlier build kept it at rest: Node's standard base64 of the cipher's bytes. */
 function sealed(plainText: string): string {
   return Buffer.from(`${CIPHER_PREFIX}${plainText}`, "utf8").toString("base64");
 }
@@ -208,8 +213,22 @@ const SAMPLE_VALUE = {
   // On is the default, so Off is the choice that has to survive a reopen.
   agentNotifications: false,
   macCommands: false,
-  // The deployment's own avatar is the default, so a stock one is the choice that has to survive a reopen.
+  // Atlas is the default, so another is the choice that has to survive a reopen.
   videoAvatar: VIDEO_AVATAR.CELIA,
+  // Each diff setting away from its default, the look a review tool's reader picked.
+  lineNumbers: false,
+  wordWrap: false,
+  diffLayout: DIFF_LAYOUT.SPLIT,
+  diffIndicators: DIFF_INDICATORS.CLASSIC,
+  inlineDiff: INLINE_DIFF.CHAR,
+  diffBackgrounds: false,
+  diffDarkTheme: "dracula",
+  diffLightTheme: "one-light",
+  diffFont: DIFF_FONT.MENLO,
+  diffFontSize: "13",
+  diffLineHeight: DIFF_LINE_HEIGHT.SPACIOUS,
+  diffLigatures: true,
+  diffMinimizeComments: true,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
@@ -256,6 +275,20 @@ test("every setting starts at its default, survives a reopen, and can be cleared
       );
     }
   }
+});
+
+// A call reads no choice as Atlas, which compose-live's "a call opens with the avatar asked for" holds.
+test("the Default avatar an earlier build stored reads as no choice", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await storeIn(directory).set("videoAvatar", VIDEO_AVATAR.CELIA);
+  const file = path.join(directory, SETTINGS_FILE_NAME);
+  const stored = await readSettingsFile(directory);
+  assert.ok(stored.includes(`"${VIDEO_AVATAR.CELIA}"`));
+  await fs.writeFile(file, stored.replace(`"${VIDEO_AVATAR.CELIA}"`, '"default"'));
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.get("videoAvatar"), undefined);
+  assert.equal(appSettingsView(await reopened.snapshot()).videoAvatar, undefined);
 });
 
 test("a stored account and a chosen preference survive each other's writes", async (t) => {
@@ -321,6 +354,17 @@ test("round-trips an encrypted account without exposing either token in snapshot
   const settings = JSON.stringify(await reopened.snapshot());
   assert.equal(settings.includes(TEST_ACCOUNT.accessToken), false);
   assert.equal(settings.includes(TEST_ACCOUNT.refreshToken), false);
+});
+
+test("an account's ciphertext is kept as the standard base64 of the cipher's bytes, as earlier builds wrote it", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await storeIn(directory).setAccount(TEST_ACCOUNT);
+
+  const written = unparsedWire(JSON.parse(await readSettingsFile(directory)));
+  const tokens = { accessToken: TEST_ACCOUNT.accessToken, refreshToken: TEST_ACCOUNT.refreshToken };
+
+  assert.ok(isRecord(written) && isRecord(written.account), "the file holds an account");
+  assert.equal(written.account.tokenCipher, sealed(JSON.stringify(tokens)));
 });
 
 test("the Mac's session rides sealed beside the OAuth tokens, and reads back with them", async (t) => {

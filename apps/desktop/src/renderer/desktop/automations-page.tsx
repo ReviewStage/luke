@@ -17,21 +17,20 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
 import { momentText, useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
@@ -41,7 +40,7 @@ import { useAutomations } from "./use-automations";
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
  *
- * It stands in the plan's place beside the sidebar, as Factory does, and
+ * It stands in the task's place beside the sidebar, as Factory does, and
  * its sidebar row is marked while it does. Who owns an automation is the
  * one thing the list must never leave in doubt, so the workspace's
  * automations stand first and the account's personal ones after, under a
@@ -119,7 +118,7 @@ function AutomationRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   return (
     <div className="automation-row" data-enabled={String(automation.enabled)}>
@@ -303,7 +302,9 @@ function ListPage({
       </header>
       <div className="automations-scroll scroll-fade-top">
         {read === undefined ? null : "failure" in read ? (
-          <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
+          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_LINE}
+          </ErrorState>
         ) : groups.length === 0 ? (
           <div className="automations-empty">
             <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
@@ -348,7 +349,9 @@ function UnreadPage({
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
-        <ReadFailure line={UNREAD_LINE} onRetry={onRetry} place={READ_FAILURE_PLACE.CENTRED} />
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {UNREAD_LINE}
+        </ErrorState>
       </div>
     </section>
   );
@@ -375,7 +378,7 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
 }
 
 /**
- * The window's Automations pages, in the plan's place: the list, or one
+ * The window's Automations pages, in the task's place: the list, or one
  * automation's editor, or a new one's. The list is read once for all of
  * them, so an automation opened from it opens as it was listed, and an
  * edit is in the list the moment it lands.

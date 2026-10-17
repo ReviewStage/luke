@@ -1,5 +1,5 @@
 /**
- * sidebar-collapse.ts -- whether the plans' sidebar is folded away, by the developer or by a window too narrow to pin it, how wide it stands, and whether it floats open over the work.
+ * sidebar-collapse.ts -- whether the tasks' sidebar is folded away, by the developer or by a window too narrow to pin it, how wide it stands, and whether it floats open over the work.
  *
  * The choice is the window's own and nobody else's: no other window draws the
  * sidebar and main never acts on it, so it is kept in the renderer's storage,

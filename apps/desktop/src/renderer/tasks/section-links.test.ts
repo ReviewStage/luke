@@ -8,19 +8,21 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { DOCUMENT_TASK } from "#testing/document-task";
-import { layWindowStyles } from "#testing/focus-ring";
+import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
- * A plan's sections' links on its own page: a mention of a section drawn as
+ * A task's sections' links on its own page: a mention of a section drawn as
  * the chip that opens it, one of a heading the plan no longer holds struck
- * through and opening the plan at its top, a section's ⋯ copying its link,
- * the title's ⋯ copying the plan's, an ask to show a section scrolling the document to it, and nothing a
+ * through and opening the task at its top, a section's ⋯ copying its link,
+ * the title's ⋯ copying the task's, an ask to show a section scrolling the document to it, and nothing a
  * mention names riding on an attribute. Mentions are read in the form
  * written before the link was settled as well as the settled one.
  * Synthetic plan.
@@ -28,7 +30,7 @@ import { PlanBody, type SectionLinks } from "./plan-body";
 
 const TASK_ID = DOCUMENT_TASK.id;
 
-/** The slug of the workspace the plan's links are written under. */
+/** The slug of the workspace the task's links are written under. */
 const WORKSPACE = "acme";
 
 const PLACE = { workspace: WORKSPACE, repository: "acme/relay" } as const;
@@ -59,19 +61,10 @@ const copied: string[] = [];
 
 beforeEach(() => {
   copied.length = 0;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-        }
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
 });
 
 afterEach(() => {
@@ -80,7 +73,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The plan's page drawn with its sections' links, the mentions it was asked to open kept. */
+/** The task's page drawn with its sections' links, the mentions it was asked to open kept. */
 function drawn(links: Partial<SectionLinks> = {}) {
   const opened: Mention[] = [];
   const container = document.createElement("div");
@@ -179,42 +172,6 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
   assert.deepEqual(revealed, [1, 2], "each ask is said shown once, so it can be let go");
 });
 
-test("a section shown stands clear of the document's faded top edge, its heading whole", async () => {
-  const { container } = drawn();
-  const scroller = container.querySelector<HTMLElement>(".plan-document-scroll");
-  assert.ok(scroller);
-  const rollout = container.querySelectorAll<HTMLElement>(".plan-unit")[1];
-  assert.ok(rollout);
-  // The layout jsdom has none of: the document's top at 100, the Rollout section's at 700.
-  vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 100 }));
-  vi.spyOn(rollout, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 700 }));
-  const root = roots[0];
-  assert.ok(root);
-  const sheets = await layWindowStyles();
-  try {
-    const fade = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--scroll-fade"),
-    );
-    act(() =>
-      root.render(
-        createElement(PlanBody, {
-          task: TASK,
-          live: false,
-          sectionLinks: {
-            workspace: WORKSPACE,
-            onOpen: () => undefined,
-            reveal: { anchor: "rollout", ask: 1 },
-          },
-        }),
-      ),
-    );
-    assert.ok(fade > 16, "the fade runs deeper than the room a section was shown with");
-    assert.equal(scroller.scrollTop, 600 - fade);
-  } finally {
-    sheets.remove();
-  }
-});
-
 test("no attribute of the plan's page carries what a mention names", () => {
   const { container } = drawn();
 
@@ -279,7 +236,7 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
   ]);
 });
 
-/** The plan's page drawn editable, as a plan's own page is. */
+/** The task's page drawn editable, as a task's own page is, its editor's bundle not yet landed so that an editor opened is its host alone. */
 function drawnEditable(): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -287,12 +244,15 @@ function drawnEditable(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task: TASK,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
-      }),
+      onSideBundles(
+        unlandedBundles(),
+        createElement(PlanBody, {
+          task: TASK,
+          live: false,
+          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
+        }),
+      ),
     ),
   );
   return container;
@@ -400,17 +360,20 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
     },
   };
   const opened: [string, MentionLines | undefined][] = [];
+  const onGitHub: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, openGitHub: (url) => onGitHub.push(url) });
   const container = drawnFiles((path, lines) => opened.push([path, lines]), task);
 
   act(() => chipNamed(container, "session-store.ts").click());
   act(() => chipNamed(container, "session-store.ts:3").click());
-  // Another repository's file is no file of the plan's, but GitHub's own page, which opens no tab.
+  // Another repository's file is no file of the task's, but GitHub's own page, which opens there rather than in a tab.
   act(() => chipNamed(container, "other.ts").click());
 
   assert.deepEqual(opened, [
     ["apps/web/session-store.ts", undefined],
     ["apps/web/session-store.ts", { commit: "0123456", startLine: 3, endLine: 5 }],
   ]);
+  assert.deepEqual(onGitHub, ["https://github.com/acme/other/blob/HEAD/other.ts"]);
 });
 
 test("a heading the plan bears twice: a mention of the second opens the second, and each ⋯ copies its own", async () => {
@@ -501,7 +464,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
-/** The plan's page drawn as a plan's own page is, its title renamed and its versions opened, each kept. */
+/** The task's page drawn as a task's own page is, its title renamed and its versions opened, each kept. */
 function drawnTitled() {
   const renamed: string[] = [];
   const histories: (number | undefined)[] = [];

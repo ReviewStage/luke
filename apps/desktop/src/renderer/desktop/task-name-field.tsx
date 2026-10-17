@@ -3,18 +3,18 @@ import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import { useLayoutEffect, useRef, useState } from "react";
 
 /**
- * plan-name-field.tsx -- a name edited where it is drawn, in the sidebar's row, on the open plan's tab, on an agent's, or on Settings › Workspace, the way a desktop list renames in place.
+ * task-name-field.tsx -- a name edited where it is drawn, in the sidebar's row, on the open task's tab, on an agent's, or on Settings › Workspace, the way a desktop list renames in place.
  *
  * The field opens over the name with all of it selected. Return or a press
  * elsewhere keeps what was typed, and Escape keeps the name it opened on; a
  * name left empty or unchanged renames nothing. Its words are an input's
  * value, which session replay masks as it masks every input. The field and
- * the rename hook are a plan's by default and an agent's where the caller
+ * the rename hook are a task's by default and an agent's where the caller
  * says so, and the field is a workspace's the same way: what differs is the
  * name said for a reader and the bound.
  */
 
-/** How an edit ended: what to rename the plan to, if anything, and whether a key ended it, so focus goes back to the name. */
+/** How an edit ended: what to rename the task to, if anything, and whether a key ended it, so focus goes back to the name. */
 export interface NameEdit {
   readonly name: string | undefined;
   readonly byKey: boolean;
@@ -30,7 +30,7 @@ export function TaskNameField({
 }: {
   name: string;
   className: string;
-  /** What the field is called for a reader; a plan's name unless said otherwise. */
+  /** What the field is called for a reader; a task's name unless said otherwise. */
   label?: string;
   maxLength?: number;
   onEnd: (edit: NameEdit) => void;
@@ -61,7 +61,7 @@ export function TaskNameField({
       onBlur={() => end(true, false)}
       onKeyDown={(event) => {
         // Note that Escape goes no further than the field, because the
-        // window's own Escape would otherwise leave the plan as well.
+        // window's own Escape would otherwise leave the task as well.
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
@@ -77,7 +77,7 @@ export function TaskNameField({
 }
 
 /**
- * One surface's rename of the plan, or the agent, it draws: whether its
+ * One surface's rename of the task, or the agent, it draws: whether its
  * field is open, and the note a refusal leaves beside the name until the
  * next edit. Both are held for the one they were about, so a surface that
  * moves on to another draws neither over it. Note that the field closes as soon as it ends,

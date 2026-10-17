@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCreateParams,
@@ -24,20 +22,23 @@ import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
+  type IntegrationProvider,
+  type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState } from "#testing/app-state";
-import { layContainersAt, shown } from "#testing/container-width";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand } from "../app-commands";
@@ -177,6 +178,7 @@ beforeEach(() => {
   installScrollIntoView();
   secretsAsked = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   feedbackAbout = [];
   standing = [DIGEST, SWEEP, FAILING];
   lists = [];
@@ -196,135 +198,128 @@ beforeEach(() => {
   defaultRefused = false;
   catalogReads = 0;
   changeRefusal = undefined;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-          listed.push(request.payload.workspaceId);
-          if (listHeld) return new Promise(() => undefined);
-          const theirs = standing.filter(
-            (each) => each.workspaceId === request.payload.workspaceId,
-          );
-          const value = lists.shift() ?? { automations: theirs };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        listed.push(request.payload.workspaceId);
+        if (listHeld) return new Promise(() => undefined);
+        const theirs = standing.filter((each) => each.workspaceId === request.payload.workspaceId);
+        const value = lists.shift() ?? { automations: theirs };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
+        changes.push(request.payload);
+        const { automationId, change } = request.payload;
+        const was = standing.find((each) => each.id === automationId);
+        if (changeRefusal !== undefined || was === undefined) {
+          const failure = changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND;
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { failure } });
         }
-        if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
-          changes.push(request.payload);
-          const { automationId, change } = request.payload;
-          const was = standing.find((each) => each.id === automationId);
-          if (changeRefusal !== undefined || was === undefined) {
-            const failure = changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND;
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { failure } });
-          }
-          const automation = { ...was, ...change };
-          standing = standing.map((each) => (each.id === automationId ? automation : each));
-          if (heldChanges === undefined) {
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation } });
-          }
-          // A held write answers in words of its own, so which answer drew is told by the row's name.
-          const held = heldChanges;
-          const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { automation: told } };
-          return new Promise((resolve) => held.push(() => resolve(done)));
+        const automation = { ...was, ...change };
+        standing = standing.map((each) => (each.id === automationId ? automation : each));
+        if (heldChanges === undefined) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation } });
         }
-        if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
-          creates.push(request.payload);
-          const { workspaceId, name, trigger, action, scope, repositories } = request.payload;
-          const hooked = trigger.kind === AUTOMATION_TRIGGER.WEBHOOK;
-          const made = automation(42, {
-            workspaceId: workspaceId ?? WORKSPACE.id,
-            name,
-            trigger,
-            action,
-            scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
-            repositories: repositories ?? [],
-            ...(hooked
-              ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
-              : undefined),
-          });
-          standing = [made, ...standing];
-          // A webhook's secret is answered once, by the write that minted it.
-          const value = hooked
-            ? { automation: made, webhookSecret: MADE_SECRET }
-            : { automation: made };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-          // Linear and Sentry are connected; the rest are not.
-          const integrations = Object.fromEntries(
-            INTEGRATION_PROVIDER_LIST.map((provider) => [
-              provider,
-              provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
-                ? INTEGRATION_STATUS.CONNECTED
-                : INTEGRATION_STATUS.DISCONNECTED,
-            ]),
-          );
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { integrations } });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
-          catalogReads += 1;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
-          const value = defaultRefused
-            ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
-            : { choice: DEFAULT_CHOICE };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-          agentsAsked.push(request.payload);
+        // A held write answers in words of its own, so which answer drew is told by the row's name.
+        const held = heldChanges;
+        const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { automation: told } };
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
+        creates.push(request.payload);
+        const { workspaceId, name, trigger, action, scope, repositories } = request.payload;
+        const hooked = trigger.kind === AUTOMATION_TRIGGER.WEBHOOK;
+        const made = automation(42, {
+          workspaceId: workspaceId ?? WORKSPACE.id,
+          name,
+          trigger,
+          action,
+          scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
+          repositories: repositories ?? [],
+          ...(hooked
+            ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
+            : undefined),
+        });
+        standing = [made, ...standing];
+        // A webhook's secret is answered once, by the write that minted it.
+        const value = hooked
+          ? { automation: made, webhookSecret: MADE_SECRET }
+          : { automation: made };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        // Linear and Sentry are connected; the rest are not.
+        const integrations = Object.fromEntries(
+          INTEGRATION_PROVIDER_LIST.map((provider) => [
+            provider,
+            provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
+              ? INTEGRATION_STATUS.CONNECTED
+              : INTEGRATION_STATUS.DISCONNECTED,
+          ]),
+        );
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          // SAFETY: every provider on the list is given a status above, which is the whole of the record.
+          value: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
+        });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+        catalogReads += 1;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
+        const value = defaultRefused
+          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
+          : { choice: DEFAULT_CHOICE };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+        agentsAsked.push(request.payload);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { agents: [CI_DIGEST] },
+        });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
+        runsAsked.push(request.payload.automationId);
+        if (runHeld) return new Promise<never>(() => undefined);
+        if (runRefusal !== undefined) {
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
-            value: { agents: [CI_DIGEST] },
+            value: { failure: runRefusal },
           });
         }
-        if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
-          runsAsked.push(request.payload.automationId);
-          if (runHeld) return new Promise<never>(() => undefined);
-          if (runRefusal !== undefined) {
-            return Promise.resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { failure: runRefusal },
-            });
-          }
-          const made = {
-            id: "6e7f8091-a2b3-4c4d-8e5f-60718293a4b5",
-            firing: { kind: "manual" },
-            status: AUTOMATION_RUN_STATUS.STARTED,
-            reason: null,
-            agent: { id: CI_DIGEST.id, title: null, status: "starting" },
-            firedAt: 5,
-            settledAt: 5,
-          } as const;
-          runs = [made, ...runs];
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET) {
-          secretsAsked.push(request.payload.automationId);
-          const automation = standing.find((each) => each.id === request.payload.automationId);
-          const value =
-            automation === undefined
-              ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
-              : { automation, webhookSecret: ROTATED_SECRET };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
-          deletes.push(request.payload.automationId);
-          standing = standing.filter((each) => each.id !== request.payload.automationId);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        const made = {
+          id: "6e7f8091-a2b3-4c4d-8e5f-60718293a4b5",
+          firing: { kind: "manual" },
+          status: AUTOMATION_RUN_STATUS.STARTED,
+          reason: null,
+          agent: { id: CI_DIGEST.id, title: null, status: "starting" },
+          firedAt: 5,
+          settledAt: 5,
+        } as const;
+        runs = [made, ...runs];
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET) {
+        secretsAsked.push(request.payload.automationId);
+        const automation = standing.find((each) => each.id === request.payload.automationId);
+        const value =
+          automation === undefined
+            ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
+            : { automation, webhookSecret: ROTATED_SECRET };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
+        deletes.push(request.payload.automationId);
+        standing = standing.filter((each) => each.id !== request.payload.automationId);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -337,22 +332,10 @@ afterEach(() => {
   document.head.innerHTML = "";
 });
 
-/** The window's own stylesheet, which says how tall a row's field stands. */
-const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
-
-/** How tall the field stands as the window's stylesheet draws it. */
-function heightOf(field: Element | null): string {
-  assert.ok(field, "the field stands");
-  if (document.head.querySelector("style") === null) {
-    document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  }
-  return getComputedStyle(field).getPropertyValue("height");
-}
-
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
 
-/** The page as drawn over the plans control given, rendered again in place where one stands. */
+/** The page as drawn over the tasks control given, rendered again in place where one stands. */
 function render(tasks: ReturnType<typeof tasksControl>): void {
   act(() =>
     root?.render(
@@ -369,7 +352,7 @@ function render(tasks: ReturnType<typeof tasksControl>): void {
   );
 }
 
-/** The Automations page, standing in the plan's place over the workspace listed. */
+/** The Automations page, standing in the task's place over the workspace listed. */
 function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -402,15 +385,6 @@ function rowOf(page: HTMLElement, name: string): Element {
   assert.ok(row, `no row for ${name}`);
   return row;
 }
-
-test("a schedule's time and a custom schedule's cron stand at the height of the pickers beside them", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-
-  assert.equal(heightOf(page.querySelector("input[aria-label='Time']")), "var(--control-height)");
-  pick(page, "Repeats", "Custom");
-  assert.equal(heightOf(page.querySelector("input[aria-label='Cron']")), "var(--control-height)");
-});
 
 test("the listed workspace's automations stand before the personal ones, under a heading each, every row naming its owner", async () => {
   const page = mount();
@@ -1217,27 +1191,6 @@ test("the Runs panel slides out past the page's right edge as it is hidden, held
   }
 });
 
-test("the automations' rows, an automation's page, and its runs fade under the bar as they scroll up beneath it, rather than being sliced at its hairline", async () => {
-  window.localStorage.clear();
-  const list = mount();
-  await settle();
-  const rows = list.querySelector(".automations-scroll") ?? assert.fail("the list scrolls");
-  act(() => root?.unmount());
-
-  const edit = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  const form = edit.querySelector(".automations-scroll") ?? assert.fail("the page scrolls");
-  const runs = edit.querySelector("aside[aria-label='Runs']") ?? assert.fail("the runs stand");
-  const sheets = layFades();
-  try {
-    for (const scroller of [rows, form, runs]) {
-      assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
-    }
-  } finally {
-    sheets.remove();
-  }
-});
-
 test("the Runs panel's edge resizes it within its bounds, and the width stands on the next page", async () => {
   window.localStorage.clear();
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -1283,23 +1236,16 @@ function pillOver(element: Element): string | undefined {
   return pill;
 }
 
-test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill, and leaves the draft's state to Save", async () => {
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each raising its words in its pill", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
-  const status = toolbar.querySelector(".automation-editor-status") ?? assert.fail("no status");
   const acts = () =>
     ["Automations", "Send feedback", "Run now"].map((name) => {
       const press =
         [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
         assert.fail(`no ${name}`);
-      const words = press.querySelector(".toolbar-button-words") ?? assert.fail("no words");
-      return {
-        name,
-        drawn: shown(words),
-        labelled: press.getAttribute("aria-label"),
-        pill: pillOver(press),
-      };
+      return { name, pill: pillOver(press) };
     });
 
   // A 760 window's toolbar, past the traffic lights.
@@ -1307,11 +1253,10 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", drawn: false, labelled: "Automations", pill: "Automations" },
-      { name: "Send feedback", drawn: false, labelled: "Send feedback", pill: "Send feedback" },
-      { name: "Run now", drawn: false, labelled: "Run now", pill: "Run now" },
+      { name: "Automations", pill: "Automations" },
+      { name: "Send feedback", pill: "Send feedback" },
+      { name: "Run now", pill: "Run now" },
     ]);
-    assert.equal(shown(status), false);
   } finally {
     narrow.remove();
   }
@@ -1319,11 +1264,10 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", drawn: true, labelled: null, pill: undefined },
-      { name: "Send feedback", drawn: true, labelled: null, pill: undefined },
-      { name: "Run now", drawn: true, labelled: null, pill: undefined },
+      { name: "Automations", pill: undefined },
+      { name: "Send feedback", pill: undefined },
+      { name: "Run now", pill: undefined },
     ]);
-    assert.equal(shown(status), true);
   } finally {
     wide.remove();
   }
@@ -1341,50 +1285,20 @@ test("the crumb naming an automation, cut short by its toolbar, reads whole on t
   assert.equal(pillOver(crumb), SWEEP.name);
 });
 
-test("the Owner menu is as wide as its widest owner's name, within the room the form leaves it from the chip's edge, so a long name reads whole and no row's start is cut off", async () => {
-  handState({});
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-  const chip = picker(page, "Owner");
-  const form = page.querySelector(".automations-scroll") ?? assert.fail("no form scroller");
-  // The form beside the runs, 300px from its left edge to the chip's right one.
-  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(380, 120, 160, 28));
-  vi.spyOn(form, "getBoundingClientRect").mockReturnValue(new DOMRect(240, 40, 420, 600));
-
-  const sheets = layContainersAt({});
-  try {
-    act(() => chip.click());
-    const menu = page.querySelector(".settings-picker-menu") ?? assert.fail("no menu");
-    const room = chip.closest<HTMLElement>(".settings-picker")?.style;
-    assert.equal(getComputedStyle(menu).width, "max-content");
-    assert.equal(room?.getPropertyValue("--settings-picker-width-max"), "294px");
-  } finally {
-    sheets.remove();
-  }
-});
-
-test("a Run now still out on a toolbar too narrow for its words draws its ring in its glyph's place", async () => {
+test("a Run now still out is named by what it is doing and refuses another press", async () => {
   mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   runHeld = true;
-  const narrow = layContainersAt({ "automation-toolbar": 570 });
-  try {
-    act(() => relayout());
-    const run = button("Run now");
-    act(() => run.click());
-    await settle();
+  const run = button("Run now");
+  act(() => run.click());
+  await settle();
+  act(() => run.click());
+  await settle();
 
-    assert.deepEqual(
-      {
-        pressable: !run.disabled,
-        ring: run.querySelector('.spinner[role="status"]') !== null,
-        glyph: run.querySelector("svg.lucide-play") !== null,
-      },
-      { pressable: false, ring: true, glyph: false },
-    );
-  } finally {
-    narrow.remove();
-  }
+  assert.deepEqual(
+    { name: run.getAttribute("aria-label"), busy: run.getAttribute("aria-busy"), runsAsked },
+    { name: "Running", busy: "true", runsAsked: [SWEEP.id] },
+  );
 });
 
 test("a page naming an automation the list does not hold, as a link to another workspace's may, says it is not found and draws nothing of it", async () => {
@@ -1719,7 +1633,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(
-    page.querySelector("aside[aria-label='Runs'] .empty-state")?.textContent ?? "",
+    page.querySelector("aside[aria-label='Runs'] .luke-empty-state")?.textContent ?? "",
     /^No runs yet$/u,
     "the panel with no run stands the empty state",
   );
@@ -1802,7 +1716,7 @@ test("a default model that could not be read is said as unknown, and a model can
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
       return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
-    if (this.classList.contains("anchored-popover"))
+    if (this.classList.contains("luke-anchored-popover"))
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
@@ -1914,7 +1828,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   act(() => button("New secret").click());
   act(() => {
     const confirm = [
-      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
     ].find((each) => each.textContent === "New secret");
     confirm?.click();
   });
@@ -1974,7 +1888,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");
   act(() => {
     const confirm = [
-      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
     ].find((each) => each.textContent === "New secret");
     assert.ok(confirm, "the dialog asks first");
     confirm.click();

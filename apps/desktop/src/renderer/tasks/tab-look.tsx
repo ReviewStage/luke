@@ -1,8 +1,15 @@
-import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { AppWindowIcon, BotIcon, GitPullRequestIcon, InboxIcon, LaptopIcon } from "lucide-react";
+import {
+  AppWindowIcon,
+  BotIcon,
+  GitPullRequestIcon,
+  InboxIcon,
+  LaptopIcon,
+  MessagesSquareIcon,
+} from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
@@ -11,7 +18,7 @@ import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark";
 import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
 
 /**
- * tab-look.tsx -- how each kind of tab looks wherever it is drawn: its glyph and its name on its tab in either strip, its pin in the sidebar, its row in either "+" menu and the plan's summary, and its row in ⌘K.
+ * tab-look.tsx -- how each kind of tab looks wherever it is drawn: its glyph and its name on its tab in either strip, its pin in the sidebar, its row in either "+" menu and the task's summary, and its row in ⌘K.
  *
  * Every place that offers a tab draws it through `tabLook`, from what that
  * place knows of the thing the tab shows, so a kind wears one glyph and one
@@ -20,7 +27,7 @@ import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
  * in every one of those places, the "+" menus' rows included: a row is
  * offered beside a strip that may not hold its tab. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
- * and section, ⌘K's plan name.
+ * and section, ⌘K's task name.
  */
 
 /** The kinds of tab, each drawn its own way. */
@@ -29,6 +36,8 @@ export const TAB_KIND = {
   PANEL: "panel",
   PLAN: "plan",
   INBOX: "inbox",
+  /** The plan's own channel of the workspace's chat. */
+  CHAT: "chat",
   /** A coding agent not yet started, and the "+" row that opens one. */
   DRAFT: "draft",
   AGENT: "agent",
@@ -53,6 +62,7 @@ export type TabSubject =
   | { readonly kind: typeof TAB_KIND.PANEL; readonly tab: FixedSidePanelTab }
   | { readonly kind: typeof TAB_KIND.PLAN; readonly name: string }
   | { readonly kind: typeof TAB_KIND.INBOX }
+  | { readonly kind: typeof TAB_KIND.CHAT }
   | { readonly kind: typeof TAB_KIND.DRAFT }
   | {
       readonly kind: typeof TAB_KIND.AGENT;
@@ -69,10 +79,10 @@ export type TabSubject =
     }
   | {
       readonly kind: typeof TAB_KIND.CHANGES;
-      /** The label of the agent whose pull request it is; none before the agent is read. */
-      readonly agentName: string | undefined;
-      /** The pull request, whose mark the tab wears for where it stands; none before it is read. */
-      readonly pullRequest?: PullRequestMarked | undefined;
+      /** The pull request, which names the tab by its number and title and whose mark it wears for where it stands; none before it is read. */
+      readonly pullRequest?:
+        | (PullRequestMarked & Pick<CodingAgentPullRequest, "title">)
+        | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.TERMINAL;
@@ -116,7 +126,7 @@ export function SubagentMark({ model }: { model: string | undefined }) {
  * full size, giving way to the working mark while the agent may still write
  * (`state-glyph.tsx`). A failed agent keeps its mark, and its row or tab
  * says the failure at its end (`agentEndMark`). An agent whose standing is
- * not known, a pin's whose plan is not open, wears its mark at rest, and one
+ * not known, a pin's whose task is not open, wears its mark at rest, and one
  * this window does not list, one another Mac started, the mark of no known
  * harness, so a row naming it keeps the glyph's column.
  */
@@ -150,6 +160,8 @@ export function tabLook(subject: TabSubject): KindLook {
       return { icon: <DocumentIcon />, label: subject.name };
     case TAB_KIND.INBOX:
       return { icon: <InboxIcon />, label: TAB_WORDS.INBOX };
+    case TAB_KIND.CHAT:
+      return { icon: <MessagesSquareIcon />, label: TAB_WORDS.CHAT };
     case TAB_KIND.DRAFT:
       return { icon: <PlusIcon />, label: TAB_WORDS.NEW_AGENT };
     case TAB_KIND.AGENT:
@@ -171,9 +183,9 @@ export function tabLook(subject: TabSubject): KindLook {
             <PullRequestMark pullRequest={subject.pullRequest} />
           ),
         label:
-          subject.agentName === undefined
+          subject.pullRequest === undefined
             ? TAB_WORDS.PULL_REQUEST
-            : pullRequestLabelOf(subject.agentName),
+            : pullRequestLabelOf(subject.pullRequest),
       };
     case TAB_KIND.TERMINAL:
       // Note that the agent's name is not the label, because the tab says

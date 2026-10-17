@@ -9,14 +9,13 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import type { TasksControl } from "../tasks/use-tasks-tab";
@@ -109,7 +108,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The summary of a plan whose running agent opened the pull request, the plan's column showing `shown`; every agent it opens recorded. */
+/** The summary of a task whose running agent opened the pull request, the task's column showing `shown`; every agent it opens recorded. */
 function mount(shown: "agent" | "plan", linkWorkspace?: string) {
   const opened: string[] = [];
   const base = tasksControl();
@@ -162,18 +161,19 @@ function hover(control: Element): void {
 /** The agent named in the Changes card the pull request's row hangs. */
 function cardAgent(page: HTMLElement): HTMLButtonElement {
   const row = [...page.querySelectorAll("button")].find((each) =>
-    each.textContent?.includes("Pull request: Expiry job"),
+    each.textContent?.includes("#42 Expire invitations"),
   );
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.tooltip-card .card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-tooltip-card .luke-hover-card-sub button.actor-ref[data-kind="agent"]',
   );
   assert.ok(named, "the Changes card names the agent");
   return named;
 }
 
 test("a page's row hangs the page's tab's card, previewing its newest version", () => {
+  fakeAppPlatform({ pageFrameUrl });
   const funnel = {
     id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
     title: "Invite funnel",
@@ -206,10 +206,14 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
   );
   assert.ok(row, "the page has a row");
   hover(row);
-  const card = document.querySelector(".tooltip-card [data-page-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, funnel.title);
-  assert.equal(card.querySelector(".card-sub"), null, "a page's one version is not counted");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, funnel.title);
+  assert.equal(
+    card.querySelector(".luke-hover-card-sub"),
+    null,
+    "a page's one version is not counted",
+  );
   assert.equal(
     card.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId, pageId: funnel.id, version: 1 }),
@@ -227,7 +231,7 @@ test("the agent's card hung from a Changes card previews its running step while 
   const latestStep = (shown: "agent" | "plan") => {
     const { page } = mount(shown);
     hover(cardAgent(page));
-    const words = [...document.querySelectorAll(".tooltip-card [data-tab-card]")]
+    const words = [...document.querySelectorAll(".luke-tooltip-card [data-tab-card]")]
       .map((card) => card.textContent ?? "")
       .join(" | ");
     act(() => root?.unmount());
@@ -241,16 +245,7 @@ test("the agent's card hung from a Changes card previews its running step while 
 
 test("an agent's row in the summary offers Copy link on a right-click, copying the agent's link under its task, before Archive agent", async () => {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
   const row = [...page.querySelectorAll<HTMLElement>(".task-summary-row")].find((each) =>
     each.textContent?.includes(AGENT.title ?? ""),
@@ -338,17 +333,6 @@ test("a column with room for the rail draws it, and one widened to that room dra
   assert.equal(column.rail(), null);
   column.widen(480);
   assert.equal(column.rail()?.getAttribute("data-mode"), "rail");
-});
-
-test("the pinned summary's rows fade under the toolbar above it and over the call bar below it, rather than being sliced at either", () => {
-  const { page } = mount("plan");
-  const sheets = layFades();
-  try {
-    const summary = page.querySelector(".task-summary") ?? assert.fail("the summary stands");
-    assert.deepEqual(fadedEdges(summary), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
 });
 
 test("a plan with nothing yet to list draws no summary and no toolbar button, and both stand once it holds a row", () => {

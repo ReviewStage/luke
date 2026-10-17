@@ -9,8 +9,17 @@ import {
   type CodingAgentPullRequest,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import { CopyIcon, DownloadIcon } from "@luke/ui";
+import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
+import {
+  CopyIcon,
+  DownloadIcon,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+} from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
   ClipboardCopyIcon,
@@ -20,12 +29,8 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act";
+import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
-import { DIFF_LAYOUT } from "../diff-view/contract";
-import { EmptyState } from "../empty-state";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
@@ -41,6 +46,7 @@ import {
   STATUS_WORDS,
 } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
+import { DiffSettingsButton } from "./diff-settings";
 import { PierreDiff, useDiffLook, useSplitRoom } from "./file-diff";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { FileTreePane } from "./file-tree-pane";
@@ -71,13 +77,14 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * Otherwise the tab is a File view (`file-view.tsx`) over the diff: its bar
  * names the chosen file as breadcrumbs, whose trees list only the changed
  * files, with the letter of what became of it and the lines it adds and
- * removes quietly beside, then the pull request's files on GitHub, the ⋯
- * (the file's name or its patch copied, the patch saved, the changes read
- * again, and the File tabs' two settings), and the tree's toggle, which
- * shows and hides the tree for every File and Changes tab alike, and, in
- * the ⋯, the diff's own two settings: Split view, the old side beside the
- * new, offered dimmed while the diff is too narrow to split
- * (`file-diff.tsx`), and Highlight changed words. The tree
+ * removes quietly beside, then the pull request's files on GitHub, the
+ * diff settings, every one stage-cli offers in a popover
+ * (`diff-settings.tsx`), the ⋯ (the file's name or its patch copied, the
+ * patch saved, the changes read again, the File tabs' two settings, and
+ * two of the diff's as quick checks: Split view, offered dimmed while the
+ * diff is too narrow to split (`file-diff.tsx`), and Highlight changed
+ * words), and the tree's toggle, which shows and hides the tree for every
+ * File and Changes tab alike. The tree
  * is a File tab's own pane (`file-tree-pane.tsx`) narrowed to the changed
  * files, every folder open, each row lettered A, M, D, or R, searched in
  * place, with the pull request's count under it, or under the diff while
@@ -214,13 +221,17 @@ function ChangesMenu({
           detail: roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT,
           checked: split && roomy,
           disabled: !roomy,
-          onSelect: () => change({ diffLayout: split ? DIFF_LAYOUT.UNIFIED : DIFF_LAYOUT.SPLIT }),
+          onSelect: () => change("diffLayout", split ? DIFF_LAYOUT.UNIFIED : DIFF_LAYOUT.SPLIT),
         },
         {
           label: "Highlight changed words",
           icon: <HighlighterIcon aria-hidden="true" />,
-          checked: settings.changedWords,
-          onSelect: () => change({ changedWords: !settings.changedWords }),
+          checked: settings.inlineDiff !== INLINE_DIFF.NONE,
+          onSelect: () =>
+            change(
+              "inlineDiff",
+              settings.inlineDiff === INLINE_DIFF.NONE ? INLINE_DIFF.WORD_ALT : INLINE_DIFF.NONE,
+            ),
         },
       ]}
     />
@@ -269,7 +280,7 @@ export function peopleOf(
 }
 
 /**
- * The card a Changes tab hangs, and its row in the plan's summary, in a tab
+ * The card a Changes tab hangs, and its row in the task's summary, in a tab
  * card's look: the pull request's title with its mark and number at the
  * right, the coding agent whose pull request it is under the title, by its
  * tile and name as every place naming an agent draws it (`ActorRef`),
@@ -299,7 +310,7 @@ export function ChangesCard({
   const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
-      <CardHead
+      <HoverCardHead
         name={pullRequest.title}
         sub={<AgentActorRef subject={subject} models={models} onOpen={onOpenAgent} />}
         corner={
@@ -309,19 +320,19 @@ export function ChangesCard({
           </>
         }
       />
-      <CardNote>
+      <HoverCardNote>
         {count} {count === 1 ? "file" : "files"} changed{" "}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-      </CardNote>
+      </HoverCardNote>
       {people?.author === undefined ? null : (
-        <CardNote oneLine>
+        <HoverCardNote oneLine>
           <OpenedBy person={people.author} />
-        </CardNote>
+        </HoverCardNote>
       )}
       {reviewers.length === 0 ? null : (
-        <CardNote>
+        <HoverCardNote>
           <ReviewersLine reviewers={reviewers} />
-        </CardNote>
+        </HoverCardNote>
       )}
     </HoverCard>
   );
@@ -338,12 +349,11 @@ export function AgentChangesTab({
   control: CodingAgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
-  /** The plan's repository, which the agent works in and the breadcrumbs name; none names the path plain. */
+  /** The task's repository, which the agent works in and the breadcrumbs name; none names the path plain. */
   repository: string | null;
   /** Whether the tree beside File and Changes tabs is open, and its toggle. */
   tree: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
-  const { tell } = useAct();
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
@@ -376,9 +386,9 @@ export function AgentChangesTab({
   }
   if ("failure" in answer) {
     return (
-      <div className="side-panel-empty">
-        <ReadFailure line={CHANGES_WORDS.FAILED} onRetry={ask} place={READ_FAILURE_PLACE.CENTRED} />
-      </div>
+      <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {CHANGES_WORDS.FAILED}
+      </ErrorState>
     );
   }
   if (pullRequest === null) {
@@ -412,8 +422,13 @@ export function AgentChangesTab({
               : { repository, listFolder: changed.folders, onOpen: choose },
         }}
         beside={<ChangeBeside file={shownFile} />}
-        onGitHub={() => tell(ACT_KIND.GITHUB_OPEN, { url: `${pullRequest.url}/files` })}
-        menu={<ChangesMenu file={shownFile} reading={out} onRefresh={ask} roomy={roomy} />}
+        onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
+        menu={
+          <>
+            <DiffSettingsButton roomy={roomy} />
+            <ChangesMenu file={shownFile} reading={out} onRefresh={ask} roomy={roomy} />
+          </>
+        }
         tree={room.toggles}
       />
       <PullRequestPeople people={pullRequest} />

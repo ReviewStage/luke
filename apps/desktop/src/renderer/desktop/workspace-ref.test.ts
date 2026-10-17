@@ -7,6 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "./workspace-ref";
 
@@ -22,10 +23,7 @@ const PHOTO = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
 const roots: Root[] = [];
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PHOTO }) },
-  });
+  fakeAppBridge({ act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PHOTO }) });
 });
 
 afterEach(() => {
@@ -55,7 +53,7 @@ function heard(node: Node): string {
   return [...node.childNodes].map(heard).join("");
 }
 
-test("a workspace is named by its letter on its hue and its name, at the size its place asks", () => {
+test("a workspace is named by its letter and its name", () => {
   const view = draw(
     createElement(WorkspaceRef, {
       workspace: { id: "workspace-stage", name: "Stage" },
@@ -65,8 +63,6 @@ test("a workspace is named by its letter on its hue and its name, at the size it
   const tile = view.querySelector(".workspace-tile") ?? assert.fail("the ref draws the tile");
 
   assert.equal(tile.textContent, "S");
-  assert.equal(tile.hasAttribute("data-hue"), true);
-  assert.equal(tile.getAttribute("data-size"), "row");
   assert.equal(heard(view), "Stage");
 });
 
@@ -123,13 +119,12 @@ test("a workspace's card names it with who shares it: its members counted, or Pe
 
   assert.deepEqual(
     [team, own].map((card) => [
-      card.querySelector(".workspace-card-head > .workspace-tile")?.getAttribute("data-size"),
-      card.querySelector(".card-name")?.textContent,
-      card.querySelector(".card-sub")?.textContent,
+      card.querySelector(".luke-hover-card-name")?.textContent,
+      card.querySelector(".luke-hover-card-sub")?.textContent,
     ]),
     [
-      ["head", "Acme", "5 members"],
-      ["head", "Dana Reyes", "Personal workspace"],
+      ["Acme", "5 members"],
+      ["Dana Reyes", "Personal workspace"],
     ],
   );
 });

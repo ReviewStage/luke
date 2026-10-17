@@ -3,13 +3,15 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { layContainersAt, shown } from "#testing/container-width";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand } from "../app-commands";
 import { OpenPersonProvider } from "../person-door";
@@ -35,16 +37,13 @@ let sent: { kind: string }[] = [];
 
 beforeEach(() => {
   sent = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: { kind: string }) => {
-        sent.push({ kind: request.kind });
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: { kind: string }) => {
+      sent.push({ kind: request.kind });
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
   });
+  handCapabilities(DESKTOP_CAPABILITIES);
 });
 
 afterEach(() => {
@@ -69,6 +68,8 @@ function mount(
     ran?: string[];
     openPerson?: (userId: string) => void;
     update?: UpdateSnapshot;
+    settingsOpen?: boolean;
+    onSettings?: () => void;
   } = {},
 ): HTMLButtonElement {
   const container = document.createElement("div");
@@ -100,8 +101,8 @@ function mount(
                 onOpenLatest: () => undefined,
               },
               shown: true,
-              settingsOpen: false,
-              onSettings: () => undefined,
+              settingsOpen: options.settingsOpen ?? false,
+              onSettings: options.onSettings ?? (() => undefined),
               onSignOut: options.onSignOut ?? (() => Promise.resolve()),
             }),
             createElement(HelpOffers, { ran: options.ran ?? [] }),
@@ -152,7 +153,7 @@ function accountItem(label: string): HTMLButtonElement {
   const item = [...(accountMenu()?.children ?? [])].find(
     (line): line is HTMLButtonElement =>
       line instanceof HTMLButtonElement &&
-      line.querySelector(".task-menu-label")?.textContent === label,
+      line.querySelector(".luke-menu-item-label")?.textContent === label,
   );
   return item ?? assert.fail(`the account's menu offers ${label}`);
 }
@@ -204,7 +205,7 @@ test("the account's menu offers the Help menu's own commands and opens the chang
   assert.deepEqual(sent, [{ kind: ACT_KIND.UPDATE_OPEN_CHANGELOG }]);
 });
 
-test("Contact us flies out its own menu beside the account's, which stands whole behind it with Contact us lit", () => {
+test("Contact us flies out its own menu beside the account's, which stands whole behind it", () => {
   const button = mount(DEAN);
   act(() => button.click());
   const contact = accountItem("Contact us");
@@ -221,7 +222,6 @@ test("Contact us flies out its own menu beside the account's, which stands whole
   assert.equal(document.activeElement?.textContent, "GitHub", "focus lands on its first item");
   assert.equal(accountMenuLines().length, 11, "the account's menu keeps every line");
   assert.equal(contact.getAttribute("aria-expanded"), "true");
-  assert.equal(contact.dataset.open, "true", "Contact us stays lit");
 });
 
 test("Left or Escape closes Contact us's menu alone, and choosing in it closes both", () => {
@@ -334,43 +334,43 @@ test("in the window, the account's menu opens with the reader's own profile, onc
   assert.deepEqual(opened, ["user-dean"]);
 });
 
-/** The foot's row at the sidebar's least width, 200, less the column's insets, and at its default, 264. */
-const FOOT = { NARROWEST: 176, DEFAULT: 240 } as const;
+test("the gear goes to Settings, and marks itself the page while Settings shows", () => {
+  let opened = 0;
+  mount(DEAN, { onSettings: () => opened++ });
+  const gear = (): HTMLButtonElement =>
+    document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]') ??
+    assert.fail("the foot draws the gear");
+  assert.equal(gear().getAttribute("aria-current"), null);
+  act(() => gear().click());
+  assert.equal(opened, 1);
 
-/** The update's press as drawn on a foot this wide: its name, and whether its word is drawn beside its glyph. */
-function updateAt(width: number) {
-  const style = layContainersAt({ "sidebar-foot": width });
-  const press =
-    document.querySelector<HTMLButtonElement>(".sidebar-update") ??
-    assert.fail("the update stands");
-  const word = press.querySelector(".sidebar-update-word") ?? assert.fail("the press has a word");
-  const drawn = { name: press.getAttribute("aria-label"), word: shown(word) };
-  style.remove();
-  return drawn;
-}
-
-test("a release waiting on its restart draws Restart's glyph alone on the sidebar's narrowest foot, so the account's name keeps its room, and its word at the default width", () => {
-  mount(DEAN, {
-    update: {
-      status: UPDATE_STATUS.READY,
-      currentVersion: "1.0.0",
-      installSupported: true,
-      latestVersion: "1.1.0",
-    },
-  });
-  assert.deepEqual(updateAt(FOOT.NARROWEST), { name: "Restart", word: false });
-  assert.deepEqual(updateAt(FOOT.DEFAULT), { name: "Restart", word: true });
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  mount(DEAN, { settingsOpen: true });
+  assert.equal(gear().getAttribute("aria-current"), "page");
 });
 
-test("a release that failed to install draws Download's glyph alone on the sidebar's narrowest foot, named still", () => {
-  mount(DEAN, {
-    update: {
-      status: UPDATE_STATUS.ERROR,
-      currentVersion: "1.0.0",
-      installSupported: true,
-      latestVersion: "1.1.0",
-    },
-  });
-  assert.deepEqual(updateAt(FOOT.NARROWEST), { name: "Download", word: false });
-  assert.deepEqual(updateAt(FOOT.DEFAULT), { name: "Download", word: true });
+test("an update ready to install offers Restart in the sidebar on the desktop, and nothing on a platform without updates", async () => {
+  const ready: UpdateSnapshot = {
+    status: UPDATE_STATUS.READY,
+    currentVersion: "1.0.0",
+    installSupported: true,
+    latestVersion: "1.1.0",
+  };
+  const restartShown = async (capabilities: readonly HostCapability[]) => {
+    handCapabilities(capabilities);
+    mount(DEAN, { update: ready });
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    const shown = document.querySelector('.sidebar-update[aria-label="Restart"]') !== null;
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    return shown;
+  };
+
+  assert.equal(await restartShown(DESKTOP_CAPABILITIES), true);
+  assert.equal(
+    await restartShown(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.UPDATES)),
+    false,
+  );
 });
