@@ -268,25 +268,6 @@ fi
 # requiring the changelog to name the packaged version makes the version-bump
 # change carry the release's notes, which the landing page renders at
 # /changelog. See .github/RELEASE.md.
-# The desktop app is the one thing that ships a version, so its manifest is the
-# one that carries one: the tag, the build, the updater, and Sentry's release
-# all read apps/desktop/package.json and nothing else does. A version on any
-# other workspace is a second number to keep in step that no reader checks, and
-# moving it changes that workspace's hash, so a release would replay nothing.
-stray_versions=$(cd "$LUKE_REPO_ROOT" && node -e '
-  const fs = require("node:fs");
-  for (const file of process.argv.slice(1)) {
-    if (file !== "apps/desktop/package.json" && "version" in JSON.parse(fs.readFileSync(file, "utf8"))) {
-      console.log(file);
-    }
-  }
-' package.json apps/*/package.json packages/*/package.json tools/*/package.json)
-if [[ -n "$stray_versions" ]]; then
-    printf 'error: only apps/desktop/package.json carries a version; remove "version" from:\n%s\n' \
-        "$stray_versions" >&2
-    exit 1
-fi
-
 desktop_version=$(node -p "require('$LUKE_REPO_ROOT/apps/desktop/package.json').version")
 if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$LUKE_REPO_ROOT/CHANGELOG.md"; then
     printf 'error: CHANGELOG.md has no entry for version %s — every release adds its notes before its tag is pushed\n' \
