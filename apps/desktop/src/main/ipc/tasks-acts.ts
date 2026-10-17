@@ -21,6 +21,8 @@ import {
   type TasksPageAnswer,
   type TasksPageParams,
   type TasksPageSourceAnswer,
+  type TasksPagesAnswer,
+  type TasksPagesParams,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPictureKeepParams,
@@ -63,6 +65,7 @@ import {
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceTransferParams,
+  type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
 import {
   ACT,
@@ -94,6 +97,7 @@ export interface TasksActsDependencies {
     tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
     tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
     tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
+    tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
     tasksArchive(params: TasksArchiveParams): Effect.Effect<boolean>;
     tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
     tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
@@ -113,6 +117,7 @@ export interface TasksActsDependencies {
     tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
     tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
     tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
+    tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
     tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
     tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
@@ -178,6 +183,7 @@ type TasksActKind =
   | typeof ACT_KIND.TASKS_RENAME
   | typeof ACT_KIND.TASKS_PIN
   | typeof ACT_KIND.TASKS_PIN_REPOSITORY
+  | typeof ACT_KIND.TASKS_WRITE_SECTION
   | typeof ACT_KIND.TASKS_ARCHIVE
   | typeof ACT_KIND.TASKS_REPOSITORIES
   | typeof ACT_KIND.TASKS_SET_REPOSITORY
@@ -202,6 +208,7 @@ type TasksActKind =
   | typeof ACT_KIND.TASKS_REVISION
   | typeof ACT_KIND.TASKS_RESTORE
   | typeof ACT_KIND.TASKS_PAGE_SOURCE
+  | typeof ACT_KIND.TASKS_PAGES
   | typeof ACT_KIND.TASKS_PICTURE_READ
   | typeof ACT_KIND.TASKS_PICTURE_KEEP
   | typeof ACT_KIND.WORKSPACE_CREATE
@@ -360,6 +367,10 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
       refuseUnlessPanel(ACT_KIND.TASKS_PIN_REPOSITORY, sender);
       return host.tasksPinRepository(params);
     },
+    [ACT_KIND.TASKS_WRITE_SECTION]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_WRITE_SECTION, sender);
+      return host.tasksWriteSection(params);
+    },
     [ACT_KIND.TASKS_ARCHIVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_ARCHIVE, sender);
       return host.tasksArchive(params);
@@ -508,6 +519,10 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
             ? { lines: pageSourceLines(answer.page.html, dependencies.colourCode) }
             : answer,
       );
+    },
+    [ACT_KIND.TASKS_PAGES]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_PAGES, sender);
+      return host.tasksPages(params);
     },
     [ACT_KIND.TASKS_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_BOARD_SAVE, sender);

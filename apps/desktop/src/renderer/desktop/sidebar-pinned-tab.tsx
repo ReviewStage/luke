@@ -8,6 +8,7 @@ import {
   HoverCardNote,
   HoverCardRule,
   UnpinIcon,
+  useMenu,
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
 import { useClipped } from "@luke/ui/use-clipped";
@@ -21,7 +22,7 @@ import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { PinnedTab } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 import { CardDetail, PullRequestLine, RepositoryDetail } from "./task-card";
@@ -264,7 +265,7 @@ export function SidebarPinnedTab({
 }): React.JSX.Element {
   const [words, clipped] = useClipped();
   const copied = useTranscriptCopier();
-  const menu = useActionMenu(tasks.shown && inSight);
+  const menu = useMenu(tasks.shown && inSight);
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const gone = pinGone(pin, tasks);

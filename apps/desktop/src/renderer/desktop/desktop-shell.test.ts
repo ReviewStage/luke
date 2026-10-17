@@ -186,6 +186,8 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        pages: undefined,
+        onRereadPages: () => undefined,
       },
       onNewTask: () => setAsked(true),
       newTask: { ...control.newTask, open: asked, onClose: () => setAsked(false) },

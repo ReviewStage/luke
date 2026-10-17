@@ -69,6 +69,12 @@ import { task } from "./task.js";
  * kept as it stood when the run started (`StoredAutomationOrigin`), so the
  * agent still names its automation once that automation is deleted and
  * `automation_id` goes null; null for an agent started by hand.
+ * `started_from` is the agent of the same plan this one was started from
+ * (`StoredStartedFrom`): the one it continues, or forks at one of its
+ * messages, with how many of that agent's steps its first message replayed
+ * of how many there were; null for an agent started afresh. The source is
+ * named by id and held to nothing, so an agent outlives a source discarded
+ * after it.
  * `author` is who the agent's commits are by and its pull request is opened
  * as, the developer or the Luke GitHub App with why (`CODING_AGENT_AUTHOR`),
  * settled once as its first session starts and never moved after, so its
@@ -119,6 +125,18 @@ export interface StoredAutomationOrigin {
 }
 
 /**
+ * The agent an agent was started from: its id, the assistant message it was
+ * forked at where it was forked rather than continued, and how many of the
+ * source's steps the replay kept of how many there were.
+ */
+export interface StoredStartedFrom {
+  readonly agentId: string;
+  readonly messageId?: string;
+  readonly steps: number;
+  readonly totalSteps: number;
+}
+
+/**
  * Who archived an agent, and why: a member from the window, or Luke or
  * another coding agent acting for one, the member always, the agent by its
  * id and its title as it stood, and the reason where one was given.
@@ -147,6 +165,8 @@ export const codingAgent = pgTable(
     }),
     /** The run of an automation that started the agent, as it stood then; null for one started by hand. */
     automationOrigin: jsonb("automation_origin").$type<StoredAutomationOrigin>(),
+    /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
+    startedFrom: jsonb("started_from").$type<StoredStartedFrom>(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

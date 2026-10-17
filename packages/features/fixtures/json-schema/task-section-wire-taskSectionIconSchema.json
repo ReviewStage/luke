@@ -1,0 +1,57 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "emoji"
+          ]
+        },
+        "emoji": {
+          "type": "string",
+          "maxLength": 32
+        }
+      },
+      "required": [
+        "kind",
+        "emoji"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "glyph"
+          ]
+        },
+        "glyph": {
+          "type": "string",
+          "enum": [
+            "folder",
+            "star",
+            "bookmark",
+            "flag",
+            "rocket",
+            "zap",
+            "bug",
+            "flask",
+            "briefcase",
+            "layers",
+            "heart",
+            "circle"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "glyph"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

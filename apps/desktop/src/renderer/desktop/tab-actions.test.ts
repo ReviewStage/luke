@@ -135,7 +135,7 @@ function readAndClose(): string[] {
   assert.ok(menu, "a menu stands open");
   const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(
     (item) =>
-      `${item.querySelector(".task-menu-label")?.textContent}${item.disabled ? " (off)" : ""}`,
+      `${item.querySelector(".luke-menu-item-label")?.textContent}${item.disabled ? " (off)" : ""}`,
   );
   act(() => {
     menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));

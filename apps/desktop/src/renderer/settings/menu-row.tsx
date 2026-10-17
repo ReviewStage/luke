@@ -1,7 +1,7 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { EllipsisIcon } from "@luke/ui";
+import { EllipsisIcon, useMenu } from "@luke/ui";
 import { useRef } from "react";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -52,7 +52,7 @@ export function MenuRow({
 }): React.JSX.Element {
   // The page is drawn whenever the row is, so the menu needs no surface of
   // its own to close with: it closes with the row unmounting.
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   const groups = groupsOf(actions);
   const acting = groups.length > 0;

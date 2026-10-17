@@ -6,7 +6,7 @@ import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import type { DialogConfirm } from "@luke/ui";
-import { BackIcon, EllipsisIcon } from "@luke/ui";
+import { BackIcon, EllipsisIcon, useMenu } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
@@ -51,7 +51,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -200,7 +200,7 @@ function RevisionRow({
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const groups = [
     [
@@ -329,7 +329,7 @@ function SectionRow({
   source: SourceDoor | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   return (
     <li>
       <button

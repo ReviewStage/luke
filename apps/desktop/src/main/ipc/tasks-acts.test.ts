@@ -5,6 +5,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
@@ -173,6 +174,11 @@ function fixture() {
           asked.push(`pin-repository:${params.repository}:${params.pinned}`);
           return true;
         }),
+      tasksWriteSection: (params) =>
+        Effect.sync(() => {
+          asked.push(`section:${params.kind}`);
+          return true;
+        }),
       tasksArchive: (params) =>
         Effect.sync(() => {
           asked.push(`archive:${params.taskId}:${params.archived}`);
@@ -268,6 +274,11 @@ function fixture() {
           const { html } = page;
           if (html === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
           return { page: { id: params.pageId, title: "Invite funnel", version: 2, at: 0, html } };
+        }),
+      tasksPages: (params) =>
+        Effect.sync(() => {
+          asked.push(`pages:${params.taskId}`);
+          return { pages: [{ id: "page-1", title: "Invite funnel", version: 2, at: 0 }] };
         }),
       githubConnect: () =>
         Effect.sync((): TasksGitHubPageAnswer => {
@@ -500,9 +511,20 @@ it.effect("the voice window does not reach the plans", () =>
       status: ACT_OUTCOME_STATUS.REFUSED,
       reason: ACT[ACT_KIND.TASKS_SELECT].refusal,
     });
+    const sectioned = yield* f.router.performAct(
+      {
+        kind: ACT_KIND.TASKS_WRITE_SECTION,
+        payload: { kind: TASK_SECTION_WRITE.PLACE, taskId: TASK_ID, sectionId: null },
+      },
+      VOICE,
+    );
     assert.deepEqual(saved, {
       status: ACT_OUTCOME_STATUS.REFUSED,
       reason: ACT[ACT_KIND.TASKS_BOARD_SAVE].refusal,
+    });
+    assert.deepEqual(sectioned, {
+      status: ACT_OUTCOME_STATUS.REFUSED,
+      reason: ACT[ACT_KIND.TASKS_WRITE_SECTION].refusal,
     });
     assert.deepEqual(f.asked, []);
   }),

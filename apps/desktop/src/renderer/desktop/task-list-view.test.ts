@@ -215,7 +215,7 @@ function mountSidebar(
 
 /** The words each standing menu item says, its glyph left out. */
 function itemLabel(item: HTMLElement): string {
-  return (item.querySelector(".task-menu-label") ?? item).textContent?.trim() ?? "";
+  return (item.querySelector(".luke-menu-item-label") ?? item).textContent?.trim() ?? "";
 }
 
 /** The menu item that says `label`, in whichever menu stands. */
