@@ -8,7 +8,7 @@ import {
   settingRowsForPage,
 } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SELECT_ALIGN, Select, SettingsRow, Switch } from "@luke/ui";
+import { SELECT_ALIGN, SELECT_WIDTH, Select, SettingsRow, Switch } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
@@ -121,6 +121,7 @@ function SchemaChoiceRow({
             describedBy={control["aria-describedby"]}
             disabled={busy}
             align={SELECT_ALIGN.END}
+            width={SELECT_WIDTH.FIELD}
             onChange={pick}
           />
         ) : (

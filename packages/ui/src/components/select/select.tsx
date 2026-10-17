@@ -1,4 +1,5 @@
-import { CHIP_LOOK, Chip, ChipName } from "../chip/chip.js";
+import { CHIP_LOOK, ChipName } from "../chip/chip.js";
+import { ChipFrame } from "../chip/chip-frame.js";
 import { dropBelowStart, MENU_ALIGN, Menu, useMenu } from "../menu/menu.js";
 
 /**
@@ -26,6 +27,24 @@ export const SELECT_ALIGN = MENU_ALIGN;
 
 export type SelectAlign = (typeof SELECT_ALIGN)[keyof typeof SELECT_ALIGN];
 
+/**
+ * How wide the field stands: as wide as its value's words, or the field
+ * column a settings row's pop-ups share, so a card of them reads as one
+ * aligned column and a change of value cannot re-shape its row.
+ */
+export const SELECT_WIDTH = {
+  FIT: "fit",
+  FIELD: "field",
+} as const;
+
+export type SelectWidth = (typeof SELECT_WIDTH)[keyof typeof SELECT_WIDTH];
+
+/** The class each width wears beside the chip's own. */
+const WIDTH_CLASS = {
+  [SELECT_WIDTH.FIT]: undefined,
+  [SELECT_WIDTH.FIELD]: "luke-select-field",
+} as const satisfies Record<SelectWidth, string | undefined>;
+
 /** One value the field may take: the value, its words, and a glyph where values carry one. */
 export interface SelectOption<Value extends string> {
   value: Value;
@@ -51,6 +70,8 @@ export function Select<Value extends string>(
     disabled?: boolean | undefined;
     /** The field's edge the menu hangs from; the leading one where none is named. */
     align?: SelectAlign | undefined;
+    /** How wide the field stands; its value's own width where none is named. */
+    width?: SelectWidth | undefined;
   } & AppAttributes,
 ): React.JSX.Element {
   const {
@@ -61,6 +82,7 @@ export function Select<Value extends string>(
     describedBy,
     disabled: unavailable = false,
     align = SELECT_ALIGN.START,
+    width = SELECT_WIDTH.FIT,
     ...appAttributes
   } = props;
   // Note that a field with no value it could change to is unavailable, because
@@ -74,9 +96,10 @@ export function Select<Value extends string>(
   return (
     <>
       {/* Note that a menu's trigger hangs it from the trailing edge unless handed another place. */}
-      <Chip
+      <ChipFrame
         {...appAttributes}
         {...menu.trigger(align === SELECT_ALIGN.START ? dropBelowStart : undefined)}
+        className={WIDTH_CLASS[width]}
         look={CHIP_LOOK.FIELD}
         chevron
         aria-label={`${label}: ${words}`}
@@ -85,7 +108,7 @@ export function Select<Value extends string>(
       >
         {chosen?.icon}
         <ChipName>{words}</ChipName>
-      </Chip>
+      </ChipFrame>
       {menu.drawn === undefined ? null : (
         <Menu
           label={label}

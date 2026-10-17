@@ -22,6 +22,8 @@
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
+  /* A settings row's pop-up stands in one column whatever value it names. */
+  --luke-select-field-width: 200px;
   --luke-field-gap: var(--luke-space-16);
   --luke-section-gap: var(--luke-space-16);
   --luke-page-inset: var(--luke-space-40);
@@ -74,6 +76,7 @@
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
+  --luke-select-field-width: auto;
   --luke-field-gap: var(--luke-space-16);
   --luke-section-gap: var(--luke-space-16);
   --luke-page-inset: var(--luke-space-24);
