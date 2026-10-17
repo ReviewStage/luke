@@ -228,7 +228,7 @@ test("a settled item says what its answerer did: the developer's pick, a form's 
         answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis", "Postgres"], note: "Fine." },
       }),
     ),
-    { by: SETTLED_BY.DEVELOPER, did: "chose Redis, Postgres", words: "Fine." },
+    { by: SETTLED_BY.DEVELOPER, did: "chose Redis, Postgres", note: "Fine." },
   );
   assert.deepEqual(
     settlementOf(
@@ -248,7 +248,7 @@ test("a settled item says what its answerer did: the developer's pick, a form's 
     {
       by: SETTLED_BY.DEVELOPER,
       did: "filled it in",
-      words: "Port: 587\nVerify certificate: yes",
+      values: "Port: 587\nVerify certificate: yes",
     },
   );
   assert.deepEqual(

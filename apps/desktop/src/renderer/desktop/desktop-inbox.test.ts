@@ -10,6 +10,7 @@ import {
 } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
   type CodingAgentListAnswer,
 } from "@luke/features/coding-agent-view";
@@ -25,22 +26,34 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
+import {
+  composerEditor,
+  installEditorBundle,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { relayout } from "#testing/resize-observer";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
@@ -182,7 +195,15 @@ let pageAgents = new Map<string, CodingAgentSummary>();
 /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
 let imageReads: (() => void)[] = [];
 
+// Set before any box renders, since the box reads the editor bundle once per window.
+installEditorBundle();
+
+// The parser an answer's note is drawn through, landed as the panel lands it.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
 beforeEach(() => {
+  installEditorLayout();
+  installScrollIntoView();
   window.localStorage.clear();
   inboxes = new Map([
     [BILLING.id, [THRESHOLD, RETRY]],
@@ -239,6 +260,20 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
           copied.push(request.payload.words);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        if (request.kind === ACT_KIND.TASKS_TREE) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: {
+              folder: {
+                path: "",
+                repository: "acme/relay",
+                branch: "main",
+                entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
+                truncated: false,
+              },
+            },
+          });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
@@ -473,7 +508,7 @@ test("a settled choice folds what its agent offered to one line saying who picke
       ["false", "Retry once", null],
     ],
   );
-  assert.equal(pane.querySelector("textarea"), null, "a settled item takes no answer");
+  assert.equal(pane.querySelector(".composer-editor"), null, "a settled item takes no answer");
   const reply = pane.querySelector<HTMLElement>('[data-inbox-comment="answered"]');
   assert.ok(reply, "the developer's answer is their own comment");
   assert.equal(reply.querySelector("[data-inbox-pick]")?.textContent, "Retry 3 times over an hour");
@@ -566,7 +601,7 @@ test("a teammate's open item does not need you: its subject's line says it waits
     "the teammate is named by their face",
   );
   assert.ok(
-    page.querySelector(".inbox-view-items:not([hidden]) textarea"),
+    page.querySelector(".inbox-view-items:not([hidden]) .composer-editor"),
     "any member may answer",
   );
 });
@@ -1368,8 +1403,9 @@ test("split, K and J move the chosen row and the item beside it, which draws no 
   pressKey("k");
   assert.equal(readTitle(page), "Alert at 80%?");
 
-  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
-  assert.ok(box, "the item waits on an answer in its box");
+  const box = composerEditor(page.querySelector(".inbox-view-items") ?? page);
+  // Note that jsdom computes no `isContentEditable`, which a browser answers for the editor.
+  Object.defineProperty(box, "isContentEditable", { value: true });
   box.focus();
   pressKey("j", box);
   assert.equal(readTitle(page), "Alert at 80%?", "the letter is the box's");
@@ -1458,6 +1494,237 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
   elsewhere.remove();
 });
 
+/** Every answer the pane sends, written down and left unanswered, so the box stays as it was. */
+function heldAnswers(): CodingAgentInboxAnswerParams[] {
+  const sent: CodingAgentInboxAnswerParams[] = [];
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) => {
+        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
+        sent.push(request.payload);
+        return new Promise(() => undefined);
+      },
+    },
+  });
+  return sent;
+}
+
+/** The open item's pane, where its box stands. */
+function itemPane(page: HTMLElement): HTMLElement {
+  return page.querySelector<HTMLElement>(".inbox-view-items") ?? assert.fail("the pane is drawn");
+}
+
+test("an item's box is the agent's message box: it takes no caret as the item opens, so K and J stay the list's; Enter sends its note, Shift+Enter is a new line, and Escape leaves the box but not the item", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.notEqual(document.activeElement, composerEditor(pane), "opening an item takes no caret");
+
+  typeInComposer(pane, "Use 90%\ninstead");
+  pressInComposer(pane, "Escape");
+  assert.notEqual(document.activeElement, composerEditor(pane), "Escape leaves the box");
+  assert.equal(readTitle(page), "Alert at 80%?", "and the item stands");
+
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ itemId, reply, note }) => ({ itemId, reply, note })),
+    [{ itemId: THRESHOLD.id, reply: INBOX_REPLY.ANSWERED, note: "Use 90%\ninstead" }],
+  );
+});
+
+test("in the window's Inbox an @ in an item's box offers its plan's repository's files, and the file picked reaches the agent in the note as its link", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+
+  typeInComposer(pane, "See @roll");
+  await settle();
+  const offered = [...pane.querySelectorAll(".mention-menu .task-compose-menu-name")].map(
+    (name) => name.textContent,
+  );
+  pressInComposer(pane, "Enter");
+  await settle();
+  const chips = [...composerEditor(pane).querySelectorAll(".mention-chip")].map(
+    (chip) => chip.textContent,
+  );
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(offered, ["rollout-store.ts"]);
+  assert.deepEqual(chips, ["rollout-store.ts"]);
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
+  assert.deepEqual(
+    sent.map(({ note }) => note),
+    [`See ${file}`],
+  );
+});
+
+test("an answered item's note draws a mention it holds as the chip a sent message draws, never as its link's words", async () => {
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
+  const answered: InboxItem = {
+    ...RETRY,
+    answer: {
+      reply: INBOX_REPLY.CHOSE,
+      choices: ["Retry 3 times over an hour"],
+      note: `See ${file}`,
+    },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, answered]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const note = itemPane(page).querySelector('[data-inbox-comment="answered"] [data-inbox-note]');
+
+  assert.equal(note?.querySelector(".mention-chip")?.textContent, "rollout-store.ts");
+  assert.equal(note?.textContent, "See rollout-store.ts");
+});
+
+test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {
+  // The strip draws still under reduced motion, which jsdom has no answer to.
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: true,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) =>
+        request.kind === ACT_KIND.MICROPHONE_REQUEST
+          ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
+          : bridge.act(request),
+    },
+  });
+  const { page } = mount();
+  await settle();
+  const alerts = () =>
+    [...itemPane(page).querySelectorAll('.agent-composer [role="alert"]')].map(
+      (alert) => alert.textContent,
+    );
+
+  const dictate =
+    itemPane(page).querySelector<HTMLButtonElement>('button[aria-label="Dictate"]') ??
+    assert.fail("the microphone is offered");
+  await act(async () => dictate.click());
+  await settle();
+  const refused = alerts();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+
+  assert.equal(refused.length, 1, "the dictation says why it left nothing");
+  assert.deepEqual(alerts(), [], "the next item's box says nothing of it");
+});
+
+/** The repository's one skill read for the box, and every GitHub page a press opened, written down. */
+function skillReads(): string[] {
+  const opened: string[] = [];
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.TASKS_SKILLS) {
+          const release = {
+            name: "release",
+            description: "Use to cut a release.",
+            path: ".agents/skills/release/SKILL.md",
+          };
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
+          });
+        }
+        if (request.kind === ACT_KIND.GITHUB_OPEN) {
+          opened.push(request.payload.url);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        return bridge.act(request);
+      },
+    },
+  });
+  return opened;
+}
+
+/** The chip of the skill an answered note names, pressed. */
+async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
+  await settle();
+  const note = itemPane(page).querySelector('[data-inbox-comment="answered"] [data-inbox-note]');
+  const chip = [...(note?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (button) => button.textContent === name,
+  );
+  assert.ok(chip, "the skill is its chip");
+  act(() => chip.click());
+}
+
+/** Where the release skill's file stands on GitHub. */
+const RELEASE_ON_GITHUB = "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md";
+
+test("in the window's Inbox a skill an answered note names is the chip a sent message draws, which opens its SKILL.md on GitHub", async () => {
+  const answered: InboxItem = {
+    ...RETRY,
+    answer: {
+      reply: INBOX_REPLY.CHOSE,
+      choices: ["Retry 3 times over an hour"],
+      note: "Run /release first.",
+    },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, answered]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const opened = skillReads();
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await pressNoteSkill(page, "/release");
+
+  assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
+});
+
+test("a skill named by a settled item of an agent with no plan that a link reached opens in the agent's own repository, which its group names none of", async () => {
+  const settled: InboxItem = {
+    ...BUMP,
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: READER,
+    answer: { reply: INBOX_REPLY.ANSWERED, note: "Run /release first." },
+  };
+  agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
+  pageAgents = new Map([[STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }]]);
+  const opened = skillReads();
+  const { page } = mount();
+  await settle();
+  act(() => chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
+  await settle();
+  await pressNoteSkill(page, "/release");
+
+  assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
+});
+
 test("an item that needs no reply says a bare press won't message the agent, and that a note typed in its box will", async () => {
   const todo: InboxItem = {
     ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
@@ -1474,13 +1741,7 @@ test("an item that needs no reply says a bare press won't message the agent, and
   const quiet = () => page.querySelector(".inbox-view-items [data-inbox-quiet]")?.textContent;
   assert.equal(quiet(), "Without a note, this won't message the agent.");
 
-  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
-  assert.ok(box, "the item takes a note in its box");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(box, "Done on preview too.");
-    box.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  typeInComposer(page.querySelector(".inbox-view-items") ?? page, "Done on preview too.");
   assert.equal(quiet(), "Your note will be sent to the agent.");
 });
 
@@ -1575,13 +1836,7 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
   assert.equal(listReads.length, 0, "a bare Done reaches no one, so nothing about the agent moved");
 
   act(() => rowNamed(page, "Turn on the flag").click());
-  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
-  assert.ok(box);
-  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(box, "On preview too.");
-    box.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  typeInComposer(page.querySelector(".inbox-view-items") ?? page, "On preview too.");
   await act(async () => press("Done")?.click());
   await settle();
   assert.ok(listReads.length > 0, "the agent heard the note, so its list is read again");
