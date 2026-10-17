@@ -50,7 +50,10 @@
   /* The window's settings groups stand further apart than its fields. */
   --luke-settings-section-gap: var(--luke-space-32);
 
+  --luke-text-area-grow-max: 320px;
+
   --luke-dialog-confirm-width: 400px;
+  --luke-dialog-wide-width: 520px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
@@ -100,7 +103,10 @@
   --luke-settings-row-min-height: auto;
   --luke-settings-section-gap: var(--luke-section-gap);
 
+  --luke-text-area-grow-max: 320px;
+
   --luke-dialog-confirm-width: 400px;
+  --luke-dialog-wide-width: 520px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);

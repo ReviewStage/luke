@@ -7973,9 +7973,9 @@ button.automation-run:hover {
 /* Dialog parts ---------------------------------------------------------------- */
 
 /* The title, body, and answers of the window's dialogs not yet on
-   `@luke/ui`'s `ConfirmDialog` (New task, Send feedback, Move to
-   workspace), in `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a
-   list of choices, a note being written) is the part that gives way and
+   `@luke/ui`'s `ConfirmDialog` (New task, Move to workspace, New issue),
+   in `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a list of
+   choices, a note being written) is the part that gives way and
    scrolls, so its title and its answers stay on screen however short the
    window is. */
 .confirm-dialog-title {
@@ -8242,51 +8242,23 @@ button.automation-run:hover {
 
 /* Feedback dialog ------------------------------------------------------------ */
 
-/* A note to the people who make Luke, on the confirm dialog's backdrop and
-   card: wider, because a note wraps, and its foot carries the screenshot
-   button at its start and the answers at its end. A screenshot dragged over
-   the window rings the card that will take it. */
+/* A note to the people who make Luke, on the shared dialog's wide card,
+   which rings while a screenshot is dragged over the window. Everything the
+   card holds stands in one column, the part the screen recording leaves out
+   (`ph-no-capture`), which gives way in a window too short for the card, so
+   the note shrinks to its least height and the screenshots, the signature,
+   and the answers stay on screen. */
 .feedback-dialog {
-  width: min(520px, 100%);
-  gap: var(--space-12);
-  transition: box-shadow var(--duration-hover) ease;
-}
-
-.feedback-dialog[data-dropping="true"] {
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--message-sent) 70%, transparent),
-    0 24px 64px var(--shadow-deep);
-}
-
-/* The note grows with its words, up to where scrolling it is kinder than a
-   card the height of the window, and is the card's body: in a window too
-   short for the card it gives way, down to its least height, so the
-   screenshots, the signature, and the answers stay on screen. No resize
-   handle: the box is already sized by what it holds. */
-.feedback-dialog-message {
-  width: 100%;
-  min-height: 112px;
-  max-height: 320px;
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--desktop-well);
-  color: var(--text-primary);
-  font: inherit;
-  line-height: 1.5;
-  field-sizing: content;
-  resize: none;
-  transition: border-color var(--duration-hover) ease;
-}
-
-.feedback-dialog-message::placeholder {
-  color: var(--text-tertiary);
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
 }
 
 .feedback-dialog-images {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -8304,53 +8276,59 @@ button.automation-run:hover {
   display: block;
   width: 100%;
   height: 100%;
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-6);
   object-fit: cover;
 }
 
-/* The signature as one quiet line: the choice at its start, and who the note
-   is signed as, or that it is not, at its end. */
+/* The signature as one line: the choice at its start, and who the note is
+   signed as, quieter, at its end. */
 .feedback-dialog-signature {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--control-gap);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.feedback-dialog-signature label {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.feedback-dialog-signature input {
-  margin: 0;
-  accent-color: var(--message-sent);
+  gap: var(--luke-control-gap);
 }
 
 .feedback-dialog-identity {
   overflow: hidden;
   min-width: 0;
   margin-left: auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The screenshot button leads the foot, square like every icon button, and
-   the answers keep its end. */
-.confirm-dialog-actions > .feedback-dialog-attach {
-  min-width: 0;
-  margin-right: auto;
+/* The foot: the screenshot button at its start, the answers at its end, a
+   common width so a short verb is not a smaller target than Cancel. */
+.feedback-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-dialog-action-gap);
+  margin-top: var(--luke-space-12);
 }
 
-/* Send's chord, and Create plan's and the home page's New plan's, muted
-   against its own fill rather than the card's. */
-.feedback-dialog .primary-button .shortcut,
+.feedback-dialog-answers {
+  display: flex;
+  gap: var(--luke-dialog-action-gap);
+}
+
+.feedback-dialog-answers > * {
+  min-width: var(--luke-dialog-action-width);
+}
+
+/* Send's chord a glyph's gap after its word, muted against its own fill
+   rather than the card's. */
+.feedback-dialog-answers .shortcut {
+  --shortcut-ink: var(--luke-color-on-accent-muted);
+  margin-inline-start: var(--luke-icon-gap);
+}
+
+/* Create plan's chord and the home page's New plan's, muted against its own
+   fill rather than the card's. */
 .new-task-dialog .primary-button .shortcut,
 .home .primary-button .shortcut {
   --shortcut-ink: var(--on-accent-muted);
