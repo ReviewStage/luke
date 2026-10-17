@@ -1,7 +1,5 @@
-import { cn } from "@luke/ui";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { PROMPT_INPUT_FIELD_CLASS } from "../ai-elements/prompt-input";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -16,7 +14,7 @@ import type {
  * composer-field.tsx -- the field of a box written to an agent, its message box's or the Inbox's answer box's: the editor bundle's composer mounted in the card, the words it hands back, and the commands that change them from outside.
  *
  * The field is TipTap (`../plan-editor/composer-editor.ts`), from the editor
- * bundle the panel starts loading as it first paints (`../editor-bundle.ts`).
+ * bundle the panel starts loading as it first paints (`../bundle-loader.ts`).
  * In the rare frame before it lands, the field is drawn at its own size with
  * its placeholder, inert and out of the Tab order, and the editor takes the
  * caret as it mounts, unless the developer is typing somewhere else or the
@@ -31,8 +29,13 @@ import type {
  * words the field draws while the draft is empty, rather than an attribute
  * of the editor's, so the recording masks it as it masks the words. A chip
  * the editor holds is drawn by the box, into the node's own element, as the
- * owner draws it (`chip`), and so is a quote block (`quote`).
+ * owner draws it (`chip`), and so is a quote block (`quote`). The field's
+ * look is its own (`.agent-composer-input`, tasks.css), in the body type,
+ * and unrecorded (`ph-no-capture`), the same in both boxes.
  */
+
+/** The editor's class, and the inert field's before it mounts. */
+const FIELD_CLASS = "ph-no-capture agent-composer-input";
 
 /** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
 function typingElsewhere(): boolean {
@@ -71,7 +74,6 @@ export function ComposerField({
   setDraft,
   placeholder,
   label,
-  className,
   input,
   maxLength,
   skills,
@@ -96,7 +98,6 @@ export function ComposerField({
   setDraft: (text: string) => void;
   placeholder: string;
   label: string;
-  className: string;
   input: ComposerInput;
   maxLength: number;
   skills: ReadonlySet<string>;
@@ -116,7 +117,6 @@ export function ComposerField({
   children?: ReactNode;
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
-  const fieldClass = cn(PROMPT_INPUT_FIELD_CLASS, "aria-disabled:opacity-60", className);
   const [chips, setChips] = useState<readonly DrawnChip[]>([]);
   // The last words the editor handed back, which a draft from outside is told against.
   const emitted = useRef(draft);
@@ -160,7 +160,7 @@ export function ComposerField({
       skills: now.skills,
       maxLength,
       label,
-      className: fieldClass,
+      className: FIELD_CLASS,
       focus: now.takesFocus && !typingElsewhere(),
       onDraft: (text) => {
         emitted.current = text;
@@ -186,7 +186,7 @@ export function ComposerField({
       editor.current = undefined;
       mounted.destroy();
     };
-  }, [module, editor, maxLength, label, fieldClass]);
+  }, [module, editor, maxLength, label]);
 
   // A draft that moved from outside is told to the editor once; its own words handed back are not.
   useLayoutEffect(() => {
@@ -207,7 +207,7 @@ export function ComposerField({
           {placeholder}
         </span>
       ) : null}
-      {module === undefined ? <div className={fieldClass} aria-busy="true" /> : <div ref={host} />}
+      {module === undefined ? <div className={FIELD_CLASS} aria-busy="true" /> : <div ref={host} />}
       {chips.map((each) =>
         createPortal(
           "mention" in each.chip

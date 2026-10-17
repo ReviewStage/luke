@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
@@ -16,12 +17,14 @@ import {
 } from "@luke/features/repository-reach-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
 } from "#testing/composer";
@@ -32,7 +35,7 @@ import { OpenSettingsProvider } from "../open-settings";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
-import type { AgentDraft } from "./use-coding-agents";
+import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * A draft agent's first message through the bridge the host answers: a
@@ -70,8 +73,8 @@ const DRAFT: AgentDraft = {
 
 const roots: Root[] = [];
 
-// Set before any tab renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
@@ -80,44 +83,40 @@ beforeEach(() => {
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: {
-              integrations: {
-                ...UNAVAILABLE,
-                [INTEGRATION_PROVIDER.SLACK]: slack,
-                [INTEGRATION_PROVIDER.GITHUB]: github,
-              },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            integrations: {
+              ...UNAVAILABLE,
+              [INTEGRATION_PROVIDER.SLACK]: slack,
+              [INTEGRATION_PROVIDER.GITHUB]: github,
             },
-          });
+          },
+        });
+      }
+      // A Connect stands Slack pending at the service, and a Cancel disconnects it.
+      if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
+        if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
+          slack = INTEGRATION_STATUS.PENDING;
         }
-        // A Connect stands Slack pending at the service, and a Cancel disconnects it.
-        if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
-          if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
-            slack = INTEGRATION_STATUS.PENDING;
-          }
-          return Promise.resolve(
-            refuseConnect
-              ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
-              : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
-          );
-        }
-        if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
-          slack = INTEGRATION_STATUS.DISCONNECTED;
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { status: INTEGRATION_STATUS.DISCONNECTED },
-          });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      },
-      recordSurfaceEvent: () => undefined,
+        return Promise.resolve(
+          refuseConnect
+            ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
+            : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
+        );
+      }
+      if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
+        slack = INTEGRATION_STATUS.DISCONNECTED;
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { status: INTEGRATION_STATUS.DISCONNECTED },
+        });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
   });
 });
@@ -134,7 +133,11 @@ async function settle(): Promise<void> {
 }
 
 /** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
-function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
+function mount(
+  answers: (Failure | undefined)[],
+  draft: AgentDraft = DRAFT,
+  extra: Partial<CodingAgentsControl> = {},
+) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
   const settings = { integrationsOpened: false };
@@ -146,6 +149,7 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
     onOpenIntegrations: () => {
       settings.integrationsOpened = true;
     },
+    ...extra,
   });
   const github = { connects: 0 };
   /** What each repository remedy's door was asked, in order. */
@@ -451,4 +455,118 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
   await tab.press("Try again");
   await tab.press("Cancel");
   assert.deepEqual(slackRow(), { words: undefined, buttons: ["Connect"] });
+});
+
+test("a fork's draft names its source and the message over the box, starts on the source's model, sends an empty box as the fork alone, and its × lets the fork go", async () => {
+  const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
+  const fork = { agentId: SOURCE, messageId: MESSAGE, opening: "I moved the invite email…" };
+  const source: CodingAgentSummary = {
+    id: SOURCE,
+    planId: TASK_ID,
+    model: "openai/gpt-6.1-sol",
+    effort: "xhigh",
+    title: "Queue the invite email",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const forks: unknown[] = [];
+  let dropped = 0;
+  const tab = mount(
+    [],
+    { ...DRAFT, prompt: "", fork },
+    {
+      agents: [source],
+      startFork: (draftId, forked, words, choice, attachments) => {
+        forks.push({ draftId, forked, words, choice, attachments });
+        return Promise.resolve(undefined);
+      },
+      onDropFork: () => {
+        dropped += 1;
+      },
+    },
+  );
+  await settle();
+
+  const chip = document.querySelector("[data-fork-chip]");
+  assert.equal(
+    chip?.textContent?.replace(/\s+/gu, " "),
+    `Fork ofQueue the invite emailat“${fork.opening}”`,
+  );
+  assert.equal(
+    document.querySelector(".agent-model-chip")?.textContent,
+    "GPT 6.1 Sol Extra high",
+    "the model chip starts on the source's model and effort",
+  );
+
+  await tab.send();
+  assert.deepEqual(forks, [
+    { draftId: DRAFT.id, forked: fork, words: "", choice: undefined, attachments: [] },
+  ]);
+  assert.deepEqual(tab.starts, [], "a fork is never started as a prompt");
+
+  await tab.press("Drop the fork");
+  assert.equal(dropped, 1);
+});
+
+test("a continue's draft names its source alone over the box, stands on a working line copying the source's work while its Start is out, and gives way to the new agent as it lands, or to the note and Retry with the words kept", async () => {
+  const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const fork = { agentId: SOURCE, opening: "" };
+  const source: CodingAgentSummary = {
+    id: SOURCE,
+    planId: TASK_ID,
+    model: "openai/gpt-6.1-sol",
+    effort: "xhigh",
+    title: "Queue the invite email",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.FAILED,
+    turnId: null,
+  };
+  const answers: ((failed: Failure | undefined) => void)[] = [];
+  const forks: unknown[] = [];
+  let dropped = 0;
+  const tab = mount(
+    [],
+    { ...DRAFT, prompt: "Now add the dark variant.", fork },
+    {
+      agents: [source],
+      startFork: (_draftId, forked, words) => {
+        forks.push({ forked, words });
+        return new Promise((resolve) => answers.push(resolve));
+      },
+      onDropFork: () => {
+        dropped += 1;
+      },
+    },
+  );
+  await settle();
+  const working = () => document.querySelector("[data-working]")?.textContent ?? undefined;
+
+  const chip = document.querySelector("[data-fork-chip]");
+  assert.equal(chip?.textContent?.replace(/\s+/gu, " "), "Continue ofQueue the invite email");
+  assert.equal(working(), undefined, "nothing works before the send");
+
+  await tab.send();
+  assert.deepEqual(forks, [{ forked: fork, words: "Now add the dark variant." }]);
+  assert.match(working() ?? "", /^Copying Queue the invite email's work…/u);
+  assert.equal(tab.button("Send")?.disabled, true, "the box is held while the Start is out");
+
+  await act(async () =>
+    answers.shift()?.(startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID)),
+  );
+  await settle();
+  assert.equal(working(), undefined, "a Start that did not land leaves the line");
+  assert.match(tab.note() ?? "", /could not be started/u);
+  assert.equal(tab.draft(), "Now add the dark variant.", "the words are kept");
+
+  await tab.press("Retry");
+  assert.equal(forks.length, 2);
+  assert.match(working() ?? "", /^Copying/u);
+  await act(async () => answers.shift()?.(undefined));
+  await settle();
+  assert.equal(working(), undefined, "the line gives way once the new agent landed");
+
+  await tab.press("Drop the continue");
+  assert.equal(dropped, 1);
 });

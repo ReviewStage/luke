@@ -1,11 +1,20 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
-import { CopyIcon, DocumentIcon, UnpinIcon } from "@luke/ui";
+import {
+  CopyIcon,
+  DocumentIcon,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  HoverCardRule,
+  UnpinIcon,
+  useMenu,
+} from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
+import { useClipped } from "@luke/ui/use-clipped";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy";
 import type { PullRequestReader } from "../tasks/use-agent-pull-request";
@@ -13,8 +22,7 @@ import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { PinnedTab } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 import { CardDetail, PullRequestLine, RepositoryDetail } from "./task-card";
@@ -78,7 +86,7 @@ function pinSubject(pin: PinnedTab, agent: TaskAgentLine | undefined): TabSubjec
     return { kind: TAB_KIND.AGENT, name: pin.label, agent: agent ?? pinned };
   }
   if (tab === MAIN_TAB.INBOX) return { kind: TAB_KIND.INBOX };
-  if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES, agentName: undefined };
+  if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES };
   return isFileTab(tab) ? { kind: TAB_KIND.FILE, path: tab.file } : { kind: TAB_KIND.PANEL, tab };
 }
 
@@ -208,17 +216,17 @@ function PinnedTabCard({
   const { openGitHub, pictures } = tasks.repositories;
   return (
     <HoverCard data-pinned-tab-card="">
-      <CardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
+      <HoverCardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
       <div className="task-card-rows">
         <CardDetail glyph={<DocumentIcon />} label={task.name} onPress={onOpenTask} />
         {repository === null ? null : (
           <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
         )}
       </div>
-      {gone ? <CardNote>{GONE_NOTE}</CardNote> : null}
+      {gone ? <HoverCardNote>{GONE_NOTE}</HoverCardNote> : null}
       {pullRequest === undefined ? null : (
         <>
-          <CardRule />
+          <HoverCardRule />
           <ul className="task-card-rows" aria-label="Pull request">
             <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
           </ul>
@@ -257,7 +265,7 @@ export function SidebarPinnedTab({
 }): React.JSX.Element {
   const [words, clipped] = useClipped();
   const copied = useTranscriptCopier();
-  const menu = useActionMenu(tasks.shown && inSight);
+  const menu = useMenu(tasks.shown && inSight);
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const gone = pinGone(pin, tasks);

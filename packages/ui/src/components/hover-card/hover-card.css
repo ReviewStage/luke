@@ -1,0 +1,124 @@
+/* hover-card.css -- the words of a card hung in a pill's place
+   (`TooltipCard`), in one type scale.
+
+   Its head is its glyph where it wears one, on the name's first line, then
+   the name in the medium weight wrapped to two lines, or a task standing in
+   for one on a single line faded at its end, a quieter line under the name a
+   size down, and the corner muted a size down at the head's right; under the
+   head, its notes, read whole and so wrapped to three lines, or one line of a
+   latest step faded at its end, and a hairline before what it lists. Sizes
+   off the type scale are the card's own, as it was drawn before it was
+   shared. */
+
+@layer components {
+  .luke-hover-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+  }
+
+  .luke-hover-card-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--luke-icon-gap);
+  }
+
+  /* The glyph takes a menu glyph's footprint on the name's first line, so
+     the rows a card lists under its head start their words on the name's
+     column. */
+  .luke-hover-card-glyph {
+    display: inline-flex;
+    width: 16px; /* off-scale: a menu row's glyph footprint */
+    height: 1lh;
+    flex: none;
+    align-self: flex-start;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .luke-hover-card-glyph > :is(svg, img) {
+    width: 14px; /* off-scale: the card's own glyph */
+    height: 14px;
+  }
+
+  .luke-hover-card-title {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--luke-space-2);
+  }
+
+  .luke-hover-card-name {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 12.5px; /* off-scale: the card's name */
+    font-weight: var(--luke-weight-medium);
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  /* What the subject runs on, whose it is, or when it ran, a size under the
+     name. */
+  .luke-hover-card-sub {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--luke-space-4);
+    color: var(--luke-color-text-muted);
+    font-size: 11.5px; /* off-scale: a size under the card's name */
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Words under a card's name wrap anywhere rather than run past the card
+     or under its corner, as a long agent's name on a page's card would. */
+  .luke-hover-card-sub > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .luke-hover-card-corner {
+    flex: none;
+    color: var(--luke-color-text-subtle);
+    font-size: 11.5px; /* off-scale: as the line under the name */
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .luke-hover-card-note {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    color: var(--luke-color-text-muted);
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .luke-hover-card-note code {
+    font-family: var(--luke-font-mono);
+    font-size: 11px; /* off-scale: code a size under the note */
+  }
+
+  :is(.luke-hover-card-name, .luke-hover-card-note)[data-one-line] {
+    display: block;
+    white-space: nowrap;
+  }
+
+  /* A line cut short fades out over its last few pixels rather than ending
+     in an ellipsis, as a browser's tab does; only one measured cut short
+     fades, so a short one ends on its last letter. */
+  :is(.luke-hover-card-name, .luke-hover-card-note)[data-one-line][data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+  }
+
+  .luke-hover-card-rule {
+    width: 100%;
+    height: 1px;
+    flex: none;
+    margin: 0;
+    border: 0;
+    background: var(--luke-color-border);
+  }
+}

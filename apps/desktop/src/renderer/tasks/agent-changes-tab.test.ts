@@ -12,14 +12,19 @@ import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { AppSettingsView } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
+import { appBridge } from "../app-bridge";
+import type { SideBundles } from "../bundle-loader";
 import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
 
 /**
@@ -31,8 +36,8 @@ import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
  * view; a diff too narrow to split is drawn unified, Split view dimmed, the
  * choice kept for a wider one. The settings are the app's own, read off the
  * document main hands the window and written back through it
- * (`handSettings`). The bundle, a script of its own the panel loads, is
- * stood in for at its global, which records what it was handed. Synthetic
+ * (`handSettings`). The bundle, a chunk of its own the panel imports, is
+ * stood in for at its importer, which records what it was handed. Synthetic
  * files only.
  */
 
@@ -93,30 +98,27 @@ function handSettings(settings: Partial<AppSettingsView> = {}): void {
   let view: AppSettingsView = Object.assign(settingsView(), settings);
   const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
   const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      requestAppState: () => Promise.resolve(snapshot()),
-      onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.SETTING_UPDATE) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.REFUSED,
-            reason: "Not in this test.",
-          });
-        }
-        view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
-        const next = snapshot();
-        for (const listener of listeners) listener(next);
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(snapshot()),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.SETTING_UPDATE) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: next.settings },
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: "Not in this test.",
         });
-      },
+      }
+      view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
+      const next = snapshot();
+      for (const listener of listeners) listener(next);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(view) },
+      });
     },
   });
 }
@@ -134,20 +136,22 @@ const standIn: DiffViewModule = {
   },
 };
 
+let bundles: SideBundles;
+
+beforeAll(async () => {
+  bundles = await Effect.runPromise(landedBundles({ diffView: () => Promise.resolve(standIn) }));
+});
+
 beforeEach(() => {
   drawn = [];
   boxWidth = 900;
-  window.lukeDiffView = standIn;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
     const width = this.classList.contains("diff-view") ? boxWidth : 0;
     return new DOMRect(0, 0, width, 0);
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({});
   handSettings();
 });
 
@@ -155,7 +159,6 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  delete window.lukeDiffView;
   vi.restoreAllMocks();
 });
 
@@ -170,13 +173,16 @@ async function drawTab(): Promise<DiffViewProps> {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(AgentChangesTab, {
-          agentId: AGENT.id,
-          control,
-          shown: true,
-          repository: "acme/relay",
-          tree: { open: false, onToggle: () => undefined },
-        }),
+        onSideBundles(
+          bundles,
+          createElement(AgentChangesTab, {
+            agentId: AGENT.id,
+            control,
+            shown: true,
+            repository: "acme/relay",
+            tree: { open: false, onToggle: () => undefined },
+          }),
+        ),
       ),
     ),
   );
@@ -329,16 +335,13 @@ test("a setting is drawn as written while its write is out, so a press reads the
 /** Holds every settings write unanswered, and the window's document unchanged, until a test answers one. */
 function holdSettingWrites(): Array<(outcome: ActOutcome) => void> {
   const held: Array<(outcome: ActOutcome) => void> = [];
-  const before = window.luke.act;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) =>
-        request.kind === ACT_KIND.SETTING_UPDATE
-          ? new Promise((resolve) => held.push(resolve))
-          : before(request),
-    },
+  const before = appBridge().act;
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) =>
+      request.kind === ACT_KIND.SETTING_UPDATE
+        ? new Promise((resolve) => held.push(resolve))
+        : before(request),
   });
   return held;
 }
@@ -366,7 +369,16 @@ test("a refused write is said under its row, and the row can be pressed again", 
   held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not save that setting." });
   await flush();
 
-  assert.ok(popover.querySelector('[role="alert"]'), "the refusal is said");
-  assert.equal(settingControl(popover, '[role="switch"]', "Ligatures").disabled, false);
+  const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
+  assert.equal(ligatures.getAttribute("aria-invalid"), "true", "the refusal is said");
+  assert.match(
+    (ligatures.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" "),
+    /Could not save that setting/u,
+    "under its own row",
+  );
+  assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
 });

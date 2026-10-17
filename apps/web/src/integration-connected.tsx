@@ -7,8 +7,7 @@ import {
   integrationLandingStatusFromWire,
   integrationProviderFromWire,
 } from "@luke/features/integration-wire";
-import { ProviderMark } from "@luke/ui";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { AuthPage, ProviderMark } from "@luke/ui";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
@@ -61,32 +60,33 @@ function landingFromAddress(): Landing {
   };
 }
 
+/**
+ * The page is one AuthPage card that opens on the provider's mark joined to
+ * Luke's, or Luke's full mark alone when the address named no provider: the
+ * title says how the connection settled, and the description how to go on.
+ */
 function IntegrationConnected(): React.JSX.Element {
   const [landing] = useState(landingFromAddress);
   return (
-    <main className={AUTH_SHELL}>
-      <section className={AUTH_CARD} aria-labelledby="landing-title">
-        {landing.provider === undefined ? (
-          <div className="inline-flex w-13" aria-hidden="true">
+    <AuthPage
+      mark={
+        landing.provider === undefined ? (
+          <span className="inline-flex w-13">
             <LukeMark className="h-auto w-full" />
-          </div>
+          </span>
         ) : (
-          <div className="mb-5">
-            <ConnectionGraphic
-              mark={<ProviderMark provider={landing.provider} className="size-10 shrink-0" />}
-            />
-          </div>
-        )}
-        <h1 id="landing-title" className={AUTH_TITLE}>
-          {titleOf(landing)}
-        </h1>
-        <p className="m-0 text-muted-foreground">
-          {landing.status === INTEGRATION_LANDING_STATUS.CONNECTED
-            ? BACK_TO_LUKE.SETTLED
-            : BACK_TO_LUKE.RETRY}
-        </p>
-      </section>
-    </main>
+          <ConnectionGraphic
+            mark={<ProviderMark provider={landing.provider} className="size-10 shrink-0" />}
+          />
+        )
+      }
+      title={titleOf(landing)}
+      description={
+        landing.status === INTEGRATION_LANDING_STATUS.CONNECTED
+          ? BACK_TO_LUKE.SETTLED
+          : BACK_TO_LUKE.RETRY
+      }
+    />
   );
 }
 

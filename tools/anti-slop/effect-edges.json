@@ -2,10 +2,10 @@
   "runtimeEdges": [
     "apps/desktop/src/main/main.ts",
     "apps/desktop/src/main/services/compose-desktop.ts",
-    "apps/desktop/src/renderer/index.tsx",
     "apps/desktop/src/renderer/renderer-runtime.ts",
     "apps/desktop/src/renderer/voice/live-call.ts",
     "apps/desktop/src/renderer/voice/use-voice-session.ts",
+    "apps/desktop/src/renderer/window-root.tsx",
     "apps/dev/agent.ts",
     "apps/dev/channels/eve.ts",
     "apps/dev/hooks/store.ts",
@@ -41,7 +41,7 @@
     "packages/wire/src/testing/effect.ts"
   ],
   "runOnHandedRuntime": [
-    "apps/desktop/src/main/app-state.ts",
+    "packages/host/src/client/app-state-store.ts",
     "packages/host/src/update-service.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
