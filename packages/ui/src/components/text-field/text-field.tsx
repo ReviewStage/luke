@@ -9,7 +9,8 @@ import type { FieldControl } from "../form-field/form-field.js";
  * so what is drawn is always what the caller has. Inside a `FormField`
  * each takes the field's control (`field`), which names it by the field's
  * label, describes it by the field's words, and marks it invalid while the
- * field says something is wrong; standing alone it is named by `label`.
+ * field says something is wrong; standing alone it is named by `label`, and
+ * marked invalid by `invalid`, as a `SettingsRow` failing its write says.
  *
  * Text arriving through an input method (a Japanese or Chinese IME, the
  * Mac's accent menu) is composed in place before it is committed. Its
@@ -53,7 +54,8 @@ export type TextFieldAutoComplete =
 /**
  * How a text entry is named: by its `FormField`'s label, through the field's
  * control, or by a `label` of its own where it stands alone, so none is
- * drawn without a name; one standing alone is described by `describedBy`.
+ * drawn without a name; one standing alone is described by `describedBy`
+ * and marked invalid by `invalid`.
  */
 type Named =
   | {
@@ -67,6 +69,8 @@ type Named =
       label: string;
       /** The id of the words that say what the entry is for, where some stand beside it, as a `SettingsRow`'s description does. */
       describedBy?: string | undefined;
+      /** Whether what it holds is wrong, as a `SettingsRow`'s error says while it stands. */
+      invalid?: boolean | undefined;
     };
 
 /** What both kinds of text entry take. */
@@ -96,7 +100,12 @@ function entryAttributes(props: TextEntryProps) {
     "aria-label": props.field === undefined ? props.label : undefined,
     "aria-describedby":
       props.field === undefined ? props.describedBy : props.field["aria-describedby"],
-    "aria-invalid": props.field?.["aria-invalid"],
+    "aria-invalid":
+      props.field === undefined
+        ? props.invalid === true
+          ? true
+          : undefined
+        : props.field["aria-invalid"],
     placeholder: props.placeholder,
     disabled: props.disabled,
     readOnly: props.readOnly,
