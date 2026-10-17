@@ -40,7 +40,7 @@ export function IssueCrumbs({
 }): React.JSX.Element {
   return (
     <nav className="automation-crumbs" aria-label="Path">
-      <FoldingButton label="Issues" glyph={<ListTodoIcon />} onClick={onBack} />
+      <FoldingButton label="Issues" icon={<ListTodoIcon />} onClick={onBack} />
       {identifier === undefined ? null : (
         <>
           <ChevronRightIcon aria-hidden="true" />
