@@ -16,7 +16,7 @@ import { writePage } from "@luke/database/models/plan-pages";
 import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { task } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/task";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
@@ -555,6 +555,33 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(isRecord(again.agent));
   assert.equal(again.agent.id, startedId);
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
+});
+
+test("start_agent hands over a prompt and a note each as long as a start allows, whole in the agent's first message, and refuses either past it, starting nothing", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const longest = CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS;
+  const prompt = `Brief: ${"p".repeat(longest - 8)}.`;
+  const note = `Note: ${"n".repeat(longest - 7)}.`;
+
+  for (const [refused, key] of [
+    [{ prompt: `${prompt}p`, note }, "call-long-prompt"],
+    [{ prompt, note: `${note}n` }, "call-long-note"],
+  ] as const) {
+    assert.deepEqual(await call(CODER_TOOL.START_AGENT, refused, key), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+    });
+  }
+  assert.equal(eve.sent.length, 0, "a start past the bound starts nothing");
+
+  const started = await call(CODER_TOOL.START_AGENT, { prompt, note }, "call-longest");
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.equal(eve.sent.length, 1);
+  const message: string = JSON.parse(eve.sent[0]?.body ?? "").message;
+  assert.ok(message.startsWith(prompt), "the prompt opens the first message whole");
+  assert.ok(message.includes(`\n\n${note}`), "the note follows it whole");
 });
 
 test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {

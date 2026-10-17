@@ -3,13 +3,18 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE, type IssueListView } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMember,
+} from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { lineWords } from "#testing/actor-line";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
@@ -19,7 +24,7 @@ import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
 
 /**
- * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, and a read that did not land said with a retry.
+ * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed, and a read that did not land said with a retry.
  *
  * The service is a script at the act boundary; synthetic issues and words throughout.
  */
@@ -30,6 +35,28 @@ const WORKSPACE: Workspace = {
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+/** The moment the window's clock stands at in a test that reads how long ago something was. */
+const NOW = Date.UTC(2026, 9, 14, 12);
+
+/** The signed-in reader's account. */
+const READER = "user-grace";
+
+/** The workspace's members, as their read answers them. */
+const MEMBERS: readonly WorkspaceMember[] = [
+  {
+    userId: "user-ada",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+    pictureUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+  },
+  { userId: READER, name: "Grace Hopper", email: "grace@example.com", role: WORKSPACE_ROLE.OWNER },
+];
 
 function issue(number: number, patch: Partial<Issue> = {}): Issue {
   return {
@@ -124,6 +151,12 @@ beforeEach(() => {
           if (held === undefined) return Promise.resolve(done);
           return new Promise((resolve) => held.push(() => resolve(done)));
         }
+        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+        }
+        if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+        }
         if (request.kind === ACT_KIND.ISSUES_READ) {
           reads.push(request.payload.issueId);
           const found = standing.find((each) => each.id === request.payload.issueId);
@@ -172,6 +205,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   act(() => root?.unmount());
   root = undefined;
@@ -199,6 +233,7 @@ function Pages({
   const control = tasksControl({ workspace });
   const plans = tasksControl({
     workspace,
+    me: READER,
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -282,6 +317,11 @@ async function openIssue(issueId: string): Promise<HTMLElement> {
 /** The issue's title as its page draws it. */
 function titleOf(page: HTMLElement): string | undefined {
   return page.querySelector("[aria-label='Issue title']")?.textContent ?? undefined;
+}
+
+/** What the line under the issue's title says, a phrase at a time, each face left out. */
+function bylineOf(page: HTMLElement): (string | undefined)[] {
+  return [...page.querySelectorAll(".issue-byline .actor-line")].map(lineWords);
 }
 
 /** The button whose words or name are `name`, wherever it is drawn. */
@@ -601,6 +641,48 @@ test("Escape in the title puts back the title it opened on, sends nothing, and l
   assert.deepEqual(changes, []);
   assert.equal(titleOf(page), "Fix login");
   assert.equal(closed, 0);
+});
+
+test("under the title an issue's page says who filed it, by their face as the members read them, and when it was filed and last changed, a task's own words", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  const filed = issue(1, {
+    creator: { userId: "user-ada", name: "Ada Lovelace" },
+    createdAt: NOW - 3 * DAY - HOUR,
+    updatedAt: NOW - 2 * HOUR - MINUTE,
+  });
+  standing = [filed];
+  const page = await openIssue(filed.id);
+
+  assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
+  const picture = page.querySelector<HTMLImageElement>(".issue-byline img.actor-picture");
+  assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
+});
+
+test("an issue the reader filed names them as you", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  const filed = issue(1, {
+    creator: { userId: READER, name: "Grace Hopper" },
+    createdAt: NOW - 2 * DAY - HOUR,
+    updatedAt: NOW - 2 * DAY - HOUR,
+  });
+  standing = [filed];
+  const page = await openIssue(filed.id);
+
+  assert.deepEqual(bylineOf(page), ["Created by you · 2d ago"]);
+});
+
+test("an issue whose creator is gone and unchanged since it was filed says only when it was created, until a change lands", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  const filedAt = NOW - 5 * HOUR - MINUTE;
+  const filed = issue(1, { creator: null, createdAt: filedAt, updatedAt: filedAt });
+  standing = [filed];
+  const page = await openIssue(filed.id);
+
+  assert.deepEqual(bylineOf(page), ["Created · 5h ago"]);
+  pick(page, "Status", "Todo");
+  await settle();
+
+  assert.deepEqual(bylineOf(page), ["Created · 5h ago", "Last edited · 5h ago"]);
 });
 
 test("the list stands in the window's own frame: the Automations page's view and scroll, Home's sections and rows", async () => {
@@ -1126,4 +1208,153 @@ test("the toolbar's New issue and C still open the card on Backlog", async () =>
 
   assert.equal(fromButton, "Backlog");
   assert.equal(picked(document.body, "Status"), "Backlog");
+});
+
+/** The button a card or row draws for the issue given. */
+function cardOf(page: HTMLElement, issueId: string): HTMLButtonElement {
+  const found = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issueId}"] > button`);
+  assert.ok(found, `no card for ${issueId}`);
+  return found;
+}
+
+/** A right-click on an element, at a point in the window, as the pointer makes one. */
+function rightClick(target: HTMLElement): void {
+  act(() => {
+    target.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }),
+    );
+  });
+}
+
+/** Opens the submenu named in the menu standing open and picks its item. */
+function pickFrom(submenu: string, item: string): void {
+  act(() => menuItem(submenu).click());
+  act(() => menuItem(item).click());
+}
+
+test("a status picked from a card's right-click menu, the current one checked, is sent and moves the card to its new column", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  act(() => menuItem("Status").click());
+  assert.equal(menuItem("Backlog").getAttribute("aria-checked"), "true");
+  assert.equal(menuItem("Done").getAttribute("aria-checked"), "false");
+  act(() => menuItem("Done").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page), [
+    ["Backlog", []],
+    ["Todo1", ["ACME-2"]],
+    ["In progress", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled", []],
+  ]);
+});
+
+test("a list row's menu opens from the keyboard with ⇧F10, and a priority picked there is sent and moves the row", async () => {
+  standing = [issue(1), issue(2, { priority: ISSUE_PRIORITY.LOW })];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = cardOf(page, issue(1).id);
+  act(() => row.focus());
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Priority", "Urgent");
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { priority: ISSUE_PRIORITY.URGENT } },
+  ]);
+  assert.deepEqual(groups(page), [["Backlog2", ["ACME-1 Issue 1", "ACME-2 Issue 2"]]]);
+});
+
+test("Archive from a card's menu asks first in the issue page's words, then sends the archive and takes the card off the board", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  act(() => menuItem("Archive").click());
+  assert.deepEqual(changes, [], "nothing is sent before the answer");
+  assert.match(
+    document.querySelector("[role=alertdialog]")?.textContent ?? "",
+    /Archive ACME-1\?/u,
+  );
+  act(() => dialogButton("Archive").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { archived: true } }]);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-2 Issue 2"]]]);
+  assert.equal(document.querySelector("[role=alertdialog]"), null, "the question is gone");
+});
+
+test("a card's menu offers Copy link, copying its issue's link under the listed workspace", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(2).id));
+  await act(async () => menuItem("Copy link").click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/${WORKSPACE.id}/issue/${issue(2).id}`]);
+  assert.deepEqual(changes, []);
+});
+
+test("a change from a card's menu the service refused leaves the card where it stood and says so", async () => {
+  standing = [issue(1)];
+  changeRefused = true;
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  pickFrom("Status", "Done");
+  await settle();
+
+  assert.equal(changes.length, 1);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
+});
+
+test("a card moved by a status picked from its menu keeps the keyboard in its new column", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+
+  const card = cardOf(page, issue(1).id);
+  act(() => card.focus());
+  act(() => {
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Status", "Done");
+  await settle();
+
+  const holding = document.activeElement?.closest<HTMLElement>("[data-issue-id]");
+  assert.equal(holding?.dataset.issueId, issue(1).id);
+  assert.equal(holding?.closest<HTMLElement>("[data-issue-column]")?.dataset.issueColumn, "done");
+});
+
+test("a card moved once the developer has gone on to New issue takes no keyboard from its card", async () => {
+  standing = [issue(1), issue(2)];
+  heldChanges = [];
+  const held = heldChanges;
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  pickFrom("Status", "Done");
+  act(() => button("New issue").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  act(() => field.focus());
+  act(() => held[0]?.());
+  await settle();
+
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+  assert.equal(document.activeElement, composerField());
 });

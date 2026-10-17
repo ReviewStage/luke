@@ -18,7 +18,7 @@ import {
 } from "@luke/database/integration-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { task } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/task";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   type IntegrationProvider,

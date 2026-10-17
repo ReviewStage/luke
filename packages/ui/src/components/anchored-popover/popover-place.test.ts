@@ -20,11 +20,11 @@ test("a popover stands above its anchor, from the trailing edge or the leading o
   const anchor = anchorAt(400, 400);
   assert.deepEqual(
     popoverPlace({ anchor, room: ROOM, width: 340, height: 200, align: POPOVER_ALIGN.END }),
-    { side: POPOVER_SIDE.ABOVE, inset: 0, width: 340 },
+    { side: POPOVER_SIDE.ABOVE, inset: 0, width: 340, room: 388 },
   );
   assert.deepEqual(
     popoverPlace({ anchor, room: ROOM, width: 340, height: 200, align: POPOVER_ALIGN.START }),
-    { side: POPOVER_SIDE.ABOVE, inset: 0, width: 340 },
+    { side: POPOVER_SIDE.ABOVE, inset: 0, width: 340, room: 388 },
   );
 });
 
@@ -41,8 +41,21 @@ test("a popover turns below only where the room above cannot hold it and below c
   assert.equal(place(60, 200), POPOVER_SIDE.BELOW);
   // 212 - 12 = 200 above holds a 200-tall popover exactly.
   assert.equal(place(212, 200), POPOVER_SIDE.ABOVE);
-  // Neither side holds 700, so it keeps to above.
-  assert.equal(place(60, 700), POPOVER_SIDE.ABOVE);
+});
+
+test("a popover neither side holds opens on the side with more room, and is told that side's height", () => {
+  const place = (top: number) =>
+    popoverPlace({
+      anchor: anchorAt(400, top),
+      room: ROOM,
+      width: 340,
+      height: 700,
+      align: POPOVER_ALIGN.END,
+    });
+  // 60 - 12 = 48 above against 600 - 90 - 12 = 498 below.
+  assert.deepEqual([place(60).side, place(60).room], [POPOVER_SIDE.BELOW, 498]);
+  // 500 - 12 = 488 above against 600 - 530 - 12 = 58 below.
+  assert.deepEqual([place(500).side, place(500).room], [POPOVER_SIDE.ABOVE, 488]);
 });
 
 test("a scroll that lifts the anchor toward its room's top turns the popover below", () => {

@@ -11,7 +11,7 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { user } from "../schemas/auth.js";
-import { task } from "../schemas/plan.js";
+import { task } from "../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../voice-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";

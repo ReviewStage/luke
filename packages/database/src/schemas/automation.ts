@@ -16,7 +16,7 @@ import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { task } from "./plan.js";
+import { task } from "./task.js";
 
 /**
  * automation.ts -- an account's automations, each a trigger and a coding agent to start on one plan, and every run one made.
@@ -37,7 +37,7 @@ import { task } from "./plan.js";
  * An automation belongs to a workspace (`organization_id`), as its owner's
  * (`scope` personal) or the workspace's own (`scope` workspace), and works
  * in `repositories`, an ordered list of `owner/name` whose first is where
- * the agent starts; one entry until full multi-repo. `plan_id` stands only
+ * the agent starts; one entry until full multi-repo. `task_id` stands only
  * on the rows made before automations left plans, and goes in the contract
  * step. `target_kind` says where a run lands: a new agent each run, or the
  * agent `target_agent_id` names, which goes null where that agent is
@@ -55,7 +55,7 @@ export const automation = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     scope: text("scope").$type<AutomationScope>().notNull().default(AUTOMATION_SCOPE.PERSONAL),
-    taskId: uuid("plan_id").references(() => task.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     enabled: boolean("enabled").notNull(),
     triggerKind: text("trigger_kind").$type<AutomationTriggerKind>().notNull(),
@@ -87,7 +87,7 @@ export const automation = pgTable(
     // The sweep claims the schedules due, soonest first.
     index("automation_next_run").on(table.nextRunAt).where(sql`${table.nextRunAt} is not null`),
     // A delivery finds the automations of its trigger kind, then reads each one's repositories.
-    index("automation_trigger_plan").on(table.triggerKind, table.taskId),
+    index("automation_trigger_task").on(table.triggerKind, table.taskId),
     // A workspace's automations, each scope newest first.
     index("automation_org_scope_created").on(table.organizationId, table.scope, table.createdAt),
   ],
