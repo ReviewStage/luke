@@ -224,6 +224,13 @@ const GITHUB_MARK = (
   </span>
 );
 
+/** Linear's own mark, which leads its row as GitHub's leads GitHub's. */
+const LINEAR_MARK = (
+  <span className="settings-row-mark">
+    <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
+  </span>
+);
+
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
 type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
   Partial<Pick<WorkspaceGithubInstallation, "installationId">>;
@@ -1159,32 +1166,17 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
   );
 }
 
-/** The workspace's Linear row's words: Linear, and under it whether its one connection stands. */
-function LinearCopy({
-  linear,
-  manages,
-}: {
-  linear: Workspace["linear"];
-  manages: boolean;
-}): React.JSX.Element {
-  if (linear === undefined) {
-    return <RowCopy name="Linear" line={manages ? LINEAR_LINE.MANAGES : LINEAR_LINE.MEMBER} />;
-  }
-  return (
-    <RowCopy
-      name="Linear"
-      line={
-        linear.active ? (
-          <span className="settings-state" data-state="connected">
-            {LINEAR_LINE.CONNECTED}
-          </span>
-        ) : (
-          <span className="settings-state" data-state="attention">
-            {manages ? LINEAR_LINE.EXPIRED : LINEAR_LINE.EXPIRED_MEMBER}
-          </span>
-        )
-      }
-    />
+/** The workspace's Linear row's line: whether its one connection stands. */
+function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactNode {
+  if (linear === undefined) return manages ? LINEAR_LINE.MANAGES : LINEAR_LINE.MEMBER;
+  return linear.active ? (
+    <span className="settings-state" data-state="connected">
+      {LINEAR_LINE.CONNECTED}
+    </span>
+  ) : (
+    <span className="settings-state" data-state="attention">
+      {manages ? LINEAR_LINE.EXPIRED : LINEAR_LINE.EXPIRED_MEMBER}
+    </span>
   );
 }
 
@@ -1194,7 +1186,9 @@ function LinearCopy({
  * sign-in in the browser, a sign-in that could not be begun saying why
  * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
  * a connected row quiet, whose menu holds Disconnect, which asks first. A
- * plan already started from an issue keeps what it read.
+ * plan already started from an issue keeps what it read. The row is
+ * `MenuRow`'s `SettingsRow` led by Linear's mark, its press the outline
+ * `Button`.
  */
 function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
@@ -1225,24 +1219,27 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
       ? []
       : [[{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]];
   return (
-    <>
-      <MenuRow label="Linear actions" actions={actions}>
-        <span className="settings-row-mark">
-          <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
-        </span>
-        <LinearCopy linear={linear} manages />
-        {linear?.active === true ? null : (
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={connecting}
-            aria-busy={connecting}
-            onClick={connect}
-          >
-            {linear === undefined ? "Connect" : "Connect again"}
-          </button>
-        )}
-      </MenuRow>
+    <div className="workspace-linear">
+      <MenuRow
+        label="Linear actions"
+        actions={actions}
+        row={{
+          leading: LINEAR_MARK,
+          label: "Linear",
+          description: linearLine(linear, true),
+          control:
+            linear?.active === true ? null : (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={connecting}
+                busyLabel="Connecting"
+                onClick={connect}
+              >
+                {linear === undefined ? "Connect" : "Connect again"}
+              </Button>
+            ),
+        }}
+      />
       {refusal === undefined ? null : (
         <p className="error-message" role="alert">
           {refusal}
@@ -1259,7 +1256,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -1271,12 +1268,13 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
 function WorkspaceLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
   if (managesWorkspace(workspace)) return <ManagedLinear workspace={workspace} />;
   return (
-    <div className="settings-row">
-      <span className="settings-row-mark">
-        <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
-      </span>
-      <LinearCopy linear={workspace.linear} manages={false} />
-    </div>
+    <SettingsRow
+      leading={LINEAR_MARK}
+      label="Linear"
+      description={linearLine(workspace.linear, false)}
+    >
+      {() => null}
+    </SettingsRow>
   );
 }
 
@@ -1585,10 +1583,12 @@ function ShownWorkspace({
           </SettingsSection>
         </div>
       ) : null}
-      <SettingsGroup title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
-        <WorkspaceGitHub workspace={workspace} />
-        <WorkspaceLinear workspace={workspace} />
-      </SettingsGroup>
+      <div {...searchAnchorProps(SETTINGS_SECTION.GITHUB_REPOSITORIES)}>
+        <SettingsSection title="Integrations">
+          <WorkspaceGitHub workspace={workspace} />
+          <WorkspaceLinear workspace={workspace} />
+        </SettingsSection>
+      </div>
       <MacRepositoriesGroup workspaceId={workspace.id} />
       <LeaveGroup
         workspace={workspace}
