@@ -258,7 +258,7 @@ function FileDiff({
     <section className="file-tab" aria-label={`Diff of ${file.path}`}>
       {file.previousPath === null ? null : (
         <div className="file-tab-notice">
-          <p className="m-0">
+          <p>
             Renamed from <bdi>{file.previousPath}</bdi>
           </p>
         </div>
@@ -436,7 +436,7 @@ export function AgentChangesTab({
       <PullRequestPeople people={pullRequest} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
-          <p className="m-0">{CHANGES_WORDS.TRUNCATED}</p>
+          <p>{CHANGES_WORDS.TRUNCATED}</p>
         </div>
       ) : null}
       <div className="file-view-body" {...room.body}>

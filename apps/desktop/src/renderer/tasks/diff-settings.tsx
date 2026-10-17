@@ -12,7 +12,14 @@ import {
   INLINE_DIFF,
   INLINE_DIFF_LABEL,
 } from "@luke/settings/diff-view";
-import { AnchoredPopover, CloseIcon, POPOVER_ALIGN, SETTINGS_ROW_DENSITY } from "@luke/ui";
+import {
+  AnchoredPopover,
+  CloseIcon,
+  IconButton,
+  POPOVER_ALIGN,
+  SETTINGS_ROW_DENSITY,
+  SettingsRow,
+} from "@luke/ui";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Segmented } from "../segmented";
@@ -70,7 +77,7 @@ function optionOf<Value extends string>(
   return options.find((option) => option.value === raw)?.value;
 }
 
-/** A setting's row of segments: its name, the settings' mark while changed, and the segments, wrapped under the name where the row is too narrow for both, as Settings wraps one. */
+/** A setting's row of segments, as compact as the popover's other rows: its name, the settings' mark while changed, why it is so where it says, and the segments. */
 function SegmentedRow<Value extends string>({
   label,
   detail,
@@ -87,16 +94,18 @@ function SegmentedRow<Value extends string>({
   onChange: (value: Value) => void;
 }): React.JSX.Element {
   return (
-    <div className="settings-row settings-row-wrapping">
-      <span className="settings-copy">
-        <strong>
+    <SettingsRow
+      density={SETTINGS_ROW_DENSITY.COMPACT}
+      label={
+        <>
           {label}
           {changed ? <ChangedMark /> : null}
-        </strong>
-        {detail === undefined ? null : <small>{detail}</small>}
-      </span>
-      <Segmented legend={label} options={options} value={value} onChange={onChange} />
-    </div>
+        </>
+      }
+      description={detail}
+    >
+      {() => <Segmented legend={label} options={options} value={value} onChange={onChange} />}
+    </SettingsRow>
   );
 }
 
@@ -289,9 +298,7 @@ function DiffSettingsPopover({
       <div className="diff-settings-head">
         <h2 className="diff-settings-title">{DIFF_SETTINGS_LABEL}</h2>
         <Tooltip label="Close">
-          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
-            <CloseIcon />
-          </button>
+          <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
         </Tooltip>
       </div>
       <DiffSettingsRows roomy={roomy} />
@@ -317,18 +324,15 @@ export function DiffSettingsButton({
   return (
     <div className="diff-settings" ref={root}>
       <Tooltip label={DIFF_SETTINGS_LABEL}>
-        <button
+        <IconButton
           ref={trigger}
-          type="button"
-          className="icon-button"
-          aria-label={DIFF_SETTINGS_LABEL}
+          icon={<SlidersHorizontalIcon aria-hidden="true" />}
+          label={DIFF_SETTINGS_LABEL}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? popoverId : undefined}
           onClick={() => setOpen(!open)}
-        >
-          <SlidersHorizontalIcon aria-hidden="true" />
-        </button>
+        />
       </Tooltip>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
