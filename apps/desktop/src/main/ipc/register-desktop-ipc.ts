@@ -81,6 +81,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const browserViews = createBrowserViews({
     tellPage: (sender, page) => sender.send(channels.onBrowserState, page),
     tellKey: (sender, key) => sender.send(channels.onBrowserKey, key),
+    tellFocus: (sender, focus) => sender.send(channels.onBrowserFocus, focus),
     whenGone: whenPageGone,
   });
 

@@ -84,6 +84,7 @@ function main(options: { holdCapture?: boolean } = {}) {
         tellKey = listener;
         return () => undefined;
       },
+      onBrowserFocus: () => () => undefined,
     },
   });
   return {

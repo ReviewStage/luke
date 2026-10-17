@@ -157,6 +157,19 @@ export type BrowserKey = typeof browserKeySchema.Type;
 /** Whether a value is a chord handed back from a Browser tab's page, as the panel is told on `onBrowserKey`. */
 export const isBrowserKey = Schema.is(browserKeySchema);
 
+/**
+ * A Browser tab's page took the keyboard, a click into it or a key, which
+ * main says to the panel, since the page stands in a view of its own that no
+ * focus event of the panel's page hears, and the panel's keys follow the
+ * column that holds the keyboard.
+ */
+const browserFocusSchema = Schema.Struct({ browserId });
+
+export type BrowserFocus = typeof browserFocusSchema.Type;
+
+/** Whether a value says which Browser tab's page took the keyboard, as the panel is told on `onBrowserFocus`. */
+export const isBrowserFocus = Schema.is(browserFocusSchema);
+
 /** The keys a page keeps under Command, since they edit its text: copy, paste, cut, select all, and undo or redo. */
 const PAGE_KEPT_KEYS: ReadonlySet<string> = new Set(["c", "v", "x", "a", "z"]);
 

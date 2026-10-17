@@ -270,6 +270,16 @@ function useViewPlacing(
   return still;
 }
 
+/**
+ * Says the tab's page took the keyboard as a focus into its body would, so
+ * the column the page stands in holds the window's keys (`useColumnFocus`),
+ * which a click into the page's own view, standing outside this page, never
+ * says itself.
+ */
+function focusHere(body: HTMLElement | null): void {
+  body?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+}
+
 /** Presses on this window a Command chord pressed over the tab's page, so its keymap answers it as over any tab. */
 function pressHere(key: BrowserKey): void {
   window.dispatchEvent(
@@ -375,12 +385,18 @@ export function BrowserPane({
       }
     };
     window.addEventListener("keydown", keys);
-    const unhear = window.luke.onBrowserKey((key) => {
-      if (key.browserId === browserId) pressHere(key);
+    const unhearKeys = window.luke.onBrowserKey((key) => {
+      if (key.browserId !== browserId) return;
+      focusHere(body.current);
+      pressHere(key);
+    });
+    const unhearFocus = window.luke.onBrowserFocus((focus) => {
+      if (focus.browserId === browserId) focusHere(body.current);
     });
     return () => {
       window.removeEventListener("keydown", keys);
-      unhear();
+      unhearKeys();
+      unhearFocus();
     };
   }, [browserId, opened, tell]);
 

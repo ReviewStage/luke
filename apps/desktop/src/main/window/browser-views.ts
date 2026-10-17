@@ -2,6 +2,7 @@ import {
   BROWSER_SHOWN_MAX_CHARS,
   BROWSER_STEP,
   type BrowserBounds,
+  type BrowserFocus,
   type BrowserKey,
   type BrowserPage,
   type BrowserStep,
@@ -74,6 +75,8 @@ export interface BrowserViewsDependencies {
   tellPage: (sender: WebContents, page: BrowserPage) => void;
   /** Hands the panel a chord pressed over one of its pages. */
   tellKey: (sender: WebContents, key: BrowserKey) => void;
+  /** Tells the panel one of its pages took the keyboard. */
+  tellFocus: (sender: WebContents, focus: BrowserFocus) => void;
   /** Calls `then` once, when the panel's page is gone (`whenPageGone`). */
   whenGone: (sender: WebContents, then: () => void) => void;
 }
@@ -129,7 +132,7 @@ function newView(): WebContentsView {
 }
 
 export function createBrowserViews(dependencies: BrowserViewsDependencies): BrowserViews {
-  const { tellPage, tellKey, whenGone } = dependencies;
+  const { tellPage, tellKey, tellFocus, whenGone } = dependencies;
   /** Each panel's views, by the id its tab made. */
   const panels = new Map<WebContents, Map<string, Held>>();
 
@@ -183,6 +186,9 @@ export function createBrowserViews(dependencies: BrowserViewsDependencies): Brow
       if (!isMainFrame || code === ABORTED) return;
       held.failure = description;
       told();
+    });
+    contents.on("focus", () => {
+      if (!sender.isDestroyed()) tellFocus(sender, { browserId });
     });
     contents.on("render-process-gone", () => {
       held.failure = "its process stopped";

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { BrowserFocus, BrowserKey } from "@luke/features/browser-acts";
 import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -31,6 +32,7 @@ import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
+import { useAppKeymap } from "../app-commands";
 import { OpenLinkProvider } from "../tasks/use-open-link";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import type { InboxChoice } from "../tasks/use-tasks-tab";
@@ -158,6 +160,12 @@ function answer(request: Act): Promise<ActOutcome> {
   }
 }
 
+/** Main's events on a Browser tab's page, as the test hears the window subscribe to them. */
+interface MainBrowserEvents {
+  focus?: (focus: BrowserFocus) => void;
+  key?: (key: BrowserKey) => void;
+}
+
 /** The window's Inbox on the plan's item, its side panel the window's own hook held by the chosen item's plan, and every place it was asked to leave for. */
 async function inbox(
   {
@@ -171,6 +179,8 @@ async function inbox(
   },
 ) {
   let control: SidePanelControl | undefined;
+  // Main's word on a Browser tab's page: that it took the keyboard, and a chord pressed over it.
+  const main: MainBrowserEvents = {};
   const links: ReadLink[] = [];
   const tasks: string[] = [];
   const left = { links, tasks, rereads: 0 };
@@ -181,7 +191,14 @@ async function inbox(
       recordSurfaceEvent: () => undefined,
       act: answer,
       onBrowserState: () => () => undefined,
-      onBrowserKey: () => () => undefined,
+      onBrowserKey: (listener: (key: BrowserKey) => void) => {
+        main.key = listener;
+        return () => undefined;
+      },
+      onBrowserFocus: (listener: (focus: BrowserFocus) => void) => {
+        main.focus = listener;
+        return () => undefined;
+      },
     },
   });
   handState(experiments);
@@ -198,6 +215,8 @@ async function inbox(
       undefined,
     );
     control = sidePanel;
+    // The window's keymap, which hears a chord as the window's root mounts it.
+    useAppKeymap(true);
     return createElement(
       OpenLinkProvider,
       { value: (link: ReadLink) => left.links.push(link) },
@@ -232,7 +251,7 @@ async function inbox(
     assert.ok(control);
     return control;
   };
-  return { container, left, panel };
+  return { container, left, panel, main };
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -305,4 +324,32 @@ test("a Browser tab chosen on the item's plan stands chosen in the panel beside 
     "the Browser tab's pane is drawn",
   );
   assert.equal(content?.textContent?.includes("Loading page"), false);
+});
+
+test("a click into a Browser tab's page beside the Inbox hands the panel the keys, so ⌘W over the page closes that tab", async () => {
+  const { container, panel, main } = await inbox({
+    pages: [FUNNEL],
+    experiments: experimentsOn(EXPERIMENT.BROWSER),
+  });
+  await pressChip(container, "invites.ts");
+  act(() => panel().onOpenBrowser("http://localhost:3000/"));
+  await settle();
+  // The Inbox's own column holds the keys, as a press in its list leaves them.
+  act(() => {
+    container
+      .querySelector(".inbox-view")
+      ?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  await settle();
+  const browserId = panel().browsers[0]?.tab.browser;
+  assert.ok(browserId);
+
+  act(() => main.focus?.({ browserId }));
+  await settle();
+  act(() =>
+    main.key?.({ browserId, key: "w", code: "KeyW", shift: false, alt: false, control: false }),
+  );
+  await settle();
+
+  assert.deepEqual(panelTabs(container), ["▸ invites.ts"]);
 });
