@@ -12,7 +12,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { user } from "../schemas/auth.js";
-import { task } from "../schemas/plan.js";
+import { task } from "../schemas/task.js";
 import { taskSection, taskSectionEntry } from "../schemas/task-section.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
