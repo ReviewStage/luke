@@ -14,6 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   installEditorBundle,
@@ -379,12 +380,8 @@ test("a dictation's words land where the caret stood as it began, spaced from th
     configurable: true,
     value: () => ({ matches: true, addEventListener: ignore, removeEventListener: ignore }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),
-      recordSurfaceEvent: ignore,
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),
   });
   const box = await mounted();
   typeInComposer(box.container, "Fix this later");

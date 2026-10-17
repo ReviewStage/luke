@@ -16,6 +16,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { conversationOf, worker, workerCall, workTurn } from "#testing/task-work";
@@ -297,6 +298,7 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
 });
 
 test("a page's tab hangs the page's card: its title and version over its newest version drawn small, in a frame that runs its scripts alone, takes no pointer or focus, and is left out of the recording", () => {
+  fakeAppPlatform({ pageFrameUrl });
   const panel = mount().querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
     (each) => each.querySelector(".tab-label")?.textContent === FUNNEL.title,
