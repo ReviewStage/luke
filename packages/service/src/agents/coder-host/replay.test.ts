@@ -144,6 +144,27 @@ it("a source that never made a branch of its own sends the new agent to the work
     /That agent's own branch is `luke\/pull-request-tab`, with its pull request #3030/u,
   );
 
+  const unread = replayOf(
+    {
+      ...from,
+      told: {
+        ...from.told,
+        carried: {
+          agent: undefined,
+          published: null,
+          copiedBranch: "luke/add-pr-tab-continued-1a2b3c4d",
+        },
+      },
+    },
+    from.steps,
+    undefined,
+  ).replay.preamble;
+  assert.match(
+    unread,
+    /took up the work of another coding agent, whose checkout was copied for it/u,
+  );
+  assert.match(unread, /git switch 'luke\/add-pr-tab-continued-1a2b3c4d'/u);
+
   assert.match(
     replayOf(from, from.steps, undefined).replay.preamble,
     /start from the repository's default branch/u,

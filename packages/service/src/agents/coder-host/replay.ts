@@ -11,6 +11,7 @@ import {
   messageSeqOf,
   type StoredMessageRecord,
 } from "@luke/database/models/message-reads";
+import { readTask } from "@luke/database/models/task-store";
 import type { StoredStartedFrom } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -483,7 +484,8 @@ function pullWords(published: CodingAgentPullRequest | null): string {
 
 /** The work a source that made no branch of its own took up: the agent it came from, that agent's pull request, and the branch that agent's work was copied to for the source, where it was. */
 interface CarriedWork {
-  readonly agent: CodingAgent;
+  /** None where that agent can no longer be read, and only the copy made of its work stands. */
+  readonly agent: CodingAgent | undefined;
   readonly published: CodingAgentPullRequest | null;
   readonly copiedBranch: string | undefined;
 }
@@ -491,20 +493,23 @@ interface CarriedWork {
 /** Where the work a source carried stands, for a source that made no branch of its own: the copy made for it of the agent it took up, or that agent's own branch and pull request. */
 function carriedWhere(carried: CarriedWork): string {
   const { agent, copiedBranch } = carried;
-  const lead = `It never made a branch of its own: it took up the work of the coding agent ${agentName(agent)}`;
+  const named =
+    agent === undefined ? "another coding agent" : `the coding agent ${agentName(agent)}`;
+  const lead = `It never made a branch of its own: it took up the work of ${named}`;
+  const branch = agent?.branch ?? null;
   const own =
-    agent.branch === null
+    branch === null
       ? ""
-      : ` That agent's own branch is \`${agent.branch}\`${pullWords(carried.published)}.`;
+      : ` That agent's own branch is \`${branch}\`${pullWords(carried.published)}.`;
   if (copiedBranch !== undefined) {
     return (
       `${lead}, whose checkout was copied for it to the branch \`${copiedBranch}\`. ${capitalized(fetchWords(copiedBranch))}, ` +
       `build on it, and open your pull request from it as usual.${own}`
     );
   }
-  if (agent.branch === null) return NO_BRANCH_WORDS;
+  if (branch === null) return NO_BRANCH_WORDS;
   return (
-    `${lead}, whose branch is \`${agent.branch}\`${pullWords(carried.published)}. ${capitalized(fetchWords(agent.branch))} ` +
+    `${lead}, whose branch is \`${branch}\`${pullWords(carried.published)}. ${capitalized(fetchWords(branch))} ` +
     "and continue there rather than starting a new one; only what that agent pushed stands."
   );
 }
@@ -521,12 +526,13 @@ function whereOf(
     const what = copy.uncommitted
       ? "with what it had not committed or pushed recorded as one snapshot commit on top"
       : "which held nothing it had not committed";
+    const taken = carried?.agent;
     const own =
       source.branch !== null
         ? ` Its own branch was \`${source.branch}\`${pull}.`
-        : carried === undefined || carried.agent.branch === null
+        : taken === undefined || taken.branch === null
           ? ""
-          : ` It made no branch of its own; the coding agent it took up, ${agentName(carried.agent)}, worked on \`${carried.agent.branch}\`${pullWords(carried.published)}.`;
+          : ` It made no branch of its own; the coding agent it took up, ${agentName(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
     return (
       `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}, ` +
       `build on it, and open your pull request from it as usual.${own}`
@@ -733,37 +739,51 @@ const editedAfter = (source: CodingAgent, cutSeq: number) =>
     return past.read.ok && past.read.value.length === 0 ? [...files] : undefined;
   });
 
+/** Whether two repositories are one, as GitHub names them whatever their case. */
+function sameRepository(one: string, other: string | null): boolean {
+  return other !== null && one.toLowerCase() === other.toLowerCase();
+}
+
 /**
  * The agents a source's work came down through, the source first: each
- * one it was started from read on while the newest read made no branch of
+ * one it was started from, read on while the newest read made no branch of
  * its own, as one that failed or never ended a turn did not, up to
- * `REPLAY_BOUNDS.CHAIN_DEPTH` and on the source's plan alone; and the work
- * it carried, where one of them left a branch, its own or the copy of its
- * work made for the agent after it. Note that a source with no branch of
- * its own is read past, because the new agent sent to the default branch
- * would lose the work the source only carried.
+ * `REPLAY_BOUNDS.CHAIN_DEPTH`, on the source's plan and in `repository`,
+ * the one the new agent clones, alone; and the work it carried, the nearest
+ * branch one of them left, its own or the copy of its work made for the
+ * agent after it, even where that agent can no longer be read. Note that a
+ * source with no branch of its own is read past, because the new agent sent
+ * to the default branch would lose the work the source only carried, and
+ * that the walk goes on past the work it found, because the context that
+ * bounds the replay is that of the first agent that measured one.
  */
-const lineageOf = (userId: string, source: CodingAgent) =>
+const lineageOf = (userId: string, source: CodingAgent, repository: string | null) =>
   Effect.gen(function* () {
     const lineage: CodingAgent[] = [source];
+    let carried: CarriedWork | undefined;
     let at = source;
     for (let depth = 0; depth < REPLAY_BOUNDS.CHAIN_DEPTH; depth += 1) {
       const link = at.startedFrom;
-      if (at.branch !== null || link === null) break;
+      if (at.branch !== null || link === null || !sameRepository(at.repository, repository)) break;
       const [found] = yield* listPublishedCodingAgentsById(userId, [link.agentId]);
-      if (found === undefined || found.agent.taskId !== source.taskId) break;
-      lineage.push(found.agent);
-      if (found.agent.branch !== null || link.branch !== undefined) {
-        const carried: CarriedWork = {
-          agent: found.agent,
-          published: found.published,
+      const reached =
+        found !== undefined &&
+        found.agent.taskId === source.taskId &&
+        sameRepository(found.agent.repository, repository);
+      // A copy made for an agent was pushed to the repository that agent cloned, which was checked above.
+      const branch = reached ? found.agent.branch : null;
+      if (carried === undefined && (link.branch !== undefined || branch !== null)) {
+        carried = {
+          agent: reached ? found.agent : undefined,
+          published: reached ? found.published : null,
           copiedBranch: link.branch,
         };
-        return { lineage, carried };
       }
+      if (!reached) break;
+      lineage.push(found.agent);
       at = found.agent;
     }
-    return { lineage, carried: undefined };
+    return { lineage, carried };
   });
 
 /** The steps a source's transcript replays, cut after the message named: refused where that message is none of its journals. */
@@ -807,8 +827,10 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
+  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
+  const repository = Option.isSome(task) ? task.value.task.repository : null;
   const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
-    lineageOf(userId, source),
+    lineageOf(userId, source, repository),
   );
   const read = yield* hostedStoreOrUnavailable(recordsOf(source, from.messageId));
   if (read === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);

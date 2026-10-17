@@ -5440,7 +5440,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a continue of an agent that never ran a turn is sent to the branch and pull request of the agent that one took up, not the default branch",
+    "a continue of an agent that never ran a turn is sent to the branch and pull request of the agent that one took up, not the default branch, unless that branch is in a repository the task moved from",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, eve, source } = yield* sourceAgent;
@@ -5463,6 +5463,18 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.ok(preamble.includes(`git switch '${PUBLISHED.branch}'`));
         assert.ok(preamble.includes(`/pull/${PUBLISHED.number}`));
         assert.doesNotMatch(preamble, /start from the repository's default branch/u);
+
+        // A branch left in a repository the task has since moved from is none the new checkout holds.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ repository: "Acme/Former" })
+            .where(eq(codingAgent.id, source.id)),
+        );
+        yield* continueFrom(never.id);
+        const moved = openedParts(eve).parts.replay?.preamble ?? "";
+        assert.match(moved, /start from the repository's default branch/u);
+        assert.ok(!moved.includes(PUBLISHED.branch));
       }),
   );
 
