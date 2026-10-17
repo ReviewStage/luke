@@ -6,22 +6,37 @@ import {
   planCommentStamps,
   readPlanCommentThreads,
   startPlanCommentThread,
+  withdrawPlanCommentAsk,
 } from "@luke/database/models/plan-comments";
+import { readTask } from "@luke/database/models/task-store";
 import {
+  PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_BOUNDS,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_REFUSAL,
   PLAN_COMMENTS_CURSOR_START,
+  type PlanCommentActionRequest,
   type PlanCommentsAnswer,
+  type PlanCommentThread,
+  type PlanCommentThreadAnswer,
   planCommentActionRequestSchema,
   planCommentStartRequestSchema,
   planCommentsCursorSchema,
 } from "@luke/features/plan-comment-wire";
+import { planSections } from "@luke/features/plan-document";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
-import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/http";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
+import type { GitHubApp } from "../github/github-app.js";
 import { cursorOf, heldUntilMoved } from "../http/held-read.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -34,8 +49,15 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import type { StoreFailure } from "../http/store-failure.js";
+import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import {
+  askableAgent,
+  type CommentAskSeams,
+  commentAskMessage,
+  handCommentAskOver,
+  sectionExcerpt,
+} from "./comment-ask.js";
 
 /**
  * plan-comments-app.ts -- a plan's comment threads for the desktop: read them as they change, start one, and answer, edit, resolve, reopen, or delete one.
@@ -81,11 +103,14 @@ const MAXIMUM_START_BODY_BYTES =
 /** An action is a comment at its bound and an id or a key, every character escaped. */
 const MAXIMUM_ACTION_BODY_BYTES = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 6 + 1_024;
 
-export interface PlanCommentsAppSeams {
+export interface PlanCommentsAppSeams extends CommentAskSeams {
   resolveUserId: UserIdResolver;
 }
 
-type PlanCommentsServices = DatabaseServices | HttpServerRequest.HttpServerRequest;
+/** What the routes may require of the function that stands them: the store, and the network and GitHub a hand-over to a coding agent reaches. */
+export type PlanCommentsAppServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
+
+type PlanCommentsServices = PlanCommentsAppServices | HttpServerRequest.HttpServerRequest;
 
 /** The bearer's account, or the invalid-token refusal. */
 const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -196,14 +221,105 @@ const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint"
   const action = readEither(planCommentActionRequestSchema)(body);
   if (Result.isFailure(action)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId } as const;
+  // Note that an agent asked is the plan's own and standing before anything is written of the ask.
+  const asking = action.success.action === PLAN_COMMENT_ACTION.ASK ? action.success : undefined;
+  if (
+    asking?.to.actor === PLAN_COMMENT_ACTOR.AGENT &&
+    (yield* askableAgent(userId, taskId, asking.to)) === undefined
+  ) {
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { refused: PLAN_COMMENT_REFUSAL.NO_AGENT });
+  }
   const outcome = yield* hostedStoreOrUnavailable(
     actOnPlanCommentThread(writer, taskId, threadId, action.success),
   );
+  if (
+    action.success.action === PLAN_COMMENT_ACTION.ASK &&
+    outcome.status === PLAN_COMMENT_OUTCOME.DONE
+  ) {
+    const refused = yield* askedHandedOver(seams, request, {
+      userId,
+      taskId,
+      answer: outcome.answer,
+      ask: action.success,
+    });
+    if (refused !== undefined) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { refused });
+  }
   return yield* outcomeAnswer(outcome, false);
 });
 
+/** The section a thread's words stand in, by where they stand, else by its heading; nothing where neither is found. */
+function sectionOf(text: string, thread: PlanCommentThread): string | undefined {
+  const sections = planSections(text);
+  const { anchor } = thread;
+  const found =
+    anchor === undefined
+      ? sections.find((each) => each.heading === thread.section)
+      : sections.find((each) => each.from <= anchor.from && anchor.from <= each.to);
+  if (found === undefined) return undefined;
+  return sectionExcerpt(found.text, anchor === undefined ? undefined : anchor.from - found.from);
+}
+
+/**
+ * An ask written in the thread handed to the one asked, in the words of the
+ * thread as it now stands, its line taken back where the hand-over does not
+ * land, so the thread never says someone was asked who was not. Answers the
+ * refusal said in band, an agent not the plan's, or nothing where it landed;
+ * any other failure is the route's.
+ */
+const askedHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: PlanCommentsAppSeams,
+  request: Request,
+  input: {
+    readonly userId: string;
+    readonly taskId: string;
+    readonly answer: PlanCommentThreadAnswer;
+    readonly ask: Extract<PlanCommentActionRequest, { action: typeof PLAN_COMMENT_ACTION.ASK }>;
+  },
+) {
+  const { userId, taskId, answer, ask } = input;
+  if (!("thread" in answer)) return undefined;
+  const { thread } = answer;
+  // The member's own newest ask names them, since an earlier one may be another member's.
+  const asked = thread.entries.findLast(
+    (entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED && entry.writer.by?.userId === userId,
+  );
+  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
+  if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const text = commentAskMessage({
+    planName: task.value.task.name,
+    thread,
+    sender: asked?.writer.by?.name ?? "A member",
+    toLuke: ask.to.actor === PLAN_COMMENT_ACTOR.LUKE,
+    section:
+      ask.to.actor === PLAN_COMMENT_ACTOR.AGENT ? sectionOf(task.value.text, thread) : undefined,
+  });
+  const withdraw = withdrawPlanCommentAsk(taskId, ask.clientKey).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.ignore,
+  );
+  const handed = yield* handCommentAskOver(seams, request, {
+    userId,
+    taskId,
+    to: ask.to,
+    clientKey: ask.clientKey,
+    text,
+  }).pipe(
+    Effect.onError(() => withdraw),
+    // An agent whose session is not running is said in band, its line already taken back, so the member reads why.
+    Effect.catch((refusal) =>
+      refusal === HOSTED_REFUSAL.AGENT_RETIRED || refusal === HOSTED_REFUSAL.AGENT_NOT_READY
+        ? Effect.succeed(PLAN_COMMENT_REFUSAL.AGENT_AWAY)
+        : Effect.fail(refusal),
+    ),
+  );
+  if (handed === undefined) return undefined;
+  if (handed === PLAN_COMMENT_REFUSAL.AGENT_AWAY) return handed;
+  yield* withdraw;
+  return PLAN_COMMENT_REFUSAL.NO_AGENT;
+});
+
 /** The group: the comment paths, and the hosted vocabulary's own refusal for any other. */
-export function planCommentsApp(seams: PlanCommentsAppSeams): WebRoutes<DatabaseServices> {
+export function planCommentsApp(seams: PlanCommentsAppSeams): WebRoutes<PlanCommentsAppServices> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,

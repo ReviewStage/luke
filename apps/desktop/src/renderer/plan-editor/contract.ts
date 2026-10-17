@@ -169,6 +169,14 @@ export interface PlanEditorMentions {
   readonly namesMention: (target: string) => boolean;
 }
 
+/** Words of the editor a thread is started on: where they stand in `text`, the Markdown the editor would hand over now, and the words themselves. */
+export interface EditorSpan {
+  readonly from: number;
+  readonly to: number;
+  readonly quote: string;
+  readonly text: string;
+}
+
 /** An editor as mounted. */
 export interface PlanEditorHandle {
   /**
@@ -187,6 +195,10 @@ export interface PlanEditorHandle {
   readonly settlePicture: (upload: string, src: string) => void;
   /** The picture waiting on `upload` taken out of the text, as its Remove does. */
   readonly removePicture: (upload: string) => void;
+  /** The words selected, as a thread started on them anchors them; nothing where none are. */
+  readonly selectionSpan: () => EditorSpan | undefined;
+  /** The block `element` is drawn in, whole, as a thread started on it anchors it; nothing where it is no block of the text, a diagram's preview say. */
+  readonly blockSpan: (element: Element) => EditorSpan | undefined;
   readonly destroy: () => void;
 }
 

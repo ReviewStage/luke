@@ -1,11 +1,14 @@
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_BOUNDS,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
+  type PlanCommentAsked,
   type PlanCommentEntry,
   type PlanCommentThread,
   type PlanCommentWriter,
@@ -33,6 +36,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   ArrowUpIcon,
   CheckIcon,
+  ChevronDownIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
   PencilIcon,
@@ -54,6 +58,7 @@ import { ActorLine, ActorMark, ActorRef } from "../actor-ref";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { usePerson } from "../member-directory";
+import type { EditorSpan, PlanEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import type { EditAgents } from "./edit-ref";
@@ -104,6 +109,7 @@ const CARD_GAP = 8;
 /** The words a thread's controls are named by. */
 const COMMENT_WORDS = {
   COMMENT: "Comment",
+  SEND_TO: "Send to",
   ADD: "Add a comment",
   REPLY: "Reply",
   RESOLVE: "Resolve",
@@ -479,6 +485,66 @@ function CommentText({
   );
 }
 
+/** Who a thread may be sent to, and the door that sends it: the draft posted first where one stands. */
+interface SendTo {
+  readonly agents: EditAgents | undefined;
+  readonly onAsk: (
+    to: PlanCommentAsked,
+    draft: { words: string; clientKey: string } | undefined,
+  ) => Promise<boolean>;
+}
+
+/**
+ * The one Send to control: Luke first, for reasoning about the plan, then the
+ * task's coding agents by name, each with its model, for changing code.
+ * Picking one asks it to read the thread with the plan and answer in it.
+ */
+function SendToMenu({
+  sendTo,
+  onPick,
+}: {
+  sendTo: SendTo;
+  onPick: (to: PlanCommentAsked) => void;
+}): React.JSX.Element {
+  const menu = useMenu(true);
+  const trigger = menu.trigger();
+  const control = sendTo.agents?.control;
+  const agents = (control?.agents ?? []).filter((agent) => agent.archivedAt === undefined);
+  const luke: MenuAction = {
+    label: "Luke",
+    icon: <ActorMark actor={LUKE_ACTOR} />,
+    detail: "Thinks about the plan",
+    onSelect: () => onPick({ actor: PLAN_COMMENT_ACTOR.LUKE }),
+  };
+  const coding: MenuAction[] = agents.map((agent) => ({
+    label: agentTabLabel(agent, control?.models),
+    icon: (
+      <WriterMark
+        writer={{ actor: PLAN_COMMENT_ACTOR.AGENT, agentId: agent.id }}
+        agents={sendTo.agents}
+      />
+    ),
+    detail: modelLabel(agent.model, control?.models),
+    onSelect: () => onPick({ actor: PLAN_COMMENT_ACTOR.AGENT, agentId: agent.id }),
+  }));
+  return (
+    <>
+      <button type="button" className="toolbar-button comment-send-to" {...trigger}>
+        {COMMENT_WORDS.SEND_TO}
+        <ChevronDownIcon aria-hidden="true" />
+      </button>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={COMMENT_WORDS.SEND_TO}
+          menu={menu.drawn}
+          groups={coding.length === 0 ? [[luke]] : [[luke], coding]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
 /** The field under a thread that answers it, or starts it where it is the thread being started. */
 function ReplyField({
   label,
@@ -486,6 +552,7 @@ function ReplyField({
   onSend,
   onCancel,
   autoFocus,
+  sendTo,
 }: {
   label: string;
   sending: boolean;
@@ -493,6 +560,8 @@ function ReplyField({
   onSend: (words: string, clientKey: string) => Promise<boolean>;
   onCancel: () => void;
   autoFocus: boolean;
+  /** Who the thread may be sent to; none for a thread not yet posted. */
+  sendTo?: SendTo | undefined;
 }): React.JSX.Element {
   const [words, setWords] = useState("");
   const attempt = useRef<{ words: string; key: string } | undefined>(undefined);
@@ -518,7 +587,26 @@ function ReplyField({
         autoFocus={autoFocus}
       />
       <div className="comment-field-foot">
-        <span />
+        {sendTo === undefined ? (
+          <span />
+        ) : (
+          <SendToMenu
+            sendTo={sendTo}
+            onPick={(to) => {
+              const trimmed = words.trim();
+              const key =
+                attempt.current?.words === trimmed ? attempt.current.key : crypto.randomUUID();
+              if (trimmed !== "") attempt.current = { words: trimmed, key };
+              void sendTo
+                .onAsk(to, trimmed === "" ? undefined : { words: trimmed, clientKey: key })
+                .then((sent) => {
+                  if (!sent || trimmed === "") return;
+                  attempt.current = undefined;
+                  setWords("");
+                });
+            }}
+          />
+        )}
         <button
           type="button"
           className="comment-send"
@@ -571,6 +659,8 @@ function ThreadCard({
 }): React.JSX.Element {
   const now = useMinute();
   const [sending, setSending] = useState(false);
+  // A send that failed is retried under its own key, so a send whose answer was lost hands the thread over once.
+  const askAttempt = useRef<{ to: string; key: string } | undefined>(undefined);
   const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
   const [first] = comments;
   const gone = thread.anchor === undefined;
@@ -648,6 +738,33 @@ function ThreadCard({
           sending={sending}
           autoFocus={false}
           onCancel={onClose}
+          sendTo={{
+            agents: doors.agents,
+            // Note that a draft standing as the thread is sent is posted first, so it is part of what is asked.
+            onAsk: async (to, draft) => {
+              setSending(true);
+              const posted =
+                draft === undefined ||
+                (await doors.control.act(thread.id, {
+                  action: PLAN_COMMENT_ACTION.REPLY,
+                  ...draft,
+                }));
+              const recipient = `${to.actor}:${to.agentId ?? ""}`;
+              if (askAttempt.current?.to !== recipient) {
+                askAttempt.current = { to: recipient, key: crypto.randomUUID() };
+              }
+              const asked =
+                posted &&
+                (await doors.control.act(thread.id, {
+                  action: PLAN_COMMENT_ACTION.ASK,
+                  clientKey: askAttempt.current.key,
+                  to,
+                }));
+              if (asked) askAttempt.current = undefined;
+              setSending(false);
+              return asked;
+            },
+          }}
           onSend={async (words, clientKey) => {
             setSending(true);
             const sent = await doors.control.act(thread.id, {
@@ -700,7 +817,8 @@ function PendingCard({
             scope: pending.scope,
             quote: pending.quote,
             anchor: { from: pending.from, to: pending.to },
-            text,
+            // Note that words started on in the editor are measured in its text, which the service lays over the saved one.
+            text: pending.text ?? text,
             words,
           });
           setSending(false);
@@ -722,6 +840,24 @@ function drawnOffset(root: HTMLElement, node: globalThis.Node, offset: number): 
   range.setStart(root, 0);
   range.setEnd(node, offset);
   return range.toString().length;
+}
+
+/** A block's own words in its section's drawn text: a bullet's up to the list nested under it, which its own bullets are commented on apart; any other block's whole. */
+function ownWords(unit: HTMLElement, block: HTMLElement) {
+  const from = drawnOffset(unit, block, 0);
+  const nested = [...block.childNodes].findIndex(
+    (child) => child instanceof HTMLElement && (child.tagName === "UL" || child.tagName === "OL"),
+  );
+  const range = document.createRange();
+  range.selectNodeContents(block);
+  if (nested >= 0) range.setEnd(block, nested);
+  const quote = range.toString().trimEnd();
+  return { quote, from, to: from + quote.length };
+}
+
+/** A thread started on the editor's words, its quote held to the bound the service keeps. */
+function editorPending(span: EditorSpan, scope: PlanCommentThread["scope"]): PendingThread {
+  return { ...span, scope, quote: span.quote.slice(0, PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) };
 }
 
 /** The words a section's drawn stretch stands for in the plan's text, laid over the section's source; nothing where none of them do. */
@@ -761,30 +897,38 @@ interface BlockEdge {
   readonly active: boolean;
 }
 
-/** The blocks threads are on whole, each by the block its mark stands in. */
-function blockEdges(body: HTMLElement | null, unitClass: string): readonly BlockEdge[] {
+/** The blocks threads are on whole, each bar spanning every mark its thread's words wear, so it stands beside a bullet, a paragraph, or a whole list alike. */
+function blockEdges(body: HTMLElement | null): readonly BlockEdge[] {
   if (body === null) return [];
-  const marks = [
-    ...body.querySelectorAll<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-block-threads]`),
-  ];
-  const seen = new Set<string>();
-  return marks.flatMap((mark) => {
-    const found = blockAt(mark, unitClass);
-    if (found === undefined) return [];
-    const threads = (mark.dataset.blockThreads ?? "").split(" ").filter((thread) => thread !== "");
-    return threads.flatMap((thread) => {
-      if (seen.has(thread)) return [];
-      seen.add(thread);
-      return [
-        {
-          thread,
-          top: topIn(body, found.block),
-          height: found.block.getBoundingClientRect().height,
-          active: mark.dataset.blockActive === "true",
-        },
-      ];
-    });
-  });
+  const spans = new Map<string, { top: number; bottom: number; active: boolean }>();
+  for (const mark of body.querySelectorAll<HTMLElement>(
+    `.${COMMENT_MARK_CLASS}[data-block-threads]`,
+  )) {
+    const rect = mark.getBoundingClientRect();
+    const top = topIn(body, mark);
+    const bottom = top + rect.height;
+    const active = mark.dataset.blockActive === "true";
+    for (const thread of (mark.dataset.blockThreads ?? "").split(" ")) {
+      if (thread === "") continue;
+      const held = spans.get(thread);
+      spans.set(
+        thread,
+        held === undefined
+          ? { top, bottom, active }
+          : {
+              top: Math.min(held.top, top),
+              bottom: Math.max(held.bottom, bottom),
+              active: held.active || active,
+            },
+      );
+    }
+  }
+  return [...spans].map(([thread, span]) => ({
+    thread,
+    top: span.top,
+    height: span.bottom - span.top,
+    active: span.active,
+  }));
 }
 
 /** The block a point is over, one of a section's own: a paragraph, a list, a heading, a quote, a table, or code. */
@@ -795,6 +939,10 @@ function blockAt(
   if (!(target instanceof HTMLElement)) return undefined;
   const unit = target.closest<HTMLElement>(`.${unitClass}`);
   if (unit === null) return undefined;
+  // A list is commented on a bullet at a time, its innermost one under the pointer, and the gaps between them offer none.
+  if (target.tagName === "UL" || target.tagName === "OL") return undefined;
+  const item = target.closest<HTMLElement>("li");
+  if (item !== null && unit.contains(item)) return { block: item, unit };
   let block: HTMLElement | null = target;
   while (block !== null && block.parentElement !== unit) block = block.parentElement;
   return block === null ? undefined : { block, unit };
@@ -806,6 +954,18 @@ function blockAt(
  * the bubble over words selected. Drawn inside the body, which it measures,
  * from the scroller around it, whose width says whether a margin fits.
  */
+/** What a press may land on and leave the open thread open: its card, a thread's words or count, the controls that start one, and a menu or dialog it opened. */
+const KEEPS_THREAD_OPEN = [
+  ".comment-card",
+  `.${COMMENT_MARK_CLASS}`,
+  ".comment-count",
+  ".comment-bubble",
+  ".comment-block-button",
+  '[role="menu"]',
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+].join(", ");
+
 export function PlanCommentLayer({
   body,
   scroller,
@@ -813,7 +973,7 @@ export function PlanCommentLayer({
   sections,
   text,
   doors,
-  editing,
+  editor,
 }: {
   body: RefObject<HTMLDivElement | null>;
   scroller: RefObject<HTMLDivElement | null>;
@@ -823,8 +983,12 @@ export function PlanCommentLayer({
   /** The plan's text, which `sections` were read from and a thread's words are measured in. */
   text: string;
   doors: ThreadDoors;
-  /** Whether the editor stands in place of the drawn sections, whose marks the margin still stands beside, though no thread is started there. */
-  editing: boolean;
+  /**
+   * The open editor's handle, where the editor stands in place of the drawn
+   * sections: a thread started there is measured on the editor's words, in
+   * the text it would hand over now, rather than on a section's.
+   */
+  editor: RefObject<PlanEditorHandle | undefined> | undefined;
 }): React.JSX.Element | null {
   const { active, onActive, pending, revealed } = useCommentFocus();
   const setPending = useContext(PendingSetter);
@@ -838,6 +1002,8 @@ export function PlanCommentLayer({
     { top: number; left: number; start: () => void } | undefined
   >(undefined);
   const cards = useRef(new Map<string, HTMLDivElement>());
+  // The cards already stood in the margin, which move to their next place rather than land there, so a card arriving lands where it belongs.
+  const settled = useRef(new Set<string>());
   const open = doors.control.threads.filter(openThread);
 
   // The margin folds where the scroller has no room for it beside the reading width.
@@ -895,7 +1061,7 @@ export function PlanCommentLayer({
       nextAnchors.size === anchors.size &&
       [...nextAnchors].every(([id, top]) => anchors.get(id) === top);
     if (!sameAnchors) setAnchors(nextAnchors);
-    const nextEdges = blockEdges(body.current, unitClass);
+    const nextEdges = blockEdges(body.current);
     if (JSON.stringify(nextEdges) !== JSON.stringify(edges)) setEdges(nextEdges);
   });
 
@@ -919,15 +1085,24 @@ export function PlanCommentLayer({
   // A block under the pointer shows its button at the column's end; words selected raise the bubble over them.
   useEffect(() => {
     const element = body.current;
-    if (element === null || editing) return;
+    if (element === null) return;
     const over = (event: PointerEvent) => {
       const found = blockAt(event.target, unitClass);
       if (found === undefined) return;
+      if (editor !== undefined) {
+        setHovered({
+          top: topIn(element, found.block),
+          start: () => {
+            const span = editor.current?.blockSpan(found.block);
+            if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.BLOCK));
+          },
+        });
+        return;
+      }
       const index = [...element.querySelectorAll(`.${unitClass}`)].indexOf(found.unit);
       const section = sections[index];
       if (section === undefined) return;
-      const from = drawnOffset(found.unit, found.block, 0);
-      const to = from + (found.block.textContent ?? "").length;
+      const { quote, from, to } = ownWords(found.unit, found.block);
       setHovered({
         top: topIn(element, found.block),
         start: () => {
@@ -936,7 +1111,7 @@ export function PlanCommentLayer({
             section,
             { from, to },
             PLAN_COMMENT_SCOPE.BLOCK,
-            found.block.textContent ?? "",
+            quote,
           );
           if (begun !== undefined) setPending(begun);
         },
@@ -955,14 +1130,27 @@ export function PlanCommentLayer({
         setBubble(undefined);
         return;
       }
+      const box = range.getBoundingClientRect();
+      const own = element.getBoundingClientRect();
+      // In the editor the words are measured through it, and its selection is left as it stands.
+      if (editor !== undefined) {
+        setBubble({
+          top: box.top - own.top,
+          left: box.left - own.left,
+          start: () => {
+            const span = editor.current?.selectionSpan();
+            if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.WORDS));
+            setBubble(undefined);
+          },
+        });
+        return;
+      }
       const index = [...element.querySelectorAll(`.${unitClass}`)].indexOf(start);
       const section = sections[index];
       const quote = selection.toString().trim();
       if (section === undefined || quote === "") return;
       const from = drawnOffset(start, range.startContainer, range.startOffset);
       const to = drawnOffset(start, range.endContainer, range.endOffset);
-      const box = range.getBoundingClientRect();
-      const own = element.getBoundingClientRect();
       setBubble({
         top: box.top - own.top,
         left: box.left - own.left,
@@ -988,19 +1176,36 @@ export function PlanCommentLayer({
       onActive(thread);
     };
     element.addEventListener("pointerover", over);
-    element.addEventListener("click", pressed);
+    // Note that in the editor a press places the caret, so marked words there open no thread.
+    if (editor === undefined) element.addEventListener("click", pressed);
     document.addEventListener("selectionchange", selected);
     return () => {
       element.removeEventListener("pointerover", over);
       element.removeEventListener("click", pressed);
       document.removeEventListener("selectionchange", selected);
     };
-  }, [body, editing, sections, unitClass, setPending, onActive, active]);
+  }, [body, editor, sections, unitClass, setPending, onActive, active]);
 
   const cardRef = (id: string) => (element: HTMLDivElement | null) => {
     if (element === null) cards.current.delete(id);
     else cards.current.set(id, element);
   };
+  useEffect(() => {
+    settled.current = new Set(tops.keys());
+  });
+  // A press anywhere but the thread, its words, or what it opened over the page closes it; one being written stays, so its draft is never lost.
+  useEffect(() => {
+    if (active === undefined || active === PENDING_THREAD) return;
+    const away = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(KEEPS_THREAD_OPEN) !== null) {
+        return;
+      }
+      onActive(undefined);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [active, onActive]);
+  const slotStyle = (id: string) => ({ transform: `translateY(${tops.get(id) ?? 0}px)` });
   const close = () => {
     onActive(undefined);
     setPending(undefined);
@@ -1029,7 +1234,6 @@ export function PlanCommentLayer({
   const blockButton =
     // Note that folded, a line holding a count opens its threads there, so its block shows no button over it.
     hovered === undefined ||
-    editing ||
     (!wide && [...anchors.values()].some((top) => Math.abs(top - hovered.top) < 4)) ? null : (
       <div className="comment-block-button" data-folded={!wide} style={{ top: hovered.top }}>
         <Tooltip label={COMMENT_WORDS.COMMENT}>
@@ -1037,6 +1241,8 @@ export function PlanCommentLayer({
             type="button"
             className="icon-button"
             aria-label={COMMENT_WORDS.COMMENT}
+            // Note that the press takes no focus, so an open editor stays to measure the block through.
+            onMouseDown={(event) => event.preventDefault()}
             onClick={hovered.start}
           >
             <MessageSquarePlusIcon aria-hidden="true" />
@@ -1045,7 +1251,7 @@ export function PlanCommentLayer({
       </div>
     );
   const bubbleDrawn =
-    bubble === undefined || editing ? null : (
+    bubble === undefined ? null : (
       <div className="comment-bubble menu-surface" style={{ top: bubble.top, left: bubble.left }}>
         <button
           type="button"
@@ -1070,7 +1276,8 @@ export function PlanCommentLayer({
               key={thread.id}
               ref={cardRef(thread.id)}
               className="comment-slot"
-              style={{ top: tops.get(thread.id) ?? 0 }}
+              data-moves={settled.current.has(thread.id)}
+              style={slotStyle(thread.id)}
             >
               <ThreadCard
                 thread={thread}
@@ -1088,7 +1295,8 @@ export function PlanCommentLayer({
             <div
               ref={cardRef(PENDING_THREAD)}
               className="comment-slot"
-              style={{ top: tops.get(PENDING_THREAD) ?? 0 }}
+              data-moves={settled.current.has(PENDING_THREAD)}
+              style={slotStyle(PENDING_THREAD)}
             >
               {pendingCard}
             </div>

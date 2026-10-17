@@ -209,7 +209,11 @@ the workspace sees every comment, as they see the plan. Comments are stored
 as written and readable by our own operators, like the plan. Deleting a
 comment or a thread deletes it at once; deleting the task deletes all of its
 comments; deleting your account leaves the comments you wrote on a task that
-stays, naming nobody, as it leaves the words you wrote.
+stays, naming nobody, as it leaves the words you wrote. Luke's planning model and the task's coding agents read the
+open threads beside the plan, and a thread a member sends one of them with
+Send to is handed to it whole as a request; either way the comments' words
+and their writers' names go to that agent's model provider, as the plan does
+(see "Who we send it to").
 
 **Your plan template.** The template a new task's plan starts from is kept with your
 account preferences on our service, as you write it in Settings › Plan
