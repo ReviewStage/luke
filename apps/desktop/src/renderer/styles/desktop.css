@@ -4785,7 +4785,9 @@ button.integration-tool-head:hover,
 }
 
 @container inbox-item (width < 360px) {
+  /* The way back folds to its glyph (`FoldingButton`). */
   .inbox-view-items > .desktop-toolbar {
+    --luke-fold: folded;
     flex-wrap: wrap;
     row-gap: var(--space-4);
   }
@@ -4793,15 +4795,6 @@ button.integration-tool-head:hover,
   .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
     order: 1;
     flex-basis: 100%;
-  }
-
-  .inbox-back {
-    width: var(--control-height);
-    padding: 0;
-  }
-
-  .inbox-back-word {
-    display: none;
   }
 
   .inbox-crumb:first-child,
@@ -6954,8 +6947,8 @@ button.automation-run:hover {
   stroke: none;
 }
 
-.inbox-needs-you-only[data-waiting="true"] svg {
-  --needs-you-unit: calc(var(--control-glyph) / 24);
+.inbox-needs-you-glyph[data-waiting="true"] {
+  --needs-you-unit: calc(var(--luke-control-icon) / 24);
   mask: radial-gradient(
     circle at calc(19 * var(--needs-you-unit)) calc(5 * var(--needs-you-unit)),
     #000 calc(3.7 * var(--needs-you-unit)),

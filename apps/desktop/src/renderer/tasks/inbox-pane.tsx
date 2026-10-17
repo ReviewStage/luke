@@ -21,7 +21,13 @@ import {
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BackIcon, ChevronRightIcon, ErrorState } from "@luke/ui";
+import {
+  BackIcon,
+  ChevronRightIcon,
+  ErrorState,
+  FoldingButton,
+  type FoldingButtonHint,
+} from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { useClipped } from "@luke/ui/use-clipped";
@@ -161,6 +167,17 @@ const THREAD_TIME_CLASS =
 
 /** What the way back from an item standing alone to the list says it does. */
 const BACK_TO_INBOX = "Back to inbox";
+
+/**
+ * The way back's pill, which says where it goes and names Back's chord
+ * whether its word is folded away or not. Note that it drops the folded
+ * label it is handed, because the pill says more than the word does.
+ */
+const BackHint: FoldingButtonHint = ({ children }) => (
+  <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
+    {children}
+  </Tooltip>
+);
 
 /** A link block: a plain link where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
 export function LinkBlock({
@@ -1223,17 +1240,7 @@ export function InboxPane({
     <section className="inbox-view-items" aria-label={cardTitle(item.title)} hidden={hidden}>
       <header className="desktop-toolbar">
         {onBack === undefined ? null : (
-          <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-            <button
-              type="button"
-              className="toolbar-button inbox-back"
-              aria-label="Inbox"
-              onClick={onBack}
-            >
-              <BackIcon />
-              <span className="inbox-back-word">Inbox</span>
-            </button>
-          </Tooltip>
+          <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
         )}
         <Crumbs holder={holder} by={by} doors={doors} />
         {pager === undefined ||

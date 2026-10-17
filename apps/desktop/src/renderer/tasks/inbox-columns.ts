@@ -59,6 +59,11 @@ export interface InboxColumns {
   readonly onList: () => void;
 }
 
+/** The list head's Needs you, the list's one steady control, found by the glyph it alone wears. */
+export function needsYouButton(list: ParentNode | null): HTMLElement | null {
+  return list?.querySelector(".inbox-needs-you-glyph")?.closest("button") ?? null;
+}
+
 /** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
 function oneColumn(width: number, was: boolean): boolean {
   return width < (was ? INBOX_SPLIT.LEAVE : INBOX_SPLIT.ENTER);
@@ -129,7 +134,7 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     // An item chosen that the list holds no row for, as a link's missing item or one Needs you leaves out, hands the keyboard to the first row instead, or to Needs you, the list's one steady control, where no row stands.
     const rows = [...held.querySelectorAll<HTMLElement>(".inbox-tasks [data-item-id]")];
     const row = rows.find((each) => each.dataset.itemId === chosen) ?? rows[0];
-    (row ?? held.querySelector<HTMLElement>(".inbox-tasks .inbox-needs-you-only"))?.focus();
+    (row ?? needsYouButton(held.querySelector(".inbox-tasks")))?.focus();
     setShowAlls(0);
   }, [shown, chosen, showAlls]);
 
