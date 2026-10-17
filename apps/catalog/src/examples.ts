@@ -19,6 +19,7 @@ import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
+import { SELECT_EXAMPLE } from "./examples/select";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
@@ -69,6 +70,7 @@ export const EXAMPLES: readonly Example[] = [
   MENU_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
   SEGMENTED_EXAMPLE,
+  SELECT_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
