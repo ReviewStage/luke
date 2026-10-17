@@ -912,30 +912,32 @@ function ShownSecretRow({
 }): React.JSX.Element {
   const copy = useCopyFeedback();
   return (
-    <div className="settings-row ph-no-capture">
-      <span className="settings-copy">
-        <strong>Secret</strong>
-        <small>You won't be able to see this again. Copy it into your sender now.</small>
-      </span>
-      <span className="automation-row-controls">
-        <input
-          className="settings-input automation-webhook-url"
-          aria-label="Secret"
-          readOnly
-          value={secret}
-        />
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={copyHint(copy.state, "Copy secret")}
-          onClick={() => copy.copy(secret)}
-        >
-          <CopyGlyph state={copy.state} />
-        </button>
-        <button type="button" className="toolbar-button" onClick={onDone}>
-          Done
-        </button>
-      </span>
+    <div className="ph-no-capture">
+      <SettingsRow
+        label="Secret"
+        description="You won't be able to see this again. Copy it into your sender now."
+      >
+        {() => (
+          <>
+            <span className="automation-webhook-field">
+              <TextField
+                label="Secret"
+                font={TEXT_FIELD_FONT.MONO}
+                spellCheck={false}
+                readOnly
+                value={secret}
+                onChange={() => undefined}
+              />
+            </span>
+            <IconButton
+              icon={<CopyGlyph state={copy.state} />}
+              label={copyHint(copy.state, "Copy secret")}
+              onClick={() => copy.copy(secret)}
+            />
+            <Button onClick={onDone}>Done</Button>
+          </>
+        )}
+      </SettingsRow>
     </div>
   );
 }
@@ -982,51 +984,54 @@ function WebhookRows({
     automation?.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? automation.webhookUrl : undefined;
   if (automation === undefined || url === undefined) {
     return (
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Address</strong>
-          <small>Save it as a webhook to get its address and a secret to call it with.</small>
-        </span>
-      </div>
+      <SettingsRow
+        label="Address"
+        description="Save it as a webhook to get its address and a secret to call it with."
+      >
+        {() => null}
+      </SettingsRow>
     );
   }
   return (
     <>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Address</strong>
-          <small>
+      <SettingsRow
+        label="Address"
+        description={
+          <>
             POST to the address with the secret as <code>Authorization: Bearer</code>. Don't send
             secrets in the body: Luke hands the body to the run's agent, and it shows in the run's
             transcript.
-          </small>
-        </span>
-        <span className="automation-row-controls">
-          <input
-            className="settings-input automation-webhook-url"
-            aria-label="Webhook address"
-            readOnly
-            value={url}
-          />
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={copyHint(address.state, "Copy address")}
-            onClick={() => address.copy(url)}
-          >
-            <CopyGlyph state={address.state} />
-          </button>
-        </span>
-      </div>
+          </>
+        }
+      >
+        {() => (
+          <>
+            <span className="automation-webhook-field">
+              <TextField
+                label="Webhook address"
+                font={TEXT_FIELD_FONT.MONO}
+                spellCheck={false}
+                readOnly
+                value={url}
+                onChange={() => undefined}
+              />
+            </span>
+            <IconButton
+              icon={<CopyGlyph state={address.state} />}
+              label={copyHint(address.state, "Copy address")}
+              onClick={() => address.copy(url)}
+            />
+          </>
+        )}
+      </SettingsRow>
       {secret === undefined ? (
-        <div className="settings-row">
-          <span className="settings-copy">
-            <strong>Secret</strong>
-          </span>
-          <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
-            New secret
-          </button>
-        </div>
+        <SettingsRow label="Secret">
+          {() => (
+            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={rotation.ask}>
+              New secret
+            </Button>
+          )}
+        </SettingsRow>
       ) : (
         <ShownSecretRow key={secret} secret={secret} onDone={() => onSecret(undefined)} />
       )}
