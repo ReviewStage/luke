@@ -160,6 +160,22 @@ export function macCommandSettledLiveStatement(
   );
 }
 
+/**
+ * The account's commands no Mac has claimed, written for Neon Realtime to
+ * wake the Mac's held read as one is queued: their ids alone, never what
+ * they run. It names no claim window, because a live statement measures
+ * nothing from the clock: the read looks again with its own statement,
+ * which keeps the window. None where it names a value Realtime cannot carry.
+ */
+export function macCommandsWaitingLiveStatement(userId: string): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(liveSelection({ id: macCommand.id }))
+      .from(macCommand)
+      .where(and(eq(macCommand.userId, userId), isNull(macCommand.claimedAt))),
+  );
+}
+
 const deleteCommand = SqlSchema.void({
   Request: CommandKeySchema,
   execute: ({ userId, id }) =>

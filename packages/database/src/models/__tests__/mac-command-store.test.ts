@@ -11,6 +11,7 @@ import {
   claimMacCommands,
   macCommandResult,
   macCommandSettledLiveStatement,
+  macCommandsWaitingLiveStatement,
   queueMacCommand,
   settleMacCommand,
 } from "../mac-command-store.js";
@@ -98,6 +99,28 @@ it.layer(getTestDB())("the Mac command store", (it) => {
         assert.ok(yield* settleMacCommand(owner, queued.id, RESULT));
         assert.deepEqual(yield* rows(owner), [{ id: queued.id, settled: true }]);
         assert.deepEqual(yield* rows(other), []);
+      }),
+  );
+
+  it.effect(
+    "the statement Realtime wakes the Mac's held read on names the account's unclaimed commands by id alone, drops one once claimed, and reads nothing of another account's",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const { owner, other } = yield* openAccounts;
+        const since = yield* now;
+        const rows = (userId: string) => {
+          const statement = Option.getOrThrow(macCommandsWaitingLiveStatement(userId));
+          return sql.unsafe(statement.sql, [...statement.params]);
+        };
+
+        assert.deepEqual(yield* rows(owner), []);
+        const queued = command();
+        yield* queueMacCommand(owner, queued);
+        assert.deepEqual(yield* rows(owner), [{ id: queued.id }]);
+        assert.deepEqual(yield* rows(other), []);
+        yield* claimMacCommands(owner, since);
+        assert.deepEqual(yield* rows(owner), []);
       }),
   );
 });
