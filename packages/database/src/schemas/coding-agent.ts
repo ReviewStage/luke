@@ -6,6 +6,7 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   foreignKey,
@@ -228,6 +229,8 @@ export const codingAgent = pgTable(
     index("coding_agent_task_created").on(table.taskId, table.createdAt),
     // A workspace's agents with no task are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
+    // An agent's summary names the agents started from it, read by the source's id.
+    index("coding_agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
   ],
 );
 

@@ -27,6 +27,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lte,
   or,
   type SQL,
   sql,
@@ -927,6 +928,47 @@ const findPublishedAgentsById = SqlSchema.findAll({
     ),
 });
 
+const findStartedFrom = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentIds: Schema.Array(Schema.String),
+    perSource: Schema.Number,
+  }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    title: Schema.NullOr(Schema.String),
+    startedFrom: StartedFromColumnSchema,
+  }),
+  execute: ({ userId, agentIds, perSource }) =>
+    Database.use((db) => {
+      // Each source's own oldest are kept, so a source started from many hides none of another's.
+      const ranked = db
+        .select({
+          id: codingAgent.id,
+          title: codingAgent.title,
+          startedFrom: codingAgent.startedFrom,
+          createdAt: codingAgent.createdAt,
+          rank: sql<number>`row_number() over (partition by (${codingAgent.startedFrom}->>'agentId') order by ${codingAgent.createdAt}, ${codingAgent.id})`.as(
+            "rank",
+          ),
+        })
+        .from(codingAgent)
+        .where(
+          and(
+            // Note that the source is matched on the expression its index is built on.
+            inArray(sql`(${codingAgent.startedFrom}->>'agentId')`, [...agentIds]),
+            agentReachableBy(userId),
+          ),
+        )
+        .as("ranked");
+      return db
+        .select({ id: ranked.id, title: ranked.title, startedFrom: ranked.startedFrom })
+        .from(ranked)
+        .where(lte(ranked.rank, perSource))
+        .orderBy(asc(ranked.createdAt), asc(ranked.id));
+    }),
+});
+
 const findAgentsOnBranches = SqlSchema.findAll({
   Request: Schema.Struct({
     repository: Schema.String,
@@ -1259,6 +1301,44 @@ export function listPublishedCodingAgentsById(
   return Effect.map(findPublishedAgentsById({ userId, agentIds }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
+}
+
+/** How many agents started from one agent its summary names, the oldest first. */
+const CONTINUATIONS_PER_AGENT = 20;
+
+/** One agent started from another: its id, its title, null before it has one, and the message it forked the other at where it was forked rather than continued. */
+export interface CodingAgentStartedFromIt {
+  readonly agentId: string;
+  readonly title: string | null;
+  readonly messageId?: string;
+}
+
+/**
+ * The agents started from each agent named, archived or not, oldest first
+ * and at most `CONTINUATIONS_PER_AGENT` of each, by the id of the agent
+ * they were started from; one of a workspace the account is not in is left
+ * out. None asked, none read.
+ */
+export function continuationsOf(
+  userId: string,
+  agentIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, readonly CodingAgentStartedFromIt[]>> {
+  if (agentIds.length === 0) return Effect.succeed(new Map());
+  const perSource = CONTINUATIONS_PER_AGENT;
+  return Effect.map(findStartedFrom({ userId, agentIds, perSource }), (rows) => {
+    const bySource = new Map<string, CodingAgentStartedFromIt[]>();
+    for (const { id, title, startedFrom } of rows) {
+      if (startedFrom === null) continue;
+      const each = bySource.get(startedFrom.agentId) ?? [];
+      each.push(
+        startedFrom.messageId === undefined
+          ? { agentId: id, title }
+          : { agentId: id, title, messageId: startedFrom.messageId },
+      );
+      bySource.set(startedFrom.agentId, each);
+    }
+    return bySource;
+  });
 }
 
 /** The pull request from the agent's branch as GitHub just answered, or null where it answered none; nothing written for an agent of a workspace the account is not in. */

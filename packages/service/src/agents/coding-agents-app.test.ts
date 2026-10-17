@@ -31,6 +31,7 @@ import {
 } from "@luke/database/models/chat-store";
 import {
   archiveCodingAgent,
+  type CodingAgent,
   createCodingAgent,
   discardCodingAgent,
   lineSendersOf,
@@ -4744,9 +4745,12 @@ function openedParts(eve: ReturnType<typeof fakeEve>) {
 
 it.layer(getTestDB())("starting an agent from another", (it) => {
   /** A source agent on the owner's plan, on a choice and servers of its own, with a transcript of two turns, a branch, and a pull request, its GitHub answering as given. */
-  const sourceAgentOn = (github?: RepositoryScript) =>
+  const sourceAgentOn = (github?: RepositoryScript, eve?: ReturnType<typeof fakeEve>) =>
     Effect.gen(function* () {
-      const opened = yield* openTask(github === undefined ? {} : { github });
+      const opened = yield* openTask({
+        ...(github === undefined ? undefined : { github }),
+        ...(eve === undefined ? undefined : { eve }),
+      });
       const source = readAnswer(
         codingAgentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
@@ -4854,6 +4858,179 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           [fromOf.has(source.id), fromOf.get(source.id), fromOf.get(started.id)],
           [true, undefined, { agentId: source.id, steps: 5, totalSteps: 5 }],
         );
+      }),
+  );
+
+  /** A source whose session eve opened is claimed, with a turn under way eve knows as `turn_0`; answers the session. */
+  const sourceRunning = (stored: CodingAgent, eve: ReturnType<typeof fakeEve>) =>
+    Effect.gen(function* () {
+      const target = { userId: stored.userId, conversationId: stored.conversationId };
+      const sessionId = eve.opened[0]?.sessionId ?? "";
+      assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      const turnId = randomUUID();
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.consume(target, {
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        conversationId: sessionKey(target.conversationId),
+        turnId,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: 0,
+      });
+      // The source's lines are the turn's, so none of them reads as awaiting a turn of its own.
+      yield* Database.use((db) =>
+        db
+          .update(messages)
+          .set({ turnId })
+          .where(eq(messages.conversationId, stored.conversationId)),
+      );
+      return sessionId;
+    });
+
+  it.effect(
+    "a continue stops its source's turn still running, once however many continue it, and a fork leaves its source running",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, ask, source, stored, firstTurn } = yield* sourceAgentOn(
+          undefined,
+          eve,
+        );
+        const sessionId = yield* sourceRunning(stored, eve);
+        const startFrom = (from: { agentId: string; messageId?: string }) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+        const sourceStatus = Effect.map(
+          ask(request(AGENT, owner, { id: source.id })),
+          (answered) =>
+            readAnswer(codingAgentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agent.status,
+        );
+
+        yield* startFrom({ agentId: source.id, messageId: firstTurn });
+        assert.deepEqual(eve.cancelled, [], "a fork stops nothing");
+        assert.equal(yield* sourceStatus, CODING_AGENT_STATUS.RUNNING);
+
+        yield* startFrom({ agentId: source.id });
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.equal(yield* sourceStatus, CODING_AGENT_STATUS.CANCELLED);
+
+        yield* startFrom({ agentId: source.id });
+        assert.deepEqual(
+          eve.cancelled,
+          [[sessionId, "turn_0"]],
+          "a source stopped is not stopped again",
+        );
+      }),
+  );
+
+  it.effect("a source eve refuses to stop still has its continue started, and runs on", () =>
+    Effect.gen(function* () {
+      const eve = fakeEve({ cancels: false });
+      const { owner, task, ask, source, stored } = yield* sourceAgentOn(undefined, eve);
+      const sessionId = yield* sourceRunning(stored, eve);
+
+      const started = readAnswer(
+        codingAgentAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+        ),
+      ).agent;
+
+      assert.deepEqual(started.from?.agentId, source.id);
+      assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+      const page = readAnswer(
+        codingAgentPageAnswerSchema,
+        HOSTED_HTTP_STATUS.OK,
+        yield* ask(request(AGENT, owner, { id: source.id })),
+      ).agent;
+      assert.equal(page.status, CODING_AGENT_STATUS.RUNNING);
+    }),
+  );
+
+  it.effect(
+    "a continue is named after its source, the suffix never stacked and the whole cut to fit, a source with no title names none, and a fork is named as it starts",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, source, firstTurn } = yield* sourceAgent;
+        const titleFrom = (from: { agentId: string; messageId?: string }) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+
+        assert.equal((yield* titleFrom({ agentId: source.id })).title, null);
+        yield* renameCodingAgent(owner, source.id, "Invite by link");
+        const continued = yield* titleFrom({ agentId: source.id });
+        assert.equal(continued.title, "Invite by link (continued)");
+        assert.equal(
+          (yield* titleFrom({ agentId: continued.id })).title,
+          "Invite by link (continued)",
+        );
+        assert.equal((yield* titleFrom({ agentId: source.id, messageId: firstTurn })).title, null);
+        const long = "Expire teammate invitations ".repeat(4);
+        yield* renameCodingAgent(owner, source.id, long);
+        const cut = (yield* titleFrom({ agentId: source.id })).title ?? "";
+        assert.equal(cut.length <= CODING_AGENT_BOUNDS.MAX_TITLE_CHARS, true);
+        assert.match(cut, /^Expire teammate invitations Expire .*[^ ] \(continued\)$/u);
+      }),
+  );
+
+  it.effect(
+    "a source names the agents that continued and forked it, in its task's list, on its own page, and once archived",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, ask, source, stored, firstTurn } = yield* sourceAgentOn(
+          undefined,
+          eve,
+        );
+        yield* sourceRunning(stored, eve);
+        const startFrom = (from: { agentId: string; messageId?: string }) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+        const continued = yield* startFrom({ agentId: source.id });
+        const forked = yield* startFrom({ agentId: source.id, messageId: firstTurn });
+        // Note that the two start within one instant here, so they are compared in the order of their ids.
+        const byId = <Named extends { readonly agentId: string }>(
+          named: readonly Named[] | undefined,
+        ) => [...(named ?? [])].sort((a, b) => a.agentId.localeCompare(b.agentId));
+        const expected = byId([
+          { agentId: continued.id, title: null, forked: false },
+          { agentId: forked.id, title: null, forked: true, messageId: firstTurn },
+        ]);
+
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
+        );
+        const continuedByOf = new Map(listed.agents.map((agent) => [agent.id, agent.continuedBy]));
+        assert.deepEqual(byId(continuedByOf.get(source.id)), expected);
+        assert.equal(continuedByOf.get(continued.id), undefined);
+        const page = readAnswer(
+          codingAgentPageAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT, owner, { id: source.id })),
+        ).agent;
+        assert.deepEqual(byId(page.continuedBy), expected);
+        const archived = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(AGENT, owner, { method: "PATCH", id: source.id, body: { archived: true } }),
+          ),
+        ).agent;
+        assert.deepEqual(byId(archived.continuedBy), expected);
       }),
   );
 

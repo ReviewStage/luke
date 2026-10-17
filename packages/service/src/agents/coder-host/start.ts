@@ -15,6 +15,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+import { storeWriter } from "@luke/database/models/writer";
 import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
@@ -29,6 +30,7 @@ import {
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentStartFrom,
@@ -81,6 +83,8 @@ import {
   type SummaryModelOf,
   summarizeSteps,
 } from "./replay-summary.js";
+import { cancelledTurn } from "./stop.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from Luke's voice, or from an automation's run.
@@ -116,7 +120,12 @@ import {
  * never becomes the account's default, and an agent started from an
  * automation's run is no run of that automation. Its mentions and servers
  * are read from the source's brief and the note, as a fresh start's would
- * be, and never from the replay.
+ * be, and never from the replay. A continue is named after its source,
+ * `<title> (continued)`, where the ask names no title and the source has
+ * one, and once eve has taken it the source is stopped as a Stop stops it,
+ * since the work goes on in the new agent; a fork leaves its source
+ * running, and a source that could not be stopped is logged, never the
+ * Start's failure.
  * An ask that names a branch has its agent's checkout cloned at that branch
  * rather than the default one, which the agent's row keeps; the branch is
  * read on GitHub through the same installation before anything is made, so
@@ -455,6 +464,47 @@ function wordsOf(prompt: string | undefined, note: string | undefined): string |
   return words.length === 0 ? undefined : words.join("\n\n");
 }
 
+/** What a continue's title adds to its source's. */
+const CONTINUED_SUFFIX = " (continued)";
+
+/** That suffix, however many times a chain of continues stacked it on a title written by hand. */
+const CONTINUED_SUFFIXES = /(?: \(continued\))+$/u;
+
+/**
+ * A continue's title from its source's: the source's, with any suffix a
+ * continue already gave it taken off and cut to fit, and the suffix after
+ * it; none where the source has no title, so the model names the continue.
+ */
+function continuedTitle(source: string | null): string | undefined {
+  const base = (source ?? "").replace(CONTINUED_SUFFIXES, "").trim();
+  if (base === "") return undefined;
+  const room = CODING_AGENT_BOUNDS.MAX_TITLE_CHARS - CONTINUED_SUFFIX.length;
+  let kept = "";
+  // Note that the title is cut by code point, so a cut never leaves half of a character.
+  for (const char of base) {
+    if (kept.length + char.length > room) break;
+    kept += char;
+  }
+  return `${kept.trimEnd()}${CONTINUED_SUFFIX}`;
+}
+
+/**
+ * The source of a continue stopped as a Stop stops it, over the eve the
+ * Start reached: a turn it still runs cancelled and stamped, and nothing
+ * where it runs none or a Stop already stands on it. Its sandbox is
+ * stopped by its own turn's end, as a Stop leaves it. A source that could
+ * not be stopped is logged, since the new agent stands either way.
+ */
+const stoppedSource = (
+  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  source: CodingAgent,
+) =>
+  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
+    Effect.catch((refusal) =>
+      Effect.logWarning(`the agent a continue took over from was not stopped: ${refusal.error}`),
+    ),
+  );
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
@@ -525,13 +575,16 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
             workspaceId: landing.workspaceId,
           }),
         );
+  // A continue is named after its source where the ask names nothing; a fork is named as it starts.
+  const continued = from !== undefined && from.told.messageId === undefined;
+  const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
-      title: ask.title,
+      title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
@@ -581,6 +634,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
+  // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
+  if (continued) yield* stoppedSource(eve, from.source);
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
   const chatOn = yield* chatEnabledFor(userId).pipe(
     Effect.tapError(logStoreFailure),

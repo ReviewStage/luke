@@ -3,6 +3,8 @@ import {
   awaitingLinesOfReached,
   type CodingAgent,
   type CodingAgentLatestTurn,
+  type CodingAgentStartedFromIt,
+  continuationsOf,
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
@@ -26,14 +28,20 @@ import {
   type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
-import { type AgentTurnStanding, codingAgentSummary, summaryAccounts } from "./status.js";
+import {
+  type AgentTurnStanding,
+  codingAgentStatusOf,
+  codingAgentSummary,
+  summaryAccounts,
+} from "./status.js";
 
 /**
  * stop.ts -- the one Stop: eve's cancel of a coding agent's turn under way, then the row's stamp.
  *
  * A Stop pressed on the agent, its archive, and the delete of the task it
  * works on all stop it here, reaching eve as the developer over the
- * request's own authorization. The cancel names the turn the row was
+ * request's own authorization; a continue of the agent stops it here too,
+ * over the eve its Start reached (`start.ts`). The cancel names the turn the row was
  * written for, so a turn that ended meanwhile is not followed by a newer
  * one stopped in its place, and an eve that refuses leaves the row as it
  * stood and the caller unavailable. An agent stopped for good, as an
@@ -82,18 +90,48 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
-/** The agent's summary with its status read now. */
+/** The agents started from each of the agents named, as the account reads them, by the id of the agent each was started from. */
+export const continuedByOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agentIds: readonly string[],
+): Effect.fn.Return<
+  (agentId: string) => readonly CodingAgentStartedFromIt[],
+  HostedRefusal,
+  DatabaseServices
+> {
+  const continued = yield* hostedStoreOrUnavailable(continuationsOf(userId, agentIds));
+  return (agentId) => continued.get(agentId) ?? [];
+});
+
+/** The agent's summary as the account reads it, with its status read now. */
 export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentSummary, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf([agent.conversationId]);
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
+  const continuedBy = yield* continuedByOf(userId, [agent.id]);
   return codingAgentSummary(
     agent,
     standing(agent.conversationId),
     yield* Clock.currentTimeMillis,
     names,
+    continuedBy(agent.id),
   );
+});
+
+/** Where the agent stands now. */
+export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  agent: CodingAgent,
+): Effect.fn.Return<CodingAgentSummary["status"], HostedRefusal, DatabaseServices> {
+  const { turn, awaitingLineAt } = (yield* standingsOf([agent.conversationId]))(
+    agent.conversationId,
+  );
+  return codingAgentStatusOf(turn, {
+    createdAt: agent.createdAt,
+    now: yield* Clock.currentTimeMillis,
+    awaitingLineAt,
+  });
 });
 
 /** Whether the turn is one a Stop has something to stop: still running, with eve's id to name, and no Stop on it yet. */
@@ -115,6 +153,20 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  return yield* cancelledTurn(eveFor(reach, request), writer, agent);
+});
+
+/**
+ * eve's cancel of the agent's turn under way, over the eve given, then the
+ * row's stamp; nothing where no turn runs that a Stop has to stop, a turn
+ * already stamped among them, so a second Stop asks eve nothing. eve is
+ * composed only once there is a turn to cancel.
+ */
+export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
+  eveOf: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  writer: Effect.Effect<StoreWriter>,
+  agent: CodingAgent,
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return;
@@ -123,7 +175,7 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   // The cancel names the turn the row was written for, never the session's turn under way, so a
   // turn that ended between the read above and eve's answer is answered `no_active_turn` and
   // nothing newer is stopped in its place.
-  const eve = yield* eveFor(reach, request);
+  const eve = yield* eveOf;
   const cancelled = yield* eve
     .cancel(sessionId, turn.eveTurnId)
     .pipe(
@@ -159,7 +211,7 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   yield* stoppedTurn(reach, writer, request, agent);
-  const { status } = yield* summaryOf(agent);
+  const status = yield* statusOf(agent);
   if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }

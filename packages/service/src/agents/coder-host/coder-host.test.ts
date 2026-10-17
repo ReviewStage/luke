@@ -499,6 +499,26 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "an opening the title model names nothing from is asked again as a failed turn ends, so an agent whose first turn fails is still named",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel(["", "Read the agent guide"]);
+        const host = yield* hostOverStore(model);
+        const { agent, userId, sessionId, auth, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of codingTurn("turn_0", "turn.failed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+        assert.equal(titled.title, "Read the agent guide");
+        assert.equal(asked.length, 2);
+      }),
+  );
+
+  it.effect(
     "a coding turn lands through the shared relay with no ask record: the plan as the developer's line, the answer with its reasoning, its shell call, and its words, and the turn row naming the agent's model and effort",
     () =>
       Effect.gen(function* () {
