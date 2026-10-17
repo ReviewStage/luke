@@ -22,6 +22,7 @@ import {
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
@@ -30,7 +31,8 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { relayout } from "#testing/resize-observer";
@@ -626,15 +628,11 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   const archivedUrl = "https://github.com/acme/relay/pull/9";
   const opened: unknown[] = [];
   const onGitHub: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+  fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
   const task: Task = {

@@ -26,14 +26,17 @@ when nothing does. **A new command is a new `ACT_KIND` entry with its payload
 schema, its answer's guard, and its one router row. There is no second write path
 to add one on.**
 
-## One bundle, two documents, one role branch
+## One entry per window, one shared startup
 
-The panels and the hidden voice window load the same `renderer.js`;
-`src/renderer/index.tsx` mounts `VoiceHost` or the panel's `Surface` by the role
-main decided for the window that asked. **The panel is the one surface that
-records**: `App` is where `applySessionReplay` is called and the voice role never
-mounts it, `voice.html` is `connect-src 'none'`, and the recording carries no
-words in any case (`session-replay.ts`).
+Each window's document loads its own entry: `index.html` the panel's
+(`src/renderer/index.tsx`, `App`), `voice.html` the voice window's
+(`voice/index.tsx`, `VoiceHost`), and `call.html` the call window's
+(`call/index.tsx`, `CallWindowCard`). What every window runs before it draws
+(tracing, the root, the first read of its document) is `window-root.tsx`, and
+the code the entries share lands in shared chunks. **The panel is the one
+surface that records**: `App` is where `applySessionReplay` is called and no
+other entry mounts it, `voice.html` is `connect-src 'none'`, and the recording
+carries no words in any case (`session-replay.ts`).
 
 No credential reaches the voice window, nothing there appends to the model, and it
 writes no Conversation line. The policy — whether a session stands, what the keys

@@ -17,7 +17,7 @@ import {
   integrationStatusesAnswerSchema,
 } from "@luke/features/integration-wire";
 import type { WireBoundaryInput } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { fakeHttpClientLayer, noNetwork } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -35,7 +35,6 @@ import {
   GRANTING_SIGN_IN_VERIFIER,
   integrationConnectOver,
 } from "../testing/integration-connect.js";
-import { noNetwork } from "../testing/no-network.js";
 import { CONNECT_SIGN_IN_RESULT, type ConnectSignInResult } from "./integration-connect.js";
 import {
   beginIntegrationSignIn,

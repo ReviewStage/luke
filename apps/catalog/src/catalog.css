@@ -440,6 +440,40 @@ body {
   height: 480px;
 }
 
+/* The window's toolbar a page under the toolbar frame stands still: one
+   row, its title at the toolbar's own 15px, a hairline under it, as the
+   desktop window draws it. */
+.catalog-window-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  min-height: 46px;
+  padding: var(--luke-space-8) var(--luke-page-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.catalog-window-toolbar-title {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: var(--luke-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A board's columns, each a card's width, which outrun a narrow screen so
+   the page scrolls them sideways. */
+.catalog-board {
+  display: flex;
+  gap: var(--luke-space-12);
+}
+
+.catalog-board-column {
+  flex: 1 0 220px;
+}
+
 /* A screen as tall as a window, which scrolls the public page it holds as a
    document would, so its banner stands still at the top. */
 .catalog-screen-public {
