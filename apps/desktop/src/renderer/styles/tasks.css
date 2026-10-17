@@ -5005,7 +5005,7 @@ button.inbox-option:hover:not(:disabled) {
 /* An option's head (`inbox-pane.tsx`'s `OptionHead`): its label, and the
    agent's recommendation as a badge at the option's top right, so it stands
    in one place however the label wraps. The badge is the app's badge
-   (`.integration-tool-badge`) in the accent's fill, the primary button's,
+   in the accent's fill, the primary button's,
    while the item waits, and steps back to the quiet badge once it is
    settled. It sits on the label's first line, centred on its 13px words. */
 .inbox-option-head {
