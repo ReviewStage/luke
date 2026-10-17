@@ -12,7 +12,10 @@ import {
   METRIC_STATUS,
   MetricCardSkeleton,
   SectionHeading,
+  STAT_CELL,
   STAT_GROUP_COLUMNS,
+  STAT_PAIR,
+  STAT_ROW,
   StatGroup,
 } from "./charts/stat-card";
 
@@ -118,7 +121,6 @@ function bones(count: number): readonly number[] {
 const STAT_CARDS_GRID = {
   1: "grid gap-3",
   2: "grid grid-cols-2 gap-3",
-  4: "grid grid-cols-2 gap-3 min-[720px]:grid-cols-4",
 } as const;
 
 /** Only the sign-in methods chart has no trend across from its heading. */
@@ -198,6 +200,24 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
         </StatGroup>
       );
     case SKELETON_SHAPE.STAT_CARDS:
+      // Note that four cards stand in the loaded page's two wrapping pairs,
+      // so the bones break where the figures will rather than at a breakpoint
+      // of their own.
+      if (shape.columns === 4) {
+        return (
+          <div className={STAT_ROW}>
+            {bones(2).map((pair) => (
+              <div key={pair} className={STAT_PAIR}>
+                {bones(2).map((card) => (
+                  <div key={card} className={STAT_CELL}>
+                    <MetricCardSkeleton />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      }
       return (
         <div className={STAT_CARDS_GRID[shape.columns]}>
           {bones(shape.count).map((card) => (

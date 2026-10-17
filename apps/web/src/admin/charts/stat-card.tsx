@@ -122,6 +122,23 @@ export function MetricCardSkeleton({
   );
 }
 
+/**
+ * A row of stat cards that wraps rather than holding fixed columns. Note that
+ * a card's cell grows from nothing but never shrinks below its own figure,
+ * so the row wraps once a figure needs the room rather than the figure
+ * overflowing its card.
+ */
+export const STAT_ROW = "flex flex-wrap gap-3";
+
+export const STAT_CELL = "flex-1";
+
+/**
+ * Two cards of a row of four, kept together so the four read in order: one
+ * row of four on a wide page, two rows of two on a narrower one, and one
+ * column once a pair's figures need the room.
+ */
+export const STAT_PAIR = "flex flex-1 basis-88 flex-wrap gap-3";
+
 /** The cards a StatGroup sets side by side once the page is wide enough for them. */
 export const STAT_GROUP_COLUMNS = 3;
 

@@ -14,7 +14,7 @@ import {
 import { accountLabel } from "@luke/ui/account-initials";
 import { formatDate, formatDayTick, formatNumber, signInMethodLabel } from "@luke/ui/admin-format";
 import { ActivityCalendar } from "../charts/activity-calendar";
-import { SectionHeading, StatCard } from "../charts/stat-card";
+import { SectionHeading, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card";
 import { UsageChart } from "../charts/usage-chart";
 import { BackLink } from "../chrome/back-link";
 import { AdminErrorCard, Centered, ForbiddenCard, SignInCard } from "../chrome/cards";
@@ -27,20 +27,6 @@ import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import { type AdminReader, useAdminRead } from "../use-admin-read";
 
 const ACCOUNT_ERROR = "The account endpoint did not answer.";
-
-/**
- * A stat card's share of its row. Note that a card grows from nothing but
- * never shrinks below its own figure, so a row wraps once a figure needs the
- * room rather than the figure overflowing its card.
- */
-const STAT_CELL = "flex-1";
-
-/**
- * Two of the daily cards, kept together so the four read in order: one row
- * of four on a wide page, two rows of two on a narrower one, and one column
- * once a pair's figures need the room.
- */
-const STAT_PAIR = "flex flex-1 basis-88 flex-wrap gap-3";
 
 // SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
 const readUserDetail: AdminReader<AdminUserDetail> = async (response) =>
@@ -183,7 +169,7 @@ export function AccountScreen({
             </div>
 
             <SectionHeading>Daily use · hosted tier</SectionHeading>
-            <div className="flex flex-wrap gap-3">
+            <div className={STAT_ROW}>
               <div className={STAT_PAIR}>
                 <div className={STAT_CELL}>
                   <StatCard
@@ -243,7 +229,7 @@ export function AccountScreen({
             </div>
 
             <SectionHeading>Volume</SectionHeading>
-            <div className="flex flex-wrap gap-3">
+            <div className={STAT_ROW}>
               <div className={STAT_CELL}>
                 <StatCard
                   label={`Hosted calls · ${detail.windowDays} days`}
