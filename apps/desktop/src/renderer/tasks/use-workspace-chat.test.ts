@@ -311,3 +311,22 @@ test("another account signed in to the same workspace starts from nothing of the
   await settle();
   assert.equal(tab.control().chat, undefined);
 });
+
+test("another account signed in with the same channel shown marks it read as its own, whatever the last account told", async () => {
+  const service = scriptedService();
+  const tab = mount(service, "acme", CHANNEL);
+  service.reads[0]?.settle(answered([message(1), message(2)], "2"));
+  await settle();
+  service.writes[0]?.settle({ readSeq: 2 });
+  tab.rerender({ workspaceId: "acme", reading: CHANNEL, account: "ada@example.com" });
+  await settle();
+  service.reads.at(-1)?.settle(answered([message(1), message(2)], "2"));
+  await settle();
+  assert.deepEqual(
+    service.writes.map((write) => write.params.write),
+    [
+      { readTo: 2, channelId: CHANNEL },
+      { readTo: 2, channelId: CHANNEL },
+    ],
+  );
+});

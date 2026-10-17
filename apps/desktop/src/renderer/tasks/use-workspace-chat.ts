@@ -252,22 +252,27 @@ export function useWorkspaceChat(input: {
   const newest = reading === undefined ? 0 : newestSeqIn(held.chat, reading);
   const readSeq = reading === undefined ? 0 : readSeqIn(held.chat, reading);
   const told = useRef<{
+    readonly account: string | undefined;
     readonly workspaceId: string | undefined;
     readonly channelId: string | undefined;
     readonly seq: number;
-  }>({ workspaceId, channelId: undefined, seq: 0 });
+  }>({ account, workspaceId, channelId: undefined, seq: 0 });
   useEffect(() => {
     if (reading === undefined) return;
-    const same = told.current.workspaceId === workspaceId && told.current.channelId === reading;
+    // Note that a read is the account's own, so what another account told says nothing of this one's.
+    const same =
+      told.current.account === account &&
+      told.current.workspaceId === workspaceId &&
+      told.current.channelId === reading;
     const already = same ? told.current.seq : 0;
     if (newest <= readSeq || newest <= already) return;
-    const telling = { workspaceId, channelId: reading, seq: newest };
+    const telling = { account, workspaceId, channelId: reading, seq: newest };
     told.current = telling;
     // A read that did not land is forgotten, so the channel shown again tells it again.
     void write({ readTo: newest, channelId: reading }).then((landed) => {
       if ("refused" in landed && told.current === telling) told.current = { ...telling, seq: 0 };
     });
-  }, [reading, newest, readSeq, workspaceId, write]);
+  }, [reading, newest, readSeq, account, workspaceId, write]);
 
   return { chat: held.chat, failed: held.failed, onRetry, onPost, onAnswer };
 }
