@@ -2,15 +2,18 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel";
@@ -51,7 +54,10 @@ const PAGE_ID = "5d2b7c1e-9a3f-4e6d-8c2b-1f0e9d8c7b6a";
 
 const roots: Root[] = [];
 
-beforeEach(installScrollIntoView);
+beforeEach(() => {
+  installScrollIntoView();
+  handCapabilities(DESKTOP_CAPABILITIES);
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -65,13 +71,20 @@ const SUBAGENT = { subagent: "call-1", delegation: { agent: AGENT.id, task: "Aud
 /** What a right-click offers on a tab itself rather than on what it shows. */
 const TAB_KEEPING = new Set(["Close", "Close others", "Pin tab", "Unpin tab"]);
 
+/** Waits out the few microtasks the window's document takes to arrive after the first draw. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
 /**
  * The task's page with a tab of every kind open, `main` chosen in its column
  * and `side` in the side panel: the task's, an agent's, the draft's, and the
  * Inbox's in the column, and in the side panel the fixed tabs, the agent's
  * delegated worker's, a file's, the agent's Changes and Terminal, and a page's.
  */
-function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): HTMLElement {
+async function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): Promise<HTMLElement> {
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: TASK.id,
@@ -112,15 +125,20 @@ function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): HTMLEleme
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
-          looks: NO_LOOKS,
-          captions: undefined,
-          tasks: control,
-        }),
+        // Only the tabs' bars are asked about, so no bundle lands under them.
+        onSideBundles(
+          unlandedBundles(),
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            captions: undefined,
+            tasks: control,
+          }),
+        ),
       ),
     ),
   );
+  await settle();
   return container;
 }
 
@@ -188,8 +206,8 @@ function pressBarMore(bar: HTMLElement): string[] {
   return items;
 }
 
-test("an agent's tab and a subagent's put their right-click's content actions, and none of the tab's keeping, behind their bar's ⋯", () => {
-  const container = mountEveryTab({ main: { agent: AGENT.id }, side: SUBAGENT });
+test("an agent's tab and a subagent's put their right-click's content actions, and none of the tab's keeping, behind their bar's ⋯", async () => {
+  const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SUBAGENT });
   const { main, side } = bars(container);
   for (const [bar, expected] of [
     [
@@ -220,14 +238,14 @@ test("an agent's tab and a subagent's put their right-click's content actions, a
   }
 });
 
-test("the plan's tab keeps the plan's own ⋯ in its bar", () => {
-  const container = mountEveryTab({ main: MAIN_TAB.PLAN, side: SIDE_PANEL_TAB.BOARD });
+test("the plan's tab keeps the plan's own ⋯ in its bar", async () => {
+  const container = await mountEveryTab({ main: MAIN_TAB.PLAN, side: SIDE_PANEL_TAB.BOARD });
   const [more, ...others] = slotButtons(bars(container).main);
   assert.equal(more?.getAttribute("aria-label"), "Task actions");
   assert.equal(others.length, 0);
 });
 
-test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", () => {
+test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
   const without: { main: MainTab; side: SidePanelTab }[] = [
     { main: MAIN_TAB.INBOX, side: SIDE_PANEL_TAB.BOARD },
     { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.CODE },
@@ -235,7 +253,7 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
     { main: MAIN_TAB.INBOX, side: { terminal: AGENT.id } },
   ];
   for (const chosen of without) {
-    const container = mountEveryTab(chosen);
+    const container = await mountEveryTab(chosen);
     const { main, side } = bars(container);
     for (const bar of [main, side]) {
       const label = bar.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
@@ -251,16 +269,7 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), pageFrameUrl });
   return copied;
 }
 
@@ -284,7 +293,7 @@ test("each tab whose thing has a link offers Copy link in its right-click and it
     [{ main: MAIN_TAB.INBOX, side: SIDE_PANEL_TAB.CALL }, "side", `${task}/call`],
   ];
   for (const [chosen, column] of cases) {
-    const container = mountEveryTab(chosen);
+    const container = await mountEveryTab(chosen);
     const tab = bars(container)[column].querySelector<HTMLElement>(
       '[role="tab"][aria-selected="true"]',
     );

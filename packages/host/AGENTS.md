@@ -72,10 +72,12 @@ its next answer.
 `@luke/features`, but the snapshot it carries is `@luke/settings` vocabulary
 and `settings` already reaches `features`. This is the lowest package holding both.
 
-## Two doors the renderer reads
+## Three doors the renderer reads
 
 `@luke/host/acts` and `@luke/host/app-state` are the desktop's
 renderer-and-main vocabulary, kept here because this is the lowest package that
 reaches every package they name (`@luke/gateway` cannot, since `@luke/voice`
-already depends on it); the renderer may import only these two doors from this
+already depends on it), and `@luke/host/bridge` is the window's bridge contract
+built from those two, which the preload builds its bridge from and a web
+bridge will too. The renderer may import only these three doors from this
 package, so they and everything they import stay free of Node.
