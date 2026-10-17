@@ -70,7 +70,7 @@ import {
   type ShortcutChord,
 } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
+import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { Highlighted } from "../search-field";
@@ -899,6 +899,8 @@ export function CommandPalette({
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
   const field = useRef<HTMLInputElement>(null);
+  // The menu bar's Back and Forward, a mouse's back button among them, leave the window behind the palette alone.
+  useOverlayHold(open);
 
   useAppCommand(
     APP_COMMAND.COMMAND_PALETTE,

@@ -33,7 +33,7 @@ function drawn(node: ReactNode): HTMLElement {
 }
 
 /** A call's row opening onto the list, open. */
-function transcriptList(errorText?: string): HTMLElement {
+function transcriptList(errorText?: string, live = false): HTMLElement {
   return drawn(
     createElement(TranscriptTodos, {
       defaultOpen: true,
@@ -41,6 +41,7 @@ function transcriptList(errorText?: string): HTMLElement {
       subject: "1 of 3 done",
       todos: TODOS,
       errorText,
+      live,
     }),
   );
 }
@@ -84,4 +85,15 @@ test("a write that failed says why under its list", () => {
   const surface = transcriptList("The list could not be read.");
   assert.equal(items(surface).length, TODOS.length);
   assert.equal(surface.querySelector("[role='alert']")?.textContent, "The list could not be read.");
+});
+
+test("only the list the agent is at wears the working mark on its item in progress", () => {
+  const working = (surface: HTMLElement): string[] =>
+    items(surface)
+      .filter((item) => item.seat.querySelector(".working-mark") !== null)
+      .map((item) => item.status);
+  assert.deepEqual(working(transcriptList(undefined, true)), [
+    CODING_AGENT_TODO_STATUS.IN_PROGRESS,
+  ]);
+  assert.deepEqual(working(transcriptList()), []);
 });

@@ -7,10 +7,11 @@ import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
 import {
   ISSUE_MATCH_LIMIT,
+  linearIssuesAskOf,
   MICROPHONE_PRESS,
   markedView,
-  matchingIssues,
   microphoneButton,
+  offeredIssues,
   pendingMark,
   positionedView,
   TASK_MARK,
@@ -175,7 +176,7 @@ test("New task offers the Linear issues whose title or key holds every word type
     { identifier: "ENG-3", title: "Show the merge queue" },
     { identifier: "OPS-40", title: "Rotate the deploy key" },
   ];
-  const keys = (typed: string) => matchingIssues(issues, typed).map((issue) => issue.identifier);
+  const keys = (typed: string) => offeredIssues(issues, typed).map((issue) => issue.identifier);
 
   assert.deepEqual(keys("stack"), ["ENG-7", "ENG-12"]);
   assert.deepEqual(keys("DEPLOY q"), ["ENG-12"]);
@@ -185,11 +186,44 @@ test("New task offers the Linear issues whose title or key holds every word type
   assert.deepEqual(keys("   "), []);
 });
 
+test("New task also offers what Linear found for the words, after the listed issues that hold them, each issue once, and a pasted link's issue first", () => {
+  const listed = [
+    { identifier: "ENG-12", title: "Restack the deploy queue" },
+    { identifier: "ENG-3", title: "Show the merge queue" },
+  ];
+  const found = [
+    { identifier: "ENG-301", title: "Old: queue jumps on retry" },
+    { identifier: "ENG-12", title: "Restack the deploy queue" },
+    { identifier: "ENG-88", title: "Retries pile up" },
+  ];
+  const keys = (typed: string, answered: typeof found) =>
+    offeredIssues(listed, typed, answered).map((issue) => issue.identifier);
+
+  assert.deepEqual(keys("queue", found), ["ENG-12", "ENG-3", "ENG-301", "ENG-88"]);
+  assert.deepEqual(keys("queue", []), ["ENG-12", "ENG-3"]);
+  assert.deepEqual(
+    keys("https://linear.app/acme/issue/ENG-88/retries-pile-up", [
+      { identifier: "ENG-88", title: "Retries pile up" },
+    ]),
+    ["ENG-88"],
+  );
+});
+
+test("New task asks Linear for the one issue a key or link names, searches for any other words, and asks nothing for a blank name", () => {
+  assert.deepEqual(linearIssuesAskOf(" eng-42 "), { identifier: "ENG-42" });
+  assert.deepEqual(linearIssuesAskOf("https://linear.app/acme/issue/OPS-7/rotate"), {
+    identifier: "OPS-7",
+  });
+  assert.deepEqual(linearIssuesAskOf("  deploy queue "), { query: "deploy queue" });
+  assert.equal(linearIssuesAskOf("x".repeat(500))?.query?.length, 200);
+  assert.equal(linearIssuesAskOf("   "), undefined);
+});
+
 test("New task offers at most a handful of issues however many match", () => {
   const issues = Array.from({ length: ISSUE_MATCH_LIMIT + 4 }, (_, index) => ({
     identifier: `ENG-${index + 1}`,
     title: `Task ${index + 1}`,
   }));
 
-  assert.equal(matchingIssues(issues, "task").length, ISSUE_MATCH_LIMIT);
+  assert.equal(offeredIssues(issues, "task").length, ISSUE_MATCH_LIMIT);
 });

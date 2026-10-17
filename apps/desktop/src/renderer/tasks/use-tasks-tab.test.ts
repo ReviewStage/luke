@@ -7,6 +7,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
@@ -24,6 +25,7 @@ import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { FOR_YOU } from "@luke/ui/chat-model";
+import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
@@ -2253,6 +2255,47 @@ test("a pin dragged to a new place stands there at once, and goes back with what
   assert.equal(position(), undefined);
   assert.equal(putBack, 1);
   assert.equal(newestToastSays(), PIN_MOVE_FAILED_NOTE);
+});
+
+test("a change to the sections is drawn at once, sent after the one before it, and a refused one goes back with a toast", async () => {
+  const answers: ((changed: boolean) => void)[] = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_WRITE_SECTION]: () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    },
+  );
+  const sent = () => tab.payloads.filter((each) => each.kind === ACT_KIND.TASKS_WRITE_SECTION);
+  const titles = () => tab.control().taskSections.sections.map((section) => section.title);
+  const make = (id: string, title: string) => ({
+    kind: TASK_SECTION_WRITE.CREATE,
+    id,
+    workspaceId: "workspace-1",
+    title,
+  });
+
+  await act(async () =>
+    tab
+      .control()
+      .onWriteSections([
+        make("0a1b2c3d-0000-4000-8000-000000000001", "Launch"),
+        make("0a1b2c3d-0000-4000-8000-000000000002", "Later"),
+      ]),
+  );
+  const drawn = titles();
+  const sentFirst = sent().length;
+  await act(async () => answers[0]?.(true));
+  const sentSecond = sent().length;
+  await act(async () => answers[1]?.(false));
+
+  assert.deepEqual(drawn, ["Launch", "Later"]);
+  assert.deepEqual([sentFirst, sentSecond], [1, 2]);
+  // Main's view never carried either, as this test stands no answer in it, so both go once settled.
+  assert.deepEqual(titles(), []);
+  assert.equal(newestToastSays(), SECTION_WRITE_FAILED_NOTE);
 });
 
 test("a pin's place the service took follows the next list, even one a drag on another Mac has moved since", async () => {

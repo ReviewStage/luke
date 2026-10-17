@@ -7,5 +7,4 @@
  * moves onto the barrel's when its screen is migrated.
  */
 
-export { DIALOG_ROLE as MODAL_ROLE } from "@luke/ui";
 export { CompatDialog as ModalShell } from "@luke/ui/compat";
