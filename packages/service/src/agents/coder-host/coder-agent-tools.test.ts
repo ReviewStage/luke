@@ -36,6 +36,7 @@ import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -81,6 +82,7 @@ import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import type { CoderHostSeams } from "./production.js";
+import type { SummaryModelOf } from "./replay-summary.js";
 import { STEER_OUTCOME } from "./steer.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
@@ -121,6 +123,8 @@ const CALLER_TITLE = "Invite expiry";
 const OPUS = "anthropic/claude-opus-5.5";
 const OPUS_FAST = "anthropic/claude-opus-5.5-fast";
 const SOL = "openai/gpt-6.1-sol";
+/** A model with a small window, which a long replay does not fit whole. */
+const SMALL_WINDOW = { model: "anthropic/claude-sonnet-4.9", tokens: 60_000 } as const;
 /** The model the agents run on, as the catalog offers it. */
 const CATALOG: readonly OfferedModel[] = [
   {
@@ -149,8 +153,8 @@ function sessionId(): string {
   return `wrun_01P${String(minted).padStart(22, "0")}`;
 }
 
-/** The host over the suite's store, acting at eve's door as the deployment where `acting` says. */
-function hostOf(acting: boolean): CoderHost {
+/** The host over the suite's store, acting at eve's door as the deployment where `acting` says, its summaries written on the model given. */
+function hostOf(acting: boolean, summaryModel?: SummaryModelOf): CoderHost {
   const seams: CoderHostSeams = {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
@@ -165,6 +169,7 @@ function hostOf(acting: boolean): CoderHost {
     titleModel: () => undefined,
     research: () => ({ openAi: undefined, spend: Effect.void }),
     scriptedModel: () => true,
+    ...(summaryModel === undefined ? undefined : { summaryModel }),
     now: () => NOW,
   };
   return coderHost(seams);
@@ -386,6 +391,24 @@ async function answeredTurnOn(agent: StartedAgent, answer: AssistantMessageBuild
   );
 }
 
+/** The tail a read answered, each entry as the record it is. */
+function tailOf(read: WireRecord): readonly WireRecord[] {
+  assert.ok(Array.isArray(read.tail), JSON.stringify(read));
+  return read.tail.map((entry) => (isRecord(entry) ? entry : assert.fail(JSON.stringify(entry))));
+}
+
+/** What each entry of a read's tail says. */
+function tailTexts(read: WireRecord): readonly unknown[] {
+  return tailOf(read).map((entry) => entry.text);
+}
+
+/** The message each entry of a read's tail stands in. */
+function tailMessageIds(read: WireRecord): readonly string[] {
+  return tailOf(read).map((entry) =>
+    isWireString(entry.messageId) ? entry.messageId : assert.fail(JSON.stringify(entry)),
+  );
+}
+
 /**
  * One workspace with the caller's agent on one plan, a teammate's agent on
  * another plan, and an archived agent; a second workspace the caller's
@@ -509,11 +532,15 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   assert.ok(isRecord(read.agent));
   assert.equal(read.agent.id, agents.teammates.id);
   assert.deepEqual(read.agent.task, { id: plans.billing, name: "Billing", archived: false });
-  assert.deepEqual(read.tail, ["Ran: pnpm test", `Said: ${report}`]);
+  assert.deepEqual(tailTexts(read), ["Ran: pnpm test", `Said: ${report}`]);
   assert.deepEqual(
-    (await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 1 })).tail,
+    tailTexts(await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 1 })),
     [`Said: ${report}`],
   );
+  // Each entry names the message it stands in, one turn's entries one message, which a fork names.
+  const [firstTurn] = tailMessageIds(read);
+  assert.ok(firstTurn !== undefined);
+  assert.deepEqual(tailMessageIds(read), [firstTurn, firstTurn]);
 
   // A tail longer than the newest turns hold reaches back into older ones.
   for (const turn of [2, 3, 4]) {
@@ -522,15 +549,18 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
     later.text(`Turn ${turn} done.`);
     await answeredTurnOn(agents.teammates, later);
   }
-  assert.deepEqual(
-    (await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 5 })).tail,
-    [
-      "Ran: pnpm test",
-      `Said: ${report}`,
-      "Said: Turn 2 done.",
-      "Said: Turn 3 done.",
-      "Said: Turn 4 done.",
-    ],
+  const longer = await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 5 });
+  assert.deepEqual(tailTexts(longer), [
+    "Ran: pnpm test",
+    `Said: ${report}`,
+    "Said: Turn 2 done.",
+    "Said: Turn 3 done.",
+    "Said: Turn 4 done.",
+  ]);
+  assert.equal(
+    new Set(tailMessageIds(longer)).size,
+    4,
+    "each turn's journal is a message of its own",
   );
 
   // An agent of another workspace is none of the caller's, even one its starter is also in.
@@ -965,6 +995,194 @@ test("list_models says the default is no longer offered where the catalog droppe
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: LIST_MODELS_REFUSAL.UNAVAILABLE,
   });
+});
+
+/** An agent's turn that ended on the words given, so the agent reads as done and has a message to fork at. */
+async function saidTurnOn(agent: StartedAgent, words: string): Promise<void> {
+  const answer = new AssistantMessageBuilder();
+  answer.stepStart();
+  answer.text(words);
+  await answeredTurnOn(agent, answer);
+}
+
+/** The words of the newest session eve was asked to open. */
+function openingWords(sent: Awaited<ReturnType<typeof fakeCoderEve>>["sent"]): string {
+  const opening = sent.findLast((each) => each.path === "/eve/coder/v1/session");
+  return JSON.stringify(JSON.parse(opening?.body ?? "{}").message);
+}
+
+/** The agent a start answered, as the store holds it. */
+async function storedStart(userId: string, started: WireRecord) {
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  return Option.getOrThrow(await database.run(readCodingAgent(userId, started.agent.id)));
+}
+
+test("start_agent continues a teammate's agent that ended, on that agent's own task when none is named, handed its transcript and named after it; a second continue is refused naming the first, and the same call run again answers the agent it made", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  await database.run(fillCodingAgentTitle(teammates.userId, teammates.id, "Invoice export"));
+  await saidTurnOn(teammates, "The export is half done; the CSV writer is next.");
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  const from = { agentId: teammates.id };
+  const started = await call(CODER_TOOL.START_AGENT, { from, note: NOTE }, "call-continue");
+  const stored = await storedStart(caller.userId, started);
+  assert.equal(stored.taskId, plans.billing, "the task is the source's own");
+  assert.equal(stored.startedFrom?.agentId, teammates.id);
+  assert.equal(stored.startedFrom?.messageId, undefined);
+  assert.equal(stored.title, "Invoice export (continued)");
+  const words = openingWords(eve.sent);
+  assert.ok(words.includes("the CSV writer is next"), words);
+  assert.ok(words.includes(NOTE) && words.includes(caller.id), words);
+
+  const again = await call(CODER_TOOL.START_AGENT, { from, note: NOTE }, "call-continue");
+  assert.ok(isRecord(again.agent), JSON.stringify(again));
+  assert.equal(again.agent.id, stored.id);
+  const openings = eve.sent.filter((each) => each.path === "/eve/coder/v1/session").length;
+
+  const second = await call(CODER_TOOL.START_AGENT, { from }, "call-continue-again");
+  assert.equal(second.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.ok(isWireString(second.reason));
+  assert.ok(second.reason.includes(stored.id), second.reason);
+  assert.ok(
+    second.reason.includes(
+      `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/plan/${plans.billing}/agent/${stored.id})`,
+    ),
+    second.reason,
+  );
+  assert.equal(
+    eve.sent.filter((each) => each.path === "/eve/coder/v1/session").length,
+    openings,
+    "neither the call run again nor a second continue opens a session",
+  );
+});
+
+test("start_agent forks an agent at one of its messages that read_agent names, while that agent still works, and leaves the agent going on", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  await saidTurnOn(teammates, "First I tried the streaming writer.");
+  await saidTurnOn(teammates, "Then I switched to a buffered one.");
+  await turnOn(teammates, false);
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  const read = await call(CODER_TOOL.READ_AGENT, { agentId: teammates.id });
+  const [messageId] = tailMessageIds(read);
+  assert.ok(messageId !== undefined);
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { from: { agentId: teammates.id, messageId } },
+    "call-fork",
+  );
+  const stored = await storedStart(caller.userId, started);
+  assert.equal(stored.taskId, plans.billing);
+  assert.deepEqual(stored.startedFrom?.messageId, messageId);
+  const words = openingWords(eve.sent);
+  assert.ok(words.includes("streaming writer"), words);
+  assert.ok(!words.includes("buffered one"), "a fork is handed the transcript up to its message");
+  assert.ok(
+    !eve.sent.some((each) => each.path.endsWith("/cancel")),
+    "a fork leaves its source going on",
+  );
+});
+
+test("start_agent from another agent refuses, in words the model acts on and starting nothing, an agent of no workspace of the caller's, a message none of the source's, a prompt, a branch, or a new task beside it, the caller continuing itself, a source still working, a task other than the source's, an archived task, and a source on no task", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const refused = async (input: WireBoundaryInput, reason: string) =>
+    assert.deepEqual(await call(CODER_TOOL.START_AGENT, input, `call-${randomUUID()}`), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason,
+    });
+  const R = START_CODING_AGENT_REFUSAL;
+  await saidTurnOn(caller, "Done with the expiry.");
+
+  for (const other of [agents.otherWorkspaces, agents.strangers]) {
+    await refused({ from: { agentId: other.id } }, R.NO_SOURCE);
+  }
+  await refused({ from: { agentId: randomUUID() } }, R.NO_SOURCE);
+  await refused({ from: { agentId: teammates.id, messageId: randomUUID() } }, R.NO_MESSAGE);
+  await refused({ from: { agentId: teammates.id }, prompt: "Do it again." }, R.FROM_WITH_PROMPT);
+  await refused({ from: { agentId: teammates.id }, branch: STACKED_BRANCH }, R.FROM_WITH_PROMPT);
+  await refused({ from: { agentId: teammates.id }, newTask: "Invoices" }, R.FROM_WITH_PROMPT);
+  await refused({ from: { agentId: caller.id } }, R.SELF_CONTINUE);
+  // A teammate's agent with no turn yet is still starting, and one whose turn runs is working.
+  await refused({ from: { agentId: teammates.id } }, R.SOURCE_RUNNING);
+  await turnOn(teammates, false);
+  await refused({ from: { agentId: teammates.id } }, R.SOURCE_RUNNING);
+  await saidTurnOn(teammates, "Stopped for the day.");
+  await refused(
+    { from: { agentId: teammates.id }, taskId: plans.invitations },
+    R.SOURCE_OTHER_TASK,
+  );
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db
+        .update(task)
+        .set({ archivedAt: new Date(NOW) })
+        .where(eq(task.id, plans.billing)),
+    ),
+  );
+  await refused({ from: { agentId: teammates.id } }, R.ARCHIVED);
+  const sweeper = await planlessAgentOn(teammates.userId, workspaceId);
+  await saidTurnOn(sweeper, "Swept.");
+  await refused({ from: { agentId: sweeper.id } }, R.SOURCE_NO_TASK);
+  assert.equal(eve.sent.length, 0, "no refusal opens a session");
+});
+
+test("start_agent from a source whose transcript does not fit the new agent's window hands it Luke's summary of the steps left out, written on the deployment's summary model", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db
+        .update(codingAgent)
+        .set({ model: SMALL_WINDOW.model })
+        .where(eq(codingAgent.id, teammates.id)),
+    ),
+  );
+  for (let turn = 0; turn < 30; turn += 1) {
+    await saidTurnOn(teammates, `Step ${turn}. ${"x".repeat(5_000)}`);
+  }
+  const recap = "Recap: the teammate asked for step after step.";
+  const summaryModel: SummaryModelOf = () =>
+    Effect.succeed({
+      model: new MockLanguageModelV4({
+        doGenerate: async () => ({
+          content: [{ type: "text", text: recap }],
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+            outputTokens: { total: 1, text: 1, reasoning: 0 },
+          },
+          warnings: [],
+        }),
+      }),
+      providerOptions: {},
+      counted: Effect.void,
+    });
+  const eve = await fakeCoderEve(workspaceId);
+  const small: OfferedModel = {
+    id: SMALL_WINDOW.model,
+    name: "Claude Sonnet 4.9",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+    contextWindow: SMALL_WINDOW.tokens,
+  };
+  const catalog = modelCatalogOf([...CATALOG, small]);
+  const call = await peerCaller(hostOf(true, summaryModel), caller, eve.services, catalog);
+
+  await storedStart(
+    caller.userId,
+    await call(CODER_TOOL.START_AGENT, { from: { agentId: teammates.id } }, "call-long"),
+  );
+  const words = openingWords(eve.sent);
+  assert.ok(words.includes(recap), "the steps left out are summarized");
+  assert.ok(words.includes("Step 29."), "the newest steps are kept whole");
 });
 
 test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {

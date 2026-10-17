@@ -967,7 +967,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
                 mount: EVE_MOUNT.CODER,
               });
         const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
-        const toolCall = { caller, eve, writer: seams.writer(), clientKey: call.callId };
+        const toolCall = {
+          caller,
+          eve,
+          writer: seams.writer(),
+          clientKey: call.callId,
+          summaryModel: seams.summaryModel,
+        };
         return yield* AGENT_TOOL_RUN[call.tool](toolCall, call.input);
       }).pipe(
         Effect.tapError(logStoreFailure),

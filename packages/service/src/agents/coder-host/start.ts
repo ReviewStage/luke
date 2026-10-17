@@ -149,9 +149,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * logged and left to the agent's first post or read. An ask that named a choice makes it
  * the account's default, so the menu's last choice and the default stay one
  * value. Who reaches eve is the caller's: the route holds the developer's
- * own bearer, and the voice brain's tool acts as the deployment for the
- * account, which the coder channel's table admits for exactly this opening
- * (`coder-host/channel.ts`).
+ * own bearer, and the voice brain's and a coding agent's tool act as the
+ * deployment for the account, which the coder channel's table admits for
+ * exactly this opening, and its door for the cancel that stops a
+ * continue's source (`coder-host/channel.ts`).
  */
 
 /** The heading the Linear issue a plan was started from stands under, after the plan and before any note. */

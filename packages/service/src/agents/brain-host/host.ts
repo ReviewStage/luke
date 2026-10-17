@@ -502,6 +502,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   eve: coder,
                   writer: seams.writer(),
                   clientKey: context.callId,
+                  summaryModel: seams.summaryModel,
                 },
                 // Luke reaches the chat on the standing of the member speaking, where Chat is on.
                 chat: !chatOn
