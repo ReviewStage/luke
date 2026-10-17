@@ -7,12 +7,12 @@ import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-vi
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
+import { EmptyState } from "@luke/ui";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
 import { AutomationDirectory } from "../automation-directory";
 import { LinkWorkspaceProvider } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { ReadFailure } from "../read-failure";
@@ -65,7 +65,7 @@ import { taskCardOf } from "./task-card";
  * that waits stands chosen, else the first listed. The pane's crumbs open
  * the task or the agent's tab, and a code block's Open its file, each
  * leaving the Inbox. With nothing listed, it says so under the Inbox's
- * glyph (`empty-state.tsx`); with Needs you leaving out every item, the list
+ * glyph (`@luke/ui`'s `EmptyState`); with Needs you leaving out every item, the list
  * says so and offers Show all, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
@@ -381,11 +381,9 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                   <NotFound
                     thing={NOT_FOUND_THING.INBOX_ITEM}
                     action={
-                      columns.onBack === undefined ? undefined : (
-                        <button type="button" className="toolbar-button" onClick={columns.onBack}>
-                          {BACK_TO_INBOX}
-                        </button>
-                      )
+                      columns.onBack === undefined
+                        ? undefined
+                        : { label: BACK_TO_INBOX, onClick: columns.onBack }
                     }
                   />
                 ) : reading || filteredOut ? null : (

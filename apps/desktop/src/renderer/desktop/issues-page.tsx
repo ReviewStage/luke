@@ -5,6 +5,7 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { EmptyState } from "@luke/ui";
 import { Schema } from "effect";
 import {
   ListIcon,
@@ -17,7 +18,6 @@ import { useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";

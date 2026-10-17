@@ -267,7 +267,7 @@ test("the task on the call stands in Talk however old, and with nothing standing
   act(() => root?.unmount());
 
   const { page } = mount([old]);
-  assert.equal(page.querySelector(".empty-state p")?.textContent, "No agents at work");
+  assert.equal(page.querySelector(".luke-empty-state p")?.textContent, "No agents at work");
   assert.equal(page.querySelector("section[data-step]"), null);
   assert.equal(page.querySelector(".factory-scroll button"), null);
 });
@@ -288,7 +288,7 @@ test("a plan list that could not be read says so, and Retry reads it again", () 
   });
   const alert = page.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
-  assert.equal(page.querySelector(".empty-state"), null);
+  assert.equal(page.querySelector(".luke-empty-state"), null);
   const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
     (each) => each.textContent === "Retry",
   );
