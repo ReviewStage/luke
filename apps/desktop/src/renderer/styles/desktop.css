@@ -6368,7 +6368,20 @@ button.automation-run:hover {
    fade's. */
 .settings-page > .luke-settings-page {
   flex: 1 1 0;
-  scroll-padding-top: var(--page-inset);
+  scroll-padding-top: var(--luke-page-inset);
+}
+
+/* The page's inset narrows under 480px (`settings-page.css`), and a landed
+   result keeps the narrower inset above it. The page cannot query its own
+   width, so the pane around it is the container. */
+.settings-page {
+  container: settings-pane / inline-size;
+}
+
+@container settings-pane (max-width: 479px) {
+  .settings-page > .luke-settings-page {
+    scroll-padding-top: var(--luke-page-inset-narrow);
+  }
 }
 
 /* The page's sections are the width its rows answer (`@container settings`
