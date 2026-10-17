@@ -118,12 +118,15 @@ import {
   Schema,
   type Scope,
   Semaphore,
+  type SubscriptionRef,
 } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import { type ConversationMark, conversationMark, markMoved } from "./conversation-follow.js";
 import type { HostKernel } from "./host-kernel.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
 
@@ -332,14 +335,19 @@ export type TasksClient = Pick<
   github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnect">;
 };
 
-/** The service's side of a plan's planning conversation, read as an agent's transcript is. */
-export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
+/** The service's side of a plan's planning conversation, read as an agent's transcript is, and its mark sealed for following over Neon Realtime. */
+export type TasksConversationClient = Pick<
+  HostedCodingAgentClient,
+  "taskMessages" | "taskConversationLive"
+>;
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   conversations: TasksConversationClient;
+  /** Realtime's client at an address, which the open plan's conversation is followed over; Realtime's own outside a test. */
+  openLive?: (url: string) => LiveClient;
   /**
    * Ends the planning call standing about `taskId`, or whatever it is about
    * where none is named, and waits for it to end. A call about another plan
@@ -412,6 +420,14 @@ export interface TasksComposer extends Composer {
  * another plan replaces it, and leaving the plan or a sign-out stops it. A
  * read the service did not answer is asked again after a backoff; a plan the
  * service no longer holds parks it.
+ *
+ * Where the service seals the conversation's mark for Neon Realtime
+ * (`conversation-follow.ts`), the read is held here instead: the host
+ * subscribes to the mark while the plan is open, and asks the conversation
+ * past its cursor in one look, unheld, each time the mark moves, so the
+ * service never looks again on a clock and nothing parks or needs waking.
+ * A service that seals nothing, or a subscription that stops, is read as
+ * before, from the cursor held.
  */
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
   dependencies: TasksDependencies,
@@ -479,6 +495,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * than miss the turn until the call's next word.
    */
   let conversationWoken = false;
+
+  /** The open plan the service sealed no conversation mark for, read on held reads until it is opened again. */
+  let unsealedTaskId: string | undefined;
 
   /**
    * The plan whose call is telling its turns' work as they run, and the
@@ -798,7 +817,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** One page of a plan's conversation, or why the service did not answer it. */
-  function askConversation(taskId: string, page: { after?: string; before?: string }) {
+  function askConversation(
+    taskId: string,
+    page: { after?: string; before?: string; unheld?: boolean },
+  ) {
     return Effect.flatMap(
       Effect.provide(conversations.taskMessages(taskId, page), FetchHttpClient.layer),
       (answer) =>
@@ -831,32 +853,106 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     };
   }
 
+  /** One page of `taskId`'s conversation, asked again after the backoff while the service does not answer; none where the plan is gone or the gate closed. */
+  function readConversation(
+    taskId: string,
+    page: { after?: string; before?: string; unheld?: boolean },
+  ) {
+    return askConversation(taskId, page).pipe(
+      Effect.retry({
+        schedule: CONVERSATION_BACKOFF,
+        while: (unanswered) => unanswered.failure !== CODING_AGENT_CALL_FAILURE.NOT_FOUND && gate(),
+      }),
+      Effect.option,
+    );
+  }
+
   /**
-   * Follows `taskId`'s conversation while it is the open plan: from its
-   * newest page, or past the cursor held, then past each page's cursor while
-   * the page says it is still written or the call woke it meanwhile. A read
-   * the service did not answer is asked again after the backoff; a plan it
-   * no longer holds, or a gate that closed, ends the follow.
+   * Follows `taskId`'s conversation on reads the service holds, while it is
+   * the open plan: from its newest page, or past `after`, then past each
+   * page's cursor while the page says it is still written or the call woke
+   * it meanwhile.
    */
-  function followConversation(taskId: string, newest: boolean) {
+  function followHeld(taskId: string, from: string | undefined) {
     return Effect.gen(function* () {
-      let after = newest ? undefined : view.conversation?.cursor;
+      let after = from;
       while (gate() && view.activeTaskId === taskId) {
         conversationWoken = false;
-        const page = yield* askConversation(taskId, after === undefined ? {} : { after }).pipe(
-          Effect.retry({
-            schedule: CONVERSATION_BACKOFF,
-            while: (unanswered) =>
-              unanswered.failure !== CODING_AGENT_CALL_FAILURE.NOT_FOUND && gate(),
-          }),
-          Effect.option,
-        );
+        const page = yield* readConversation(taskId, after === undefined ? {} : { after });
         if (Option.isNone(page) || view.activeTaskId !== taskId) return;
         write({ conversation: withForwardPage(page.value) });
         if (!conversationWriting(page.value) && !conversationWoken) return;
         after = page.value.cursor;
       }
     });
+  }
+
+  /**
+   * Follows `taskId`'s conversation on its live mark, while it is the open
+   * plan: from its newest page, or past `after`, then past each page's
+   * cursor in one look each time the mark moves from where it stood as the
+   * read before left. A mark that stops goes on from the cursor held on
+   * reads the service holds.
+   */
+  function followLive(
+    taskId: string,
+    from: string | undefined,
+    mark: SubscriptionRef.SubscriptionRef<ConversationMark>,
+  ) {
+    return Effect.gen(function* () {
+      let after = from;
+      let seen: ConversationMark = { kind: "waiting" };
+      while (gate() && view.activeTaskId === taskId) {
+        if (seen.kind === "broken") return yield* followHeld(taskId, after);
+        const page = yield* readConversation(
+          taskId,
+          after === undefined ? {} : { after, unheld: true },
+        );
+        if (Option.isNone(page) || view.activeTaskId !== taskId) return;
+        write({ conversation: withForwardPage(page.value) });
+        after = page.value.cursor;
+        seen = yield* markMoved(mark, seen);
+      }
+    });
+  }
+
+  /**
+   * Follows `taskId`'s conversation while it is the open plan, from its
+   * newest page or past the cursor held: on its live mark where the service
+   * seals one, and on held reads otherwise. A plan the service answered no
+   * mark for is not asked for one again until it is opened again, since
+   * every word of a call would otherwise ask. A read the service did not
+   * answer is asked again after the backoff; a plan it no longer holds, or
+   * a gate that closed, ends the follow.
+   */
+  function followConversation(taskId: string, newest: boolean) {
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const after = newest ? undefined : view.conversation?.cursor;
+        if (newest) unsealedTaskId = undefined;
+        if (unsealedTaskId === taskId || !gate()) return yield* followHeld(taskId, after);
+        const sealed = yield* Effect.provide(
+          conversations.taskConversationLive(taskId),
+          FetchHttpClient.layer,
+        );
+        if ("failure" in sealed) {
+          unsealedTaskId = taskId;
+          return yield* followHeld(taskId, after);
+        }
+        const mark = yield* conversationMark(
+          {
+            seal: () =>
+              gate()
+                ? Effect.provide(conversations.taskConversationLive(taskId), FetchHttpClient.layer)
+                : Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+            openLive: dependencies.openLive ?? openRealtimeClient,
+            now: kernel.now,
+          },
+          sealed,
+        );
+        return yield* followLive(taskId, after, mark);
+      }),
+    );
   }
 
   /** Reads `taskId`'s conversation from its newest turns and follows it, in place of any read standing. */

@@ -82,6 +82,8 @@ import {
 import {
   type AccountInboxLiveAnswer,
   accountInboxLiveAnswerSchema,
+  type PlanConversationLiveAnswer,
+  planConversationLiveAnswerSchema,
   type ScopeInboxLiveAnswer,
   scopeInboxLiveAnswerSchema,
 } from "./live-wire.js";
@@ -529,7 +531,7 @@ export class HostedCodingAgentClient {
    */
   taskMessages(
     taskId: string,
-    page: { after?: string; before?: string },
+    page: { after?: string; before?: string; unheld?: boolean },
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
     const path =
@@ -757,6 +759,25 @@ export class HostedCodingAgentClient {
         path: `${HOSTED_SERVICE_PATH.LIVE_TASK_INBOX}?${new URLSearchParams({ id: taskId })}`,
       }),
       (answer) => readAnswer(answer, scopeInboxLiveAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * One plan's planning conversation, its mark sealed for following over
+   * Neon Realtime, answered at once: not found where the account reaches no
+   * such plan, unanswered where the deployment has no Realtime and for
+   * anything else, which the caller answers by holding its read open as
+   * before.
+   */
+  taskConversationLive(
+    taskId: string,
+  ): Effect.Effect<PlanConversationLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_TASK_CONVERSATION}?${new URLSearchParams({ id: taskId })}`,
+      }),
+      (answer) => readAnswer(answer, planConversationLiveAnswerSchema, ROW_REFUSALS),
     );
   }
 

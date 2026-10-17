@@ -22,6 +22,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { planConversationLiveStatements } from "../tasks/brain-transcript.js";
 import { type LiveSealer, LiveSealing } from "./realtime.js";
 
 /**
@@ -41,6 +42,12 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * one plan's inbox, or one agent's, the same way: its open items and its
  * latest settled ones as one statement, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
+ *
+ * `GET /api/live/plan-conversation?id=` answers one plan's planning
+ * conversation the same way, after the plan is read as the account: its
+ * mark, one row that moves whenever a read past the cursor would answer
+ * something new, which the desktop asks the conversation on rather than
+ * holding a read the service looks again for on a clock.
  * Nothing else here reads a row: the store is read by Realtime.
  */
 
@@ -129,6 +136,32 @@ const taskInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskInboxLiveEndpoi
   return yield* sealedScope(yield* LiveSealing, taskInboxLiveStatements(userId, taskId));
 });
 
+const taskConversationLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskConversationLiveEndpoint")(
+  function* (
+    seams: LiveAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | DatabaseServices
+  > {
+    const request = yield* getRequest;
+    const taskId = yield* uuidOf(request, LIVE_QUERY.ID);
+    const userId = yield* resolvedUserId(seams, request);
+    const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
+    if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const sealing = yield* LiveSealing;
+    const statements = planConversationLiveStatements(userId, taskId);
+    if (Option.isNone(sealing) || Option.isNone(statements)) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    const { seal, url } = sealing.value;
+    const queries = yield* Effect.all({ mark: seal(statements.value.mark) }).pipe(
+      Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
+  },
+);
+
 const agentInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxLiveEndpoint")(function* (
   seams: LiveAppSeams,
 ): Effect.fn.Return<
@@ -158,6 +191,11 @@ export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
       ANY_METHOD,
       HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX,
       hostedRefusing(agentInboxLiveEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.LIVE_TASK_CONVERSATION,
+      hostedRefusing(taskConversationLiveEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

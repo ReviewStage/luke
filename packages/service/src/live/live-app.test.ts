@@ -6,7 +6,11 @@ import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { accountInboxLiveAnswerSchema, scopeInboxLiveAnswerSchema } from "@luke/features/live-wire";
+import {
+  accountInboxLiveAnswerSchema,
+  planConversationLiveAnswerSchema,
+  scopeInboxLiveAnswerSchema,
+} from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter } from "effect/http";
@@ -192,6 +196,32 @@ it.layer(getTestDB())("the live reads", (it) => {
             body: { error: HOSTED_API_ERROR.UNAVAILABLE },
           });
         }
+      }),
+  );
+
+  it.effect(
+    "a plan's planning conversation is sealed as its mark for an account that reaches the plan, not found for one that does not, and unavailable without Realtime",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        const path = `/api/live/plan-conversation?id=${task.id}`;
+
+        const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(planConversationLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.ok(answer.queries.mark.capability.includes(`"${owner}"`), "read for the bearer");
+        assert.ok(answer.queries.mark.capability.includes(`"${task.id}"`), "read of the plan");
+        assert.deepEqual(yield* ask({ bearer: stranger, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        assert.deepEqual(yield* ask({ bearer: owner, path, sealing: Option.none() }), {
+          status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+          body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+        });
       }),
   );
 });
