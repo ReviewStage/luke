@@ -12,34 +12,39 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { CopyIcon, DownloadIcon, HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
-import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ClipboardCopyIcon,
+  Columns2Icon,
+  FileDiffIcon,
+  HighlighterIcon,
+  RotateCwIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
+import { DIFF_LAYOUT } from "../diff-view/contract";
 import { EmptyState } from "../empty-state";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
-import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
+import { AgentActorRef, type AgentSubject } from "./agent-ref";
 import {
   CHANGES_WORDS,
   changedFolders,
   changeMarks,
-  DIFF_ROW,
   fileNotice,
   filePatch,
   linesChanged,
-  patchHunks,
   STATUS_LETTER,
   STATUS_WORDS,
 } from "./changes-model";
-import { BLANK_LINE_TEXT, CodeLineNumber } from "./code-pane";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
+import { PierreDiff, useDiffLook, useSplitRoom } from "./file-diff";
 import { LinesMenu, useSaveText } from "./file-menu";
-import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
+import { useFileViewSettings } from "./file-view-settings";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
@@ -68,24 +73,24 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * removes quietly beside, then the pull request's files on GitHub, the ⋯
  * (the file's name or its patch copied, the patch saved, the changes read
  * again, and the File tabs' two settings), and the tree's toggle, which
- * shows and hides the tree for every File and Changes tab alike. The tree
+ * shows and hides the tree for every File and Changes tab alike, and, in
+ * the ⋯, the diff's own two settings: Split view, the old side beside the
+ * new, offered dimmed while the diff is too narrow to split
+ * (`file-diff.tsx`), and Highlight changed words. The tree
  * is a File tab's own pane (`file-tree-pane.tsx`) narrowed to the changed
  * files, every folder open, each row lettered A, M, D, or R, searched in
  * place, with the pull request's count under it, or under the diff while
  * the tree is hidden; choosing a file there or
- * in a crumb's tree shows its diff. The diff is drawn in a File tab's lines
- * (`code-pane.tsx`), numbered on both sides in the same gutter, numbered
- * and wrapped as the File tabs' settings say, left out of the find and of
- * a copy as a File tab's numbers are; what is a diff's alone is the tint of
- * a line added or removed, the hunk's header, and git's note on a line.
+ * in a crumb's tree shows its diff. The diff is drawn by Pierre's diffs in
+ * a bundle of its own (`../diff-view/`), on the File tab's ground, in its
+ * type and colours, unified or split, numbered and wrapped as the File
+ * tabs' settings say, its numbers left out of the find and of a copy as a
+ * File tab's are; what is a diff's alone is the tint of a line added or
+ * removed, the words a changed line changed, and the count of unchanged
+ * lines between two hunks.
  * Every name and line here is the repository's, so the tab is left out of
  * the screen recording (`ph-no-capture`).
  */
-
-/** What the row holding a hunk's header is, beside the kinds of row the hunk holds. */
-const DIFF_HUNK = "hunk";
-
-type DiffLineKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW] | typeof DIFF_HUNK;
 
 /** A read that threw rather than answered, drawn as any other failed read. */
 const UNANSWERED: CodingAgentChangesAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
@@ -149,21 +154,26 @@ function ChangeBeside({ file }: { file: CodingAgentChangedFile }): React.JSX.Ele
   );
 }
 
-/** The bar's ⋯ over a diff: the file's name or its patch copied, the patch saved, and the changes read again, over the File tabs' settings. */
+/** The bar's ⋯ over a diff: the file's name or its patch copied, the patch saved, and the changes read again, over the File tabs' settings and the diff's own. */
 function ChangesMenu({
   file,
   reading,
   onRefresh,
+  roomy,
 }: {
   file: CodingAgentChangedFile;
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
+  /** Whether the diff is wide enough to split, which Split view is offered by. */
+  roomy: boolean;
 }): React.JSX.Element {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
+  const { settings, change } = useFileViewSettings();
   const name = fileName(file.path);
   const patch = filePatch(file);
+  const split = settings.diffLayout === DIFF_LAYOUT.SPLIT;
   return (
     <LinesMenu
       label="Changes actions"
@@ -196,40 +206,41 @@ function ChangesMenu({
           onSelect: onRefresh,
         },
       ]}
+      looks={[
+        {
+          label: "Split view",
+          icon: <Columns2Icon aria-hidden="true" />,
+          detail: roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT,
+          checked: split && roomy,
+          disabled: !roomy,
+          onSelect: () => change({ diffLayout: split ? DIFF_LAYOUT.UNIFIED : DIFF_LAYOUT.SPLIT }),
+        },
+        {
+          label: "Highlight changed words",
+          icon: <HighlighterIcon aria-hidden="true" />,
+          checked: settings.changedWords,
+          onSelect: () => change({ changedWords: !settings.changedWords }),
+        },
+      ]}
     />
   );
 }
 
-/** One row of the diff in a File tab's line: the old side's number, the new side's, and its text, tinted by what it is. */
-function DiffLine({
-  kind,
-  oldLine,
-  newLine,
-  children,
-}: {
-  kind: DiffLineKind;
-  oldLine: number | undefined;
-  newLine: number | undefined;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="code-line" data-diff={kind}>
-      <CodeLineNumber line={oldLine} />
-      <CodeLineNumber line={newLine} />
-      <code className="code-line-text">{children}</code>
-    </div>
-  );
-}
-
 /** The chosen file: where it moved from, and its diff, or why there is none, in a File tab's place. */
-function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element {
-  const look = useLinesLook();
-  const notice = fileNotice(file);
-  // A file with no notice has a patch with hunks, which may yet not read as a diff.
-  const hunks = useMemo(
-    () => (notice === undefined && file.patch !== null ? patchHunks(file.patch) : undefined),
-    [file.patch, notice],
-  );
+function FileDiff({
+  file,
+  roomy,
+  boxRef,
+}: {
+  file: CodingAgentChangedFile;
+  /** Whether the diff is wide enough to split. */
+  roomy: boolean;
+  /** Handed the box the diff is drawn in, which the view measures for a split's room. */
+  boxRef: (element: HTMLDivElement | null) => void;
+}): React.JSX.Element {
+  const look = useDiffLook(roomy);
+  // A file with no notice has a patch with hunks, headed as git writes one for Pierre to read.
+  const patch = fileNotice(file) === undefined ? filePatch(file) : undefined;
   return (
     <section className="file-tab" aria-label={`Diff of ${file.path}`}>
       {file.previousPath === null ? null : (
@@ -239,29 +250,10 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
           </p>
         </div>
       )}
-      {hunks === undefined ? (
-        <p className="side-panel-empty">{notice ?? CHANGES_WORDS.UNREADABLE}</p>
+      {patch === undefined ? (
+        <p className="side-panel-empty">{fileNotice(file) ?? CHANGES_WORDS.UNREADABLE}</p>
       ) : (
-        <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
-          {hunks.map((hunk, index) => (
-            // oxlint-disable-next-line react/no-array-index-key -- a file's hunks are drawn once per patch, in order.
-            <Fragment key={index}>
-              <DiffLine kind={DIFF_HUNK} oldLine={undefined} newLine={undefined}>
-                {hunk.header}
-              </DiffLine>
-              {hunk.rows.map((row, at) => (
-                // oxlint-disable-next-line react/no-array-index-key -- a hunk's rows never move within it.
-                <DiffLine key={at} kind={row.kind} oldLine={row.oldLine} newLine={row.newLine}>
-                  {row.kind === DIFF_ROW.NOTE
-                    ? row.text.trim()
-                    : row.text === ""
-                      ? BLANK_LINE_TEXT
-                      : row.text}
-                </DiffLine>
-              ))}
-            </Fragment>
-          ))}
-        </div>
+        <PierreDiff patch={patch} look={look} boxRef={boxRef} />
       )}
     </section>
   );
@@ -303,7 +295,6 @@ export function ChangesCard({
   onOpenAgent: () => void;
 }): React.JSX.Element {
   const count = pullRequest.changedFiles;
-  const agent = { subject, models };
   const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
@@ -323,12 +314,12 @@ export function ChangesCard({
       </HoverCardNote>
       {people?.author === undefined ? null : (
         <HoverCardNote oneLine>
-          <OpenedBy person={people.author} writtenAs={people.writtenAs} agent={agent} />
+          <OpenedBy person={people.author} />
         </HoverCardNote>
       )}
       {reviewers.length === 0 ? null : (
         <HoverCardNote>
-          <ReviewersLine reviewers={reviewers} agent={agent} />
+          <ReviewersLine reviewers={reviewers} />
         </HoverCardNote>
       )}
     </HoverCard>
@@ -357,6 +348,8 @@ export function AgentChangesTab({
   const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   const room = usePaneRoom(tree);
+  const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
+  const roomy = useSplitRoom(diffBox);
   const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;
   // Note that the lists are kept while the answer is the same one, because
   // fresh ones would have the tree draw itself anew.
@@ -376,11 +369,6 @@ export function AgentChangesTab({
   );
   const shownFile =
     pullRequest?.files.find((file) => file.path === chosen) ?? pullRequest?.files[0];
-  // Luke's own bot is the agent whose pull request it is, wherever the pull request names it.
-  const named = {
-    subject: agentSubject(control, agentId, NOTHING_HELD, false),
-    models: control.models,
-  };
   // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion label={CHANGES_WORDS.READING} />;
@@ -399,7 +387,7 @@ export function AgentChangesTab({
   if (shownFile === undefined) {
     return (
       <div className="file-view ph-no-capture">
-        <PullRequestPeople people={pullRequest} agent={named} />
+        <PullRequestPeople people={pullRequest} />
         <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>
       </div>
     );
@@ -424,17 +412,17 @@ export function AgentChangesTab({
         }}
         beside={<ChangeBeside file={shownFile} />}
         onGitHub={() => tell(ACT_KIND.GITHUB_OPEN, { url: `${pullRequest.url}/files` })}
-        menu={<ChangesMenu file={shownFile} reading={out} onRefresh={ask} />}
+        menu={<ChangesMenu file={shownFile} reading={out} onRefresh={ask} roomy={roomy} />}
         tree={room.toggles}
       />
-      <PullRequestPeople people={pullRequest} agent={named} />
+      <PullRequestPeople people={pullRequest} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p className="m-0">{CHANGES_WORDS.TRUNCATED}</p>
         </div>
       ) : null}
       <div className="file-view-body" {...room.body}>
-        <FileDiff key={shownFile.path} file={shownFile} />
+        <FileDiff key={shownFile.path} file={shownFile} roomy={roomy} boxRef={setDiffBox} />
         {room.drawn ? (
           <FileTreePane
             file={shownFile.path}

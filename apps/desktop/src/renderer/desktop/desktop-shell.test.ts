@@ -502,6 +502,28 @@ test("a press on Factory's row in a floating sidebar puts the sidebar away, as e
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });
 
+test("the Issues page's sidebar row and its command stand only while the account has its experiment on, and each opens the page", async () => {
+  let opens = 0;
+  const control = tasksControl();
+  const issuesView = { ...control.issuesView, onOpen: () => (opens += 1) };
+  handState({});
+  const off = mount(false, false, { issuesView });
+  await settle();
+  assert.equal(off.querySelector(".sidebar-issues"), null);
+  assert.equal(runAppCommand(APP_COMMAND.ISSUES), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState(experimentsOn(EXPERIMENT.ISSUES));
+  const on = mount(false, false, { issuesView });
+  await settle();
+  const issues = on.querySelector<HTMLButtonElement>("button.sidebar-issues");
+  assert.ok(issues, "the Issues row stands");
+  act(() => issues.click());
+  assert.equal(runAppCommand(APP_COMMAND.ISSUES), true);
+  assert.equal(opens, 2);
+});
+
 test("the Automations page's sidebar row and its command stand only while the account has its experiment on", async () => {
   handState({});
   const off = mount(false);

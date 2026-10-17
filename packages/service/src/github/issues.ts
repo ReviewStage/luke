@@ -24,6 +24,7 @@ import {
   readBody,
   send,
 } from "./github-app.js";
+import { GitHubOpenerSchema, openerFieldsOf } from "./pull-requests.js";
 
 /** One issue as a link to it draws it. */
 export interface GitHubIssue {
@@ -31,8 +32,10 @@ export interface GitHubIssue {
   readonly title: string;
   readonly url: string;
   readonly state: IssueState;
-  /** The login of who opened it, where GitHub named one. */
+  /** The login of who opened it, where GitHub named one, their avatar where GitHub's avatar host serves it, and whether they are an App's bot. */
   readonly author?: string;
+  readonly authorAvatarUrl?: string;
+  readonly authorBot?: boolean;
 }
 
 /** GitHub's own word for a closed issue, and its reasons for closing one that read as not planned. */
@@ -46,7 +49,7 @@ const IssueSchema = Schema.Struct({
   state: Schema.String,
   state_reason: Schema.optional(Schema.NullOr(Schema.String)),
   /** Who opened it; null where their account is gone. */
-  user: Schema.optional(Schema.NullOr(Schema.Struct({ login: Schema.String }))),
+  user: Schema.optional(Schema.NullOr(GitHubOpenerSchema)),
   /** Present only where the number is a pull request's. */
   pull_request: Schema.optional(Schema.Unknown),
 });
@@ -82,7 +85,7 @@ export function issueByNumber(
               title: record.title,
               url: record.html_url,
               state: stateOf(record),
-              ...(record.user == null ? undefined : { author: record.user.login }),
+              ...openerFieldsOf(record.user),
             })
           : Option.none(),
       );

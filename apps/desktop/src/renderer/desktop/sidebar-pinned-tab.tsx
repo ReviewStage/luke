@@ -118,7 +118,13 @@ function pinActionGroups(
       ? tasks.agents.agents?.find((each) => each.id === tab.agent)
       : undefined;
   if (agent === undefined) return [[unpin]];
-  const read = agentTranscriptRead(tasks.agents.readTranscript, agent.id, pin.label, agent.brief);
+  const read = agentTranscriptRead(
+    tasks.agents.readTranscript,
+    agent.id,
+    pin.label,
+    agent.brief,
+    tasks.agents.chatOn,
+  );
   const copy = copied(read);
   return [
     [
