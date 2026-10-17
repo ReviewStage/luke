@@ -12,6 +12,7 @@
 @import "./components/layout/layout.css";
 @import "./components/list-row/list-row.css";
 @import "./components/text/text.css";
+@import "./components/avatar/avatar.css";
 @import "./components/badge/badge.css";
 @import "./components/button/button.css";
 @import "./components/chip/chip.css";

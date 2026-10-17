@@ -1,6 +1,7 @@
 import { ANCHORED_POPOVER_EXAMPLE } from "./examples/anchored-popover";
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
+import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
@@ -40,6 +41,7 @@ export const EXAMPLES: readonly Example[] = [
   ANCHORED_POPOVER_EXAMPLE,
   TYPOGRAPHY_EXAMPLE,
   LAYOUT_EXAMPLE,
+  AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
   BUTTONS_EXAMPLE,
   CHIPS_EXAMPLE,

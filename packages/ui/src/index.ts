@@ -1,6 +1,7 @@
 export * from "./cn.js";
 export * from "./components/anchored-popover/anchored-popover.js";
 export * from "./components/auth-page/auth-page.js";
+export * from "./components/avatar/avatar.js";
 export * from "./components/badge/badge.js";
 export * from "./components/button/button.js";
 export * from "./components/checkbox/checkbox.js";
