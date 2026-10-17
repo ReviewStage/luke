@@ -6,7 +6,7 @@ import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { startMacTerminal } from "@luke/host/mac-terminal";
+import { startMacTerminal } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";

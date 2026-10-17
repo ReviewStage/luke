@@ -294,7 +294,10 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
           disabled={confirm.busy}
           onChange={(event) => {
             setTitle(event.target.value);
-            confirm.clear();
+            // Note that a refused answer has settled, so the refusal alone holds
+            // the card up: the question is asked again rather than cleared, or
+            // the first key typed after it would close the card.
+            if (confirm.rejection !== undefined) confirm.ask();
           }}
         />
         {/* Keyed by what was asked, so each opening starts its typed emoji from the icon it opened with. */}

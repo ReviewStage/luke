@@ -313,6 +313,35 @@ test("a new section starts with no icon and is made without one", async () => {
   assert.equal("icon" in made, false);
 });
 
+test("a title typed after a refusal keeps the card up, takes the refusal away, and can still be made", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  await act(async () => dialogButton("Create section").click());
+  const refused = document.querySelector('[role="alertdialog"] [role="alert"]')?.textContent;
+  const title = document.querySelector<HTMLInputElement>('[aria-label="Section title"]');
+  assert.ok(title);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(title, "S");
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const typed = document.querySelector<HTMLInputElement>(
+    '[role="alertdialog"] [aria-label="Section title"]',
+  )?.value;
+  const refusalAfterTyping = document.querySelector('[role="alertdialog"] [role="alert"]');
+  await act(async () => dialogButton("Create section").click());
+
+  assert.equal(refused, "Name the section.");
+  assert.equal(typed, "S", "the card stays up with what was typed");
+  assert.equal(refusalAfterTyping, null);
+  assert.equal(writes[0]?.kind, TASK_SECTION_WRITE.CREATE);
+  assert.equal(writes[0]?.kind === TASK_SECTION_WRITE.CREATE && writes[0].title, "S");
+});
+
 test("choosing No icon and saving clears a section's icon", async () => {
   handState(experimentsOn(EXPERIMENT.SECTIONS));
   const writes: TaskSectionWrite[] = [];
