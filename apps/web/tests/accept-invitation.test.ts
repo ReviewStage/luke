@@ -112,8 +112,20 @@ afterEach(() => {
 
 test("a valid invitation names its workspace and inviter and is accepted from its button", async () => {
   let settleAccept: (answer: Answer) => void = () => undefined;
-  const answers = signedInReading(VALID);
-  const page = await openPage(answers);
+  let offer = VALID;
+  let sessionRead: () => void = () => undefined;
+  const page = await openPage(
+    new Map([
+      [
+        "/api/auth/get-session",
+        () => {
+          sessionRead();
+          return SIGNED_IN;
+        },
+      ],
+      [HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER, () => offer],
+    ]),
+  );
   await titled(page, "Join Atlas");
   expect(page.textContent).toContain("Grace invited you to plan in Atlas on Luke, as member.");
   expect(buttonNames(page)).toEqual(["Accept invitation"]);
@@ -127,7 +139,15 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await act(async () => buttonNamed(page, "Accept invitation").click());
   expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true");
 
+  // Note that Better Auth reads the session again once an invitation is
+  // accepted, and Luke's route then answers that the invitation is spent, so
+  // the page is read only after that session read has been answered.
+  const sessionReadAgain = new Promise<void>((settle) => {
+    sessionRead = settle;
+  });
+  offer = offerRead({ refused: INVITATION_OFFER_REFUSAL.SPENT });
   await act(async () => settleAccept({ status: 200, body: { invitation: {}, member: {} } }));
+  await act(async () => sessionReadAgain);
   await titled(page, "You joined Atlas");
   expect(page.textContent).toContain("Return to Luke. You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
