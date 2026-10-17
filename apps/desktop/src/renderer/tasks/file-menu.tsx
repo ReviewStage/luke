@@ -1,10 +1,10 @@
 import { ACT_KIND } from "@luke/host/acts";
-import { CopyIcon, DownloadIcon, EllipsisIcon } from "@luke/ui";
+import { CopyIcon, DownloadIcon, EllipsisIcon, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model";
@@ -49,7 +49,7 @@ export function LinesMenu({
   /** Settings only this bar's lines follow, as checks under the File tabs' own. */
   looks?: readonly MenuAction[];
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const { settings, change } = useFileViewSettings();
   const groups: readonly (readonly MenuAction[])[] = [
     actions,

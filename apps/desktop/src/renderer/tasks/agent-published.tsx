@@ -4,11 +4,11 @@ import {
   type CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { CopyIcon, ProviderMark } from "@luke/ui";
+import { CopyIcon, ProviderMark, useMenu } from "@luke/ui";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import {
@@ -121,7 +121,7 @@ export function PublishedChip({
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
 }): ReactNode {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const url = published === undefined ? undefined : publishedUrl(published);
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;

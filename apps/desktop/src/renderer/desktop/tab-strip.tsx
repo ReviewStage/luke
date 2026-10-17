@@ -1,20 +1,20 @@
-import { CloseIcon, cssCustomProperties } from "@luke/ui";
+import {
+  atPointer,
+  CloseIcon,
+  cssCustomProperties,
+  MENU_ALIGN,
+  MENU_DROP,
+  type MenuPlacement,
+  opensMenu,
+  useMenu,
+} from "@luke/ui";
 import { Children, isValidElement, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import {
-  ActionMenu,
-  atPointer,
-  MENU_ALIGN,
-  MENU_DROP,
-  type MenuAction,
-  type MenuPlacement,
-  opensMenu,
-  useActionMenu,
-} from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { type TabMove, useTabDrag } from "./use-tab-drag";
 
 /**
@@ -484,7 +484,7 @@ export function MenuTab({
 }: Omit<React.ComponentProps<typeof Tab>, "onMenu"> & {
   groups: MenuAction[][];
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   return (
     <>
       <Tab

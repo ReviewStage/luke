@@ -41,6 +41,7 @@ import {
   type TasksLinearIssuesAnswer,
   type TasksMoveAnswer,
   type TasksPageAnswer,
+  type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPullRequestAnswer,
@@ -69,6 +70,7 @@ import {
   tasksMessagesParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
+  tasksPagesParamsSchema,
   tasksPictureKeepParamsSchema,
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
@@ -93,6 +95,7 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceTransferParamsSchema,
+  tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
 import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -283,6 +286,8 @@ export type TasksClient = Pick<
   | "mark"
   | "repositoryPins"
   | "pinRepository"
+  | "taskSections"
+  | "writeTaskSection"
   | "readBoard"
   | "saveBoard"
   | "readTranscript"
@@ -585,6 +590,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const readRepositoryPins = Effect.gen(function* () {
     const pins = yield* Effect.provide(client.repositoryPins(), FetchHttpClient.layer);
     if (pins !== undefined) write({ repositoryPins: pins });
+  });
+
+  // A failed read keeps the sections it last read, as the pins' does.
+  const readTaskSections = Effect.gen(function* () {
+    const sections = yield* Effect.provide(client.taskSections(), FetchHttpClient.layer);
+    if (sections !== undefined) write({ taskSections: sections });
   });
 
   /**
@@ -1076,6 +1087,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             yield* readList;
             yield* readRepositoryPins;
+            yield* readTaskSections;
             const taskId = view.activeTaskId;
             if (taskId !== undefined) yield* readDocument(taskId);
             if (taskId !== undefined) yield* readBoard(taskId);
@@ -1318,6 +1330,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
         );
       }),
+    // A plan's pages are answered to the Inbox that asked and held nowhere,
+    // since the view holds the active plan's alone.
+    [GATEWAY_METHOD.TASKS_PAGES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading a plan's pages names the plan");
+        if (!gate()) return carried<TasksPagesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const pages = yield* Effect.provide(
+          client.readPages(read.success.taskId),
+          FetchHttpClient.layer,
+        );
+        return carried<TasksPagesAnswer>(
+          pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
+        );
+      }),
     // A picture's bytes are answered to the window that asked and held
     // nowhere, so they never enter the view every window is told.
     [GATEWAY_METHOD.TASKS_PICTURE]: (params) =>
@@ -1504,6 +1531,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             );
             if (pins === undefined) return { changed: false };
             write({ repositoryPins: pins });
+            return { changed: true };
+          }),
+        );
+      }),
+    // The service answers the sections as they then stand, as it does the pins.
+    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksWriteSectionParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("a change to a section names what it changes");
+        }
+        if (!gate()) return { changed: false };
+        const asked = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const sections = yield* Effect.provide(
+              client.writeTaskSection(asked),
+              FetchHttpClient.layer,
+            );
+            if (sections === undefined) return { changed: false };
+            write({ taskSections: sections });
             return { changed: true };
           }),
         );

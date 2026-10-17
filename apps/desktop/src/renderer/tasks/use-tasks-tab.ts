@@ -7,8 +7,10 @@ import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
+import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { CodeRef, Task } from "@luke/features/task-wire";
 import {
   TASK_CALL_FAILURE,
@@ -41,6 +43,11 @@ import {
   type StripTab,
   sameTab,
 } from "@luke/ui/tab-strip-model";
+import {
+  applySectionWrite,
+  NO_TASK_SECTIONS,
+  SECTION_WRITE_FAILED_NOTE,
+} from "@luke/ui/task-sections-model";
 import {
   AGENT_PIN_FAILED_NOTES,
   agentsPinned,
@@ -105,6 +112,7 @@ import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import type { FixtureChat, Staged } from "./chat-fixture";
+
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -125,6 +133,7 @@ import {
 } from "./tasks-fixture";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
+import { useInboxPages } from "./use-inbox-pages";
 import { useLastTask } from "./use-last-task";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
@@ -149,6 +158,12 @@ import {
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
 import { agentListCallIds, workerCallIds, workRowsOf } from "./work-model";
+
+/** A change to the sections drawn before the service answered it, and when it was asked. */
+interface PendingSectionWrite {
+  readonly write: TaskSectionWrite;
+  readonly at: number;
+}
 
 /**
  * use-tasks-tab.ts -- the panel's Tasks tab as one control: which page shows, the presses each page makes, and the host's read of the tasks as the tab shows.
@@ -211,6 +226,10 @@ interface InboxViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
+  /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
+  readonly pages: readonly PageLine[] | undefined;
+  /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
+  readonly onRereadPages: () => void;
 }
 
 /**
@@ -649,6 +668,18 @@ export interface TasksControl {
    * on this Mac instead (`sidePanel`), which the drop's `putBack` restores.
    */
   onMovePins: (moves: readonly PinMove[], putBack?: () => void) => void;
+  /**
+   * The sections the account made in its sidebars and the tasks it keeps
+   * in them, every workspace's, as the service last answered them with the
+   * writes still out drawn over them.
+   */
+  taskSections: TaskSections;
+  /**
+   * Writes changes to the sections, in order, on the account: drawn at
+   * once, sent one after another, and let go as each is answered, so a
+   * refused one goes back with a toast.
+   */
+  onWriteSections: (writes: readonly TaskSectionWrite[]) => void;
   /** Deletes a task, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
   onDeleteTask: (taskId: string) => Promise<ActionResult>;
   /**
@@ -1069,6 +1100,17 @@ export function useTasksTab(input: {
       ),
     [viewed, accountSignedIn],
   );
+  // A change to the sections stands drawn until its act settles, by which
+  // time main's view carries the service's answer to it. Note that a
+  // sign-out lets every one go, as it does a repository's pin.
+  const [sectionWrites, setSectionWrites] = useState<readonly PendingSectionWrite[]>([]);
+  useEffect(() => {
+    if (!accountSignedIn) setSectionWrites([]);
+  }, [accountSignedIn]);
+  const taskSections = sectionWrites.reduce(
+    (held, pending) => applySectionWrite(held, pending.write, pending.at),
+    viewed.taskSections ?? NO_TASK_SECTIONS,
+  );
   // A tab closed names a task of the account it was closed under, so a sign-out lets them go.
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
@@ -1228,16 +1270,48 @@ export function useTasksTab(input: {
     () => (pageAgent === undefined ? undefined : [pageAgent]),
     [pageAgent],
   );
+  // The Inbox lists the listed workspace's items alone, so a choice another workspace's list made gives way with it.
+  // Note that an agent's with no task is held to the listed workspace by the list itself, which lists its workspace's alone.
+  const inboxAsked = inboxView?.chosen;
+  const inboxChosen =
+    inboxAsked !== undefined &&
+    (!("taskId" in inboxAsked) ||
+      inWorkspace([inboxAsked], tasks.tasks, listedWorkspaceId).length > 0)
+      ? inboxAsked
+      : undefined;
+  // While the Inbox stands, the panel beside it is the chosen item's task's, or its agent's where it
+  // has no task, as that agent's page's is: what the item opens there, its files, its task's pages,
+  // and its agents' pull requests, and none of the fixed kinds, which the task's page draws.
+  const inboxTask =
+    inboxChosen !== undefined && "taskId" in inboxChosen ? inboxChosen.taskId : undefined;
+  const inboxAgent =
+    inboxChosen !== undefined && "agentId" in inboxChosen ? inboxChosen.agentId : undefined;
+  const inboxPages = useInboxPages(inboxView === undefined ? undefined : inboxTask);
+  const inboxPageIds = useMemo(
+    () => (inboxPages.pages ?? NO_PAGES).map((page) => page.id),
+    [inboxPages.pages],
+  );
+  const inboxAgents = useMemo(
+    () => (inboxAgent === undefined ? NO_IDS : [inboxAgent]),
+    [inboxAgent],
+  );
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
-    pageAgents === undefined
-      ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
-      : { id: pageAgent, holds: NO_HOLDS },
-    pageAgents ?? mainTabs.openAgents,
-    pageAgents === undefined ? workers : NO_IDS,
-    pageAgents === undefined ? files : NO_IDS,
-    pageAgents === undefined ? pages : NO_IDS,
-    pageAgents ?? agents.agentIds,
+    inboxView !== undefined
+      ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
+      : pageAgents === undefined
+        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
+        : { id: pageAgent, holds: NO_HOLDS },
+    inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
+    inboxView === undefined && pageAgents === undefined ? workers : NO_IDS,
+    inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
+    inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : NO_IDS,
+    // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by.
+    inboxView !== undefined
+      ? inboxAgent === undefined
+        ? undefined
+        : inboxAgents
+      : (pageAgents ?? agents.agentIds),
   );
   // An agent pinned to the sidebar is named there as its tab is named now,
   // so a pin made before the agent had its title, or before a rename,
@@ -1271,15 +1345,6 @@ export function useTasksTab(input: {
       : columnShown && isAgentTab(mainTabs.tab)
         ? mainTabs.tab.agent
         : null;
-  // The Inbox lists the listed workspace's items alone, so a choice another workspace's list made gives way with it.
-  // Note that an agent's with no task is held to the listed workspace by the list itself, which lists its workspace's alone.
-  const inboxAsked = inboxView?.chosen;
-  const inboxChosen =
-    inboxAsked !== undefined &&
-    (!("taskId" in inboxAsked) ||
-      inWorkspace([inboxAsked], tasks.tasks, listedWorkspaceId).length > 0)
-      ? inboxAsked
-      : undefined;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
       ? inboxChosen !== undefined && "taskId" in inboxChosen
@@ -1680,6 +1745,37 @@ export function useTasksTab(input: {
       putBack?.();
       toast({ words: PIN_MOVE_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
     });
+  };
+
+  // Each change to the sections waits on the one before it, so the service
+  // takes them in the order they were drawn. A fixture run draws them and
+  // sends none, so its sections stand as dragged until it ends.
+  const sectionFlight = useRef<Promise<unknown>>(Promise.resolve());
+  const writeSections = (writes: readonly TaskSectionWrite[]) => {
+    const now = Date.now();
+    const pending = writes.map((write): PendingSectionWrite => ({ write, at: now }));
+    if (pending.length === 0) return;
+    setSectionWrites((held) => [...held, ...pending]);
+    if (fixture !== undefined) return;
+    const pressedBy = input.account;
+    for (const each of pending) {
+      const flight = sectionFlight.current.then(() =>
+        accountNow.current === pressedBy
+          ? act(ACT_KIND.TASKS_WRITE_SECTION, each.write).catch(() => false)
+          : undefined,
+      );
+      sectionFlight.current = flight;
+      flight.then((changed) => {
+        setSectionWrites((held) => held.filter((one) => one !== each));
+        if (changed === false) {
+          toast({
+            words: SECTION_WRITE_FAILED_NOTE,
+            tone: TOAST_TONE.FAILED,
+            hold: TOAST_HOLD.FAILED,
+          });
+        }
+      });
+    }
   };
 
   // Several tasks archived at once answer with one toast rather than one
@@ -2417,14 +2513,15 @@ export function useTasksTab(input: {
   // the panel is never shown empty beside the summary that lists the same:
   // the tab last closed on the plan this launch, where ⇧⌘T would open it,
   // else the kind last closed on it, kept across launches, else Call. An
-  // agent's page has no kind to fall back on, so its panel shows empty,
-  // offering what its "+" does.
+  // agent's page, and the Inbox beside an item, have no kind to fall back on,
+  // so their panel shows empty, offering what its "+" does.
   const toggleSidePanel = () => {
     const task = tasks.activeTaskId;
     if (
       sidePanel.open ||
       sidePanel.strip.length > 0 ||
       pageAgents !== undefined ||
+      inboxView !== undefined ||
       task === undefined
     ) {
       sidePanel.onToggle();
@@ -2598,6 +2695,8 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
         ),
+      pages: inboxPages.pages,
+      onRereadPages: inboxPages.onReread,
     },
     // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.
     chatView: {
@@ -2773,6 +2872,8 @@ export function useTasksTab(input: {
     onArchiveTasks: archiveTasks,
     pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
     onPinRepository: pinRepository,
+    taskSections,
+    onWriteSections: writeSections,
     onPinAgent: pinAgent,
     onMovePins: movePins,
     onDeleteTask: deleteTask,

@@ -443,9 +443,11 @@ function DelegationRow({
 function TodosRow({
   part,
   open,
+  live,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   open: boolean;
+  live: boolean;
 }): ReactNode {
   const todos = todosView(part.input);
   if (todos === undefined) return <ToolCallView part={part} />;
@@ -458,24 +460,30 @@ function TodosRow({
       subject={todosSummary(todos)}
       todos={todos}
       errorText={part.errorText}
+      live={live}
     />
   );
 }
 
-/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, and the call whose list is drawn open, none while the list is docked above the composer. */
+/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, the call whose list is drawn open, none while the list is docked above the composer, and the call whose list the agent is at, none once it stops. */
 interface TodosPlace {
   readonly kept: string | undefined;
   readonly open: string | undefined;
+  readonly live: string | undefined;
 }
 
 /** A transcript that holds no to-do list, as the brain's does not. */
-const NO_TODOS: TodosPlace = { kept: undefined, open: undefined };
+const NO_TODOS: TodosPlace = { kept: undefined, open: undefined, live: undefined };
 
-/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it. */
+/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it, and live while the agent works. */
 function todosPlace(messages: readonly CodingAgentMessage[], working: boolean): TodosPlace {
   const standing = newestTodos(messages);
   const docked = dockedTodos(standing, working);
-  return { kept: standing?.callId, open: docked === undefined ? standing?.callId : undefined };
+  return {
+    kept: standing?.callId,
+    open: docked === undefined ? standing?.callId : undefined,
+    live: working ? standing?.callId : undefined,
+  };
 }
 
 /** The list the agent is working through, docked above the composer; nothing where none is (`dockedTodos`). */
@@ -597,7 +605,13 @@ function AgentPartView({
         );
       }
       if (part.tool === AGENT_TOOL.WRITE_TODOS) {
-        return <TodosRow part={part} open={part.callId === todos.open} />;
+        return (
+          <TodosRow
+            part={part}
+            open={part.callId === todos.open}
+            live={part.callId === todos.live}
+          />
+        );
       }
       return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
         <LoadedSkillView part={part} />

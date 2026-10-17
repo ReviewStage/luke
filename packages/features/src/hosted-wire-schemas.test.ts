@@ -33,6 +33,7 @@ import * as providerKeyWire from "./provider-key-wire.js";
 import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
+import * as taskSectionWire from "./task-section-wire.js";
 import * as taskWire from "./task-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
 import * as workspaceWire from "./workspace-wire.js";
@@ -346,6 +347,13 @@ const EFFECT_MODULE_SCHEMAS = {
     planCommentThreadAnswerSchema: planCommentWire.planCommentThreadAnswerSchema,
     planCommentAnchorsSchema: planCommentWire.planCommentAnchorsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planCommentWire>,
+  "task-section-wire": {
+    taskSectionIconSchema: taskSectionWire.taskSectionIconSchema,
+    taskSectionSchema: taskSectionWire.taskSectionSchema,
+    taskSectionEntrySchema: taskSectionWire.taskSectionEntrySchema,
+    taskSectionsAnswerSchema: taskSectionWire.taskSectionsAnswerSchema,
+    taskSectionWriteSchema: taskSectionWire.taskSectionWriteSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof taskSectionWire>,
   "task-wire": {
     workspaceIdSchema: taskWire.workspaceIdSchema,
     agentEditLineSchema: taskWire.agentEditLineSchema,

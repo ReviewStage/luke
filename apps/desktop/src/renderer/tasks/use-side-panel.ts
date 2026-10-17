@@ -596,6 +596,8 @@ export type TaskHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;
 export interface OpenTask {
   id: string | undefined;
   holds: TaskHolds;
+  /** Whether the panel draws none of the task's fixed tabs, standing beside the window's Inbox rather than the task's page, which draws what they show. */
+  bare?: true | undefined;
 }
 
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files shown on it. */
@@ -632,6 +634,7 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
 
 /** The task's fixed tabs in the strip's order: each it holds something of and was not closed on, and each opened on it. */
 function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
+  if (task.bare === true) return [];
   const chosen = taskTabs(held, task.id);
   const open = held.tabs.filter(
     (tab) =>
@@ -1513,7 +1516,7 @@ export function useSidePanel(
   // chosen on this very task and stands in for nothing: a file's waits for
   // the task's code to be read, however much arrives before it. A kind that
   // arrived stands at the strip's end, as a tab opened does (`firstHeld`).
-  if (seen.id !== taskId || !sameHolds(seen.holds, task.holds)) {
+  if (seen.id !== taskId || seen.bare !== task.bare || !sameHolds(seen.holds, task.holds)) {
     setSeen(task);
     const before =
       seen.id === taskId && arrived(seen.holds, task.holds) ? shownFor(seen.holds) : undefined;

@@ -17,13 +17,6 @@ export const AUTH_CARD =
 export const AUTH_TITLE = "mt-4 mb-2 text-[1.75rem] leading-[1.15] font-semibold";
 
 /**
- * `data-tone` carries the state rather than a computed class, so the pill
- * says what it means in the markup and the palette stays in one string.
- */
-export const AUTH_PILL =
-  "mt-4 inline-block rounded-full bg-complete-tint px-[11px] py-[3px] font-mono text-xs font-semibold tracking-[0.2px] text-complete data-[tone=attention]:bg-attention-tint data-[tone=attention]:text-attention";
-
-/**
  * `cursor-pointer` is carried here rather than inherited: Tailwind's preflight
  * leaves a button on the user agent's own arrow.
  */

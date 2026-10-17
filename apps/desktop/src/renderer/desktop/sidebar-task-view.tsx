@@ -1,5 +1,5 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ArchiveIcon } from "@luke/ui";
+import { ArchiveIcon, useMenu } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
 import {
@@ -19,7 +19,7 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import type { CountNoun } from "./sidebar-group-header";
 import type { TaskListViewControl } from "./task-list-view";
 
@@ -239,7 +239,7 @@ export function TaskViewOptions({
   /** Whether the view leaves any task out, which the button's dot says. */
   filtered: boolean;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const reader = useMemberDirectory();
   return (
     <>

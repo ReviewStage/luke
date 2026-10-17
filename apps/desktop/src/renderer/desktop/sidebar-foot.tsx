@@ -10,8 +10,10 @@ import {
   GearIcon,
   KeyboardIcon,
   ProviderMark,
+  riseAbove,
   UpdateIcon,
   useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
@@ -31,7 +33,7 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
 import { useOpenPerson } from "../person-door";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuEntry } from "./action-menu";
 
 /**
  * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, a release on its way in, and Settings' gear.
@@ -208,7 +210,7 @@ function AccountMenu({
 }): React.JSX.Element {
   const { tell } = useAct();
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  const { drawn, close, trigger } = useActionMenu(shown);
+  const { drawn, close, trigger } = useMenu(shown);
   const logOut = useConfirmDialog(
     { subject: signedIn, surfaceOpen: shown },
     // A sign-out main refused keeps the dialog up saying so, rather than

@@ -30,7 +30,7 @@ import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
-import { CopyIcon, EmptyState, ErrorState, ProviderMark } from "@luke/ui";
+import { CopyIcon, EmptyState, ErrorState, ProviderMark, useMenu } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   CheckIcon,
@@ -49,7 +49,7 @@ import { type ReactNode, useCallback, useId, useState } from "react";
 import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
@@ -331,7 +331,7 @@ function PullRequestMenu({
   onRefresh: () => void;
 }): React.JSX.Element {
   const label = "Pull request actions";
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyWithToast = useCopyToast();
   const actions: MenuAction[] = [
     {

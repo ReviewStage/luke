@@ -102,20 +102,3 @@ export function ProviderChoices({
     </>
   );
 }
-
-/** The choices and their failure on a page still drawn on the old card, which lays them out itself. */
-export function SignInChoices({ client }: { readonly client: SocialSignIn }): React.JSX.Element {
-  const { pending, failed, begin } = useSocialSignIn(client);
-  return (
-    <>
-      <div className="mt-8 mb-4 grid gap-3">
-        <ProviderChoices pending={pending} onPress={begin} />
-      </div>
-      {failed ? (
-        <p className="m-0 text-attention" role="alert">
-          {SIGN_IN_FAILURE}
-        </p>
-      ) : null}
-    </>
-  );
-}

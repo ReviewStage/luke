@@ -151,7 +151,7 @@ function accountItem(label: string): HTMLButtonElement {
   const item = [...(accountMenu()?.children ?? [])].find(
     (line): line is HTMLButtonElement =>
       line instanceof HTMLButtonElement &&
-      line.querySelector(".task-menu-label")?.textContent === label,
+      line.querySelector(".luke-menu-item-label")?.textContent === label,
   );
   return item ?? assert.fail(`the account's menu offers ${label}`);
 }

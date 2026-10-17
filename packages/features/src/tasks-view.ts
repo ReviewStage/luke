@@ -22,10 +22,12 @@ import {
   pageLineSchema,
   pageVersionNumberSchema,
   planPageVersionAnswerSchema,
+  taskPagesAnswerSchema,
 } from "./page-wire.js";
 import { pictureDataUrlSchema, pictureTypeSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
+import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   codeRefSchema,
   planRevisionAnswerSchema,
@@ -405,6 +407,8 @@ export const tasksViewSchema = EffectSchema.Struct({
   github: EffectSchema.optionalKey(githubConnectionSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
+  /** The sections the account made in its sidebars and the tasks it keeps in them, as last read or written; absent before the first read lands. */
+  taskSections: EffectSchema.optionalKey(taskSectionsAnswerSchema),
   /** The one active task, absent while the window has none open. */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
   document: tasksDocumentSchema,
@@ -518,6 +522,11 @@ export type TasksPinParams = typeof tasksPinParamsSchema.Type;
 export const tasksPinRepositoryParamsSchema = repositoryPinRequestSchema;
 
 export type TasksPinRepositoryParams = typeof tasksPinRepositoryParamsSchema.Type;
+
+/** One change to the account's sidebar sections, as the window asks it; the service keeps them on the account. */
+export const tasksWriteSectionParamsSchema = taskSectionWriteSchema;
+
+export type TasksWriteSectionParams = typeof tasksWriteSectionParamsSchema.Type;
 
 /** Archiving a task, or bringing it back, as the window asks it. */
 export const tasksArchiveParamsSchema = EffectSchema.Struct({
@@ -869,6 +878,21 @@ export const tasksPageAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksPageAnswer = typeof tasksPageAnswerSchema.Type;
+
+/** One plan's pages, as the window's Inbox names the plan whose item it shows. */
+export const tasksPagesParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+});
+
+export type TasksPagesParams = typeof tasksPagesParamsSchema.Type;
+
+/** A plan's pages as the window hears them, each by its newest version, or that the service did not answer. */
+export const tasksPagesAnswerSchema = EffectSchema.Union([
+  taskPagesAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type TasksPagesAnswer = typeof tasksPagesAnswerSchema.Type;
 
 /** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
 export const tasksPageSourceAnswerSchema = EffectSchema.Union([

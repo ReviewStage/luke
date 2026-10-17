@@ -664,21 +664,13 @@ async function inboxOn(item: InboxItem) {
     ),
   );
   await settle();
-  const note = () =>
-    container.querySelector<HTMLTextAreaElement>(".inbox-view textarea") ??
-    assert.fail("the card's answer box");
+  const box = () => container.querySelector(".inbox-view") ?? assert.fail("the card's answer box");
   return {
-    note,
+    /** The words the card's note shows. */
+    note: () => composerEditor(box()).textContent,
     /** Types the words into the card's note, as the field's own input does. */
     type: async (words: string) => {
-      const field = note();
-      act(() => {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
-          field,
-          words,
-        );
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-      });
+      typeInComposer(box(), words);
       await settle();
     },
     drafted: () =>
@@ -697,12 +689,12 @@ test("an inbox card's note outlasts a reload, its task's row marked meanwhile, a
   before.reload();
 
   const after = await inboxOn(approval(1));
-  assert.equal(after.note().value, "Only for teammates, not guests");
+  assert.equal(after.note(), "Only for teammates, not guests");
   assert.equal(after.drafted(), true);
   after.reload();
 
   const changed = await inboxOn(approval(2));
-  assert.equal(changed.note().value, "", "the agent's change starts the card afresh");
+  assert.equal(changed.note(), "", "the agent's change starts the card afresh");
   assert.equal(changed.drafted(), false, "and the draft it outdated is let go");
 });
 

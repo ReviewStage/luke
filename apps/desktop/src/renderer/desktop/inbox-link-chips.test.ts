@@ -196,6 +196,8 @@ async function inbox(options: {
           onOpen: () => undefined,
           onClose: () => undefined,
           onChoose: setChosen,
+          pages: undefined,
+          onRereadPages: () => undefined,
         },
       }),
     });
