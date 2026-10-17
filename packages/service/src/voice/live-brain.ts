@@ -4,7 +4,11 @@ import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import { childTitlesByCall } from "@luke/database/models/child-titles";
 import type { HostedStore } from "@luke/database/models/hosted-store";
 import { childConversationId } from "@luke/database/models/ids";
-import { listJournals, type SpokenAskRow } from "@luke/database/models/message-reads";
+import {
+  listJournals,
+  type SpokenAskRow,
+  type StoredTurnRecord,
+} from "@luke/database/models/message-reads";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import type { TurnRecord } from "@luke/features/coding-agent-wire";
 import { TASK_ACTIVITY_ACTION_MAX_CHARS, type TaskWorkTurn } from "@luke/features/tasks-view";
@@ -15,6 +19,8 @@ import {
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
   type LiveBrainCancel,
+  type LiveBrainJoin,
+  type LiveBrainQuestion,
   type LiveBrainRecoveredRun,
   type LiveBrainRecovery,
   type LiveBrainRunEnd,
@@ -285,6 +291,47 @@ const FOLLOW_LOOK = {
 } as const;
 
 type FollowLook = (typeof FOLLOW_LOOK)[keyof typeof FOLLOW_LOOK];
+
+/**
+ * How much of what Luke said with no call up a call back is handed, the
+ * newest kept: a catch-up the voice says in a sentence or two, never a
+ * replay of every reply.
+ */
+const MISSED_MAX_CHARS = 1_200;
+
+/** A join that found nothing to take up and set nothing off. */
+function nothingJoined(joined: boolean): LiveBrainJoin {
+  return { joined, runs: [], missed: undefined, questions: [], follow: Effect.void };
+}
+
+/** The questions queued past the position given and not taken back since, oldest first. */
+function questionsOf(events: readonly TurnEvent[], heard: number): LiveBrainQuestion[] {
+  const queued: LiveBrainQuestion[] = [];
+  for (const event of events) {
+    if (event.seq <= heard) continue;
+    if (event.kind === TURN_EVENT_KIND.QUESTION_QUEUED) {
+      queued.push({ question: event.question, recommendation: event.recommendation });
+    } else if (event.kind === TURN_EVENT_KIND.QUESTION_WITHDRAWN) {
+      const at = queued.findIndex((held) => held.question === event.question);
+      if (at >= 0) queued.splice(at, 1);
+    }
+  }
+  return queued;
+}
+
+/** The newest of the sentences that fit the bound, oldest first; one too long alone is cut from its start. */
+function missedOf(sentences: readonly string[]): string | undefined {
+  const kept: string[] = [];
+  let length = 0;
+  for (const sentence of [...sentences].reverse()) {
+    if (length + sentence.length + 1 > MISSED_MAX_CHARS) break;
+    kept.unshift(sentence);
+    length += sentence.length + 1;
+  }
+  const newest = sentences.at(-1);
+  if (kept.length === 0 && newest !== undefined) return `…${newest.slice(-MISSED_MAX_CHARS)}`;
+  return kept.length === 0 ? undefined : kept.join(" ");
+}
 
 /** No recovered run: the session's revisions start from nothing, and nothing is followed. */
 const NO_RECOVERY: LiveBrainRecovery = { revision: 0, runs: [], follow: Effect.void };
@@ -844,6 +891,117 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     return Effect.asVoid(Effect.forkIn(following, socket));
   }
 
+  /**
+   * What of one earlier call's turn nobody heard: the sentences past the last
+   * event told, which the call back is handed as its catch-up, the questions
+   * queued since and not taken back, which it asks in turn, and the
+   * position everything the turn holds now is to count as told from, so its
+   * follow says nothing of it again, a goodbye's end of the call included.
+   * None where the turn's journal cannot be read.
+   */
+  const unheardOf = Effect.fnUntraced(function* (turn: StoredTurnRecord, heard: number) {
+    const journal = yield* options.store.messages.byClientId(
+      options.conversation.userId,
+      turn.conversationId,
+      HOSTED_TOOL_SET,
+      turn.id,
+    );
+    if (!journal.ok) return undefined;
+    const events = projectTurnEvents(turn, journal.value[0]?.message);
+    const held = events.filter((event) => event.kind !== TURN_EVENT_KIND.ENDED);
+    return {
+      seq: Math.max(heard, ...held.map((event) => event.seq)),
+      ended: events.at(-1)?.kind === TURN_EVENT_KIND.ENDED,
+      sentences: held.flatMap((event) =>
+        event.kind === TURN_EVENT_KIND.REPLY_SENTENCE && event.seq > heard ? [event.sentence] : [],
+      ),
+      questions: questionsOf(events, heard),
+    };
+  });
+
+  /**
+   * A call back takes up the work earlier calls left: each spoken ask of the
+   * conversation not yet told to its end nor stopped, made inside the
+   * window a follow could still hear its turn end in. What its turn said
+   * unheard becomes the catch-up, and the questions it queued are handed on;
+   * this call's follow starts past all of it, and the follow the caller runs
+   * once it has handed them over counts them told on the row, so the next
+   * call says none of it again, while a call that went before then leaves
+   * them for the next. A turn already over is done with there, and one still
+   * running, or an ask eve has not started, is followed from there under
+   * revision zero, below any ask this call makes. Note that this reads and writes through the
+   * same standing reads the asks are followed by, so an ask the account no
+   * longer reaches is passed over as the follow would pass it.
+   */
+  const takeUp = Effect.fnUntraced(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const since = new Date(now - Duration.toMillis(bounds.PARKED_FOLLOW));
+    const unended = yield* options.asks.asks.unendedSpoken(
+      options.conversation.userId,
+      options.conversation.conversationId,
+      since,
+    );
+    const runs: string[] = [];
+    const missed: string[] = [];
+    const questions: LiveBrainQuestion[] = [];
+    const heardAll: ReturnType<typeof options.asks.asks.told>[] = [];
+    const turns = new Map<string, { readonly seq: number; readonly ended: boolean }>();
+    for (const ask of unended) {
+      const standing = yield* askStanding(reads, options.conversation.userId, ask.id);
+      if (standing === undefined) continue;
+      const { turn } = standing;
+      if (turn === undefined) {
+        runs.push(ask.id);
+        continue;
+      }
+      if (turn.cancelRequestedAt !== null) continue;
+      let read = turns.get(turn.id);
+      if (read === undefined) {
+        const heard = Math.max(
+          0,
+          ...unended.filter((other) => other.turnId === turn.id).map((other) => other.toldSeq),
+        );
+        const unheard = yield* unheardOf(turn, heard);
+        if (unheard === undefined) {
+          options.report("An earlier call's turn could not be read; the call back leaves it");
+          continue;
+        }
+        missed.push(...unheard.sentences);
+        questions.push(...unheard.questions);
+        recoveredSeq.set(turn.id, Math.max(recoveredSeq.get(turn.id) ?? 0, unheard.seq));
+        read = unheard;
+        turns.set(turn.id, read);
+      }
+      heardAll.push(
+        options.asks.asks.told(
+          ask.id,
+          read.ended ? { seq: read.seq, endAt: new Date(now) } : { seq: read.seq },
+        ),
+      );
+      if (!read.ended) runs.push(ask.id);
+    }
+    // A position that could not be written leaves the catch-up for the next call to hand again.
+    const heard = Effect.all(heardAll, { discard: true }).pipe(
+      Effect.tapError(logStoreFailure),
+      Effect.catch(() =>
+        Effect.sync(() => options.report("How far a call back caught up could not be written")),
+      ),
+    );
+    return {
+      joined: true,
+      runs,
+      missed: missedOf(missed),
+      questions,
+      follow: Effect.andThen(
+        heard,
+        Effect.forEach(runs, (runId) => follow(runId, 0), { discard: true }),
+      ).pipe(
+        Effect.provideService(SqlClient.SqlClient, sql),
+        Effect.provideService(Database, database),
+      ),
+    } satisfies LiveBrainJoin;
+  });
+
   /** Accepts one ask through the door and follows it under the revision given. */
   function submit(input: AskInput, revision: number): Effect.Effect<LiveBrainSubmission> {
     return Effect.gen(function* () {
@@ -890,23 +1048,46 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         ask.revision,
       );
     },
-    // Note that the session's id is the ask's client id, because one
-    // session starts once, so a second start explores nothing twice; and
-    // that the ask names no voice session, because it answers no delegation
-    // a re-attached connection could take up. It is followed under revision
-    // zero, below every spoken ask's, so the developer's first ask tells a
-    // turn the two share.
-    explore(sessionId) {
-      return submit(
-        {
-          accountId: options.accountId,
-          userId: options.conversation.userId,
-          question: BRAIN_EXPLORE_ASK,
-          origin: ASK_ORIGIN.SPOKEN,
-          clientId: sessionId,
-          conversationId: options.conversation.conversationId,
-        },
-        0,
+    // Note that the plan's first call is the one whose conversation no ask
+    // has yet reached eve in: it explores, under the session's id as the
+    // ask's client id, because one session starts once, so a second start
+    // explores nothing twice; the ask names no voice session, because it
+    // answers no delegation a re-attached connection could take up, and it
+    // is followed under revision zero, below every spoken ask's, so the
+    // developer's first ask tells a turn the two share. Every later call
+    // takes up what earlier calls left instead, and asks eve nothing.
+    join(sessionId) {
+      return Effect.gen(function* () {
+        const latest = yield* options.asks.asks.latestSession(
+          options.conversation.userId,
+          options.conversation.conversationId,
+        );
+        if (latest !== undefined) return yield* takeUp();
+        const explored = yield* submit(
+          {
+            accountId: options.accountId,
+            userId: options.conversation.userId,
+            question: BRAIN_EXPLORE_ASK,
+            origin: ASK_ORIGIN.SPOKEN,
+            clientId: sessionId,
+            conversationId: options.conversation.conversationId,
+          },
+          0,
+        );
+        if (explored.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) return nothingJoined(false);
+        return { ...nothingJoined(false), runs: [explored.runId] };
+      }).pipe(
+        Effect.provideService(SqlClient.SqlClient, sql),
+        Effect.provideService(Database, database),
+        // The record could not be read: the call starts with nothing taken up
+        // and nothing set off, rather than exploring a plan it may have explored.
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() =>
+          Effect.sync(() => {
+            options.report("A fresh call could not read the plan's earlier work");
+            return nothingJoined(false);
+          }),
+        ),
       );
     },
     cancelRun(runId) {
