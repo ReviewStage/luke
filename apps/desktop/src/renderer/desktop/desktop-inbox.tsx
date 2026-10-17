@@ -27,6 +27,7 @@ import {
   type InboxHolder,
   type InboxListed,
   inboxList,
+  itemWorkspaceId,
   listedItems,
   NEEDS_YOU,
   type PlanlessAgent,
@@ -35,6 +36,11 @@ import {
 } from "../tasks/inbox-model";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane";
+import {
+  type PlanMentionsValue,
+  planlessMentions,
+  useMentionAgentsReader,
+} from "../tasks/plan-mentions";
 import { useMinute } from "../tasks/task-time";
 import { useCodingAgents } from "../tasks/use-coding-agents";
 import { useInboxItems } from "../tasks/use-inbox-items";
@@ -326,6 +332,15 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     taken.current = asked;
     openColumn(asked.itemId);
   }, [opensItem, asked, openColumn]);
+  // What the chosen item's box offers an `@`, read under the item's own workspace and repository.
+  const mentionTasks = useMemo(
+    () => [...tasks.tasks, ...tasks.archived],
+    [tasks.tasks, tasks.archived],
+  );
+  const mentionWorkspaceId =
+    chosen === undefined ? undefined : itemWorkspaceId(chosen.holder, chosen.item.agentId);
+  const readMentionAgents = useMentionAgentsReader(mentionWorkspaceId, mentionTasks, named.models);
+  const mentions = answerMentions(tasks, chosen?.holder, mentionWorkspaceId, readMentionAgents);
   const onRetry = () => {
     read.onRetry();
     taskless.onRetry();
@@ -403,6 +418,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                 onBack={columns.onBack}
                 pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
                 next={next}
+                mentions={mentions}
                 doors={paneDoors(tasks, chosen.holder, { act, openLink, now, automationsOn })}
               />
             )}
@@ -411,6 +427,28 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
+}
+
+/**
+ * What the box of an item an `@` offers in the window's Inbox, which stands
+ * on no plan's page: the item's repository's files and folders, its
+ * workspace's agents, and the servers, written under the item's own
+ * workspace, as the page of an agent no plan holds offers them
+ * (`planlessMentions`); a plan's sections and pages are offered on its own
+ * Inbox, whose page holds them. None until the item's workspace and
+ * repository are known.
+ */
+function answerMentions(
+  tasks: TasksControl,
+  holder: InboxHolder | undefined,
+  workspaceId: string | undefined,
+  readAgents: ReturnType<typeof useMentionAgentsReader>,
+): PlanMentionsValue | undefined {
+  if (holder === undefined || workspaceId === undefined) return undefined;
+  const repository = holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.repository;
+  if (repository === null || repository === "") return undefined;
+  const workspace = tasks.workspaces.find((each) => each.id === workspaceId)?.slug ?? workspaceId;
+  return planlessMentions({ workspace, workspaceId, repository }, tasks.onShowMention, readAgents);
 }
 
 /**

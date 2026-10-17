@@ -2868,7 +2868,7 @@ button.skill-chip:hover,
    opens for them hangs where the ⋯ stands. */
 @container composer (max-width: 399px) {
   .agent-composer :is(.agent-changes-chip, .agent-servers-button, .agent-context-button),
-  .agent-composer .dictate-button {
+  .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
 
@@ -2911,12 +2911,21 @@ button.skill-chip:hover,
   }
 }
 
-/* The Inbox's answer box draws the same card (`inbox-pane.tsx`): its quiet
-   line is cut short before its presses are, and goes once the card is too
-   narrow for both, when the presses tighten and, still too wide, stack at
-   the right rather than run past the card. */
+/* The Inbox's answer box draws the same card and field
+   (`inbox-answer-box.tsx`): its quiet line is cut short before its
+   microphone and presses are, and goes once the card is too narrow for
+   both, when the microphone goes too and the presses tighten and, still
+   too wide, stack at the right rather than run past the card. */
 .inbox-answer-quiet {
   flex: 1 1 0;
+}
+
+.inbox-answer-actions {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
 }
 
 .inbox-answer-quiet [data-inbox-quiet] {
@@ -2941,18 +2950,17 @@ button.skill-chip:hover,
 }
 
 @container composer (max-width: 299px) {
-  .inbox-answer-foot > .inbox-answer-quiet {
+  .inbox-answer-foot > .inbox-answer-quiet,
+  .inbox-answer .dictate-button {
     display: none;
   }
 
-  .inbox-answer:not([data-presses]) > textarea {
+  .inbox-answer:not([data-presses]) .agent-composer-input {
     padding: var(--space-12) calc(30px + 2 * var(--space-6)) var(--space-12) var(--space-12);
   }
 
-  .inbox-answer:not([data-presses]) > textarea::placeholder {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .inbox-answer:not([data-presses]) .agent-composer-placeholder {
+    padding: var(--space-12) calc(30px + 2 * var(--space-6)) 0 var(--space-12);
   }
 
   .inbox-answer:not([data-presses]) > .inbox-answer-foot {

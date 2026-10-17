@@ -242,20 +242,25 @@ const REPLY_WORDS = {
 /**
  * How a settled item came to be settled: answered, by the item's
  * `answeredBy`, whom its line names before what they did in a few words
- * (`did`: "chose Postgres"), or taken back by its agent, said whole; and
- * what either wrote.
+ * (`did`: "chose Postgres"), with a form's values one per line and the note
+ * they wrote, which is Markdown as their box wrote it, its mentions links;
+ * or taken back by its agent, said whole, and why.
  */
 export type Settlement =
-  | { readonly by: typeof SETTLED_BY.DEVELOPER; readonly did: string; readonly words?: string }
+  | {
+      readonly by: typeof SETTLED_BY.DEVELOPER;
+      readonly did: string;
+      readonly values?: string;
+      readonly note?: string;
+    }
   | { readonly by: typeof SETTLED_BY.AGENT; readonly lead: string; readonly words?: string };
 
-/** What the developer wrote: a form's values one per line, then the note. */
-function answerWords(answer: InboxReply): string | undefined {
+/** A form's values as the developer filled them, one per line; nothing where they filled none. */
+function valueLines(answer: InboxReply): string | undefined {
   const values = (answer.values ?? []).map(
     ({ label, value }) => `${label}: ${fieldValueWords(value)}`,
   );
-  const lines = [...values, ...(answer.note === undefined ? [] : [answer.note])];
-  return lines.length === 0 ? undefined : lines.join("\n");
+  return values.length === 0 ? undefined : values.join("\n");
 }
 
 /** How an item was settled, or nothing while it waits: what its answerer did and wrote, or the agent taking it back and why. */
@@ -275,8 +280,13 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
     answer.reply === INBOX_REPLY.CHOSE
       ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
       : REPLY_WORDS[answer.reply];
-  const words = answerWords(answer);
-  return { by: SETTLED_BY.DEVELOPER, did, ...(words === undefined ? undefined : { words }) };
+  const values = valueLines(answer);
+  return {
+    by: SETTLED_BY.DEVELOPER,
+    did,
+    ...(values === undefined ? undefined : { values }),
+    ...(answer.note === undefined ? undefined : { note: answer.note }),
+  };
 }
 
 /**
