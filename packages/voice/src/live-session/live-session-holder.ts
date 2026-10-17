@@ -14,7 +14,7 @@ import {
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
-import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
+import { DEFAULT_VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
@@ -771,7 +771,7 @@ export class LiveSessionHolder {
 
   /** The avatar the developer chose, as it stands now. */
   #chosenAvatar(): Effect.Effect<VideoAvatar> {
-    return this.#options.videoAvatar ?? Effect.succeed(VIDEO_AVATAR.DEFAULT);
+    return this.#options.videoAvatar ?? Effect.succeed(DEFAULT_VIDEO_AVATAR);
   }
 
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */

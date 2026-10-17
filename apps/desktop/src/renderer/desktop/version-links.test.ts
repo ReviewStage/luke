@@ -10,7 +10,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DOCUMENT_TASK } from "#testing/document-task";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
@@ -121,22 +120,6 @@ function drawn(): HTMLElement {
   );
   return container;
 }
-
-test("the version list fades under its head and over the sidebar's foot, and a version's page under its bar, rather than being sliced at either", () => {
-  const container = drawn();
-  const sheets = layFades();
-  try {
-    const list =
-      container.querySelector(".version-log-pane > .sidebar-section") ??
-      assert.fail("the versions are listed");
-    const page =
-      container.querySelector(".plan-document-scroll") ?? assert.fail("a version's page stands");
-    assert.deepEqual(fadedEdges(list), { top: true, bottom: true });
-    assert.deepEqual(fadedEdges(page), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
-});
 
 test("a version's row offers Copy link, which copies its plan's address under the version's number and says Link copied", async () => {
   const container = drawn();

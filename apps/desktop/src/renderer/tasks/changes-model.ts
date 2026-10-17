@@ -7,6 +7,8 @@ import {
   PATCH_OMITTED,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
+import { parsePatch } from "diff";
+import { DIFF_SELECTION_SIDE, type DiffSelection } from "../diff-view/contract";
 import {
   FILE_MARK,
   type FileMark,
@@ -16,7 +18,7 @@ import {
 } from "../file-tree/contract";
 
 /**
- * changes-model.ts -- an agent's changes as its Files changed view draws them: each file's patch headed as a whole unified diff, or why it has none.
+ * changes-model.ts -- an agent's changes as its Files changed view draws them: each file's patch headed as a whole unified diff, or why it has none, and the lines a review thread is on as a patch of their own.
  *
  * A file's patch is the hunks of a unified diff from the first `@@` header
  * on, as GitHub sends it. It is drawn whole (`filePatch`), headed as git
@@ -31,15 +33,20 @@ import {
  * marked as an editor's source control marks it (`changeMarks`).
  *
  * A review thread on the pull request's overview previews the lines it is
- * on as a diff's rows (`threadPreview`): GitHub freezes the hunk a thread
- * was made on, from the hunk's start to the thread's line, so the preview
- * is the end of that hunk, from a few rows above the first line the thread
- * is on down to its last, counted where the thread was made rather than
- * where it stands now, since a later push moves the one and not the other.
+ * on through the same diff bundle (`threadPreview`): GitHub freezes the
+ * hunk a thread was made on, from the hunk's start to the thread's line, so
+ * the preview is the end of that hunk, from a few rows above the first line
+ * the thread is on down to its last, counted where the thread was made
+ * rather than where it stands now, since a later push moves the one and not
+ * the other. The hunk's lines are read by jsdiff (`parsePatch`), which
+ * counts them by the header, so a removed line whose own text starts with
+ * dashes is still one removed line; the rows kept are written again as a
+ * patch of their own, its header counting them, with the thread's own lines
+ * selected.
  */
 
 /** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
-export const DIFF_ROW = {
+const DIFF_ROW = {
   CONTEXT: "context",
   ADDED: "added",
   REMOVED: "removed",
@@ -49,25 +56,25 @@ export const DIFF_ROW = {
 type DiffRowKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW];
 
 /** One row of a hunk: what it is, its line number on each side it stands on, and its text without the mark before it. */
-export interface DiffRow {
+interface DiffRow {
   readonly kind: DiffRowKind;
   readonly oldLine: number | undefined;
   readonly newLine: number | undefined;
   readonly text: string;
 }
 
-/** The kind of row each mark starts in a hunk; a line of context starts with a space. */
+/** One hunk: its `@@` header as written, and its rows. */
+interface DiffHunk {
+  readonly header: string;
+  readonly rows: readonly DiffRow[];
+}
+
+/** The kind of row each mark starts in a patch; a line of context starts with a space. */
 const ROW_MARK = new Map<string, DiffRowKind>([
   ["+", DIFF_ROW.ADDED],
   ["-", DIFF_ROW.REMOVED],
   ["\\", DIFF_ROW.NOTE],
 ]);
-
-/** How many rows a review thread's preview shows above the first line it is on. */
-const THREAD_CONTEXT_ROWS = 3;
-
-/** A hunk's header: where it starts on each side, and what it counts. */
-const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/u;
 
 /** What the tab says where the changes cannot be drawn. */
 export const CHANGES_WORDS = {
@@ -112,6 +119,181 @@ export const STATUS_WORDS = {
 
 /** Where git's diff names a side the file does not stand on: before it was added, or after it was deleted. */
 const NO_SIDE = "/dev/null";
+
+/** How many rows a review thread's preview shows above the first line it is on. */
+const THREAD_CONTEXT_ROWS = 3;
+
+/** A hunk's header: where it starts on each side, what it counts, and the scope git writes after. */
+const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/u;
+
+/** One hunk's lines as rows, each numbered on the side it stands on, counting from where the hunk starts. */
+function rowsOf(lines: readonly string[], oldStart: number, newStart: number): DiffRow[] {
+  let oldLine = oldStart;
+  let newLine = newStart;
+  return lines.map((line) => {
+    const kind = ROW_MARK.get(line.charAt(0)) ?? DIFF_ROW.CONTEXT;
+    const text = line.slice(1);
+    if (kind === DIFF_ROW.NOTE) return { kind, oldLine: undefined, newLine: undefined, text };
+    if (kind === DIFF_ROW.ADDED) return { kind, oldLine: undefined, newLine: newLine++, text };
+    if (kind === DIFF_ROW.REMOVED) return { kind, oldLine: oldLine++, newLine: undefined, text };
+    return { kind, oldLine: oldLine++, newLine: newLine++, text };
+  });
+}
+
+/**
+ * A patch's hunks, or none where it does not read as a unified diff. Note
+ * that each hunk's header is taken from the patch as written, because
+ * jsdiff keeps only its numbers and git writes the enclosing scope after
+ * them; a hunk's own lines start with a mark or a space, so the lines that
+ * start with `@@` are its headers, in order.
+ */
+function patchHunks(patch: string): readonly DiffHunk[] | undefined {
+  let parsed: ReturnType<typeof parsePatch>;
+  try {
+    parsed = parsePatch(patch);
+  } catch {
+    return undefined;
+  }
+  const headers = patch.split("\n").filter((line) => line.startsWith("@@"));
+  return (parsed[0]?.hunks ?? []).map((hunk, index) => ({
+    header: headers[index] ?? "",
+    rows: rowsOf(hunk.lines, hunk.oldStart, hunk.newStart),
+  }));
+}
+
+/**
+ * A hunk GitHub froze for a review thread, its header counting the lines it
+ * holds; none where it does not start with a header. Note that the header
+ * is counted again, because GitHub keeps the whole hunk's counts while
+ * cutting its lines at the thread's line, and jsdiff refuses a hunk whose
+ * lines fall short of its header.
+ */
+function frozenHunk(diffHunk: string): string | undefined {
+  const [header = "", ...written] = diffHunk.split("\n");
+  const match = HUNK_HEADER.exec(header);
+  if (match === null) return undefined;
+  const lines = written.at(-1) === "" ? written.slice(0, -1) : written;
+  const old = lines.filter((line) => !line.startsWith("+") && !line.startsWith("\\")).length;
+  const now = lines.filter((line) => !line.startsWith("-") && !line.startsWith("\\")).length;
+  const [, oldStart = "", newStart = "", scope = ""] = match;
+  return [`@@ -${oldStart},${old} +${newStart},${now} @@${scope}`, ...lines].join("\n");
+}
+
+/** A row's number on the side given, none where it does not stand on that side. */
+function lineOn(row: DiffRow, side: DiffSide): number | undefined {
+  return side === DIFF_SIDE.LEFT ? row.oldLine : row.newLine;
+}
+
+/** The rows a review thread previews, and those of them its own range holds. */
+interface PreviewRows {
+  readonly kept: readonly DiffRow[];
+  readonly own: readonly DiffRow[];
+}
+
+/** The rows a review thread previews, the end of the hunk from a few rows above its range to its line, and those of its range. */
+function previewRows(
+  rows: readonly DiffRow[],
+  thread: Pick<ReviewThread, "originalLine" | "originalStartLine" | "side" | "startSide">,
+): PreviewRows {
+  const { originalLine: line, originalStartLine: startLine, side } = thread;
+  const found = rows.findLastIndex((row) => line !== null && lineOn(row, side) === line);
+  const end = found === -1 ? rows.length - 1 : found;
+  const startSide = thread.startSide ?? side;
+  const first = rows.findIndex(
+    (row, at) => at <= end && startLine !== null && lineOn(row, startSide) === startLine,
+  );
+  const start = first === -1 ? end : first;
+  return {
+    kept: rows.slice(Math.max(0, start - THREAD_CONTEXT_ROWS), end + 1),
+    own: rows.slice(start, end + 1),
+  };
+}
+
+/** Where a row stands in a unified diff's selection: a removed line on the old side, any other on the new. */
+function selectionPoint(row: DiffRow): { line: number; side: DiffSelection["side"] } | undefined {
+  if (row.kind === DIFF_ROW.REMOVED) {
+    return row.oldLine === undefined
+      ? undefined
+      : { line: row.oldLine, side: DIFF_SELECTION_SIDE.DELETIONS };
+  }
+  return row.newLine === undefined
+    ? undefined
+    : { line: row.newLine, side: DIFF_SELECTION_SIDE.ADDITIONS };
+}
+
+/** The mark a row is written with in a patch. */
+const ROW_WRITTEN = {
+  [DIFF_ROW.CONTEXT]: " ",
+  [DIFF_ROW.ADDED]: "+",
+  [DIFF_ROW.REMOVED]: "-",
+  [DIFF_ROW.NOTE]: "\\",
+} as const satisfies Record<DiffRowKind, string>;
+
+/** One side's start and count in a hunk's header, for its line numbers among the rows, at `before` where it holds none. */
+function sideRange(numbers: readonly (number | undefined)[], before: number): string {
+  const standing = numbers.filter((line) => line !== undefined);
+  return `${standing[0] ?? before},${standing.length}`;
+}
+
+/** A review thread's preview: the lines it is on as a patch of their own, and the thread's own lines selected in it. */
+export interface ThreadPreview {
+  readonly patch: string;
+  readonly selected: DiffSelection | undefined;
+}
+
+/**
+ * What a review thread previews: the end of the hunk GitHub froze for it,
+ * from a few rows above the first line of its range to its line, each found
+ * on the side it counts on, the hunk's last row where its line is not
+ * found, since GitHub ends the hunk there; written as a patch of the
+ * thread's file, its header counting the rows kept, with the thread's own
+ * lines selected. None where the hunk is empty or does not read as a diff.
+ */
+export function threadPreview(
+  thread: Pick<
+    ReviewThread,
+    "path" | "diffHunk" | "originalLine" | "originalStartLine" | "side" | "startSide"
+  >,
+): ThreadPreview | undefined {
+  const hunk = frozenHunk(thread.diffHunk);
+  if (hunk === undefined) return undefined;
+  const parsed = patchHunks(hunk)?.at(-1);
+  const rows = parsed?.rows ?? [];
+  const { kept, own } = previewRows(rows, thread);
+  const first = kept[0];
+  if (parsed === undefined || first === undefined) return undefined;
+  const before = rows.slice(0, rows.indexOf(first));
+  // A side the kept rows hold no line of is written at the last line before them, as git writes an empty side.
+  const oldBefore = before.findLast((row) => row.oldLine !== undefined)?.oldLine ?? 0;
+  const newBefore = before.findLast((row) => row.newLine !== undefined)?.newLine ?? 0;
+  const scope = HUNK_HEADER.exec(parsed.header)?.[3] ?? "";
+  const oldRange = sideRange(
+    kept.map((row) => row.oldLine),
+    oldBefore,
+  );
+  const newRange = sideRange(
+    kept.map((row) => row.newLine),
+    newBefore,
+  );
+  const header = `@@ -${oldRange} +${newRange} @@${scope}`;
+  const patch = [
+    `diff --git a/${thread.path} b/${thread.path}`,
+    `--- a/${thread.path}`,
+    `+++ b/${thread.path}`,
+    header,
+    ...kept.map((row) => `${ROW_WRITTEN[row.kind]}${row.text}`),
+    "",
+  ].join("\n");
+  const ownFirst = own[0];
+  const ownLast = own.at(-1);
+  const start = ownFirst === undefined ? undefined : selectionPoint(ownFirst);
+  const end = ownLast === undefined ? undefined : selectionPoint(ownLast);
+  const selected =
+    start === undefined || end === undefined
+      ? undefined
+      : { start: start.line, side: start.side, end: end.line, endSide: end.side };
+  return { patch, selected };
+}
 
 /**
  * What a file's pane says in its patch's place, or nothing where it draws
@@ -178,63 +360,4 @@ export function filePatch(file: CodingAgentChangedFile): string | undefined {
   const after = file.status === CHANGED_FILE_STATUS.DELETED ? NO_SIDE : `b/${file.path}`;
   const body = file.patch.endsWith("\n") ? file.patch : `${file.patch}\n`;
   return [`diff --git a/${from} b/${file.path}`, `--- ${before}`, `+++ ${after}`, body].join("\n");
-}
-
-/** One hunk's lines as rows, each numbered on the side it stands on, counting from where the hunk starts. */
-function rowsOf(lines: readonly string[], oldStart: number, newStart: number): DiffRow[] {
-  let oldLine = oldStart;
-  let newLine = newStart;
-  return lines.map((line) => {
-    const kind = ROW_MARK.get(line.charAt(0)) ?? DIFF_ROW.CONTEXT;
-    const text = line.slice(1);
-    if (kind === DIFF_ROW.NOTE) return { kind, oldLine: undefined, newLine: undefined, text };
-    if (kind === DIFF_ROW.ADDED) return { kind, oldLine: undefined, newLine: newLine++, text };
-    if (kind === DIFF_ROW.REMOVED) return { kind, oldLine: oldLine++, newLine: undefined, text };
-    return { kind, oldLine: oldLine++, newLine: newLine++, text };
-  });
-}
-
-/**
- * The rows of the hunk GitHub froze for a review thread, numbered from its
- * header; none where it does not start with one. Note that the header's
- * counts are not read, because GitHub keeps the whole hunk's while cutting
- * its lines at the thread's line.
- */
-function frozenRows(diffHunk: string): readonly DiffRow[] | undefined {
-  const [header = "", ...written] = diffHunk.split("\n");
-  const match = HUNK_HEADER.exec(header);
-  if (match === null) return undefined;
-  const lines = written.at(-1) === "" ? written.slice(0, -1) : written;
-  return rowsOf(lines, Number(match[1]), Number(match[2]));
-}
-
-/** A row's number on the side given, none where it does not stand on that side. */
-function lineOn(row: DiffRow, side: DiffSide): number | undefined {
-  return side === DIFF_SIDE.LEFT ? row.oldLine : row.newLine;
-}
-
-/**
- * The rows a review thread previews: the end of the hunk GitHub froze for
- * it, from a few rows above the first line of its range to its line, each
- * found on the side it counts on; the hunk's last row where its line is
- * not found, since GitHub ends the hunk there. None where the hunk is
- * empty or does not read as a diff.
- */
-export function threadPreview(
-  thread: Pick<
-    ReviewThread,
-    "diffHunk" | "originalLine" | "originalStartLine" | "side" | "startSide"
-  >,
-): readonly DiffRow[] | undefined {
-  const rows = frozenRows(thread.diffHunk) ?? [];
-  if (rows.length === 0) return undefined;
-  const { originalLine: line, originalStartLine: startLine, side } = thread;
-  const found = rows.findLastIndex((row) => line !== null && lineOn(row, side) === line);
-  const end = found === -1 ? rows.length - 1 : found;
-  const startSide = thread.startSide ?? side;
-  const first = rows.findIndex(
-    (row, at) => at <= end && startLine !== null && lineOn(row, startSide) === startLine,
-  );
-  const start = first === -1 ? end : first;
-  return rows.slice(Math.max(0, start - THREAD_CONTEXT_ROWS), end + 1);
 }

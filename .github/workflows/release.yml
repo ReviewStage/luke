@@ -108,12 +108,6 @@ jobs:
             ' "$VERSION"
           } >> "$GITHUB_ENV"
 
-      # The Chromium @luke/ui's browser tests run in, at the build its pinned
-      # `playwright` names: bootstrap.sh leaves it to each CI job that runs
-      # them, and this job's check.sh does.
-      - name: Install the browser tests' Chromium
-        run: pnpm --filter @luke/ui exec playwright install chromium
-
       - name: Run repository checks
         run: ./scripts/check.sh
 

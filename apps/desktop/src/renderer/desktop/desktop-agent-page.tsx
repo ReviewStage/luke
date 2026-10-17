@@ -275,7 +275,7 @@ export function DesktopAgentPage({
   const openChanges = (changed: string) =>
     showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
   const openPullRequest = (published: string) =>
-    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.OVERVIEW);
+    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,

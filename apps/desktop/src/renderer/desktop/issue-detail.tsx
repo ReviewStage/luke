@@ -1,10 +1,12 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ArchiveIcon, ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
@@ -15,7 +17,7 @@ import { PriorityMenu, StatusMenu } from "./issue-pickers";
 import type { IssueChange } from "./use-issues";
 
 /**
- * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, its status and priority changed from their chips, its description written in place, and its archive.
+ * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, its status and priority changed from their chips, its description written in place, its link copied, and its archive.
  *
  * Every change is sent at once and the page draws the issue the service
  * answers, so what stands is what was kept; a change the service refused
@@ -51,17 +53,20 @@ export function IssueCrumbs({
   );
 }
 
-/** The toolbar: the path back to the list, and the issue's ⋯ menu. */
+/** The toolbar: the path back to the list, and the issue's ⋯ menu: Copy link, and Archive. */
 function DetailToolbar({
+  issueId,
   identifier,
   onBack,
   onArchive,
 }: {
+  issueId: string;
   identifier: string;
   onBack: () => void;
   onArchive: () => void;
 }): React.JSX.Element {
   const menu = useActionMenu(true);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId });
   const archive: MenuAction = {
     label: "Archive",
     icon: <ArchiveIcon />,
@@ -89,7 +94,7 @@ function DetailToolbar({
           <ActionMenu
             label={ACTIONS_LABEL}
             menu={menu.drawn}
-            groups={[[archive]]}
+            groups={copyLink === undefined ? [[archive]] : [[copyLink], [archive]]}
             onClose={menu.close}
           />
         )}
@@ -193,7 +198,12 @@ export function IssueDetail({
   const identifier = issueIdentifier(workspaceName, issue.number);
   return (
     <section className="automations-view" aria-label={identifier}>
-      <DetailToolbar identifier={identifier} onBack={onBack} onArchive={archiving.ask} />
+      <DetailToolbar
+        issueId={issue.id}
+        identifier={identifier}
+        onBack={onBack}
+        onArchive={archiving.ask}
+      />
       {/* The issue is drawn as a task's document is (`version-view.tsx`): its title, then its body, at the document's measure. */}
       <div className="desktop-document">
         <div className="plan-document-scroll scroll-fade">
