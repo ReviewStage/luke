@@ -5513,16 +5513,14 @@ button.picture-frame {
 }
 
 /* A block's own comment button, under the pointer, just outside the column's end, where a section's ⋯ hangs. */
+/* The button stands in the gutter past the column's end, its start level
+   with a folded line's count, which stands in its place on a line holding
+   threads. */
 .comment-block-button {
   position: absolute;
-  right: calc((var(--control-height) + var(--space-6)) * -1);
+  left: calc(100% + var(--space-2));
   opacity: 0;
   transition: opacity var(--duration-hover) ease;
-}
-
-/* Folded, the line's count stands where the button would, so the button steps one further out. */
-.comment-block-button[data-folded="true"] {
-  right: calc((var(--control-height) + var(--space-6)) * -2);
 }
 
 .plan-body:hover .comment-block-button,
@@ -5541,12 +5539,15 @@ button.picture-frame {
 /* A line's comments at its end where no margin fits: a plain toolbar
    button (`.toolbar-button`), the glyph and how many, filled on hover and
    while its threads stand under it, as the toolbar's buttons are. */
+/* Note that the gutter is the page's 40px inset, so the count stands a hair
+   past the column and keeps its padding tight, its glyph and two digits
+   inside the inset the scroller clips at. */
 .comment-count {
   position: absolute;
-  right: calc((var(--control-height) + var(--space-6)) * -1);
+  left: calc(100% + var(--space-2));
   height: 24px; /* off-scale: a size under a control's, so it sits on the line it counts */
   gap: 3px; /* off-scale: a 12px glyph's gap to its digits */
-  padding: 0 var(--space-6);
+  padding: 0 var(--space-4);
   color: var(--text-secondary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
@@ -5596,6 +5597,7 @@ button.picture-frame {
 }
 
 .comment-card[data-open="false"] {
+  border-color: var(--hairline);
   cursor: pointer;
 }
 
@@ -5685,6 +5687,19 @@ button.picture-frame {
   margin-top: var(--space-6);
 }
 
+/* The thread's quote under its first comment's writer, level with the words. */
+.comment-entry > :is(.comment-quote, .comment-gone) {
+  margin-left: calc(16px + 5px); /* off-scale: under the name, as the words stand */
+}
+
+.comment-entry > .comment-quote-link {
+  width: calc(100% - 16px - 5px); /* off-scale: as the indent it stands at */
+}
+
+.comment-entry > .comment-quote {
+  margin-top: var(--space-4);
+}
+
 /* A thread at rest shows its first comment's first lines, chips and all. */
 .comment-clamp {
   display: -webkit-box;
@@ -5728,6 +5743,8 @@ button.picture-frame {
 
 /* A comment's tools stand at its corner under the pointer or the keyboard. */
 .comment-tools {
+  position: relative;
+  z-index: 1;
   display: flex;
   margin-right: calc(var(--space-6) * -1);
   opacity: 0;
@@ -5742,6 +5759,12 @@ button.picture-frame {
 .comment-tools:focus-within,
 .comment-tools:has([aria-expanded="true"]) {
   opacity: 1;
+}
+
+/* Note that the time gives the tools its place under the pointer, presses
+   included, so a press over where it stood lands on the tools. */
+.comment-entry:hover .comment-head-end > .comment-time {
+  pointer-events: none;
 }
 
 .comment-entry:hover .comment-head-end > .comment-time,
@@ -5765,7 +5788,25 @@ button.picture-frame {
 }
 
 .comment-event-time {
-  margin-left: var(--space-4);
+  margin-left: auto;
+  padding-left: var(--space-6);
+}
+
+/* What happened, by its glyph at the comments' writers' marks' width, so
+   the line reads under their names as one of the thread's own. */
+.comment-event-glyph {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  margin-right: 5px; /* off-scale: as an actor's mark's gap to its name */
+  color: var(--text-tertiary);
+}
+
+.comment-event-glyph svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* Who sent a thread to whom: the line wraps between its names rather than
@@ -5905,15 +5946,13 @@ button.picture-frame {
   padding-left: 0;
 }
 
-/* A reply waits as one quiet line on the raised ground under the thread's
-   comments; its tools come up as it is used, and stay while it holds words. */
+/* A reply is a composer as every box in the window is (`PromptInput`): the
+   card's ground, its hairline, and its larger round, ringed while it holds
+   the caret. */
 .comment-field[data-variant="reply"] {
-  border-color: transparent;
-  background: var(--raised);
-}
-
-.comment-field[data-variant="reply"]:not(:focus-within, [data-held="true"]) .comment-field-foot {
-  display: none;
+  border-color: var(--hairline);
+  border-radius: 0.75rem; /* off-scale: a composer's round, as Tailwind's rounded-xl draws it */
+  background: var(--desktop-sidebar);
 }
 
 /* Send, as the composer's: a disc in the primary ink. */
@@ -5967,7 +6006,7 @@ button.picture-frame {
   flex: none;
   align-items: center;
   justify-content: space-between;
-  margin: var(--space-6) var(--space-8) var(--space-2) var(--space-16);
+  margin: var(--space-6) var(--column-inset) var(--space-2) var(--space-16);
 }
 
 .comments-head-title {
@@ -5983,6 +6022,12 @@ button.picture-frame {
 .comments-head-count {
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
+}
+
+/* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
+.comments-list:has(.luke-empty-state) {
+  display: flex;
+  flex-direction: column;
 }
 
 .comments-list {
