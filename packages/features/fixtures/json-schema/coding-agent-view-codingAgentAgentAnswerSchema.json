@@ -193,6 +193,9 @@
                 "totalSteps": {
                   "type": "number",
                   "minimum": 0
+                },
+                "branch": {
+                  "type": "string"
                 }
               },
               "required": [
