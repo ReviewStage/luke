@@ -1592,3 +1592,119 @@ test("a press outside the review panel closes it, its words kept, and one on a s
     vi.restoreAllMocks();
   }
 });
+
+/** A review carrying the threads given, as the conversation's read answers one. */
+function reviewWith(threads: readonly ReviewThread[]): CodingAgentOverviewConversation {
+  return {
+    ...CONVERSATION,
+    conversation: [
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.COMMENTED,
+        html: null,
+        body: "",
+        at: 2_500,
+        url: `${PAGE}#pullrequestreview-9`,
+        threads,
+      },
+    ],
+  };
+}
+
+/** The press of the words given under the thread. */
+function threadPress(thread: HTMLElement, label: string): HTMLButtonElement {
+  return (
+    [...thread.querySelectorAll<HTMLButtonElement>(".pull-request-thread-actions button")].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the thread offers ${label}`)
+  );
+}
+
+/** Writes a reply on the thread as the member would, the field opened first. */
+function writeReply(thread: HTMLElement, words: string): void {
+  act(() => threadPress(thread, "Reply…").click());
+  const field =
+    thread.querySelector<HTMLTextAreaElement>('textarea[aria-label="Reply"]') ??
+    assert.fail("Reply… opens the reply's field");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+test("a thread is replied on, resolved, and opened again from under its comments, each asked of the service for the agent by the thread's id, the conversation read again after each", async () => {
+  let reads = 0;
+  let resolved = false;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        reads += 1;
+        return Promise.resolve({
+          pullRequest: reviewWith([thread({ id: "PRRT_flag", resolved })]),
+        });
+      },
+    }),
+  );
+  const card = (): HTMLElement =>
+    tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+
+  writeReply(card(), "Renamed in the next push.");
+  act(() => threadPress(card(), "Reply").click());
+  await settle();
+  assert.equal(card().querySelector("textarea"), null, "the field closes once GitHub took it");
+
+  resolved = true;
+  act(() => threadPress(card(), "Resolve conversation").click());
+  await settle();
+  resolved = false;
+  act(() => threadPress(card(), "Unresolve conversation").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.REPLY_TO_THREAD,
+        threadId: "PRRT_flag",
+        body: "Renamed in the next push.",
+      },
+    ],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.UNRESOLVE_THREAD, threadId: "PRRT_flag" }],
+  ]);
+  assert.equal(reads, 4, "the conversation is read again after each");
+  assert.ok(threadPress(card(), "Resolve conversation"), "the thread stands open again");
+});
+
+test("a reply GitHub refuses says so under its thread in GitHub's own words, its words kept, and a thread read with no id offers nothing to press", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Pull request review thread is locked",
+  };
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: reviewWith([
+            thread({ id: "PRRT_flag" }),
+            thread({ path: "src/other.ts", comments: [] }),
+          ]),
+        }),
+    }),
+  );
+  const [withId, withoutId] = [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")];
+  assert.ok(withId !== undefined && withoutId !== undefined);
+
+  writeReply(withId, "Done.");
+  act(() => threadPress(withId, "Reply").click());
+  await settle();
+
+  assert.equal(
+    withId.querySelector(".pull-request-thread-note .failure-note-words")?.textContent,
+    "GitHub said: Pull request review thread is locked",
+  );
+  assert.equal(withId.querySelector("textarea")?.value, "Done.");
+  assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
+});

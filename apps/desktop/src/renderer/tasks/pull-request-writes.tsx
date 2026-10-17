@@ -50,6 +50,9 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: "Ready for review",
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: "Convert to draft",
   [PULL_REQUEST_ACTION.SUBMIT_REVIEW]: "Submit review",
+  [PULL_REQUEST_ACTION.REPLY_TO_THREAD]: "Reply",
+  [PULL_REQUEST_ACTION.RESOLVE_THREAD]: "Resolve conversation",
+  [PULL_REQUEST_ACTION.UNRESOLVE_THREAD]: "Unresolve conversation",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
