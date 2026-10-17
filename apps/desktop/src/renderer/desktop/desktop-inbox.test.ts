@@ -437,7 +437,16 @@ test("the list holds every plan's items under the sidebar's group header for eac
   ]);
 });
 
-test("a settled choice keeps every option its agent offered with the developer's pick marked, then their note as their own bubble, saying what they did and that it reached the agent", async () => {
+/** The line heading the developer's answer in the shown item's thread, as a reader hears it: who answered, when, and where it went. */
+function answerHead(page: HTMLElement): string | null {
+  return wordsOf(
+    page.querySelector(
+      '.inbox-view-items:not([hidden]) [data-inbox-comment="answered"] .inbox-comment-head',
+    ),
+  );
+}
+
+test("a settled choice folds what its agent offered to one line saying who picked which, which still holds every option with the pick marked, then the developer's answer as their comment: their pick as a chip over their note, under a line saying when and that it reached the agent", async () => {
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
@@ -445,8 +454,16 @@ test("a settled choice keeps every option its agent offered with the developer's
 
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
+  const offered =
+    pane.querySelector<HTMLDetailsElement>("details[data-inbox-offered]") ??
+    assert.fail("what was offered is folded");
+  assert.equal(offered.open, false, "the fold stands closed");
+  assert.equal(
+    offered.querySelector("summary")?.textContent,
+    "2 options · you picked Retry 3 times over an hour",
+  );
   assert.deepEqual(
-    [...pane.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
+    [...offered.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
       option.dataset.picked,
       option.querySelector(".font-medium")?.textContent,
       wordsOf(option.querySelector(".inbox-picked")),
@@ -457,11 +474,17 @@ test("a settled choice keeps every option its agent offered with the developer's
     ],
   );
   assert.equal(pane.querySelector("textarea"), null, "a settled item takes no answer");
-  const reply = pane.querySelector<HTMLElement>(".is-user");
-  assert.ok(reply, "the developer's reply is their own bubble");
+  const reply = pane.querySelector<HTMLElement>('[data-inbox-comment="answered"]');
+  assert.ok(reply, "the developer's answer is their own comment");
+  assert.equal(reply.querySelector("[data-inbox-pick]")?.textContent, "Retry 3 times over an hour");
   assert.equal(reply.querySelector("p")?.textContent, "And page on-call if all three fail.");
-  assert.match(wordsOf(reply) ?? "", /You chose Retry 3 times over an hour · .+ · Sent to Alerts/u);
-  assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their disc");
+  assert.match(answerHead(page) ?? "", /^You.+ · Sent to Alerts$/u);
+  assert.equal(
+    reply.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    "person",
+    "the answerer's face leads their comment",
+  );
+  assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their name");
 });
 
 /** An item's options as a reader meets them: each label, then its Recommended badge's words, and whether the badge has gone quiet, where it wears one. */
@@ -477,6 +500,76 @@ function optionHeads(page: HTMLElement, option: string): (string | null | undefi
     ];
   });
 }
+
+/** The shown item's subject as a reader meets it: its title, and where its line says it stands, with whether it wears the attention mark. */
+function subjectOf(page: HTMLElement): (string | boolean | null | undefined)[] {
+  const subject =
+    page.querySelector(".inbox-view-items:not([hidden]) .inbox-subject") ??
+    assert.fail("the thread leads with its subject");
+  const standing = subject.querySelector(".inbox-standing");
+  return [
+    subject.querySelector("h2[data-inbox-title]")?.textContent,
+    wordsOf(standing),
+    standing?.querySelector(".attention-mark") !== null,
+  ];
+}
+
+test("a thread leads with its item's title as its subject, and a line saying where it stands: a waiting item needs you by the attention mark, an answered one is answered, and one its agent took back is withdrawn, its agent's comment saying why", async () => {
+  const WITHDRAWN: InboxItem = {
+    ...EXPIRY,
+    status: INBOX_STATUS.CLOSED,
+    closedReason: "The plan now says 7 days.",
+  };
+  inboxes.set(INVITES.id, [WITHDRAWN]);
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(subjectOf(page), ["Alert at 80%?", "Needs you", true]);
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  assert.deepEqual(subjectOf(page), ["How is a failed email retried?", "Answered", false]);
+  const fold = () =>
+    page.querySelector<HTMLDetailsElement>(
+      ".inbox-view-items:not([hidden]) details[data-inbox-offered]",
+    ) ?? assert.fail("what was offered is folded");
+  act(() => {
+    fold().open = true;
+  });
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.deepEqual(subjectOf(page), ["Expire after 7 days?", "Withdrawn", false]);
+  assert.equal(fold().open, false, "the fold opened on one item stands closed on the next");
+  assert.equal(fold().querySelector("summary")?.textContent, "2 options offered");
+  const withdrawn =
+    page.querySelector('[data-inbox-comment="withdrawn"]') ??
+    assert.fail("the agent's taking it back is a comment");
+  assert.match(
+    wordsOf(withdrawn.querySelector(".inbox-comment-head")) ?? "",
+    /^Alertswithdrew this /u,
+  );
+  assert.equal(withdrawn.querySelector("p")?.textContent, "The plan now says 7 days.");
+});
+
+test("a teammate's open item does not need you: its subject's line says it waits on them, by their face and name, with no attention mark, and its box still takes your answer", async () => {
+  const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: CHARLES }, RETRY]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.deepEqual(subjectOf(page), ["Alert at 80%?", "Waiting on Charles Pan", false]);
+  const standing =
+    page.querySelector(".inbox-view-items:not([hidden]) .inbox-standing") ??
+    assert.fail("the subject says where the item stands");
+  assert.equal(
+    standing.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
+    "person",
+    "the teammate is named by their face",
+  );
+  assert.ok(
+    page.querySelector(".inbox-view-items:not([hidden]) textarea"),
+    "any member may answer",
+  );
+});
 
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
   const { page } = mount();
@@ -533,8 +626,15 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
   assert.equal(wordsOf(picked), "Charles Pan’s pick");
   assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
-  const reply = pane.querySelector<HTMLElement>(".is-user") ?? assert.fail("their reply");
-  assert.match(wordsOf(reply) ?? "", /Charles Pan chose Retry 3 times over an hour · /u);
+  assert.equal(
+    pane.querySelector("details[data-inbox-offered] summary")?.textContent,
+    "2 options · Charles Pan picked Retry 3 times over an hour",
+  );
+  const reply =
+    pane.querySelector<HTMLElement>('[data-inbox-comment="answered"]') ??
+    assert.fail("their answer");
+  assert.match(answerHead(page) ?? "", /^Charles Pan.+ · /u);
+  assert.equal(reply.querySelector("[data-inbox-pick]")?.textContent, "Retry 3 times over an hour");
 
   const answerer = reply.querySelector(".actor-ref") ?? assert.fail("the answerer is named");
   act(() => {
@@ -693,23 +793,30 @@ function wearsAgentTile(element: Element): boolean {
   return element.querySelector('.actor-mark[data-kind="agent"]') !== null;
 }
 
-test("the thread names its agent as one button wherever it does, its byline and the line saying an answer was sent to it: each hangs the agent's tab's card, which offers no Open agent, and opens its tab, leaving the Inbox", async () => {
+test("the thread names its agent as one button wherever it does, its subject's line, its question's comment, and the line saying an answer was sent to it: each hangs the agent's tab's card, which offers no Open agent, and opens its tab, leaving the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
-  const [byline] = threadRefs(page);
-  assert.ok(byline, "the byline names the agent");
+  const [byline, comment] = threadRefs(page);
+  assert.ok(byline, "the subject's line names the agent");
   assert.equal(byline.textContent, "Alerts");
-  assert.ok(wearsAgentTile(byline), "the byline wears the agent's tile");
+  assert.ok(wearsAgentTile(byline), "the subject's line wears the agent's tile");
+  assert.equal(comment?.textContent, "Alerts", "the question's comment names the agent");
+  const asking =
+    page.querySelector('[data-inbox-comment="asked"]') ?? assert.fail("the question is a comment");
+  assert.ok(
+    asking.querySelector('.inbox-comment-face .actor-mark[data-kind="agent"]'),
+    "the agent's tile leads its comment",
+  );
   reach(byline);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
-  assert.deepEqual(openings("[data-tab-card]"), [], "the byline is the way to the tab");
+  assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
   act(() => byline.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
   const sent = page.querySelector<HTMLButtonElement>(
-    '[data-inbox-answer] button.actor-ref[data-kind="agent"]',
+    '[data-inbox-comment="answered"] button.actor-ref[data-kind="agent"]',
   );
   assert.ok(sent, "the line saying the answer was sent names the agent");
   assert.equal(sent.textContent, "Alerts");
@@ -1405,8 +1512,7 @@ test("an item that needs no reply, once settled, says a note was sent to the age
   await settle();
   const where = (title: string) => {
     act(() => rowNamed(page, title).click());
-    const lines = page.querySelectorAll(".inbox-view-items [data-inbox-answer] p");
-    return wordsOf(lines[lines.length - 1]);
+    return answerHead(page);
   };
   assert.match(where("Turn on the flag") ?? "", /· Sent to /u);
   assert.match(where("Add the secret") ?? "", /Saved for the agent to read$/u);
@@ -1421,8 +1527,7 @@ test("an answered item that asked to be heard back, carried without its answer, 
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
-  const lines = page.querySelectorAll(".inbox-view-items [data-inbox-answer] p");
-  assert.match(wordsOf(lines[lines.length - 1]) ?? "", /· Sent to /u);
+  assert.match(answerHead(page) ?? "", /· Sent to /u);
 });
 
 test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare press", async () => {
