@@ -29,21 +29,23 @@ import { CopyIcon, ProviderMark } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   CheckIcon,
+  CircleCheckIcon,
   CircleDotIcon,
   CircleSlashIcon,
   EllipsisIcon,
+  FileDiffIcon,
   GitPullRequestIcon,
+  MessagesSquareIcon,
   RotateCwIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback } from "react";
+import { type ReactNode, useCallback, useId } from "react";
 import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { EmptyState } from "../empty-state";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
-import { Segmented } from "../segmented";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -66,44 +68,47 @@ import { useOpenLink } from "./use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
 /**
- * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, read top to bottom as a page: where it stands, whether it would merge, its checks one by one, its description, and its conversation.
+ * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, and its files.
  *
  * The overview is read from GitHub afresh by the service on each ask, on
  * the App's token for the agent's repository rather than anyone's own, so
- * nothing here reads on a clock: the tab asks as it first comes on screen,
- * when the developer presses Retry or Refresh, and the moment the agent
- * ends, since that is when what it published settles (`useAgentRead`, as
- * the Changes tab reads). It is read in three reads asked at once, each
+ * nothing here reads on a clock: each read is asked as what draws it first
+ * comes on screen, when the developer presses Retry or Refresh, and the
+ * moment the agent ends, since that is when what it published settles
+ * (`useAgentRead`, as the Changes tab reads). It is three reads, each
  * landing on its own: the pull request itself (its description, branches,
- * mergeability, and people), its checks, and its conversation. What Luke
- * already holds of the pull request, what the agent published, draws the
- * bar and the title at once; each section stands as a skeleton until its
- * read lands, and says so with its own Retry where its read failed. Refresh
- * reads all three again, each section drawn standing until its answer
- * lands; an agent with no pull request yet says that.
+ * mergeability, and people), asked as the tab is shown, since the header
+ * always draws it; its conversation, asked as the Conversation tab is first
+ * shown; and its checks, as the Checks tab is. What Luke already holds of
+ * the pull request, what the agent published, draws the bar, the title, and
+ * the Files changed tab's lines at once; each part stands as a skeleton
+ * until its read lands, and says so with its own Retry where its read
+ * failed. Refresh reads again the header and every tab read so far, each
+ * part drawn standing until its answer lands; an agent with no pull request
+ * yet says that.
  *
- * Under a bar like a File tab's, which wears the pull request's mark and the
- * word for where it stands, the switch between its overview and its files
- * (`AgentChangesTab`), and on the overview its doors (GitHub and the ⋯), the
- * page reads as a pull request's page on GitHub does, drawn in the window's
- * own parts: its title, number, and branches; who
- * opened it and when, as the Changes tab names them
+ * The header stays put while the tab under it scrolls: a bar like a File
+ * tab's, wearing the pull request's mark and the word for where it stands,
+ * with its doors (GitHub and the ⋯); its title and number; its branches;
+ * who opened it and when, as the Changes tab names them
  * (`pull-request-people.tsx`), with its reviewers' faces wearing where each
- * stands; while it is open, whether it would merge as it stands, in
- * GitHub's own terms; every check on its head, those that failed first,
- * then those still running, each opening its page; and its description and
- * its comments and reviews in time order, as GitHub renders them
- * (`body_html`), drawn through the transcript's own markdown drawing
- * (`GitHubWords`), with an image GitHub serves read through the service on
- * the App's token (`GitHubPicture`) and any other drawn as its link, as
- * ReviewStage/stage draws them. A review carries the threads on lines it
- * started, each headed by its file and lines over the end of the hunk it was
- * made on, drawn as Files changed draws a diff with its own lines lit
- * (`file-diff.tsx`), then its comments; one
- * resolved or outdated by a later push is folded closed under its head,
- * which says which, until opened. Every name and word here is the
- * repository's, so the tab is left out of the screen recording
- * (`ph-no-capture`).
+ * stands; and, while it is open, whether it would merge as it stands, in
+ * GitHub's own terms. Under it, a row of tabs, each its glyph, its name,
+ * and a quiet count: Conversation, its description and its comments and
+ * reviews in time order, as GitHub renders them (`body_html`), drawn
+ * through the transcript's own markdown drawing (`GitHubWords`), with an
+ * image GitHub serves read through the service on the App's token
+ * (`GitHubPicture`) and any other drawn as its link, as ReviewStage/stage
+ * draws them; Checks, every check on its head, those that failed first,
+ * then those still running, each opening its page, counted in the colour
+ * of how they went; and Files changed (`AgentChangesTab`), its own bar and
+ * tree, counted by the lines it adds and removes. A review carries the
+ * threads on lines it started, each headed by its file and lines over the
+ * end of the hunk it was made on, drawn as Files changed draws a diff with
+ * its own lines lit (`file-diff.tsx`), then its comments; one resolved or
+ * outdated by a later push is folded closed under its head, which says
+ * which, until opened. Every name and word here is the repository's, so
+ * the tab is left out of the screen recording (`ph-no-capture`).
  */
 
 /** The tab's own words. */
@@ -344,60 +349,47 @@ function reviewersOf(
   return [...by.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
-/** The words the bar's switch says for each view. */
-const VIEW_OPTIONS = [
-  { value: PULL_REQUEST_VIEW.OVERVIEW, label: "Overview" },
-  { value: PULL_REQUEST_VIEW.FILES, label: "Files changed" },
-] as const;
-
 /**
- * The bar across the tab: the pill saying where the pull request stands,
- * in its colour, as last read of what the agent published, then the switch
- * between its overview and its files; on the overview, GitHub's page and the
- * ⋯ at its end, where the files' own bar stands under it otherwise.
+ * The bar across the top of the fixed header: the pill saying where the
+ * pull request stands, in its colour, as last read of what the agent
+ * published until the header's own read lands, and GitHub's page and the ⋯
+ * at its end.
  */
 function PullRequestBar({
   published,
-  view,
-  onView,
-  overview,
+  reading,
+  onRefresh,
 }: {
   published: BarPullRequest | undefined;
-  view: PullRequestView;
-  onView: (view: PullRequestView) => void;
-  /** The overview's doors, drawn while it is the view shown and the agent has a pull request. */
-  overview: { readonly reading: boolean; readonly onRefresh: () => void } | undefined;
+  /** Whether a read is out, which a refresh would only repeat. */
+  reading: boolean;
+  onRefresh: () => void;
 }): React.JSX.Element {
   const { tell } = useAct();
   return (
-    <header className="file-view-bar pull-request-bar">
+    <div className="file-view-bar pull-request-bar">
       {published === undefined ? null : (
-        <span className="pull-request-state" data-pull-request-state={published.state}>
-          <PullRequestMark pullRequest={published} />
-          {STATE_WORDS[published.state]}
-        </span>
+        <>
+          <span className="pull-request-state" data-pull-request-state={published.state}>
+            <PullRequestMark pullRequest={published} />
+            {STATE_WORDS[published.state]}
+          </span>
+          <div className="file-view-actions">
+            <Tooltip label="Open on GitHub">
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Open on GitHub"
+                onClick={() => tell(ACT_KIND.GITHUB_OPEN, { url: published.url })}
+              >
+                <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+              </button>
+            </Tooltip>
+            <PullRequestMenu url={published.url} reading={reading} onRefresh={onRefresh} />
+          </div>
+        </>
       )}
-      <Segmented legend="Pull request view" options={VIEW_OPTIONS} value={view} onChange={onView} />
-      {published === undefined || overview === undefined ? null : (
-        <div className="file-view-actions">
-          <Tooltip label="Open on GitHub">
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="Open on GitHub"
-              onClick={() => tell(ACT_KIND.GITHUB_OPEN, { url: published.url })}
-            >
-              <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-            </button>
-          </Tooltip>
-          <PullRequestMenu
-            url={published.url}
-            reading={overview.reading}
-            onRefresh={overview.onRefresh}
-          />
-        </div>
-      )}
-    </header>
+    </div>
   );
 }
 
@@ -873,92 +865,284 @@ function ConversationPart({
   );
 }
 
-/** The page under the bar: the title, as read or as held, then each part as its read stands: the head, the checks, the description, and the conversation. */
-function PullRequestPage({
-  agentId,
+/** The fixed header's title and number, as the pull request's read says or, until it lands, as Luke held them; a skeleton where neither has. */
+function HeaderTitle({
   title,
+}: {
+  title: Pick<CodingAgentPullRequest, "title" | "number"> | undefined;
+}): React.JSX.Element {
+  if (title === undefined) {
+    return (
+      <PartSkeleton
+        label={PULL_REQUEST_WORDS.READING}
+        widths={["60%"]}
+        className="pull-request-title"
+      />
+    );
+  }
+  return (
+    <h2 className="pull-request-title">
+      {title.title} <span className="pull-request-number">{pullRequestNumberLabel(title)}</span>
+    </h2>
+  );
+}
+
+/** What a tab of the row says beside its name: a quiet count, a count in the checks' colour, or the lines a pull request adds and removes. */
+const TAB_COUNT = {
+  COUNT: "count",
+  CHECKS: "checks",
+  LINES: "lines",
+} as const;
+
+type TabCount =
+  | { readonly kind: typeof TAB_COUNT.COUNT; readonly count: number }
+  | {
+      readonly kind: typeof TAB_COUNT.CHECKS;
+      /** How many, once the checks are read; none before. */
+      readonly count: number | undefined;
+      readonly summary: CheckSummary;
+    }
+  | {
+      readonly kind: typeof TAB_COUNT.LINES;
+      readonly additions: number;
+      readonly deletions: number;
+    };
+
+/** One tab of the row: the view it shows, its glyph, its name, and what it counts. */
+interface TabEntry {
+  readonly view: PullRequestView;
+  readonly icon: ReactNode;
+  readonly label: string;
+  readonly count: TabCount | undefined;
+}
+
+/** The glyph the Checks tab wears for how its checks went, as the pull request's mark tells it; none where there are none. */
+const SUMMARY_GLYPHS = {
+  [CHECK_SUMMARY.FAILING]: <XIcon />,
+  [CHECK_SUMMARY.PENDING]: <CircleDotIcon />,
+  [CHECK_SUMMARY.PASSING]: <CheckIcon />,
+  [CHECK_SUMMARY.NONE]: null,
+} as const satisfies Record<CheckSummary, ReactNode>;
+
+/** How the checks went, in the words the Checks tab's glyph says to a reader who cannot see it. */
+const SUMMARY_WORDS = {
+  [CHECK_SUMMARY.FAILING]: "failing",
+  [CHECK_SUMMARY.PENDING]: "running",
+  [CHECK_SUMMARY.PASSING]: "passing",
+  [CHECK_SUMMARY.NONE]: "none",
+} as const satisfies Record<CheckSummary, string>;
+
+/** What a tab counts, drawn quiet beside its name: on Checks, how they went in its colour from the first frame, and how many once read. */
+function TabCountWords({ count }: { count: TabCount }): React.JSX.Element | null {
+  if (count.kind === TAB_COUNT.CHECKS) {
+    const glyph = SUMMARY_GLYPHS[count.summary];
+    if (glyph === null && count.count === undefined) return null;
+    return (
+      <span className="pull-request-tab-count" data-check-summary={count.summary}>
+        {glyph === null ? null : (
+          <span
+            className="pull-request-tab-glyph"
+            role="img"
+            aria-label={SUMMARY_WORDS[count.summary]}
+          >
+            {glyph}
+          </span>
+        )}
+        {count.count?.toLocaleString()}
+      </span>
+    );
+  }
+  if (count.kind === TAB_COUNT.LINES) {
+    return (
+      <span className="pull-request-tab-count">
+        <span className="pull-request-tab-added">+{count.additions.toLocaleString()}</span>{" "}
+        <span className="pull-request-tab-removed">−{count.deletions.toLocaleString()}</span>
+      </span>
+    );
+  }
+  return <span className="pull-request-tab-count">{count.count.toLocaleString()}</span>;
+}
+
+/**
+ * The row of tabs under the fixed header, as stage-cli's pull request page
+ * draws them: each its glyph, its name, and a quiet count, the chosen one
+ * underlined. The arrows move between them, as a tab strip's do.
+ */
+function PullRequestTabs({
+  tabs,
+  view,
+  onView,
+  ids,
+}: {
+  tabs: readonly TabEntry[];
+  view: PullRequestView;
+  onView: (view: PullRequestView) => void;
+  /** The id of each tab and of the panel it controls, by view. */
+  ids: (view: PullRequestView) => { readonly tab: string; readonly panel: string };
+}): React.JSX.Element {
+  const step = (by: number) => {
+    const at = tabs.findIndex((tab) => tab.view === view);
+    const next = tabs[(at + by + tabs.length) % tabs.length];
+    if (next === undefined) return;
+    onView(next.view);
+    document.getElementById(ids(next.view).tab)?.focus();
+  };
+  return (
+    <div
+      className="pull-request-tabs"
+      role="tablist"
+      aria-label="Pull request"
+      onKeyDown={(event) => {
+        if (event.key === "ArrowRight") step(1);
+        if (event.key === "ArrowLeft") step(-1);
+      }}
+    >
+      {tabs.map((tab) => {
+        const selected = tab.view === view;
+        return (
+          <button
+            key={tab.view}
+            id={ids(tab.view).tab}
+            type="button"
+            role="tab"
+            className="pull-request-tab-button"
+            aria-selected={selected}
+            aria-controls={ids(tab.view).panel}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onView(tab.view)}
+          >
+            <span className="pull-request-tab-icon" aria-hidden="true">
+              {tab.icon}
+            </span>
+            <span className="pull-request-tab-label">{tab.label}</span>
+            {tab.count === undefined ? null : <TabCountWords count={tab.count} />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
+function conversationCount(conversation: CodingAgentOverviewConversation): number {
+  const threads = conversation.conversation.reduce(
+    (sum, entry) => sum + (entry.threads?.length ?? 0),
+    0,
+  );
+  return conversation.earlier + conversation.conversation.length + threads;
+}
+
+/**
+ * The three tabs under the header, each counting what Luke has read of it
+ * so far: the conversation once read; the checks by how they went from the
+ * first frame, as the bar's mark says it, and by how many once read; and
+ * the files by the lines what was published adds and removes.
+ */
+function tabsOf(
+  parts: OverviewParts,
+  published: CodingAgentPullRequest | undefined,
+  bar: BarPullRequest | undefined,
+): readonly TabEntry[] {
+  const conversation = landed(parts.conversation);
+  const checks = landed(parts.checks);
+  return [
+    {
+      view: PULL_REQUEST_VIEW.CONVERSATION,
+      icon: <MessagesSquareIcon />,
+      label: "Conversation",
+      count:
+        conversation === undefined
+          ? undefined
+          : { kind: TAB_COUNT.COUNT, count: conversationCount(conversation) },
+    },
+    {
+      view: PULL_REQUEST_VIEW.CHECKS,
+      icon: <CircleCheckIcon />,
+      label: "Checks",
+      count:
+        bar === undefined
+          ? undefined
+          : { kind: TAB_COUNT.CHECKS, count: checks?.checks.length, summary: bar.checks },
+    },
+    {
+      view: PULL_REQUEST_VIEW.FILES,
+      icon: <FileDiffIcon />,
+      label: "Files changed",
+      count:
+        published === undefined
+          ? undefined
+          : {
+              kind: TAB_COUNT.LINES,
+              additions: published.additions,
+              deletions: published.deletions,
+            },
+    },
+  ];
+}
+
+/** The Conversation tab: the description, then the comments, reviews, and threads, in one scroll under the header. */
+function ConversationView({
+  agentId,
   parts,
+  url,
 }: {
   agentId: string;
-  /** The title and number, as the pull request's read says or, until it lands, as Luke held them; none where neither has. */
-  title: Pick<CodingAgentPullRequest, "title" | "number" | "url"> | undefined;
   parts: OverviewParts;
+  url: string | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
   return (
     <div className="pull-request-page">
-      {title === undefined ? (
-        <PartSkeleton
-          label={PULL_REQUEST_WORDS.READING}
-          widths={["60%"]}
-          className="pull-request-title"
-        />
-      ) : (
-        <h2 className="pull-request-title">
-          {title.title} <span className="pull-request-number">{pullRequestNumberLabel(title)}</span>
-        </h2>
-      )}
-      <PullRequestHead parts={parts} now={now} />
-      <ChecksPart parts={parts} />
       <DescriptionPart part={parts.pullRequest} picture={picture} />
-      <ConversationPart parts={parts} url={title?.url} now={now} picture={picture} />
+      <ConversationPart parts={parts} url={url} now={now} picture={picture} />
     </div>
   );
 }
 
+/** Whether there is a pull request to draw: none, a wait, a failure, or the header and the tabs under it. */
+const STANDING = {
+  NONE: "none",
+  WAITING: "waiting",
+  FAILED: "failed",
+  DRAWN: "drawn",
+} as const;
+
+type Standing = (typeof STANDING)[keyof typeof STANDING];
+
 /**
- * The overview as its reads stand: no pull request yet where a read says
- * so; while nothing is held or read of the pull request, a wait, or, where
- * every read failed, one failure whose Retry reads all three; else the
- * page, each part as its read stands.
+ * Whether there is a pull request to draw, as the reads asked so far
+ * stand: none where one says so; a wait while nothing is held or read of
+ * it, or, where every read asked failed, one failure whose Retry reads them
+ * again; else the header and the tabs under it.
  */
-function OverviewView({
-  agentId,
-  parts,
-  published,
-  onRetry,
-}: {
-  agentId: string;
-  parts: OverviewParts;
-  published: CodingAgentPullRequest | undefined;
-  onRetry: () => void;
-}): React.JSX.Element {
-  const all = [parts.pullRequest, parts.checks, parts.conversation];
-  if (all.some((part) => part.kind === PART.NONE)) {
-    return (
-      <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
-    );
-  }
+function standingOf(
+  parts: readonly Part<unknown>[],
+  published: CodingAgentPullRequest | undefined,
+): Standing {
+  if (parts.some((part) => part.kind === PART.NONE)) return STANDING.NONE;
   // Note that with nothing held, only a part landing says there is a pull request to draw.
-  if (published === undefined && !all.some((part) => part.kind === PART.LANDED)) {
-    if (all.some((part) => part.kind === PART.PENDING)) {
-      return <SpinnerRegion label={PULL_REQUEST_WORDS.READING} />;
-    }
-    return (
-      <div className="side-panel-empty">
-        <ReadFailure
-          line={PULL_REQUEST_WORDS.FAILED}
-          onRetry={onRetry}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
-      </div>
-    );
+  if (published !== undefined || parts.some((part) => part.kind === PART.LANDED)) {
+    return STANDING.DRAWN;
   }
-  return (
-    <PullRequestPage
-      agentId={agentId}
-      title={landed(parts.pullRequest) ?? published}
-      parts={parts}
-    />
-  );
+  return parts.some((part) => part.kind === PART.PENDING) ? STANDING.WAITING : STANDING.FAILED;
+}
+
+/** One of the overview's reads, as `useAgentRead` holds it, and whether it has been asked yet. */
+function askedYet(read: { readonly answer: unknown; readonly out: boolean }): boolean {
+  return read.answer !== undefined || read.out;
 }
 
 /**
- * One agent's Pull request tab: the bar, then the view it shows, the
- * overview or the files (`AgentChangesTab`). Both stand once shown, the one
- * not shown hidden, so switching back and forth draws what each last read
- * rather than asking GitHub again; each reads first as it is first shown.
+ * One agent's Pull request tab, laid out as stage-cli's pull request page:
+ * a fixed header that stays put while what is under it scrolls (the bar
+ * with the pill saying where it stands and GitHub's page and the ⋯; its
+ * title and number; its branches; who opened it and when, and its
+ * reviewers; and, while it is open, whether it would merge), then a row of
+ * tabs, Conversation, Checks, and Files changed (`AgentChangesTab`), each
+ * with its count. Each tab stands once shown, the others hidden, so
+ * switching draws what each last read rather than asking GitHub again; each
+ * reads as it is first shown, the header's own read as the tab is.
  */
 export function AgentPullRequestTab({
   agentId,
@@ -982,22 +1166,31 @@ export function AgentPullRequestTab({
 }): React.JSX.Element {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
-  const onOverview = view === PULL_REQUEST_VIEW.OVERVIEW;
-  const reads = shown && onOverview;
-  // The three are asked at once as the overview is first shown, each landing on its own.
+  const id = useId();
+  const ids = (each: PullRequestView) => ({
+    tab: `${id}-${each}-tab`,
+    panel: `${id}-${each}-panel`,
+  });
+  // The header's read is asked as the tab is first shown; each tab's own as it is first shown.
   const pullRequestRead = useAgentRead(
     agentId,
-    reads,
+    shown,
     ended,
     control.readOverviewPullRequest,
     UNANSWERED,
   );
-  const checksRead = useAgentRead(agentId, reads, ended, control.readOverviewChecks, UNANSWERED);
   const conversationRead = useAgentRead(
     agentId,
-    reads,
+    shown && view === PULL_REQUEST_VIEW.CONVERSATION,
     ended,
     control.readOverviewConversation,
+    UNANSWERED,
+  );
+  const checksRead = useAgentRead(
+    agentId,
+    shown && view === PULL_REQUEST_VIEW.CHECKS,
+    ended,
+    control.readOverviewChecks,
     UNANSWERED,
   );
   const ask = {
@@ -1005,10 +1198,11 @@ export function AgentPullRequestTab({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
+  // Refresh reads again the header and every tab read so far, never one not yet shown.
   const refresh = () => {
     ask.pullRequest();
-    ask.checks();
-    ask.conversation();
+    if (askedYet(checksRead)) ask.checks();
+    if (askedYet(conversationRead)) ask.conversation();
   };
   const parts: OverviewParts = {
     pullRequest: partOf(pullRequestRead),
@@ -1018,22 +1212,78 @@ export function AgentPullRequestTab({
   };
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
   const published = control.pullRequests.get(agentId);
+  const bar = barPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
+  const standing = standingOf(
+    [
+      parts.pullRequest,
+      ...(askedYet(checksRead) ? [parts.checks] : []),
+      ...(askedYet(conversationRead) ? [parts.conversation] : []),
+    ],
+    published,
+  );
+  const title = landed(parts.pullRequest) ?? published;
+  const now = useMinute();
   return (
     <div className="file-view pull-request-tab ph-no-capture">
-      <PullRequestBar
-        published={barPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published)}
-        view={view}
-        onView={onView}
-        overview={onOverview ? { reading, onRefresh: refresh } : undefined}
-      />
-      <div className="pull-request-view" hidden={!onOverview}>
-        <OverviewView agentId={agentId} parts={parts} published={published} onRetry={refresh} />
-      </div>
-      <div className="pull-request-view" hidden={onOverview}>
+      <PullRequestBar published={bar} reading={reading} onRefresh={refresh} />
+      {standing === STANDING.NONE ? (
+        <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
+      ) : standing === STANDING.WAITING ? (
+        <SpinnerRegion label={PULL_REQUEST_WORDS.READING} />
+      ) : standing === STANDING.FAILED ? (
+        <div className="side-panel-empty">
+          <ReadFailure
+            line={PULL_REQUEST_WORDS.FAILED}
+            onRetry={refresh}
+            place={READ_FAILURE_PLACE.CENTRED}
+          />
+        </div>
+      ) : (
+        <>
+          <header className="pull-request-header">
+            <HeaderTitle title={title} />
+            <PullRequestHead parts={parts} now={now} />
+          </header>
+          <PullRequestTabs
+            tabs={tabsOf(parts, published, bar)}
+            view={view}
+            onView={onView}
+            ids={ids}
+          />
+          <div
+            className="pull-request-view"
+            role="tabpanel"
+            id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+            aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+            hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
+          >
+            <ConversationView agentId={agentId} parts={parts} url={title?.url} />
+          </div>
+          <div
+            className="pull-request-view"
+            role="tabpanel"
+            id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+            aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+            hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+          >
+            <div className="pull-request-page">
+              <ChecksPart parts={parts} />
+            </div>
+          </div>
+        </>
+      )}
+      {/* The files stand outside the header's wait, since they read on their own and say on their own that there is no pull request yet. */}
+      <div
+        className="pull-request-view"
+        role="tabpanel"
+        id={ids(PULL_REQUEST_VIEW.FILES).panel}
+        aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+        hidden={standing !== STANDING.DRAWN || view !== PULL_REQUEST_VIEW.FILES}
+      >
         <AgentChangesTab
           agentId={agentId}
           control={control}
-          shown={shown && !onOverview}
+          shown={shown && standing === STANDING.DRAWN && view === PULL_REQUEST_VIEW.FILES}
           repository={repository}
           tree={tree}
         />
