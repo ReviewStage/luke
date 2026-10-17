@@ -53,9 +53,11 @@ import {
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
-  acceptedModelChoice,
   ModelCatalog,
-  type ModelChoiceRefused,
+  ModelChoiceRefused,
+  type OfferedModel,
+  offeredToAccount,
+  validateModelChoice,
 } from "../../providers/model-catalog.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
@@ -237,13 +239,46 @@ export interface CodingAgentStart {
 /** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to eve. */
 export type StartServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
+/** What an account may start an agent on: the models the catalog offers it, and the choice a Start naming none runs on. */
+export interface AccountModelChoices {
+  readonly offered: readonly OfferedModel[];
+  /** The account's stored default, or Luke's where it stored none; it may have since left the catalog. */
+  readonly defaultChoice: ModelChoice;
+}
+
+/**
+ * The models an account may start an agent on, the catalog as the account
+ * is offered it (`offeredToAccount`), so a fast version withheld from it,
+ * its key's organization never granted fast mode, is not among them, and
+ * the account's default choice beside them. This is the one source a Start
+ * is checked against and the agent tools list the choices from, so the two
+ * never disagree. A catalog or a store that could not be read is an outage.
+ */
+export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<AccountModelChoices, HostedRefusal, DatabaseServices | ModelCatalog> {
+  const stored = (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent;
+  const fastAccess = yield* hostedStoreOrUnavailable(anthropicFastAccess(userId));
+  const catalog = yield* ModelCatalog;
+  const read = yield* catalog.read.pipe(
+    Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
+      Effect.logWarning(
+        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
+      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
+    ),
+  );
+  return {
+    offered: offeredToAccount(read, fastAccess),
+    defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE,
+  };
+});
+
 /**
  * The choice an agent runs on: the one named where one is, the account's
- * default otherwise, either checked against the catalog as the account is
- * offered it, so a fast version withheld from it, its key's organization
- * never granted fast mode, is refused here
- * rather than at the agent's first step. A catalog that
- * could not be read is an outage; a choice it refuses is its own refusal.
+ * default otherwise, either checked against the models the account is
+ * offered (`accountModelChoices`), so a fast version withheld from it is
+ * refused here rather than at the agent's first step. A catalog that could
+ * not be read is an outage; a choice it refuses is its own refusal.
  */
 export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -253,17 +288,9 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal | ModelChoiceRefused,
   DatabaseServices | ModelCatalog
 > {
-  const choice =
-    named ??
-    (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent ??
-    CODING_AGENT_DEFAULT_CHOICE;
-  const fastAccess = yield* hostedStoreOrUnavailable(anthropicFastAccess(userId));
-  return yield* acceptedModelChoice(choice, fastAccess).pipe(
-    Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
-      Effect.logWarning(
-        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
-      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
-    ),
+  const { offered, defaultChoice } = yield* accountModelChoices(userId);
+  return yield* Effect.fromResult(validateModelChoice(offered, named ?? defaultChoice)).pipe(
+    Effect.mapError((reason) => new ModelChoiceRefused({ reason, offered })),
   );
 });
 

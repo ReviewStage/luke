@@ -46,13 +46,18 @@ import type { GitHubApp } from "../github/github-app.js";
 import { agentWorkspace, taskWorkspace } from "../github/workspace-repository.js";
 import type { HostedRefusal } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
-import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "../providers/model-catalog.js";
+import {
+  ModelCatalog,
+  ModelChoiceRefused,
+  type OfferedModel,
+  validateModelChoice,
+} from "../providers/model-catalog.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
-import { startCodingAgent } from "./coder-host/start.js";
+import { accountModelChoices, startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -107,8 +112,10 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
  * after either, on the model and effort named or else the member's default,
- * checked against the catalog, whose choices the refusal lists, with its
- * checkout cloned at the branch named where one is, which GitHub must hold. An agent a
+ * checked against the catalog as the member is offered it, whose choices the
+ * refusal lists and `list_models` answers from the same read, so a choice it
+ * lists is one a start takes, with its checkout cloned at the branch named
+ * where one is, which GitHub must hold. An agent a
  * coding agent starts is told in that note which agent started it and how
  * to report back, and its choice leaves the member's default as it stood.
  * An archive takes the rule the Archive agent menu's does for the member
@@ -238,6 +245,11 @@ export const START_CODING_AGENT_REFUSAL = {
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
   ARCHIVED: "Not started: this task is archived; a member unarchives it first.",
+} as const;
+
+/** Why a list of the models answered none, in words the model can act on. */
+export const LIST_MODELS_REFUSAL = {
+  UNAVAILABLE: "Not listed: the models could not be read just now. The call may be made again.",
 } as const;
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
@@ -499,8 +511,20 @@ export const START_AGENT_TOOL = {
     "model and effort named, or on the member's default with neither. Answers `accepted` with " +
     "the agent's id, model, the model's name to say it by, effort, status, and mention once its session " +
     "is open, or `rejected` and why nothing was started; a rejected model or effort lists the " +
-    "choices.",
+    `choices. ${AGENT_TOOL.LIST_MODELS} lists them before you name one.`,
   inputSchema: START_AGENT_INPUT,
+} as const;
+
+export const LIST_MODELS_TOOL = {
+  name: AGENT_TOOL.LIST_MODELS,
+  description:
+    `List the models you may start a coding agent on with ${AGENT_TOOL.START_AGENT}, as the ` +
+    `member you act for is offered them: each with its catalog id, which ${AGENT_TOOL.START_AGENT}'s ` +
+    "model takes, the model's name to say it by, and the efforts it lists, one of which its " +
+    "effort takes; and the member's default model and effort, which a start naming neither runs " +
+    "on, and whether it is still offered. Call it before you name a model or an effort to " +
+    `${AGENT_TOOL.START_AGENT}, such as one the developer named in their own words.`,
+  inputSchema: Schema.Struct({}),
 } as const;
 
 export const ARCHIVE_AGENT_TOOL = {
@@ -1068,7 +1092,8 @@ export function runStartAgent(
       if (Result.isFailure(started)) {
         const refusal = started.failure;
         if (refusal instanceof ModelChoiceRefused) {
-          return agentToolRejected(choiceRefusal(choice, yield* offeredModels));
+          // The choices are the models the start was checked against, so no second read can lose them.
+          return agentToolRejected(choiceRefusal(choice, refusal.offered));
         }
         return agentToolRejected(startRefusalWords(refusal));
       }
@@ -1251,6 +1276,36 @@ export function runListTasks(
       };
     }),
   );
+}
+
+/**
+ * One call of `list_models`: the models the caller's member may start an
+ * agent on, each by its catalog id, the name to say it by, and its efforts,
+ * and the member's default choice and whether it is still offered, read from
+ * the one source a start is checked against (`accountModelChoices`), so a
+ * choice listed is one `start_agent` takes. It names nothing of the call's.
+ */
+export function runListModels(
+  call: CodingAgentCall,
+  _input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  return Effect.match(accountModelChoices(callerUserId(call.caller)), {
+    onFailure: () => agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE),
+    onSuccess: ({ offered, defaultChoice }) => ({
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      models: offered.map((model) => ({
+        id: model.id,
+        name: modelLabel(model.id, offered),
+        efforts: [...model.efforts],
+      })),
+      default: {
+        model: defaultChoice.model,
+        modelName: modelLabel(defaultChoice.model, offered),
+        effort: defaultChoice.effort,
+        offered: Result.isSuccess(validateModelChoice(offered, defaultChoice)),
+      },
+    }),
+  });
 }
 
 /** A page's HTML as a read answers it, and how many characters of it were left out. */
