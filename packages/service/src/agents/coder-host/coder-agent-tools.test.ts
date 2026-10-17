@@ -226,7 +226,11 @@ async function claimed(
  * installation reaching the repository is connected to the workspace:
  * every message to a session answered taken, and each written down.
  */
-async function fakeCoderEve(workspaceId: string, branches: readonly string[] = []) {
+async function fakeCoderEve(
+  workspaceId: string,
+  branches: readonly string[] = [],
+  beforeGitHub?: () => Promise<void>,
+) {
   installations += 1;
   const installation: InstallationFixture = {
     id: 70 + installations,
@@ -238,14 +242,17 @@ async function fakeCoderEve(workspaceId: string, branches: readonly string[] = [
     LINK_OUTCOME.LINKED,
   );
   const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
-  const github = githubReaching([installation], undefined, undefined, (request) => {
+  const github = githubReaching([installation], undefined, undefined, async (request) => {
     const { pathname } = new URL(request.url);
     // The repository holds the branches given, each at a commit; any other is GitHub's not found.
     const ref = pathname.slice(`/repos/${RELAY_FULL_NAME}/git/ref/heads/`.length);
     if (pathname.startsWith(`/repos/${RELAY_FULL_NAME}/git/ref/heads/`) && branches.includes(ref)) {
       return Response.json({ object: { type: "commit", sha: BRANCH_COMMIT } });
     }
-    if (!pathname.startsWith("/eve/coder/v1/session")) return undefined;
+    if (!pathname.startsWith("/eve/coder/v1/session")) {
+      if (beforeGitHub !== undefined) await beforeGitHub();
+      return undefined;
+    }
     sent.push({ path: pathname, headers: request.headers, body: request.body });
     if (pathname === "/eve/coder/v1/session") {
       return Response.json({ sessionId: sessionId() }, { status: 202 });
@@ -1125,6 +1132,48 @@ test("start_agent makes the new task it names in the caller's workspace, owned b
   }
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Both"), []);
   assert.equal(eve.sent.length, 1, "a refused start starts nothing");
+});
+
+test("start_agent run twice at once under one call's key keeps one new task: the run that finds the other's agent takes away the task it made and answers that agent with its own task", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const name = "Invite expiry migration";
+  const prompt = "Write the migration that adds the invitation's expiry.";
+  // The other run of the same call lands its agent, on a new task of its own, while this run
+  // confirms its repository: after this run found no agent under the key, before it made one.
+  let racing = false;
+  let raced: { readonly agentId: string; readonly taskId: string } | undefined;
+  const eve = await fakeCoderEve(workspaceId, [], async () => {
+    if (!racing) return;
+    racing = false;
+    const theirs = await database.run(
+      createTask(caller.userId, {
+        organizationId: workspaceId,
+        name,
+        repository: RELAY_FULL_NAME,
+        planning: false,
+      }),
+    );
+    const agent = await claimed(caller.userId, {
+      ...AGENT_CHOICE,
+      idempotencyKey: "call-race",
+      taskId: theirs.id,
+      planSnapshot: null,
+      prompt,
+    });
+    raced = { agentId: agent.id, taskId: theirs.id };
+  });
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  racing = true;
+  const answered = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-race");
+  assert.ok(raced !== undefined, "the other run landed while this one ran");
+  assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(answered));
+  assert.ok(isRecord(answered.agent) && isRecord(answered.newTask), JSON.stringify(answered));
+  assert.equal(answered.agent.id, raced.agentId);
+  assert.equal(answered.newTask.id, raced.taskId);
+  assert.deepEqual(await tasksNamed(caller.userId, workspaceId, name), [raced.taskId]);
+  assert.equal(eve.sent.length, 0, "no second agent's session is opened");
 });
 
 test("an agent whose starter has left the workspace makes no task in it", async () => {

@@ -1207,9 +1207,16 @@ export function runStartAgent(
         branch: asked.success.branch,
         ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
+      // A new task stands only under the agent its own call made. One whose start failed, or that
+      // found an agent a retry of the same call made meanwhile on a task of its own, goes (and is
+      // left where an agent stands on it after all), and the call answers whatever agent its key
+      // now stands for, with that agent's own task, or else the refusal.
+      if (made !== undefined && (Result.isFailure(started) || !started.success.created)) {
+        yield* discardNewTask(userId, made.id);
+        const standing = yield* startedBefore(call, true);
+        if (Option.isSome(standing)) return standing.value;
+      }
       if (Result.isFailure(started)) {
-        // A task made for a start that failed holds nothing, so it goes rather than stand empty.
-        if (made !== undefined) yield* discardNewTask(userId, made.id);
         const refusal = started.failure;
         if (refusal instanceof ModelChoiceRefused) {
           // The choices are the models the start was checked against, so no second read can lose them.
