@@ -33,7 +33,7 @@ import {
 } from "../core.js";
 
 /**
- * task-work.ts -- one planning turn as the Work tab draws it, read from the turn's row and its journal.
+ * task-work.ts -- one brain turn as the Work tab draws it, read from the turn's row and its journal.
  *
  * The journal is the AI SDK message the relay writes as eve runs the turn:
  * a step marker per model step, the model's words, its reasoning, and each
@@ -45,8 +45,8 @@ import {
  * it stands and its own session, which the journal alone cannot say.
  *
  * Note that the output does travel. A repository command's output is text
- * the service read in the plan's repository sandbox for the developer who
- * owns the plan, and a page or search is the public web's; the frame hands
+ * the service read in the task's repository sandbox for the developer who
+ * owns the task, and a page or search is the public web's; the frame hands
  * it to that developer's own Mac and nowhere else.
  */
 
@@ -62,7 +62,7 @@ type WorkerInput = { readonly message: string; readonly taskId?: string | null }
 
 /**
  * A worker call's input in that shape, whichever name the call was made
- * under: eve's own `worker` carries it as it is, and the planning model's
+ * under: eve's own `worker` carries it as it is, and the brain's
  * `delegate` names the message its task.
  */
 function workerInputOf(input: StoredToolPart["input"]): WorkerInput | undefined {
@@ -233,7 +233,7 @@ function journalOf(messages: readonly StoredUIMessage[]) {
  */
 const STARTED_TASK = /^Started task (\S+)\. /u;
 
-/** The planning model's worker calls in the journals. */
+/** The brain's worker calls in the journals. */
 function workerCallsIn(journals: readonly (StoredUIMessage | undefined)[]): StoredToolPart[] {
   return journals.flatMap((journal) =>
     (journal?.parts ?? []).filter(isStoredToolPart).filter(isWorkerCall),
@@ -277,7 +277,7 @@ export function callsSendingToEarlierTasks(journal: StoredUIMessage | undefined)
 }
 
 /**
- * The planning model's `worker` calls in a journal, each with the call whose
+ * The brain's `worker` calls in a journal, each with the call whose
  * child conversation records its subagent's session. A call that started a
  * task reads its own. A call that sent more work to a task already started
  * reads the starting call's, because eve hands that work to the task's
@@ -367,7 +367,7 @@ function askedOf(asked: readonly SpokenAskRow[]): Pick<TaskWorkTurn, "asked" | "
 }
 
 /**
- * One planning turn's work, from its row and its journal (absent before the
+ * One brain turn's work, from its row and its journal (absent before the
  * turn wrote any): its state, when it started and, once it ended, when, and
  * the newest of its words, reasoning, and calls as the journal holds them.
  * Beside them stands each worker the newest of its calls started or sent
@@ -378,7 +378,7 @@ function askedOf(asked: readonly SpokenAskRow[]): Pick<TaskWorkTurn, "asked" | "
  * when its newest task began and ended, its title where one landed on that
  * child (`titles`, by the call's id), and what its newest task ran on and
  * spent as its turn row recorded them (`records`, by the call's id,
- * `plans/child-models.ts`). The turn carries what it ran on and spent too,
+ * `tasks/child-models.ts`). The turn carries what it ran on and spent too,
  * as its own row recorded them, and the developer's spoken lines it took as
  * its ask (`asked`, by the ids the voice's ledger minted, and `askedAt`, by
  * where on its call each began), the newest the wire carries, where it took

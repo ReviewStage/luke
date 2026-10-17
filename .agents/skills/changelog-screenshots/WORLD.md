@@ -3,7 +3,7 @@
 Every release's pictures happen in one invented company, so a reader paging
 through the changelog sees one team's work go on rather than a new set of
 strangers each time. Keep what is here; add to it. A new release brings new
-plans, agents, and pull requests for whatever it shows, written into this
+tasks, agents, and pull requests for whatever it shows, written into this
 world and recorded below when they are worth keeping. The source of truth
 for 0.12.0's data is `staging/shots/`; this file is the part that should
 outlive any one release's code.
@@ -24,7 +24,7 @@ outlive any one release's code.
 
 ## Workspaces
 
-Since 0.13.0 plans live in workspaces. Dean owns **acme**, where every plan
+Since 0.13.0 tasks live in workspaces. Dean owns **acme**, where every task
 here lives, its GitHub organization `acme` connected, and his own
 **Dean's workspace** beside it. acme is listed first, since a fixture run
 lists the first workspace. acme's members are Dean (owner), Dana Moreno
@@ -41,7 +41,7 @@ drawn by generated one-letter pictures on the pastels below, Theo on
 
 ## Repositories
 
-| Repository | What it is | Plans in it |
+| Repository | What it is | Tasks in it |
 | --- | --- | --- |
 | `acme/relay` | The product: workspaces, members, webhooks | Teammate invitations, Webhook retries, Audit log export, SSO with Okta (archived) |
 | `acme/ledger` | Billing | Usage-based billing, Invoice PDF redesign |
@@ -53,7 +53,7 @@ routes (`src/routes/`), React Email templates sent through Postmark
 under `.agents/skills/` are `api-routes`, `db-migrations`, `drizzle`,
 `email-templates`, `release`, and `testing`.
 
-## The plan everything is about
+## The task everything is about
 
 **Teammate invitations** (`acme/relay`): a member invites a teammate by email
 and the teammate joins by opening the link. An invite is a `memberships` row
@@ -64,9 +64,9 @@ an invite (settled: the sender or any admin) and whether a link lasts 7 days
 or 14. Its full document, written under every heading of the default
 template, is `staging/shots/plan-document.ts`.
 
-Other plans appear in lists and need only a name, a repository, and an age;
+Other tasks appear in lists and need only a name, a repository, and an age;
 "Usage-based billing" (`acme/ledger`) has a short document of its own for a
-shot that opens a plan other than this one.
+shot that opens a task other than this one.
 
 ## Coding agents and their pull requests
 
@@ -75,7 +75,7 @@ shot that opens a plan other than this one.
 | Add teammate invitations | Claude Opus 5.5, high | Finished after 19 minutes | #214 "Add teammate invitations", open, checks passing, 9 files +412 −38 |
 | Invite emails | GPT-6.1 Sol, high | Running | #216 "Send invite emails through Postmark", draft, +96 −4 |
 
-Other plans' agents, from 0.13.0: "Meter API calls per workspace" (Usage-based
+Other tasks' agents, from 0.13.0: "Meter API calls per workspace" (Usage-based
 billing, Claude Sonnet 5.5; its PR is #88 "Record usage events per
 workspace" on acme/ledger), "Retry failed webhook deliveries" (Webhook retries,
 Claude Opus 5.5; PR #209, merged), and "Build the onboarding checklist"
@@ -111,7 +111,7 @@ switched off or not connected where that is the point.
 
 ## Time
 
-Every time is counted back from the capture: the hero plan edited 4 minutes
+Every time is counted back from the capture: the hero task edited 4 minutes
 ago, its agent finished 12 minutes ago, siblings from 26 minutes to 4 days,
-the archived plan 18 days. A running turn started seconds before the capture,
+the archived task 18 days. A running turn started seconds before the capture,
 a finished one ran minutes. Yesterday's call ran 12 minutes 41 seconds.

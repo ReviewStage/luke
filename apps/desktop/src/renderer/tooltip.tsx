@@ -99,7 +99,7 @@ const TOOLTIP_SIDE = {
   ABOVE: "above",
   /** Beside the control, past its end: a card a list row hangs, so it covers none of the rows under it. */
   END: "end",
-  /** Beside the control, before its start: a row's card where the window ends past the row, as the plan's summary at its right edge hangs one. */
+  /** Beside the control, before its start: a row's card where the window ends past the row, as the task's summary at its right edge hangs one. */
   START: "start",
 } as const;
 

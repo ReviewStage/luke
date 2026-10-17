@@ -108,7 +108,7 @@ function personOf(by: PlanEditor | undefined, reader: HistoryReader, own: boolea
  * Who wrote a revision: a member, the reader as You only where the revision
  * names them, or every revision where `own` says the history is theirs
  * alone; Luke; a coding agent by the title its row has now, wearing
- * the harness of the agent the line names among the plan's `agents`, or no
+ * the harness of the agent the line names among the task's `agents`, or no
  * harness where the agent is not among them; or the plan before history.
  */
 export function revisionAuthorOf(

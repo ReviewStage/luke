@@ -17,12 +17,12 @@ import { HISTORY_READ } from "./use-plan-history";
 import { VersionView } from "./version-view";
 
 /**
- * plan-link-chips.test.ts -- a link in the plan's words, or in Luke's
+ * task-link-chips.test.ts -- a link in the plan's words, or in Luke's
  * notes, is drawn as the chip of what it names whoever wrote it, as a
- * transcript draws one: the plan read on its page, a version's diff, and a
+ * transcript draws one: the task read on its page, a version's diff, and a
  * File tab's note. A link that names nothing stays a link, and code stays
  * code.
- * Synthetic plan and repository.
+ * Synthetic task and repository.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -61,7 +61,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What a plan's page hands its places. */
+/** What a task's page hands its places. */
 const PAGE: PlanMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",

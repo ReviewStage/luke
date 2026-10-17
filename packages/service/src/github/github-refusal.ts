@@ -6,7 +6,7 @@
  * installation. Both are an outage the caller may retry, refused as
  * unavailable, and logged by kind: nothing of a token, the request that
  * carried it, or GitHub's body reaches a line. Where the read is whether
- * the workspace reaches a plan's repository, a GitHub that did not answer is
+ * the workspace reaches a task's repository, a GitHub that did not answer is
  * refused as its own kind, so the desktop says GitHub, not Luke, failed.
  */
 

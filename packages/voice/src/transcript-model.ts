@@ -5,10 +5,10 @@ import type { UIMessage } from "ai";
 import type { VoiceView } from "./voice-view.js";
 
 /**
- * transcript-model.ts -- what the open plan's Call tab draws, decided from the stored transcript and the call standing now.
+ * transcript-model.ts -- what the open task's Call tab draws, decided from the stored transcript and the call standing now.
  *
- * Two sources make one list. The host reads what was said on the plan's
- * calls from the record whenever the plan opens and whenever a call about it
+ * Two sources make one list. The host reads what was said on the task's
+ * calls from the record whenever the task opens and whenever a call about it
  * ends; the call standing now is not on record yet, so its words come from
  * the voice window's report as they are said. The two are told apart by the
  * store's id for the call's session, which both carry: a call the record
@@ -21,7 +21,7 @@ import type { VoiceView } from "./voice-view.js";
  * a line on record is.
  */
 
-/** What the tab says before anything was said on any call about the plan. */
+/** What the tab says before anything was said on any call about the task. */
 export const TRANSCRIPT_EMPTY_LINE = "Nothing said yet.";
 
 /** The quiet line a call that has ended closes with, and the one for a call Luke ended himself. */
@@ -35,7 +35,7 @@ export const TRANSCRIPT_REGION = {
   READING: "reading",
   /** The read failed and nothing is held: the failure and Try again. */
   FAILED: "failed",
-  /** Nothing was said on any call about the plan. */
+  /** Nothing was said on any call about the task. */
   EMPTY: "empty",
   READY: "ready",
 } as const;
@@ -120,11 +120,11 @@ function wordCount(messages: readonly UIMessage[]): number {
 }
 
 /**
- * The calls heard on the open plan, from the voice window's report and what
+ * The calls heard on the open task, from the voice window's report and what
  * was held before: the call reported is live and grows in place, every other
  * is held no longer live, so a call ended just before the next began keeps
- * its words until the record has them. Another plan opening drops them all,
- * and a call about another plan than the one open is not this tab's.
+ * its words until the record has them. Another task opening drops them all,
+ * and a call about another task than the one open is not this tab's.
  */
 export function heardCalls(input: {
   held: readonly HeardCall[];

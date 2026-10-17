@@ -134,7 +134,7 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
- * agent-tab.tsx -- one coding agent's tab in the plan's column: its transcript live, and the message box under it wearing what it runs on and what it published.
+ * agent-tab.tsx -- one coding agent's tab in the task's column: its transcript live, and the message box under it wearing what it runs on and what it published.
  *
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
  * over `../ai-elements/`), the Call tab alike, from the
@@ -191,7 +191,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * worker's transcript the same way, under the agent and the call that
  * started it, with the task it was handed in the plan card's place and no
  * composer, since nothing is sent to a worker. Either tab says what it
- * holds to the plan's page each time it moves (`onHeld`), which its tab's hover
+ * holds to the task's page each time it moves (`onHeld`), which its tab's hover
  * card previews (`agent-tab-card.tsx`).
  */
 
@@ -204,7 +204,7 @@ interface TranscriptLead {
   startingLine: string;
 }
 
-/** An agent's transcript: the plan it was handed, and the agent starting; the planning model's turns on the Call tab, which open on no card, alike. */
+/** An agent's transcript: the plan it was handed, and the agent starting; the brain's turns on the Call tab, which open on no card, alike. */
 export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
   icon: (
@@ -469,7 +469,7 @@ interface TodosPlace {
   readonly open: string | undefined;
 }
 
-/** A transcript that holds no to-do list, as the planning model's does not. */
+/** A transcript that holds no to-do list, as the brain's does not. */
 const NO_TODOS: TodosPlace = { kept: undefined, open: undefined };
 
 /** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it. */
@@ -504,7 +504,7 @@ function TodosDock({
 /**
  * A call that loaded a skill: the one button that opens the skill's
  * `SKILL.md`, hanging the card a sent message's chip of the skill hangs
- * (`skill-ref.tsx`), where it is one of the plan's skills, and a call's row
+ * (`skill-ref.tsx`), where it is one of the task's skills, and a call's row
  * otherwise. Note that a load that failed keeps the call's row, because the
  * row is where its error is read.
  */
@@ -1146,7 +1146,7 @@ function AgentTranscriptView({
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
   earlierOmitted?: boolean;
-  /** The plan's or task's card line, where it is named otherwise than by its first line, as a planning worker is by its job. */
+  /** The plan's or task's card line, where it is named otherwise than by its first line, as a brain's worker is by its job. */
   briefTitle?: string | undefined;
   /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
   briefSender?: Actor | undefined;
@@ -1255,7 +1255,7 @@ function AgentTranscriptView({
 /**
  * The tab as drawn from what it holds: the transcript with the lines sent
  * and not yet read back at its end, and the composer under it, or, while
- * the plan is archived, the note that offers Unarchive in its place, with
+ * the task is archived, the note that offers Unarchive in its place, with
  * the Stop of a turn still running.
  */
 function AgentTabView({
@@ -1301,7 +1301,7 @@ function AgentTabView({
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
-  /** Brings the plan back from the archive; present exactly while it is archived, when no message is sent. */
+  /** Brings the task back from the archive; present exactly while it is archived, when no message is sent. */
   onUnarchive?: (() => void) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
@@ -1448,7 +1448,7 @@ export function AgentTab({
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
   run?: CodingAgentOrigin | undefined;
   control: CodingAgentsControl;
-  /** Whether the tab is on screen: the plan's column showing it, on the Plans tab. */
+  /** Whether the tab is on screen: the task's column showing it, on the Tasks tab. */
   shown: boolean;
   /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;

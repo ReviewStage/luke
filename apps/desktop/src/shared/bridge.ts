@@ -208,7 +208,7 @@ export const BRIDGE = {
     result: result<AppCommand>(isAppCommand),
   }),
   /**
-   * The talk key going down, carrying the panel's open plan while one is open
+   * The talk key going down, carrying the panel's open task while one is open
    * and nothing otherwise.
    */
   onVoiceHotkeyPress: entry({
@@ -248,8 +248,8 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * The Plans tab's microphone press, forwarded by the main process to the
-   * voice window alone, carrying the plan the panel had open when it was
+   * The Tasks tab's microphone press, forwarded by the main process to the
+   * voice window alone, carrying the task the panel had open when it was
    * pressed and nothing else.
    */
   onTasksTalk: entry({
@@ -259,8 +259,8 @@ export const BRIDGE = {
     result: result<{ taskId: string }>((value) => isRecord(value) && isWireString(value.taskId)),
   }),
   /**
-   * A coding agent's notification clicked: the panel is to open the plan on
-   * that agent's tab, or the agent's own page for an agent with no plan. An
+   * A coding agent's notification clicked: the panel is to open the task on
+   * that agent's tab, or the agent's own page for an agent with no task. An
    * event rather than a slice of the document, because a click is an ask the
    * window answers once, not a state it bootstraps from.
    */
@@ -276,7 +276,7 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * An inbox notification clicked: the panel is to open the plan on its
+   * An inbox notification clicked: the panel is to open the task on its
    * Inbox tab. An event, as an agent's notification's click is, because it
    * is an ask the window answers once.
    */
@@ -287,7 +287,7 @@ export const BRIDGE = {
     result: result<{ taskId: string }>((value) => isRecord(value) && isWireString(value.taskId)),
   }),
   /**
-   * A notification of an item of an agent with no plan clicked: the panel is
+   * A notification of an item of an agent with no task clicked: the panel is
    * to open the window's Inbox with that item chosen, where it is answered.
    * An event, as an inbox notification's click is.
    */
@@ -370,7 +370,7 @@ export const BRIDGE = {
   }),
   /**
    * The call card's way back pressed, in the floating window or a panel's
-   * own card: the panel is to show the call's plan. An event, as a notification's click is, because it is an
+   * own card: the panel is to show the call's task. An event, as a notification's click is, because it is an
    * ask the window answers once.
    */
   onShowTask: entry({
@@ -419,7 +419,7 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * An inbox item opened while the window was focused away from its plan's
+   * An inbox item opened while the window was focused away from its task's
    * Inbox tab: the panel says so in its toast, whose View opens that tab.
    * An event, as an agent's end is, because it is said once and never
    * bootstrapped from.

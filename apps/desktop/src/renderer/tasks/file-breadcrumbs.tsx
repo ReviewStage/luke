@@ -254,7 +254,7 @@ export function FileBreadcrumbs({
   listFolder,
   onOpen,
 }: {
-  /** The plan's repository, `owner/name`, the first crumb. */
+  /** The task's repository, `owner/name`, the first crumb. */
   repository: string;
   /** The tab's file, from the repository's root. */
   path: string;

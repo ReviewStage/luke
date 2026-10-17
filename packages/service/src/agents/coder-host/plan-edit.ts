@@ -34,9 +34,9 @@ import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from 
  * An agent that meets something the plan does not settle, verifies a fact
  * the plan has wrong, or makes a decision the plan left open does not stop
  * and does not keep it to itself: it takes notes on the plan exactly as the
- * planning call's notetaker does (`tasks/plan-scribe.ts`), under the same
+ * task's call's notetaker does (`tasks/plan-scribe.ts`), under the same
  * schema and through the plan's one write (`plan-notes.ts`), which journals
- * the save under the agent's id, so the planning model and the developer
+ * the save under the agent's id, so the brain and the developer
  * read them on the next call and see which agent wrote what. A call's notes
  * may land anywhere in the plan, its headings among it, and land together or
  * not at all: one naming what the plan does not hold exactly once answers the

@@ -42,7 +42,7 @@ interface LiveCallLine {
  * Everything said on the standing call so far, settled or not and whatever
  * the captions preference says: the store's id for the call's session, where
  * an account holds it, and its lines in the order they opened. It is what the
- * Plans tab's transcript draws until the call ends and the record is read.
+ * Tasks tab's transcript draws until the call ends and the record is read.
  */
 export interface LiveCallTranscript {
   readonly voiceSessionId: string | undefined;
@@ -65,7 +65,7 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   lukeCaptions: readonly string[] | undefined;
   /** The developer's own rows while they are still being said, under the captions preference alone. */
   developerCaptions: readonly string[] | undefined;
-  /** The plan the standing call is about; none while no call stands. */
+  /** The task the standing call is about; none while no call stands. */
   callTaskId: string | undefined;
   /** What was said on the standing call so far; none while no call stands or before its first line. */
   callTranscript: LiveCallTranscript | undefined;
@@ -167,9 +167,9 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
  * The one voice session as the desktop drives it, following the live guide's
  * one-owner rule: the renderer owns the microphone switch and the hang-up,
  * the host owns every append and the close decision. Every session is a
- * planning call about one plan. The talk key is held to talk: its press
- * opens the call about the plan the window has open if none stands, speaks
- * into the standing call whatever plan is open if one does, and unmutes it;
+ * task call about one task. The talk key is held to talk: its press
+ * opens the call about the task the window has open if none stands, speaks
+ * into the standing call whatever task is open if one does, and unmutes it;
  * its release mutes, and the microphone is open exactly between
  * the two; the stop key mutes the same way and silences Luke where he is
  * speaking. The host's `voiceLiveSession.changed` is obeyed rather than
@@ -211,7 +211,7 @@ export class LiveVoiceOrchestrator {
   #talkOpening = false;
   /** Whether the developer silenced Luke's voice on this device for the call standing, which its end lets go of. */
   #speakerMuted = false;
-  /** The plan the call standing or opening is about. */
+  /** The task the call standing or opening is about. */
   #callTask: string | undefined;
   /** The open still negotiating: a second ask reads its answer rather than building a second call. */
   #opening: Deferred.Deferred<LiveVoiceCall | undefined> | undefined;
@@ -271,11 +271,11 @@ export class LiveVoiceOrchestrator {
    * does that, so a hold is heard for exactly as long as it lasts, and a
    * hold that ended while the system's microphone dialog stood, or while the
    * session was opening, unmutes nothing. A press speaks into the call
-   * standing or opening, whatever plan the window has open, because the call
-   * outlives the plan on screen and a hold must not hang it up: moving the
-   * call to another plan is that plan's own button. With no call, a press
-   * made while the window has a plan open opens the call about that plan,
-   * and a press naming no plan does nothing: there is no call about no plan.
+   * standing or opening, whatever task the window has open, because the call
+   * outlives the task on screen and a hold must not hang it up: moving the
+   * call to another task is that task's own button. With no call, a press
+   * made while the window has a task open opens the call about that task,
+   * and a press naming no task does nothing: there is no call about no task.
    */
   beginTalk(taskId?: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
@@ -287,7 +287,7 @@ export class LiveVoiceOrchestrator {
       }
       this.#keyDown = true;
       // A press over a call the host is closing waits it out. A key let go of
-      // meanwhile opens nothing, and nor does a press naming no plan, which
+      // meanwhile opens nothing, and nor does a press naming no task, which
       // spoke into the call that has now gone.
       if ((yield* this.#outlastClosing()) && (!this.#keyDown || taskId === undefined)) return;
       const task = this.#call === undefined ? taskId : this.#callTask;
@@ -297,14 +297,14 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The Plans tab's microphone button, about the plan the panel has
-   * open. It toggles rather than holds, because a planning conversation runs
-   * for minutes: against the call about that plan, a press while the
+   * The Tasks tab's microphone button, about the task the panel has
+   * open. It toggles rather than holds, because a task conversation runs
+   * for minutes: against the call about that task, a press while the
    * developer is heard mutes, and a press while muted unmutes. Against no
-   * call it opens one about the plan and unmutes it; against a call about
-   * another plan, that call is hung up first,
-   * since only one plan is ever the spoken conversation and no other call
-   * may carry the plan's words or hear its answers.
+   * call it opens one about the task and unmutes it; against a call about
+   * another task, that call is hung up first,
+   * since only one task is ever the spoken conversation and no other call
+   * may carry the task's words or hear its answers.
    */
   talkAboutTask(taskId: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
@@ -329,8 +329,8 @@ export class LiveVoiceOrchestrator {
 
   /**
    * The microphone's mute chord, pressed wherever the panel stands: the call
-   * standing is toggled as its plan's own button toggles it, whatever plan
-   * is open, since the call outlives the plan on screen. A press over no call,
+   * standing is toggled as its task's own button toggles it, whatever task
+   * is open, since the call outlives the task on screen. A press over no call,
    * or over one the host is closing, opens nothing.
    */
   toggleMicrophone(): Effect.Effect<void> {
@@ -342,7 +342,7 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The press's own work, for the talk key and the planning button alike:
+   * The press's own work, for the talk key and the Tasks tab's button alike:
    * the microphone asked for where it is not granted, the session opened if
    * none stands, and the developer heard for as long as the press stands.
    */
@@ -618,7 +618,7 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * A planning call's press is a toggle that stands for minutes, so it ends
+   * A task call's press is a toggle that stands for minutes, so it ends
    * with the call: nothing after it (the talk key's release) reads it as the
    * developer still wanting to be heard.
    */
