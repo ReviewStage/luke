@@ -6,6 +6,7 @@ import {
   WINDOW_ROLE,
   type WindowRole,
 } from "@luke/gateway/window-session";
+import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
@@ -56,6 +57,8 @@ interface AppRunFacts {
   profile: string;
   packaged: boolean;
   platform: string;
+  /** What this platform offers, which every control of a platform feature is drawn by. */
+  capabilities: readonly HostCapability[];
   appVersion: string;
   /** The commit the build was cut from, for the Updates row to name. */
   commit?: BuildCommit;
@@ -259,24 +262,38 @@ export type AppStateSnapshot = AppState & { window: AppWindowFacts };
 
 const WINDOW_ROLES: ReadonlySet<string> = new Set(Object.values(WINDOW_ROLE));
 
+const HOST_CAPABILITIES: ReadonlySet<string> = new Set(Object.values(HOST_CAPABILITY));
+
+/** Whether a value is a list of capabilities, each one this build knows. */
+function isCapabilityList(value: UnparsedWireValue): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((each: UnparsedWireValue) => isWireString(each) && HOST_CAPABILITIES.has(each))
+  );
+}
+
 /**
  * The boundary parse for a snapshot. What it can check is what the wire
  * cannot lie about cheaply and every reader depends on: the version that
- * orders deliveries, and the window facts that decide which surface draws at
- * all. The slices are read by the guards of the vocabularies they came from,
- * where a reader actually uses them.
+ * orders deliveries, the window facts that decide which surface draws at
+ * all, and the capabilities that decide which platform controls stand,
+ * since a bridge other than the desktop's may hand them. The other slices
+ * are read by the guards of the vocabularies they came from, where a reader
+ * actually uses them.
  */
 export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
   if (!isRecord(value)) return false;
   if (!isWireNumber(value.version) || !Number.isInteger(value.version) || value.version < 0) {
     return false;
   }
-  const window = value.window;
+  const { window, run } = value;
   return (
     isRecord(window) &&
     isWireString(window.role) &&
     WINDOW_ROLES.has(window.role) &&
-    isWireBoolean(window.fullScreen)
+    isWireBoolean(window.fullScreen) &&
+    isRecord(run) &&
+    isCapabilityList(run.capabilities)
   );
 }
 

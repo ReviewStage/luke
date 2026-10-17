@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GatewayHost, NodeRegistry } from "@luke/gateway";
+import { channels } from "@luke/host/bridge";
 import type { HostBootstrap, HostOperator } from "@luke/host/host-operator";
 import type { AppSettings } from "@luke/settings/wire";
 import { Effect, Option, type Scope } from "effect";
-import { channels } from "#shared/bridge";
 import { type AppStateStore, bootstrapPatch } from "../app-state";
 import { wireGateway } from "../gateway/wiring";
 import type { DesktopConfig } from "./desktop-config";

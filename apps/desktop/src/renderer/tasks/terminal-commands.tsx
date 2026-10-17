@@ -7,8 +7,8 @@ import {
 } from "@luke/features/terminal-entry";
 import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useContext, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { TerminalPicker } from "./terminal-picker";
