@@ -752,14 +752,17 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
         assert.deepEqual(yield* at(room.second, private_.seq), Option.none());
         assert.deepEqual(yield* at(room.ada, 999), Option.none());
 
-        assert.equal(yield* markNoticed(room.owner, room.workspace, room.ada.id, posted.seq), true);
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.ada.id, room.channel.id, posted.seq),
+          true,
+        );
         assert.deepEqual(
           yield* readAllTo(room.owner, room.workspace, room.ada.id, posted.seq),
           Option.some(posted.seq),
         );
         // The notice it passed is let go, so the next one is told.
         assert.equal(
-          yield* markNoticed(room.owner, room.workspace, room.ada.id, private_.seq),
+          yield* markNoticed(room.owner, room.workspace, room.ada.id, dm.id, private_.seq),
           true,
         );
         assert.deepEqual(
