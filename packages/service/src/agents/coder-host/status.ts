@@ -30,15 +30,24 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * nothing the turn still does changes where it ends. An agent with no turn
  * row long past its Start (`CODER.STARTING_GRACE`) reads as failed rather
  * than starting forever, as one that never started: eve took the session,
- * and its first turn lands in seconds or not at all. A line that awaits its turn reads as running
- * whatever the newest turn says, because the session took the message and
- * the turn it opens is on its way (`@luke/database/models/message-reads`'s
- * `awaitingLinesOf` is where a line is counted as waiting). A failed turn
+ * and its first turn lands in seconds or not at all. A line that awaits its
+ * turn reads as running whatever the newest turn says, because the session
+ * took the message and the turn it opens is on its way
+ * (`@luke/database/models/message-reads`'s `awaitingLinesOf` is where a
+ * line is counted as waiting), but only for so long: a line that has
+ * waited past `CODER.LINE_GRACE` with no turn running reads as failed, as
+ * one whose turn is not coming, so the developer is offered Continue on it
+ * rather than watching it run forever. Failed rather than as the newest
+ * turn says, because the line went unanswered, and a settled agent would
+ * offer neither Continue nor any word of why. A line older than the newest
+ * turn's queueing that the turn never took awaits nothing either: that turn
+ * was its, and ended without the store hearing it received. A failed turn
  * is also read for why, as one of the wire's fixed words: the sweep's own
  * word for a turn it settled, else the host's refusal sentences where the
  * turn's detail carries one, GitHub's or the sandbox's, else the model
- * call, which is what every other eve failure of a coding turn is. Nothing
- * of the detail itself leaves here.
+ * call, which is what every other eve failure of a coding turn is. An
+ * unanswered line after a turn that did not fail has no word, and its end
+ * line says Failed alone. Nothing of the detail itself leaves here.
  */
 
 /** The status a turn row's own status word reads as. */
@@ -56,13 +65,13 @@ function isTurnStatusWord(status: string): status is keyof typeof STATUS_OF_TURN
   return STATUS_WORDS.has(status);
 }
 
-/** When the agent was started, when it is being read, which is what an agent with no turn is judged by, and whether a line of the developer's awaits its turn. */
+/** When the agent was started, when it is being read, which is what an agent with no turn is judged by, and when the newest line of the developer's still awaiting its turn was written. */
 export interface AgentStanding {
   readonly createdAt: Date;
   /** Epoch milliseconds now. */
   readonly now: number;
-  /** Whether a message of the developer's stands in the transcript with no turn yet; none where unsaid. */
-  readonly lineAwaits?: boolean;
+  /** When the newest message of the developer's standing in the transcript with no turn yet was written; none where none stands or unsaid. */
+  readonly awaitingLineAt?: Date | undefined;
 }
 
 /** Whether an agent with no turn row is still inside the grace its first turn may land in. */
@@ -70,12 +79,65 @@ function withinStartingGrace(standing: AgentStanding): boolean {
   return standing.now - standing.createdAt.getTime() <= Duration.toMillis(CODER.STARTING_GRACE);
 }
 
-/** Where an agent stands, from its newest turn; running where a line awaits its turn, starting with no turn inside the grace, failed with none past it. */
+/** Where a line of the developer's with no turn stands: none, awaiting the turn it opens, or unanswered past the grace. */
+const LINE_STANDING = {
+  NONE: "none",
+  AWAITS: "awaits",
+  UNANSWERED: "unanswered",
+} as const;
+
+type LineStanding = (typeof LINE_STANDING)[keyof typeof LINE_STANDING];
+
+/** Whether a turn row still runs, or is queued to: what takes a line at its next step, however long the step it is on runs. */
+function turnRuns(turn: CodingAgentLatestTurn): boolean {
+  return (
+    isTurnStatusWord(turn.status) && STATUS_OF_TURN[turn.status] === CODING_AGENT_STATUS.RUNNING
+  );
+}
+
+/**
+ * Where the newest line awaiting a turn stands. A turn still running takes
+ * it, so it awaits. With none running, a line written before the newest
+ * turn was queued was that turn's opener, written under the lock before
+ * eve's first write of the turn (`steer.ts`), and the turn ended without the
+ * store hearing it received, so it awaits nothing; a line written once the
+ * turn was queued was a steer to it and still counts. Else it awaits for
+ * the grace, counted from when it was written or the newest turn ended,
+ * whichever came later, since that is how long it has stood with nothing
+ * running to take it, and is unanswered past it.
+ */
+function lineStandingOf(
+  turn: CodingAgentLatestTurn | undefined,
+  standing: Pick<AgentStanding, "now" | "awaitingLineAt">,
+): LineStanding {
+  const line = standing.awaitingLineAt?.getTime();
+  if (line === undefined) return LINE_STANDING.NONE;
+  if (turn !== undefined && turnRuns(turn)) return LINE_STANDING.AWAITS;
+  if (turn !== undefined && line < turn.queuedAt.getTime()) {
+    return LINE_STANDING.NONE;
+  }
+  const since = Math.max(line, turn?.settledAt?.getTime() ?? 0);
+  return standing.now - since <= Duration.toMillis(CODER.LINE_GRACE)
+    ? LINE_STANDING.AWAITS
+    : LINE_STANDING.UNANSWERED;
+}
+
+/** Whether a line of the developer's awaits the turn it opens, which keeps the agent at work: what an archive or a Stop reads the agent idle by. */
+export function lineAwaitsTurn(
+  turn: CodingAgentLatestTurn | undefined,
+  standing: Pick<AgentStanding, "now" | "awaitingLineAt">,
+): boolean {
+  return lineStandingOf(turn, standing) === LINE_STANDING.AWAITS;
+}
+
+/** Where an agent stands, from its newest turn; running where a line awaits its turn, failed where one went unanswered past its grace, starting with no turn inside the grace, failed with none past it. */
 export function codingAgentStatusOf(
   turn: CodingAgentLatestTurn | undefined,
   standing: AgentStanding,
 ): CodingAgentStatus {
-  if (standing.lineAwaits === true) return CODING_AGENT_STATUS.RUNNING;
+  const line = lineStandingOf(turn, standing);
+  if (line === LINE_STANDING.AWAITS) return CODING_AGENT_STATUS.RUNNING;
+  if (line === LINE_STANDING.UNANSWERED) return CODING_AGENT_STATUS.FAILED;
   if (turn === undefined) {
     return withinStartingGrace(standing)
       ? CODING_AGENT_STATUS.STARTING
@@ -133,18 +195,18 @@ export function codingAgentFailureOf(
   return named?.[0] ?? CODING_AGENT_FAILURE.MODEL;
 }
 
-/** What an agent's status is read from: its newest turn, and whether a line of the developer's awaits its turn. */
+/** What an agent's status is read from: its newest turn, and when the newest line of the developer's awaiting its turn was written. */
 export interface AgentTurnStanding {
   readonly turn: CodingAgentLatestTurn | undefined;
-  readonly lineAwaits: boolean;
+  readonly awaitingLineAt: Date | undefined;
 }
 
 /** When the run the status is read from began: the newest turn's start, or its queueing before eve starts it, the agent's own before any turn, and none while a line awaits its turn. */
 export function codingAgentRunStartedAt(
   turn: CodingAgentLatestTurn | undefined,
-  standing: Pick<AgentStanding, "createdAt" | "lineAwaits">,
+  standing: AgentStanding,
 ): number | undefined {
-  if (standing.lineAwaits === true) return undefined;
+  if (lineAwaitsTurn(turn, standing)) return undefined;
   return (turn === undefined ? standing.createdAt : (turn.startedAt ?? turn.queuedAt)).getTime();
 }
 
@@ -205,7 +267,7 @@ function summaryFields(
     status: codingAgentStatusOf(standing.turn, {
       createdAt: agent.createdAt,
       now,
-      lineAwaits: standing.lineAwaits,
+      awaitingLineAt: standing.awaitingLineAt,
     }),
     turnId: standing.turn?.id ?? null,
     brief: agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT,
@@ -225,7 +287,8 @@ function summaryFields(
   };
   const started = codingAgentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,
-    lineAwaits: standing.lineAwaits,
+    now,
+    awaitingLineAt: standing.awaitingLineAt,
   });
   return started === undefined ? summary : { ...summary, runStartedAt: started };
 }

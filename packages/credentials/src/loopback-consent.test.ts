@@ -3,12 +3,8 @@ import { createHash } from "node:crypto";
 import http from "node:http";
 import { it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber } from "effect";
-import {
-  type LoopbackAuthorization,
-  type LoopbackConsentOptions,
-  type LoopbackExchange,
-  loopbackConsent,
-} from "./loopback-consent.js";
+import type { LoopbackAuthorization, LoopbackConsentOptions, LoopbackExchange } from "./consent.js";
+import { loopbackConsent } from "./loopback-consent.js";
 
 interface Grant {
   token: string;

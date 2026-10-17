@@ -25,6 +25,7 @@ import {
   postAsk,
   postMessage,
   readAttachment,
+  readTo,
   roster,
   unreadFor,
 } from "@luke/database/models/chat-store";
@@ -62,7 +63,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
+import { ACCOUNT_CHAT_REASON, accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
   firstMessageText,
@@ -117,12 +118,15 @@ import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_LEAD,
   INBOX_REPLY,
   INBOX_RESPONSE,
+  INBOX_STATUS,
   type InboxImageBlock,
   type InboxPost,
   inboxAnsweredSchema,
   inboxAnswerSchema,
+  inboxMessagedSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
@@ -140,6 +144,7 @@ import { and, eq } from "drizzle-orm";
 import {
   Clock,
   DateTime,
+  Deferred,
   Duration,
   Effect,
   Fiber,
@@ -216,8 +221,15 @@ import {
   resolveAsAgent,
 } from "./coder-host/chat.js";
 import { ASK_REFUSAL } from "./coder-host/chat-ask.js";
-import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
+import {
+  CHAT_DOORS,
+  type ChatTelling,
+  HELD_DOORS,
+  postChat,
+  tellMessage,
+} from "./coder-host/chat-notify.js";
 import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
+import { accountInboxPast } from "./coder-host/inbox-page.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -1967,6 +1979,53 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a line no turn ever took reads its agent running for the line's grace and failed past it, alike on its page, in its task's list, and on its transcript",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, agent, ask, transcript, sent } = yield* startedAgent(fakeEve(), {
+          running: false,
+        });
+        // The session takes the line and then fails with the store's hooks, so no turn row is written for it.
+        yield* TestClock.adjust(Duration.seconds(1));
+        assert.equal(
+          (yield* sent("Rename the subject line too.")).agent.status,
+          CODING_AGENT_STATUS.RUNNING,
+        );
+        const statuses = () =>
+          Effect.gen(function* () {
+            const page = readAnswer(
+              codingAgentPageAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(AGENT, owner, { id: agent.id })),
+            );
+            const listed = readAnswer(
+              codingAgentListAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
+            );
+            return {
+              page: page.agent.status,
+              list: listed.agents.find((each) => each.id === agent.id)?.status,
+              transcript: (yield* transcript()).status,
+            };
+          });
+
+        yield* TestClock.adjust(CODER.LINE_GRACE);
+        assert.deepEqual(yield* statuses(), {
+          page: CODING_AGENT_STATUS.RUNNING,
+          list: CODING_AGENT_STATUS.RUNNING,
+          transcript: CODING_AGENT_STATUS.RUNNING,
+        });
+        yield* TestClock.adjust(Duration.millis(1));
+        assert.deepEqual(yield* statuses(), {
+          page: CODING_AGENT_STATUS.FAILED,
+          list: CODING_AGENT_STATUS.FAILED,
+          transcript: CODING_AGENT_STATUS.FAILED,
+        });
+      }),
+  );
+
+  it.effect(
     "the plan list a teammate reads names the member who started each of the plan's agents, by the name their account holds now",
     () =>
       Effect.gen(function* () {
@@ -2441,7 +2500,15 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
-          ["Take the split view.", { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab" }],
+          [
+            "Take the split view.",
+            {
+              kind: MESSAGE_SENDER.AGENT,
+              agentId: agent.id,
+              name: "Add PR overview tab",
+              model: agent.model,
+            },
+          ],
         ] as const) {
           yield* writer.writeAwaitingLine(
             target,
@@ -2471,8 +2538,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
-          // Another agent is marked as one beside its name, with no kind an older window would refuse.
-          ["Take the split view.", { name: "Add PR overview tab", agent: true }],
+          // Another agent is marked as one beside its name, its model, and itself on its task, with no kind an older window would refuse.
+          [
+            "Take the split view.",
+            {
+              name: "Add PR overview tab",
+              agent: true,
+              model: agent.model,
+              agentId: agent.id,
+              taskId: task.id,
+            },
+          ],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);
@@ -2846,6 +2922,7 @@ const TASK_INBOX = "/api/plans/inbox";
 const INBOX_ITEM = "/api/inbox/item";
 const ACCOUNT_INBOX = "/api/inbox";
 const INBOX_ATTACHMENT = "/api/inbox/attachment";
+const INBOX_MESSAGES = "/api/inbox/messages";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
@@ -2882,7 +2959,34 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           opened.ask(request(ACCOUNT_INBOX, bearer, after === undefined ? undefined : { after })),
           (answered) => readAnswer(accountInboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
         );
-      return { ...opened, agent, target, post, read, answer, waiting };
+      /** A member's message on an item's thread, as the route answers it. */
+      const message = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
+        opened.ask(request(INBOX_MESSAGES, bearer, { method: "POST", id: itemId, body }));
+      /** The agent's transcript as the owner reads it: the developer's lines, and where it stands. */
+      const transcript = () =>
+        Effect.map(
+          opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
+          (answered) => {
+            const page = readAnswer(
+              codingAgentMessagesAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              answered,
+            );
+            return { lines: userTexts(page), status: page.status };
+          },
+        );
+      return {
+        ...opened,
+        agent,
+        target,
+        sessionId,
+        post,
+        read,
+        answer,
+        waiting,
+        message,
+        transcript,
+      };
     });
 
   const QUESTION = {
@@ -3046,6 +3150,173 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         [shot.name],
       );
     }),
+  );
+
+  /** The agent's one turn run to its end, as the relay writes a turn that settled: the agent stopped, and waits on nothing. */
+  const turnEnded = (target: { readonly userId: string; readonly conversationId: string }) =>
+    Effect.gen(function* () {
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      const turnId = randomUUID();
+      const turn = { conversationId: sessionKey(target.conversationId), turnId };
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: 0,
+      });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        sequence: 2,
+        message: userMessage(
+          randomUUID(),
+          SNAPSHOT,
+          userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+        ),
+      });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        sequence: 3,
+        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        responseIds: [],
+        at: 0,
+      });
+    });
+
+  it.effect(
+    "a member's message on an answered item wakes the agent that stopped, reaching it under its own lead with its files, and leaves the item answered at its revision, its thread naming the member; a teammate writes as the starter does, a repeat under its key reaches the agent once, and an outsider, no bearer, and an empty message are refused",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, target, ask, post, answer, read, message, transcript } =
+          yield* openInbox(eve);
+        const asked = yield* post({
+          key: "flag-thread",
+          title: "Turn on the agent-mail flag in staging",
+          response: { type: INBOX_RESPONSE.TODO },
+          needsReply: false,
+        });
+        assert.ok(Result.isSuccess(asked));
+        const { id, key, title } = asked.success;
+        // A bare Done on an item that asks nothing back reaches nobody, so the turn below is the agent's last.
+        const answered = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(id, {
+            revision: asked.success.revision,
+            clientKey: randomUUID(),
+            reply: INBOX_REPLY.DONE,
+          }),
+        ).item;
+        yield* turnEnded(target);
+        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.COMPLETED);
+        const before = eve.sent.length;
+        const trace = {
+          name: "copy-review.txt",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          data: Buffer.from("subject line too long\n").toString("base64"),
+        };
+        const body = {
+          text: "One more: drop the emoji.",
+          attachments: [trace],
+          clientKey: randomUUID(),
+        };
+
+        const sent = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* message(id, body),
+        );
+        assert.deepEqual(
+          [sent.item.status, sent.item.revision, sent.item.answer],
+          [INBOX_STATUS.ANSWERED, answered.revision, answered.answer],
+        );
+        assert.deepEqual(
+          sent.item.messages?.map((each) => [
+            each.member?.userId,
+            each.text,
+            each.files?.map((file) => file.name),
+          ]),
+          [[owner, body.text, [trace.name]]],
+        );
+        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
+        assert.ok(handed.includes(`${INBOX_MESSAGE_LEAD} on \\"${title}\\" (key ${key})`));
+        assert.ok(handed.includes(body.text), "it carries the words");
+        assert.ok(handed.includes("subject line too long"), "it carries the file");
+        const woken = yield* transcript();
+        assert.equal(woken.status, CODING_AGENT_STATUS.RUNNING, "the message woke the agent");
+        assert.ok(woken.lines.some((line) => line?.includes(body.text)));
+
+        yield* message(id, body);
+        assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
+        assert.deepEqual(
+          yield* message(id, { ...body, text: "Something else." }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "other words under a key already taken are refused, so the agent never hears what the thread does not show",
+        );
+        assert.equal(eve.sent.length, before + 1);
+
+        assert.deepEqual(
+          yield* message(id, { text: "Before I joined.", clientKey: randomUUID() }, other),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        yield* joinWorkspace(task.workspaceId, other);
+        yield* TestClock.adjust(Duration.seconds(1));
+        readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* message(id, { text: "Agreed.", clientKey: randomUUID() }, other),
+        );
+        const kept = (yield* read()).items.find((item) => item.id === id);
+        assert.deepEqual(
+          kept?.messages?.map((each) => [each.member?.userId, each.text]),
+          [
+            [owner, body.text],
+            [other, "Agreed."],
+          ],
+        );
+        assert.equal(kept?.status, INBOX_STATUS.ANSWERED);
+
+        assert.deepEqual(
+          yield* ask(
+            request(INBOX_MESSAGES, undefined, {
+              method: "POST",
+              id,
+              body: { text: "Hello.", clientKey: randomUUID() },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        assert.deepEqual(
+          yield* message(id, { text: "  ", clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a message the agent's session did not take is taken back off the thread, so the thread never shows what the agent was not told",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, message } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }),
+        );
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+
+        const sent = yield* message(asked.success.id, {
+          text: "Still there?",
+          clientKey: randomUUID(),
+        });
+
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
+        assert.equal(kept?.messages, undefined);
+      }),
   );
 
   it.effect(
@@ -3360,7 +3631,29 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         });
         assert.deepEqual(
           (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
-          { kind: MESSAGE_SENDER.AGENT, name: "agent-1" },
+          // An agent's notice names it by its handle, and by its member's agent and the model that agent posted under.
+          {
+            kind: MESSAGE_SENDER.AGENT,
+            name: "agent-1",
+            model: chat.first.agent.model,
+            agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
+          },
+        );
+        // The notice keeps the model its agent posted under, whatever the agent runs on since.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ model: "openai/gpt-6.1-sol" })
+            .where(eq(codingAgent.id, chat.first.agent.id)),
+        );
+        assert.deepEqual(
+          (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
+          {
+            kind: MESSAGE_SENDER.AGENT,
+            name: "agent-1",
+            model: chat.first.agent.model,
+            agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
+          },
         );
         const again = yield* chat.post(
           chat.first.member,
@@ -3378,6 +3671,90 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const told = yield* chat.post(chat.first.member, "Done now.", { channelId: dm.id });
         assert.deepEqual(told.receipt.told, ["agent-2"]);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "an account with Chat off reads nothing waiting in chat, a message addressed to its person among it",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openChat();
+        yield* chooseChat(chat.owner, false);
+        const telling = { ...chat.telling, doors: CHAT_DOORS };
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+        );
+        const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        yield* postChat(telling, {
+          authorMemberId: chat.first.member.id,
+          to: { channelId: dm.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
+          mentions: [],
+          clientKey: randomUUID(),
+        }).pipe(Effect.provide(chat.github.layer));
+        const after = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        assert.deepEqual(after.chat, []);
+        assert.equal(after.cursor, before.cursor, "nothing in chat moves the read");
+      }),
+  );
+
+  it.effect(
+    "a person a message addresses is told through their account's read once, a second before they read is held, and the read carries who and where until they read past it, with none of its words",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openChat();
+        yield* chooseChat(chat.owner, true);
+        const telling = { ...chat.telling, doors: CHAT_DOORS };
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+        );
+        const say = (text: string) =>
+          postChat(telling, {
+            authorMemberId: chat.first.member.id,
+            to: { channelId: dm.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            mentions: [],
+            clientKey: randomUUID(),
+          }).pipe(Effect.provide(chat.github.layer));
+        const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        assert.deepEqual(before.chat, []);
+
+        const first = yield* say("Can I take the invite file too?");
+        assert.deepEqual(first.receipt.told, [chat.person.handle]);
+        const second = yield* say("Or should I wait for #214?");
+        assert.deepEqual(second.receipt.held, [chat.person.handle]);
+
+        const waiting = yield* accountInboxPast(chat.owner, before.cursor);
+        assert.notEqual(waiting.cursor, before.cursor);
+        assert.deepEqual(
+          waiting.chat?.map(({ seq, reason, from, workspaceId }) => ({
+            seq,
+            reason,
+            from,
+            workspaceId,
+          })),
+          [
+            {
+              seq: first.message.seq,
+              reason: ACCOUNT_CHAT_REASON.DIRECT,
+              from: "agent-1",
+              workspaceId: chat.workspace,
+            },
+          ],
+        );
+        assert.ok(!JSON.stringify(waiting.chat).includes("invite file"));
+
+        yield* readTo(
+          chat.owner,
+          chat.workspace,
+          chat.person.id,
+          second.message.channelId,
+          second.message.seq,
+        );
+        const read = yield* accountInboxPast(chat.owner, waiting.cursor);
+        assert.deepEqual(read.chat, []);
+        const third = yield* say("Going ahead.");
+        assert.deepEqual(third.receipt.told, [chat.person.handle]);
       }),
   );
 
@@ -4487,9 +4864,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       const checkout = sourceCheckout(yield* Effect.promise(() => temporaryDirectory(t, "copy-")));
       writeFileSync(join(checkout.checkout, "invites.ts"), "export const ttl = 7;\n");
       const sandbox = sourceSandbox(checkout, "stopped");
-      const opened = yield* sourceAgentOn((sent) =>
-        sandbox.answer(sent.url, sent.method, sent.body),
-      );
+      const opened = yield* sourceAgentOn(sandbox.answer);
       yield* claimRuntimeSession(opened.stored, "wrun_source", new Date());
       const continued = Effect.gen(function* () {
         const started = readAnswer(
@@ -4546,6 +4921,8 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const fresh = fetchedAsHanded(checkout, preamble);
         assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), branch);
         assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+        // The stop runs behind the Start, which answered without waiting on it.
+        yield* Deferred.await(sandbox.stopAsked);
         assert.deepEqual(
           [sandbox.ran, sandbox.stops],
           [[SOURCE_SANDBOX.WOKEN], [SOURCE_SANDBOX.WOKEN]],
@@ -5542,11 +5919,6 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           readSeq: asked.message.seq,
         });
         assert.deepEqual(yield* chat.wrote({ readTo: 0 }), { readSeq: asked.message.seq });
-        // One channel's read is refused while the store keeps one cursor per member.
-        assert.deepEqual(
-          yield* chat.write({ readTo: asked.message.seq, channelId: chat.channel.id }),
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
         assert.equal((yield* chat.read).readSeq, asked.message.seq);
 
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
@@ -5566,6 +5938,35 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.deepEqual(
           yield* chat.write({ readTo: 1 }, "no-such-bearer"),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+      }),
+  );
+
+  it.effect(
+    "a read naming the channel shown moves that channel's own cursor alone, which the write's answer and the chat's read both carry, and a channel the person may not see is refused",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        // The window's read moves its cursor to the head, so the ask comes after it.
+        const floor = (yield* chat.read).readSeq;
+        const asked = yield* chat.agentAsks("Ship it?");
+        const { channelId, seq } = asked.message;
+
+        assert.deepEqual(yield* chat.wrote({ readTo: seq, channelId }), {
+          readSeq: floor,
+          reads: [{ channelId, readSeq: seq }],
+        });
+        const read = yield* chat.read;
+        assert.equal(read.readSeq, floor, "the cursor everywhere stays where it was");
+        assert.deepEqual(read.reads, [{ channelId, readSeq: seq }]);
+
+        // Every channel read past it leaves no channel's own cursor ahead to say.
+        assert.deepEqual(yield* chat.wrote({ readTo: seq }), { readSeq: seq });
+        assert.equal((yield* chat.read).reads, undefined);
+
+        assert.deepEqual(
+          yield* chat.write({ readTo: seq, channelId: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
       }),
   );

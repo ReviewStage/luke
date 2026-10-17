@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { installEditorBundle, installEditorLayout } from "#testing/composer";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { relayout } from "#testing/resize-observer";
 import { appCommandOffered, runAppCommand } from "../app-commands";
@@ -66,21 +68,19 @@ const saved: string[] = [];
 /** The keep the host answers next: held until the test lets it go, with what it answers. */
 let keeping: { resolve: (outcome: ActOutcome) => void } | undefined;
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
-  installEditorBundle();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
-          return new Promise((resolve) => {
-            keeping = { resolve };
-          });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
+        return new Promise((resolve) => {
+          keeping = { resolve };
+        });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
 });

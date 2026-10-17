@@ -82,6 +82,8 @@ export type Actor =
       readonly kind: typeof ACTOR_KIND.AGENT;
       /** The agent's id, which tells two agents of one name apart; absent where an older service named none. */
       readonly agentId?: string | undefined;
+      /** The task the agent works on, where the place naming it knows it, which its card and its tab are read under. */
+      readonly taskId?: string | undefined;
       readonly name: string;
       readonly provider: ModelProvider | undefined;
       readonly state: ActorState;

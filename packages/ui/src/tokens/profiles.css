@@ -51,6 +51,10 @@
   --luke-settings-row-compact-block: var(--luke-space-0);
   --luke-settings-row-compact-inline: var(--luke-space-0);
   --luke-settings-row-compact-min-height: 32px;
+  /* A list row stands in a card as a reference list's line does, denser
+     than a setting's, because it is read down rather than set. */
+  --luke-settings-row-list-block: var(--luke-space-8);
+  --luke-settings-row-list-min-height: 40px;
   /* The window's settings groups stand further apart than its fields. */
   --luke-settings-section-gap: var(--luke-space-32);
 
@@ -108,6 +112,8 @@
   --luke-settings-row-compact-block: var(--luke-space-0);
   --luke-settings-row-compact-inline: var(--luke-space-0);
   --luke-settings-row-compact-min-height: auto;
+  --luke-settings-row-list-block: var(--luke-settings-row-block);
+  --luke-settings-row-list-min-height: auto;
   --luke-settings-section-gap: var(--luke-section-gap);
 
   --luke-text-area-grow-max: 320px;

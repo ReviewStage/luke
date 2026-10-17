@@ -12,6 +12,10 @@
  * started `from` a message names that message, so the source's tab says
  * under it which agents were forked there, in the order started, and no
  * read of the service's is owed to it.
+ *
+ * A continue is held the same way, naming no message: the draft its
+ * Continue in new agent opens (`continue-agent.tsx`) starts from the
+ * source on its whole transcript, its chip naming the source alone.
  */
 
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
@@ -25,9 +29,11 @@ import { cardTitle } from "./tool-call-model";
 export const FORK_WORDS = {
   ACTION: "Fork to new agent",
   OF: "Fork of",
+  CONTINUE_OF: "Continue of",
   AT: "at",
   TO: "Forked to",
   DROP: "Drop the fork",
+  DROP_CONTINUE: "Drop the continue",
   OPEN_SOURCE: "Open the message",
 } as const;
 
@@ -37,12 +43,37 @@ const OPENING = { WORDS: 8, CHARS: 60 } as const;
 /** The ellipsis a quote cut short ends on. */
 const ELLIPSIS = "…";
 
-/** One agent forked at one of its messages, with the message's opening words, which the draft's chip quotes. */
+/**
+ * One agent forked at one of its messages, with the message's opening
+ * words, which the draft's chip quotes; or, naming no message, continued
+ * on its whole transcript, when there is nothing to quote and `opening` is
+ * empty.
+ */
 export interface AgentFork {
   readonly agentId: string;
-  readonly messageId: string;
+  readonly messageId?: string;
   readonly opening: string;
 }
+
+/** A continue of `agentId` as a draft holds it: its whole transcript, no message named. */
+export function continueFork(agentId: string): AgentFork {
+  return { agentId, opening: "" };
+}
+
+/** What a forked or continued draft's working line says while its Start is out, in the order the service does it. */
+const START_STAGE_WORDS = {
+  COPYING_BEFORE: "Copying ",
+  COPYING_AFTER: "'s work…",
+  STARTING: "Starting the new agent…",
+} as const;
+
+/**
+ * How long the copy of the source's work is said to take before the line
+ * moves on to the new agent starting. Note that the service says nothing
+ * while a Start is out, so the stage follows the time it typically spends
+ * on the copy, which comes first, rather than a word of its own.
+ */
+const COPY_STAGE_MS = 3_000;
 
 /** A Start as the draft's send asks it, the plan left for the caller to name. */
 export type ForkStart = Omit<ActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">;
@@ -71,6 +102,12 @@ export function forkChoice(source: CodingAgentSummary): ModelChoice {
   });
 }
 
+/** Where a fork starts from: its source at its message, or on its whole transcript for a continue. */
+function forkFrom(fork: AgentFork): NonNullable<ForkStart["from"]> {
+  const { agentId, messageId } = fork;
+  return messageId === undefined ? { agentId } : { agentId, messageId };
+}
+
 /**
  * The Start a forked draft sends under its own key: from the source at its
  * message, a note where the box holds anything, its words and the files
@@ -90,13 +127,25 @@ export function forkStart(input: {
   const { attachments, choice, disabledServers } = input;
   return {
     idempotencyKey: input.draftId,
-    from: { agentId: input.fork.agentId, messageId: input.fork.messageId },
+    from: forkFrom(input.fork),
     ...(note === "" && attachments.length === 0 ? undefined : { note }),
     ...(attachments.length === 0 ? undefined : { attachments }),
     // Note that the servers go even when none is off, because a Start naming none runs on the source's.
     disabledServers,
     ...(choice === undefined ? undefined : choiceRequest(choice)),
   };
+}
+
+/**
+ * What a forked or continued draft's working line says `elapsedMs` after
+ * its Start went: the copy of `source`'s work, named as its tab is, from
+ * the first and while the time is not yet read, then the new agent
+ * starting.
+ */
+export function startingWords(source: string, elapsedMs: number | undefined): string {
+  return elapsedMs !== undefined && elapsedMs >= COPY_STAGE_MS
+    ? START_STAGE_WORDS.STARTING
+    : `${START_STAGE_WORDS.COPYING_BEFORE}${source}${START_STAGE_WORDS.COPYING_AFTER}`;
 }
 
 /**
