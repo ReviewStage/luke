@@ -1407,6 +1407,46 @@ test("Escape keeps a new page whose schedule was changed, though nothing was typ
   assert.equal(places.length, 1);
 });
 
+test("a schedule's day, time, and zone are saved as picked and typed, and a custom cron as written", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Weekly sweep");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Update the dependencies.");
+  pick(page, "Repeats", "Weekly");
+  pick(page, "Day", "Monday");
+  type(page.querySelector("input[aria-label='Time']"), "07:30");
+  act(() => picker(page, "Time zone").click());
+  type(document.querySelector("input[placeholder='Search time zones']"), "Tokyo");
+  act(() => {
+    [...document.querySelectorAll<HTMLButtonElement>("[role=option]")]
+      .find((each) => each.textContent?.includes("Asia/Tokyo"))
+      ?.click();
+  });
+  assert.equal(picked(page, "Time zone"), "Asia/Tokyo");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.deepEqual(creates.at(-1)?.trigger, {
+    kind: AUTOMATION_TRIGGER.SCHEDULE,
+    cron: "30 7 * * 1",
+    timezone: "Asia/Tokyo",
+  });
+
+  pick(page, "Repeats", "Custom");
+  type(page.querySelector("input[aria-label='Cron']"), "15 2 * * 1-5");
+  const created = places.at(-1);
+  assert.equal(created?.kind, AUTOMATIONS_PAGE.EDIT);
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes.at(-1), {
+    automationId: "automationId" in created ? created.automationId : undefined,
+    change: {
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "15 2 * * 1-5", timezone: "Asia/Tokyo" },
+    },
+  });
+});
+
 test("Escape while writing the prompt lets go of the caret and reaches the window marked taken, composing or not", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();

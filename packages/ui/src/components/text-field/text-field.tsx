@@ -22,16 +22,25 @@ import type { FieldControl } from "../form-field/form-field.js";
  * and must not close the page the field stands on either.
  */
 
-/** What a one-line field holds: words, a search, an address, or a secret. */
+/** What a one-line field holds: words, a search, an address, a secret, or a time of day. */
 export const TEXT_FIELD_TYPE = {
   TEXT: "text",
   SEARCH: "search",
   EMAIL: "email",
   URL: "url",
   PASSWORD: "password",
+  TIME: "time",
 } as const;
 
 export type TextFieldType = (typeof TEXT_FIELD_TYPE)[keyof typeof TEXT_FIELD_TYPE];
+
+/** The face a field's words are set in: the body's, or a fixed width for code, a cron or a path. */
+export const TEXT_FIELD_FONT = {
+  BODY: "body",
+  MONO: "mono",
+} as const;
+
+export type TextFieldFont = (typeof TEXT_FIELD_FONT)[keyof typeof TEXT_FIELD_FONT];
 
 /** What the system may fill a one-line field with: nothing, for a credential it must neither offer nor keep. */
 export const TEXT_FIELD_AUTO_COMPLETE = {
@@ -74,6 +83,8 @@ type TextEntryProps = Named & {
   spellCheck?: boolean | undefined;
   /** What an Escape does, pressed while no input method is composing; every Escape is marked taken, so the page's Escape passes it by. */
   onEscape?: (() => void) | undefined;
+  /** The face its words are set in; the body's where none is named. */
+  font?: TextFieldFont | undefined;
 };
 
 /** The attributes a text entry carries for its field, or its own name where it has none. */
@@ -92,6 +103,7 @@ function entryAttributes(props: TextEntryProps) {
     maxLength: props.maxLength,
     spellCheck: props.spellCheck,
     value: props.value,
+    "data-font": props.font ?? TEXT_FIELD_FONT.BODY,
   };
 }
 

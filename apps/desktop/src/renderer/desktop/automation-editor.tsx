@@ -72,13 +72,17 @@ import {
   IconButton,
   POPOVER_ALIGN,
   ProviderMark,
+  SettingsRow,
   SidePanelIcon,
   Switch,
   TEXT_ELEMENT,
+  TEXT_FIELD_FONT,
+  TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextArea,
+  TextField,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
@@ -470,6 +474,9 @@ function ScheduleRows({
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
 }): React.JSX.Element {
+  // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  const cron = useRef<HTMLInputElement>(null);
+  const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
   const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
   return (
@@ -483,62 +490,65 @@ function ScheduleRows({
         onChange={(kind) => onSchedule({ ...schedule, kind })}
       />
       {schedule.kind === SCHEDULE_KIND.CUSTOM ? (
-        <div className="settings-row">
-          <span className="settings-copy">
-            <strong>Cron</strong>
-          </span>
-          <input
-            className="settings-input automation-cron"
-            aria-label="Cron"
-            spellCheck={false}
-            onKeyDown={releaseOnEscape}
-            value={schedule.cron}
-            onChange={(event) => onSchedule({ ...schedule, cron: event.target.value })}
-          />
-        </div>
+        <SettingsRow label="Cron">
+          {() => (
+            <span className="automation-field">
+              <TextField
+                ref={cron}
+                label="Cron"
+                font={TEXT_FIELD_FONT.MONO}
+                spellCheck={false}
+                value={schedule.cron}
+                onEscape={() => cron.current?.blur()}
+                onChange={(text) => onSchedule({ ...schedule, cron: text })}
+              />
+            </span>
+          )}
+        </SettingsRow>
       ) : (
-        <div className="settings-row">
-          <span className="settings-copy">
-            <strong>{schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}</strong>
-          </span>
-          <span className="automation-row-controls">
-            {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
-              <Picker
-                label="Day"
-                value={String(schedule.weekday)}
-                valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
-                rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
-                noMatch={NO_MATCH}
-                onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
-              />
-            ) : null}
-            {schedule.kind === SCHEDULE_KIND.HOURLY ? (
-              <Picker
-                label="Minutes past the hour"
-                value={String(schedule.minute)}
-                valueLabel={hourlyLabel(schedule.minute)}
-                rows={HOURLY_MINUTES.map((minute) => ({
-                  id: String(minute),
-                  label: hourlyLabel(minute),
-                }))}
-                noMatch={NO_MATCH}
-                onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
-              />
-            ) : (
-              <input
-                type="time"
-                className="settings-input automation-time"
-                aria-label="Time"
-                value={clockValue(schedule.hour, schedule.minute)}
-                onKeyDown={releaseOnEscape}
-                onChange={(event) => {
-                  const clock = clockOf(event.target.value);
-                  if (clock !== undefined) onSchedule({ ...schedule, ...clock });
-                }}
-              />
-            )}
-          </span>
-        </div>
+        <SettingsRow label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}>
+          {() => (
+            <>
+              {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
+                <Picker
+                  label="Day"
+                  value={String(schedule.weekday)}
+                  valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
+                  rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
+                  noMatch={NO_MATCH}
+                  onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
+                />
+              ) : null}
+              {schedule.kind === SCHEDULE_KIND.HOURLY ? (
+                <Picker
+                  label="Minutes past the hour"
+                  value={String(schedule.minute)}
+                  valueLabel={hourlyLabel(schedule.minute)}
+                  rows={HOURLY_MINUTES.map((minute) => ({
+                    id: String(minute),
+                    label: hourlyLabel(minute),
+                  }))}
+                  noMatch={NO_MATCH}
+                  onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
+                />
+              ) : (
+                <span className="automation-field">
+                  <TextField
+                    ref={time}
+                    type={TEXT_FIELD_TYPE.TIME}
+                    label="Time"
+                    value={clockValue(schedule.hour, schedule.minute)}
+                    onEscape={() => time.current?.blur()}
+                    onChange={(text) => {
+                      const clock = clockOf(text);
+                      if (clock !== undefined) onSchedule({ ...schedule, ...clock });
+                    }}
+                  />
+                </span>
+              )}
+            </>
+          )}
+        </SettingsRow>
       )}
       <PickerRow
         label="Time zone"
