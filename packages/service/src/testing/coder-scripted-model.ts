@@ -26,7 +26,10 @@ import { CODER_TOOL } from "../agents/coder-host/tool-set.js";
  * same model, reads the task back under eve's wrapper as the agent reads
  * the plan's title back. Handed a list of to-dos, it writes them, the first
  * in progress, and says so. Offered the fixture's skill and told its
- * `/name`, it loads it and repeats the body's last line. It is
+ * `/name`, it loads it and repeats the body's last line. Told to post in
+ * chat, it posts the words in its plan's channel and names the message's
+ * number; told to read the chat, it reads what it has not read and repeats
+ * the first message with who said it. It is
  * selected only by the fixture's own environment variable and a deployment
  * never names it.
  */
@@ -44,6 +47,15 @@ export const SCRIPTED_TODOS_REPLY = "The to-dos are written.";
 /** The pair the scripted agent names for every worker, which the fixture records as asked. */
 export const SCRIPTED_WORKER_CHOICE = { model: "openai/gpt-6.1-sol", effort: "low" } as const;
 
+/** What a developer's words start with when they ask the scripted agent to post the rest in chat. */
+export const SCRIPTED_CHAT_POST = "Post in chat: ";
+/** The reply once the post has landed: the message's number follows. */
+export const SCRIPTED_CHAT_POSTED = "Posted in chat as m";
+/** What a developer's words are when they ask the scripted agent to read the chat. */
+export const SCRIPTED_CHAT_READ = "Read the chat.";
+/** The reply once the chat is read: who said the first message unread, and its words, follow. */
+export const SCRIPTED_CHAT_HEARD = "The chat says:";
+
 /** What the scripted agent says once it has loaded a skill: the skill's last line follows. */
 export const SCRIPTED_SKILL_REPLY = "The skill says:";
 /** The skills a session under the fixture is offered in place of its repository's, so the eval reaches no GitHub. */
@@ -60,6 +72,14 @@ const NAMED_SKILL = /(?:^|\s)\/([a-z0-9-]+)/u;
 
 const readDelegationOutput = Schema.decodeUnknownOption(
   Schema.fromJsonString(codingAgentDelegationOutputSchema),
+);
+/** What a post answers, read for the message's number. */
+const readPosted = Schema.decodeUnknownOption(Schema.Struct({ seq: Schema.Number }));
+/** What a read answers, read for its messages' authors and words. */
+const readHeard = Schema.decodeUnknownOption(
+  Schema.Struct({
+    messages: Schema.Array(Schema.Struct({ from: Schema.String, text: Schema.String })),
+  }),
 );
 /** What `load_skill` answers: the skill's body. */
 const readSkillBody = Schema.decodeUnknownOption(Schema.String);
@@ -125,7 +145,39 @@ function skillReply(loaded: MockModelToolResult): MockModelResponse {
   return { text: `${SCRIPTED_SKILL_REPLY} ${body.trim().split("\n").at(-1) ?? ""}` };
 }
 
+/** The scripted agent's chat turn: a post or a read where the developer's words ask for one, its answer once it has answered, nothing otherwise. */
+function chatResponse(request: MockModelRequest): MockModelResponse | undefined {
+  const posted = request.toolResults.find((result) => result.name === CODER_TOOL.POST_CHAT);
+  if (posted) {
+    const seq = Option.match(readPosted(posted.output), {
+      onNone: () => "?",
+      onSome: (read) => String(read.seq),
+    });
+    return { text: `${SCRIPTED_CHAT_POSTED} ${seq}` };
+  }
+  const heard = request.toolResults.find((result) => result.name === CODER_TOOL.READ_CHAT);
+  if (heard) {
+    const [first] = Option.match(readHeard(heard.output), {
+      onNone: () => [],
+      onSome: (read) => read.messages,
+    });
+    return {
+      text: `${SCRIPTED_CHAT_HEARD} ${first === undefined ? "" : `${first.from}: ${first.text}`}`,
+    };
+  }
+  const words = request.lastUserMessage ?? "";
+  if (words.startsWith(SCRIPTED_CHAT_POST)) {
+    const text = words.slice(SCRIPTED_CHAT_POST.length);
+    return { toolCalls: [{ name: CODER_TOOL.POST_CHAT, input: { text } }] };
+  }
+  if (words === SCRIPTED_CHAT_READ)
+    return { toolCalls: [{ name: CODER_TOOL.READ_CHAT, input: {} }] };
+  return undefined;
+}
+
 function scriptedResponse(request: MockModelRequest): MockModelResponse {
+  const chatted = chatResponse(request);
+  if (chatted !== undefined) return chatted;
   const loaded = request.toolResults.find((result) => result.name === CODER_TOOL.LOAD_SKILL);
   if (loaded) return skillReply(loaded);
   const skill = offeredSkillNamed(request);
