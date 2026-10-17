@@ -4,7 +4,10 @@ import {
   METRIC_STATUS,
   MetricCardSkeleton,
   SectionHeading,
+  STAT_CELL,
   STAT_GROUP_COLUMNS,
+  STAT_PAIR,
+  STAT_ROW,
   StatGroup,
 } from "./charts/stat-card";
 
@@ -82,7 +85,7 @@ interface SkeletonTextLine {
 export type SkeletonShape =
   | { kind: typeof SKELETON_SHAPE.HEADING; label: string }
   | { kind: typeof SKELETON_SHAPE.STAT_GROUP }
-  | { kind: typeof SKELETON_SHAPE.STAT_CARDS; count: 1 | 2 | 3 | 4; columns: 1 | 2 | 3 | 4 }
+  | { kind: typeof SKELETON_SHAPE.STAT_CARDS; count: 1 | 2 | 4; columns: 1 | 2 | 4 }
   /** One chart card, or the pair a page sets side by side. */
   | { kind: typeof SKELETON_SHAPE.CHART; plots: readonly SkeletonPlot[] }
   | { kind: typeof SKELETON_SHAPE.CALENDAR }
@@ -110,8 +113,6 @@ function bones(count: number): readonly number[] {
 const STAT_CARDS_GRID = {
   1: "grid gap-3",
   2: "grid grid-cols-2 gap-3",
-  3: "grid grid-cols-2 gap-3 min-[720px]:grid-cols-3",
-  4: "grid grid-cols-2 gap-3 min-[720px]:grid-cols-4",
 } as const;
 
 /** Only the sign-in methods chart has no trend across from its heading. */
@@ -185,6 +186,24 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
         </StatGroup>
       );
     case SKELETON_SHAPE.STAT_CARDS:
+      // Note that four cards stand in the loaded page's two wrapping pairs,
+      // so the bones break where the figures will rather than at a breakpoint
+      // of their own.
+      if (shape.columns === 4) {
+        return (
+          <div className={STAT_ROW}>
+            {bones(2).map((pair) => (
+              <div key={pair} className={STAT_PAIR}>
+                {bones(2).map((card) => (
+                  <div key={card} className={STAT_CELL}>
+                    <MetricCardSkeleton />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      }
       return (
         <div className={STAT_CARDS_GRID[shape.columns]}>
           {bones(shape.count).map((card) => (
