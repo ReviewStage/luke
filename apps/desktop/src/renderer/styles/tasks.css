@@ -2299,6 +2299,45 @@ button.pull-request-check:hover {
   margin: 0 var(--boxed-inset) var(--space-8);
 }
 
+/* The reactions under a description or a comment, as GitHub draws them:
+   a row of pills, each its emoji and how many gave it, the reader's own lit
+   in the accent. */
+.pull-request-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-section > .pull-request-reactions {
+  margin-top: var(--space-8);
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-8);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.pull-request-reaction-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.pull-request-reaction[data-mine="true"] {
+  border-color: color-mix(in srgb, var(--focus-ring) 55%, transparent);
+  background: color-mix(in srgb, var(--focus-ring) 14%, transparent);
+  color: var(--text-primary);
+}
+
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
   margin: 0 0 var(--space-8);
