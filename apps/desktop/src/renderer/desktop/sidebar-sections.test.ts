@@ -282,8 +282,8 @@ test("Move to section names a section without an icon with no glyph beside it", 
 
   openMoveToSection(sidebar, "Invite expiry");
 
-  assert.equal(item("Someday").querySelector(".menu-item-glyph")?.childElementCount, 0);
-  assert.equal(item("Launch").querySelector(".menu-item-glyph")?.textContent, "🚀");
+  assert.equal(item("Someday").querySelector(".luke-menu-item-glyph")?.childElementCount, 0);
+  assert.equal(item("Launch").querySelector(".luke-menu-item-glyph")?.textContent, "🚀");
 });
 
 test("a new section starts with no icon and is made without one", async () => {
