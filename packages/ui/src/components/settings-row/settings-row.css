@@ -1,8 +1,9 @@
 /* settings-row.css -- a setting's words and its controls on one line, the
    words taking what room the controls leave and wrapping in it, and the
    controls dropping below the words to the row's end once the row is
-   narrower than 380px, a leading mark staying beside the words. A compact row stands bare, at a menu row's height,
-   and keeps its controls beside its words at any width. */
+   narrower than 380px, a leading mark staying beside the words. A compact
+   row stands bare, at a menu row's height, and keeps its controls beside
+   its words at any width. */
 
 @layer components {
   /* Note that the row is its own container, and its padding is its body's,

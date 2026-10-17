@@ -49,6 +49,21 @@ import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
+  APP_COMMAND,
+  APP_SHORTCUT_GROUPS,
+  APP_SHORTCUTS,
+  type AppCommand,
+  appCommandLabel,
+  commandForKey,
+  isKeyedCommand,
+  type KeyedCommand,
+  PALETTE_COMMANDS,
+  SHORTCUT_KEY,
+  type ShortcutChord,
+} from "@luke/settings/shortcuts";
+import {
+  CHIP_LOOK,
+  Chip,
   GearIcon,
   PinIcon,
   SearchIcon,
@@ -65,19 +80,6 @@ import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  APP_COMMAND,
-  APP_SHORTCUT_GROUPS,
-  APP_SHORTCUTS,
-  type AppCommand,
-  appCommandLabel,
-  commandForKey,
-  isKeyedCommand,
-  type KeyedCommand,
-  PALETTE_COMMANDS,
-  SHORTCUT_KEY,
-  type ShortcutChord,
-} from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
@@ -92,6 +94,7 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import { useChatOn } from "../tasks/chat-gate";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { refusalLine } from "../tasks/file-tab-model";
@@ -103,7 +106,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { agentEntries, inboxEntries } from "./main-tabs";
+import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, taskWorkers } from "./side-panel";
 import { taskOf } from "./task-actions";
 import { WorkspaceRef } from "./workspace-ref";
@@ -472,7 +475,7 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 }
 
 /**
- * The open task's Inbox and coding agents, as the column's "+" lists them,
+ * The open task's Inbox, Chat, and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
  * lists them, then its archived agents (`archivedAgentRows`), each in its
  * row's look and words, found by its row's words, and beside the task's
@@ -481,12 +484,17 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
  * subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
  */
-function agentRows(tasks: TasksControl, show: (pick: () => void) => void): readonly PaletteRow[] {
+function agentRows(
+  tasks: TasksControl,
+  chatOn: boolean,
+  show: (pick: () => void) => void,
+): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
   const workers = taskWorkers(workRowsOf(tasks.work.conversation, tasks.work.callLive));
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
+  const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
@@ -501,7 +509,7 @@ function agentRows(tasks: TasksControl, show: (pick: () => void) => void): reado
         changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
       }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
-  const entries = [...inbox, ...agents, ...subagents];
+  const entries = [...inbox, ...chat, ...agents, ...subagents];
   const standing = entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,
@@ -825,10 +833,9 @@ function FilterChips({
   return (
     <fieldset className="command-palette-filters" aria-label="Filter">
       {PALETTE_FILTERS.map((each) => (
-        <button
+        <Chip
           key={each}
-          type="button"
-          className="command-palette-filter"
+          look={CHIP_LOOK.FILTER}
           aria-pressed={each === filter}
           // Note that a chip takes no focus, because the caret belongs in the
           // field and Return there opens the row chosen, not the chip.
@@ -837,7 +844,7 @@ function FilterChips({
           onClick={() => onFilter(each)}
         >
           {FILTER_LABEL[each]}
-        </button>
+        </Chip>
       ))}
     </fieldset>
   );
@@ -890,6 +897,7 @@ export function CommandPalette({
   readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const chatOn = useChatOn();
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
@@ -1062,7 +1070,7 @@ export function CommandPalette({
     [PALETTE_FILTER.TASKS]: () => [
       plans.signedIn ? taskRows(plans, members, (id) => onTasks(() => plans.onSelect(id))) : [],
     ],
-    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onTasks)],
+    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, chatOn, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, plans.me, (userId) => onTasks(() => plans.personView.onOpen(userId))),
     ],

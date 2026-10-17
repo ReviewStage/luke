@@ -6,6 +6,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { noNetwork } from "@luke/wire/testing";
 import { ConnectError } from "@vercel/connect";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
@@ -32,7 +33,6 @@ import {
   integrationConnectOf,
   integrationConnectOver,
 } from "../testing/integration-connect.js";
-import { noNetwork } from "../testing/no-network.js";
 import {
   type ConnectorService,
   INTEGRATION_CONNECT_FAILURE,
