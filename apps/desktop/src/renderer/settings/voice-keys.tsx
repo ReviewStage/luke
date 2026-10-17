@@ -11,12 +11,6 @@ import {
   VOICE_HOTKEY_NONE,
 } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
-import { PencilIcon, ResetIcon, TrashIcon } from "@luke/ui";
-import { actionRejection } from "@luke/ui/use-setting-write";
-import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
-import type { ShortcutControl } from "@luke/voice/settings-controls";
-import type { ActionResult } from "@luke/wire";
-import { useEffect, useId, useRef, useState } from "react";
 import {
   APP_SHORTCUTS,
   commandForKey,
@@ -24,11 +18,22 @@ import {
   type KeyedCommand,
   shortcutAccelerator,
   shortcutLabel,
-} from "#shared/shortcuts";
+} from "@luke/settings/shortcuts";
+import {
+  PencilIcon,
+  ResetIcon,
+  type SettingsRowControl,
+  SettingsSection,
+  TrashIcon,
+} from "@luke/ui";
+import { actionRejection } from "@luke/ui/use-setting-write";
+import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
+import type { ShortcutControl } from "@luke/voice/settings-controls";
+import type { ActionResult } from "@luke/wire";
+import { useEffect, useId, useRef, useState } from "react";
 import { Shortcut } from "../shortcut";
 import { AttentionMark, ChangedMark } from "./marks";
 import { MenuRow } from "./menu-row";
-import { SettingsGroup } from "./settings-group";
 
 /* What a talk key may be: offered the moment recording starts, and restated
    in the error line for the keystroke that was not one. */
@@ -60,6 +65,10 @@ function windowChordRefusal(command: KeyedCommand): string {
  * already keeps. What the row shows is the key as registered, not as stored —
  * the two differ when another app owns the chosen chord, and a row that
  * showed the stored one would name a key that answers nothing.
+ *
+ * The row is `@luke/ui`'s `SettingsRow`, through `MenuRow`: the hint stands
+ * under the key's own detail while a recording listens, and a refusal in the
+ * row's error line, which a reader hears as it arrives.
  *
  * Remove is offered on Reset's own terms — never while it could only change
  * nothing, which for a removal is while the key is already deleted — and is
@@ -164,100 +173,126 @@ function ShortcutRow({
       : []),
   ];
 
-  return (
-    <MenuRow label={`${title} shortcut actions`} actions={actions} anchor={anchor}>
-      <span className="settings-copy">
-        <span className="shortcut-name">
-          {title}
-          {/* A stored chord is a changed value on the other rows' terms; the
-              flag that shows Reset is the flag that earns the mark. */}
-          {chosen ? <ChangedMark /> : null}
-          {/* The same mark the Voice page wears, because it is the same
-              missing key: the chord is still shown and still changeable, the
-              mark only says pressing it does nothing yet. */}
-          {attention ? <AttentionMark note={attention} /> : null}
-        </span>
-        {detail === undefined ? null : <small>{detail}</small>}
-        {rejection ? (
-          <p className="error-message" role="alert">
-            {rejection}
-          </p>
-        ) : recording ? (
-          <p className="settings-note">{SHORTCUT_HINT}</p>
-        ) : null}
-      </span>
-      <button
-        ref={field}
-        type="button"
-        className="shortcut-field"
-        disabled={busy}
-        aria-pressed={recording}
-        aria-describedby={recording ? undefined : chordId}
-        aria-label={
-          recording
-            ? `Cancel, or type the new shortcut for ${title}`
-            : `Change the shortcut for ${title}`
-        }
-        onClick={() => {
-          if (recording) {
-            setRecording(false);
-            return;
-          }
-          record();
-        }}
-        // Focus leaving takes the recording with it: whatever was pressed
-        // instead is its own action, not a half-formed chord left armed.
-        onBlur={() => setRecording(false)}
-        onKeyDown={(event) => {
-          // A key that repeats is being held through the chord, not
-          // pressed as one; only its first arrival is read.
-          if (!recording || event.repeat) return;
-          // Nothing typed here is typing: not a Space press on the button,
-          // and not the panel's own Escape-to-close behind it.
-          event.preventDefault();
-          event.stopPropagation();
-          if (event.key === "Escape") {
-            setRecording(false);
-            return;
-          }
-          // A system-wide key wins over the window's own chord, so a
-          // key that would take one of them is refused rather than
-          // left to silence it.
-          const taken = commandForKey(KEYED_COMMANDS, event.nativeEvent);
-          if (taken !== undefined) {
-            setRejection(windowChordRefusal(taken));
-            return;
-          }
-          const read = capturedVoiceHotkey(event);
-          if (read.outcome === VOICE_HOTKEY_CAPTURE.PENDING) return;
-          if (read.outcome === VOICE_HOTKEY_CAPTURE.REFUSED) {
-            setRejection(SHORTCUT_HINT);
-            return;
-          }
-          setRejection(undefined);
+  // Note that the field is described by the row's words and its refusal as
+  // well as by its chord, because a refusal still standing must be heard
+  // again when the field is returned to, not only as it arrived.
+  const chordField = (control: SettingsRowControl) => (
+    <button
+      ref={field}
+      type="button"
+      className="shortcut-field"
+      disabled={busy}
+      aria-pressed={recording}
+      aria-describedby={
+        [recording ? undefined : chordId, control["aria-describedby"]]
+          .filter((part) => part !== undefined)
+          .join(" ") || undefined
+      }
+      aria-invalid={control["aria-invalid"]}
+      aria-label={
+        recording
+          ? `Cancel, or type the new shortcut for ${title}`
+          : `Change the shortcut for ${title}`
+      }
+      onClick={() => {
+        if (recording) {
           setRecording(false);
-          void apply(read.accelerator);
-        }}
-      >
-        {/* The chord while there is one to press, and a sentence when
+          return;
+        }
+        record();
+      }}
+      // Focus leaving takes the recording with it: whatever was pressed
+      // instead is its own action, not a half-formed chord left armed.
+      onBlur={() => setRecording(false)}
+      onKeyDown={(event) => {
+        // A key that repeats is being held through the chord, not
+        // pressed as one; only its first arrival is read.
+        if (!recording || event.repeat) return;
+        // Nothing typed here is typing: not a Space press on the button,
+        // and not the panel's own Escape-to-close behind it.
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === "Escape") {
+          setRecording(false);
+          return;
+        }
+        // A system-wide key wins over the window's own chord, so a
+        // key that would take one of them is refused rather than
+        // left to silence it.
+        const taken = commandForKey(KEYED_COMMANDS, event.nativeEvent);
+        if (taken !== undefined) {
+          setRejection(windowChordRefusal(taken));
+          return;
+        }
+        const read = capturedVoiceHotkey(event);
+        if (read.outcome === VOICE_HOTKEY_CAPTURE.PENDING) return;
+        if (read.outcome === VOICE_HOTKEY_CAPTURE.REFUSED) {
+          setRejection(SHORTCUT_HINT);
+          return;
+        }
+        setRejection(undefined);
+        setRecording(false);
+        void apply(read.accelerator);
+      }}
+    >
+      {/* The chord while there is one to press, and a sentence when
             there is not: "Press a shortcut…", "None" and
             "Unavailable" are things being said about the key, not keys to
             draw — and the two absences differ: "None" was asked for, where
             "Unavailable" is another app owning the chord. */}
-        <span id={chordId} className="visually-hidden">
-          {chordWords}
-        </span>
-        {recording ? (
-          <span className="shortcut-state">Press a shortcut…</span>
-        ) : off ? (
-          <span className="shortcut-state">None</span>
-        ) : shown ? (
-          <Shortcut accelerator={shown} />
-        ) : (
-          <span className="shortcut-state">Unavailable</span>
-        )}
-      </button>
-    </MenuRow>
+      <span id={chordId} className="visually-hidden">
+        {chordWords}
+      </span>
+      {recording ? (
+        <span className="shortcut-state">Press a shortcut…</span>
+      ) : off ? (
+        <span className="shortcut-state">None</span>
+      ) : shown ? (
+        <Shortcut accelerator={shown} />
+      ) : (
+        <span className="shortcut-state">Unavailable</span>
+      )}
+    </button>
+  );
+
+  return (
+    <MenuRow
+      label={`${title} shortcut actions`}
+      actions={actions}
+      anchor={anchor}
+      row={{
+        label: (
+          <>
+            {title}
+            {/* A stored chord is a changed value on the other rows' terms; the
+                flag that shows Reset is the flag that earns the mark. */}
+            {chosen ? <ChangedMark /> : null}
+            {/* The same mark the Voice page wears, because it is the same
+                missing key: the chord is still shown and still changeable, the
+                mark only says pressing it does nothing yet. */}
+            {attention ? <AttentionMark note={attention} /> : null}
+          </>
+        ),
+        // What a chord may be stands under the key's own detail while a
+        // recording listens, and a refusal takes the row's error line.
+        description:
+          recording && !rejection ? (
+            <>
+              {detail === undefined ? null : (
+                <>
+                  {detail}
+                  <br />
+                </>
+              )}
+              {SHORTCUT_HINT}
+            </>
+          ) : (
+            detail
+          ),
+        error: rejection,
+        describedControl: chordField,
+      }}
+    />
   );
 }
 
@@ -293,7 +328,7 @@ export function ShortcutSection({
     ? undefined
     : (shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop));
   return (
-    <SettingsGroup title="Keys">
+    <SettingsSection title="Keys">
       <ShortcutRow
         title="Talk to Luke"
         anchor={SETTINGS_SEARCH_ROW.TALK_KEY}
@@ -324,6 +359,6 @@ export function ShortcutSection({
         onChange={shortcuts.onStopHotkeyChange}
         onCapture={shortcuts.onCapture}
       />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }

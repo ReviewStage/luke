@@ -42,7 +42,7 @@ function profileFace(account: SignedIn): Element | null {
       onSignOut: () => Promise.resolve(),
       onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     }),
-  ).querySelector(".settings-row > :first-child");
+  ).querySelector(".actor-mark");
 }
 
 /** The face the shared mark draws for the same account at a Settings row's size. */

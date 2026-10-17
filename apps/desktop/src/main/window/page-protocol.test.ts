@@ -54,6 +54,8 @@ it.effect(
 
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.equal(response.headers.get("x-content-type-options"), "nosniff");
       assert.equal(yield* Effect.promise(() => response.text()), CHART.html);
       assert.equal(policy.get("default-src"), "'none'");
       assert.equal(policy.get("connect-src"), "'none'");

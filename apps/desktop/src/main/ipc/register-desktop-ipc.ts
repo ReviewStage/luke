@@ -4,25 +4,27 @@ import path from "node:path";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
+import { createHostActRouter, type PlatformActRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { startMacTerminal } from "@luke/host/mac-terminal";
+import { channels } from "@luke/host/bridge";
+import { startMacTerminal } from "@luke/host/node";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
-import { BrowserWindow, clipboard, dialog, ipcMain, MessageChannelMain } from "electron";
-import { channels } from "#shared/bridge";
-import { type ActRows, createActRouter } from "../act-router";
+import {
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  MessageChannelMain,
+  type WebContents,
+} from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
-import { accountActRows } from "./account-session";
-import { automationActRows } from "./automation-acts";
+import { HOTKEY_RANK } from "../window/hotkey-registrar";
 import { avatarActRows, avatarReports } from "./avatar-acts";
-import { codingAgentActRows } from "./coding-agent-acts";
-import { integrationActRows } from "./integration-acts";
-import { issueActRows } from "./issue-acts";
 import { macTerminalActRows } from "./mac-terminal-acts";
-import { settingsActRows } from "./settings-rows";
-import { tasksActRows } from "./tasks-acts";
+import { clientSettingSideEffects } from "./settings-side-effects";
 import { terminalActRows, whenPageGone } from "./terminal-acts";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
@@ -33,9 +35,9 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
  * loaded before its channels were registered would meet an unhandled invoke,
  * and the windows open in the window service's own start.
  *
- * What is composed here is the act table — one row per kind, gathered from the
- * files that own each concern and total by its type — and the reports beside
- * it. Nothing else registers IPC.
+ * What is composed here is the act table — the host's rows, handed what they
+ * reach of this process, over the rows only Electron can answer, total by
+ * their type together — and the reports beside it. Nothing else registers IPC.
  */
 export function registerDesktopIpc(services: DesktopServices): void {
   const {
@@ -74,20 +76,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     },
   };
 
-  const rows: ActRows = {
-    ...accountActRows({
-      host: operator.host,
-      haltSessionReplay: operator.haltSessionReplay,
-      resumeSessionReplay: operator.resumeSessionReplay,
-    }),
-    ...settingsActRows({
-      host: operator.host,
-      reporterOf: windows.reporterOf,
-      lastSettings: () => operator.settings(),
-      hotkeys,
-      applyLoginItem: windows.applyLoginItem,
-      mediaDuck: native.mediaDuck,
-    }),
+  const platformRows: PlatformActRows<WebContents> = {
     ...windowSurfaceActRows({
       panels,
       requestMicrophone: () => native.requestMicrophone(),
@@ -109,25 +98,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...avatarActRows({ avatar }),
-    ...tasksActRows({
-      host: operator.host,
-      openExternal: config.openExternal,
-      serviceBaseUrl: config.hostedServiceBaseUrl,
-      activeTaskId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutTask: (taskId) => {
-        voiceWindow.current()?.webContents.send(channels.onTasksTalk, { taskId });
-      },
-      voiceReady: () => {
-        const snapshot = state.snapshot();
-        return (
-          snapshot.settings?.status.voiceAvailable === true &&
-          snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
-        );
-      },
-      callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
-      colourCode: highlightSnippet,
-    }),
-    ...codingAgentActRows({ host: operator.host, notices }),
     ...macTerminalActRows({
       host: operator.host,
       stateRoot: config.stateRoot,
@@ -164,9 +134,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       createId: randomUUID,
       run,
     }),
-    ...integrationActRows({ host: operator.host }),
-    ...automationActRows({ host: operator.host }),
-    ...issueActRows({ host: operator.host }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
@@ -174,6 +141,51 @@ export function registerDesktopIpc(services: DesktopServices): void {
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
     [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
   };
+
+  const router = createHostActRouter<WebContents>(
+    {
+      account: {
+        host: operator.host,
+        haltSessionReplay: operator.haltSessionReplay,
+        resumeSessionReplay: operator.resumeSessionReplay,
+      },
+      settings: {
+        host: operator.host,
+        reporterOf: windows.reporterOf,
+        lastSettings: () => operator.settings(),
+        sideEffects: clientSettingSideEffects({
+          hotkeys,
+          applyLoginItem: windows.applyLoginItem,
+          mediaDuck: native.mediaDuck,
+        }),
+        stopChordHolder: (chord) =>
+          hotkeys.reserve(chord, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK ? "talk" : undefined,
+      },
+      tasks: {
+        host: operator.host,
+        openExternal: config.openExternal,
+        serviceBaseUrl: config.hostedServiceBaseUrl,
+        activeTaskId: () => state.snapshot().tasks.activeTaskId,
+        talkAboutTask: (taskId) => {
+          voiceWindow.current()?.webContents.send(channels.onTasksTalk, { taskId });
+        },
+        voiceReady: () => {
+          const snapshot = state.snapshot();
+          return (
+            snapshot.settings?.status.voiceAvailable === true &&
+            snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
+          );
+        },
+        callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
+        colourCode: highlightSnippet,
+      },
+      codingAgents: { host: operator.host, notices },
+      integrations: { host: operator.host },
+      automations: { host: operator.host },
+      issues: { host: operator.host },
+    },
+    platformRows,
+  );
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
@@ -216,7 +228,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       voice: voiceWindow.owns(sender),
       call: callWindow.owns(sender),
     }),
-    router: createActRouter(rows),
+    router,
     run,
     reports,
     /**

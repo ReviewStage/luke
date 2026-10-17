@@ -1,0 +1,126 @@
+/* attachment-chip.css -- a file's chip, as tall as a thumbnail: a picture
+   fills it, any other file is its glyph, its name cut short, and its size.
+   The face is the press that opens the file, washed under the pointer as a
+   row is; the way off is a small disc over the chip's corner. */
+
+@layer components {
+  .luke-attachment-chip {
+    position: relative;
+    display: flex;
+    max-width: min(220px, 100%);
+    height: 48px;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-8);
+    background: var(--luke-color-surface);
+    transition: border-color var(--duration-hover) ease;
+  }
+
+  .luke-attachment-chip[data-image="true"] {
+    width: 64px;
+  }
+
+  .luke-attachment-chip:has(button.luke-attachment-chip-face:hover) {
+    border-color: var(--luke-color-border-strong);
+  }
+
+  .luke-attachment-chip-face {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--luke-space-8);
+    margin: 0;
+    padding: 0 var(--luke-space-12) 0 10px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: var(--luke-color-text-muted);
+    font: inherit;
+    font-size: var(--luke-type-caption-size);
+    text-align: left;
+    transition: background-color var(--duration-hover) ease;
+  }
+
+  .luke-attachment-chip[data-image="true"] .luke-attachment-chip-face {
+    padding: 0;
+  }
+
+  button.luke-attachment-chip-face {
+    cursor: pointer;
+  }
+
+  button.luke-attachment-chip-face:hover {
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-attachment-chip-face > svg {
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+
+  .luke-attachment-chip img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 7px;
+    object-fit: cover;
+    transition: filter var(--duration-hover) ease;
+  }
+
+  button.luke-attachment-chip-face:hover img {
+    filter: brightness(1.12);
+  }
+
+  .luke-attachment-chip-name {
+    overflow: hidden;
+    color: var(--luke-color-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-attachment-chip-detail {
+    flex: none;
+  }
+
+  /* Note that the disc is 18px but the button is 24px, because a chip's
+     corner carries no more disc than that and the pointer still needs a
+     24px target over it: a transparent border is hit like the rest of the
+     button, and the ground is clipped inside it. */
+  .luke-attachment-chip-remove {
+    position: absolute;
+    top: -9px;
+    right: -9px;
+    display: flex;
+    width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: 3px solid transparent;
+    border-radius: 50%;
+    background: var(--luke-color-overlay) padding-box;
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
+    color: var(--luke-color-text-muted);
+    transition: color var(--duration-hover) ease;
+  }
+
+  .luke-attachment-chip-remove:hover:not(:disabled) {
+    color: var(--luke-color-text);
+  }
+
+  .luke-attachment-chip-remove:disabled {
+    opacity: 0.5;
+  }
+
+  /* The app's reset draws the ring; it stands inside the target, close round the disc. */
+  .luke-attachment-chip-remove:focus-visible {
+    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+  }
+
+  .luke-attachment-chip-remove svg {
+    width: 8px;
+    height: 8px;
+  }
+}

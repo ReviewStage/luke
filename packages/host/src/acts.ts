@@ -19,11 +19,14 @@ import {
 import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -37,6 +40,10 @@ import {
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
+  codingAgentChatAnswerViewSchema,
+  codingAgentChatParamsSchema,
+  codingAgentChatPostParamsSchema,
+  codingAgentChatWriteAnswerViewSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -47,6 +54,8 @@ import {
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxMessagedViewSchema,
+  codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
@@ -136,6 +145,7 @@ import {
   type TasksIssue,
   type TasksMoveAnswer,
   type TasksPageSourceAnswer,
+  type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksRepositoriesAnswer,
@@ -160,6 +170,8 @@ import {
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPageSourceAnswerSchema,
+  tasksPagesAnswerSchema,
+  tasksPagesParamsSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
   tasksPictureKeepParamsSchema,
@@ -371,6 +383,8 @@ export const ACT_KIND = {
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
   TASKS_PAGE_SOURCE: "planning.pageSource",
+  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
+  TASKS_PAGES: "planning.pages",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "planning.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
@@ -507,6 +521,8 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
+  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
@@ -535,6 +551,14 @@ export const ACT_KIND = {
   MAC_REPOSITORY_SET: "macRepositories.set",
   MAC_TERMINAL_OPEN: "macTerminal.open",
   MAC_TERMINAL_CLOSE: "macTerminal.close",
+  /**
+   * The workspace's chat: read past a cursor (held open by the service
+   * while nothing moved), and written to as the account's own member, a
+   * post, an answer to an ask, a resolve, or how far it has read. The
+   * window holds what it draws; nothing here does.
+   */
+  CODING_AGENTS_CHAT: "codingAgents.chat",
+  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own task. */
   CALL_SHOW_TASK: "call.showPlan",
@@ -714,6 +738,17 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
  * value the host would not hold.
  */
 const exactId = exactText(512);
+
+/**
+ * The Chat the panel has on screen: a workspace's whole Chat, where the
+ * plan is none, or one task's Chat tab, which shows only its plan's channel.
+ */
+const chatShownSchema = EffectSchema.Struct({
+  workspaceId: exactId,
+  planId: EffectSchema.NullOr(exactId),
+});
+
+export type ChatShown = typeof chatShownSchema.Type;
 
 /**
  * The longest fenced block a transcript asks main to colour. Note that a
@@ -1117,6 +1152,11 @@ export const ACT = {
     result: wireResult<TasksPageSourceAnswer>(isReadable(tasksPageSourceAnswerSchema)),
     refusal: "Could not read that page's source on this system.",
   },
+  [ACT_KIND.TASKS_PAGES]: {
+    payload: actSchema(tasksPagesParamsSchema),
+    result: wireResult<TasksPagesAnswer>(isReadable(tasksPagesAnswerSchema)),
+    refusal: "Could not read that plan's pages on this system.",
+  },
   [ACT_KIND.TASKS_WORK_EARLIER]: press("Could not read that task's earlier work on this system."),
   [ACT_KIND.TASKS_CONVERSATION_EARLIER]: press(
     "Could not read that task's earlier conversation on this system.",
@@ -1234,6 +1274,8 @@ export const ACT = {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
       inboxTaskId: EffectSchema.NullOr(exactId),
+      /** The Chat on screen: a workspace's whole Chat, the plan none, or a task's Chat tab on its plan's channel; none where no Chat is. */
+      chatShown: EffectSchema.optionalKey(EffectSchema.NullOr(chatShownSchema)),
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",
@@ -1413,6 +1455,13 @@ export const ACT = {
     ),
     refusal: "Could not answer the inbox item on this system.",
   },
+  [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: {
+    payload: actSchema(codingAgentInboxMessageParamsSchema),
+    result: wireResult<CodingAgentInboxMessagedView>(
+      isReadable(codingAgentInboxMessagedViewSchema),
+    ),
+    refusal: "Could not send the message on this system.",
+  },
   [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
     payload: actSchema(codingAgentInboxAttachmentParamsSchema),
     result: wireResult<CodingAgentInboxAttachmentView>(
@@ -1481,6 +1530,18 @@ export const ACT = {
     payload: actSchema(terminalShellParamsSchema),
     result: answersNothing,
     refusal: "Could not close that shell.",
+  },
+  [ACT_KIND.CODING_AGENTS_CHAT]: {
+    payload: actSchema(codingAgentChatParamsSchema),
+    result: wireResult<CodingAgentChatAnswerView>(isReadable(codingAgentChatAnswerViewSchema)),
+    refusal: "Could not read the workspace's chat on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_CHAT_POST]: {
+    payload: actSchema(codingAgentChatPostParamsSchema),
+    result: wireResult<CodingAgentChatWriteAnswerView>(
+      isReadable(codingAgentChatWriteAnswerViewSchema),
+    ),
+    refusal: "Could not write to the workspace's chat on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

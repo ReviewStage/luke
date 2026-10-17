@@ -92,6 +92,20 @@
           "enum": [
             true
           ]
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
         }
       },
       "required": [

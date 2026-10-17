@@ -17,7 +17,6 @@ import {
   movedOrder,
   openedOrder,
   type PageStripTab,
-  pullRequestLabelOf,
   replacementOf,
   type StripTab,
   type SubagentStripTab,
@@ -341,6 +340,12 @@ export interface PinnedTab extends Omit<typeof pinnedTabSchema.Type, "tab"> {
   readonly tab: PinnableTab;
 }
 
+/** What the open task's pins of agents and of their Pull requests are named now, each by agent id: an agent as its tab is, and its Pull request by the pull request's number and title. */
+interface PinNames {
+  readonly agents: ReadonlyMap<string, string>;
+  readonly pullRequests: ReadonlyMap<string, string>;
+}
+
 /** A tab an earlier version pinned in the strip itself, of any kind it then held but a draft agent's. */
 const stripPinSchema = Schema.Union([
   pinnableTabSchema,
@@ -548,8 +553,8 @@ export interface SidePanelControl {
   /** Pins the open task's tab, of either strip, to the sidebar under the name given, newest of the pins; an agent's with the model it runs on. */
   onPin: (tab: PinnableTab, label: string, model?: string) => void;
   onUnpin: (taskId: string, tab: PinnableTab) => void;
-  /** Names each agent pinned on the task as its tab is named now, by agent id; an agent named nowhere keeps the name it has. */
-  onRenamePins: (taskId: string, labels: ReadonlyMap<string, string>) => void;
+  /** Names each agent, and each agent's Pull request, pinned on the task as its tab is named now; one named nowhere keeps the name it has. */
+  onRenamePins: (taskId: string, names: PinNames) => void;
   /** Stands each pin dragged in the sidebar's Pinned section at its new place, named by the instant it was pinned, kept on this Mac; none stands it by that instant again. */
   onPlacePins: (places: ReadonlyMap<number, string | undefined>) => void;
   /**
@@ -596,6 +601,8 @@ export type TaskHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;
 export interface OpenTask {
   id: string | undefined;
   holds: TaskHolds;
+  /** Whether the panel draws none of the task's fixed tabs, standing beside the window's Inbox rather than the task's page, which draws what they show. */
+  bare?: true | undefined;
 }
 
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files shown on it. */
@@ -632,6 +639,7 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
 
 /** The task's fixed tabs in the strip's order: each it holds something of and was not closed on, and each opened on it. */
 function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
+  if (task.bare === true) return [];
   const chosen = taskTabs(held, task.id);
   const open = held.tabs.filter(
     (tab) =>
@@ -740,22 +748,16 @@ function withPinsPlaced(
   return pins.every((pin, at) => pin === held.pins[at]) ? held : { ...held, pins };
 }
 
-/** The name a pin of an agent's tab or its Changes tab wears for the agent `labels` names, by agent id; none for any other pin, or an agent named nowhere. */
-function agentPinLabel(tab: PinnableTab, labels: ReadonlyMap<string, string>): string | undefined {
-  if (isAgentTab(tab)) return labels.get(tab.agent);
-  if (!isChangesTab(tab)) return undefined;
-  const agent = labels.get(tab.changes);
-  return agent === undefined ? undefined : pullRequestLabelOf(agent);
+/** The name a pin of an agent's tab or its Changes tab wears as `names` names it, by agent id; none for any other pin, or one named nowhere. */
+function agentPinLabel(tab: PinnableTab, names: PinNames): string | undefined {
+  if (isAgentTab(tab)) return names.agents.get(tab.agent);
+  return isChangesTab(tab) ? names.pullRequests.get(tab.changes) : undefined;
 }
 
-/** The state with each agent, and each agent's Changes, pinned on the task named as `labels` names the agent, and the state as it is where every one already was. */
-function withPinsRenamed(
-  held: HeldState,
-  taskId: string,
-  labels: ReadonlyMap<string, string>,
-): HeldState {
+/** The state with each agent, and each agent's Changes, pinned on the task named as `names` names it, and the state as it is where every one already was. */
+function withPinsRenamed(held: HeldState, taskId: string, names: PinNames): HeldState {
   const renamed = (pin: PinnedTab) => {
-    const label = pin.task === taskId ? agentPinLabel(pin.tab, labels) : undefined;
+    const label = pin.task === taskId ? agentPinLabel(pin.tab, names) : undefined;
     return label === undefined || label === pin.label ? pin : { ...pin, label };
   };
   const pins = held.pins.map(renamed);
@@ -1513,7 +1515,7 @@ export function useSidePanel(
   // chosen on this very task and stands in for nothing: a file's waits for
   // the task's code to be read, however much arrives before it. A kind that
   // arrived stands at the strip's end, as a tab opened does (`firstHeld`).
-  if (seen.id !== taskId || !sameHolds(seen.holds, task.holds)) {
+  if (seen.id !== taskId || seen.bare !== task.bare || !sameHolds(seen.holds, task.holds)) {
     setSeen(task);
     const before =
       seen.id === taskId && arrived(seen.holds, task.holds) ? shownFor(seen.holds) : undefined;
@@ -1731,8 +1733,7 @@ export function useSidePanel(
     [update],
   );
   const onRenamePins = useCallback(
-    (on: string, labels: ReadonlyMap<string, string>) =>
-      update((held) => withPinsRenamed(held, on, labels)),
+    (on: string, names: PinNames) => update((held) => withPinsRenamed(held, on, names)),
     [update],
   );
   const onPlacePins = useCallback(

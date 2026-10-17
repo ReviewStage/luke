@@ -239,10 +239,16 @@ export function AccountsTable<Row extends AccountsTableRow>({
                       onOpen(row.id);
                     }}
                   >
-                    <AccountAvatar
-                      account={{ name: row.name, email: row.email, image: row.image ?? undefined }}
-                    />
-                    <div className="min-w-0">
+                    <span className="flex shrink-0">
+                      <AccountAvatar
+                        account={{
+                          name: row.name,
+                          email: row.email,
+                          image: row.image ?? undefined,
+                        }}
+                      />
+                    </span>
+                    <div>
                       <Inline>
                         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
                           {accountLabel(row)}

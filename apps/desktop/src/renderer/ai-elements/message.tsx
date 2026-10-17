@@ -134,42 +134,60 @@ export function MessageAction({
  * are a note's, a step above the words around them and no more, a
  * list keeps to the column's own indent, and a quote is the one every
  * Markdown in the window draws (`@luke/ui/quote-face`) rather than
- * Streamdown's, which stood the browser's 40px in from the column.
+ * Streamdown's, which stood the browser's 40px in from the column. Each is
+ * drawn by its class in tasks.css, a heading by its level.
  */
 export const PANEL_MARKDOWN_COMPONENTS: Components = {
-  h1: ({ children }) => <h1 className="mt-3 mb-1 text-[15px] font-semibold">{children}</h1>,
-  h2: ({ children }) => <h2 className="mt-3 mb-1 text-[14px] font-semibold">{children}</h2>,
-  h3: ({ children }) => <h3 className="mt-2 mb-1 text-[13px] font-semibold">{children}</h3>,
-  h4: ({ children }) => <h4 className="mt-2 mb-1 text-[13px] font-medium">{children}</h4>,
-  h5: ({ children }) => <h5 className="mt-2 mb-1 text-[13px] font-medium">{children}</h5>,
-  h6: ({ children }) => <h6 className="mt-2 mb-1 text-[13px] font-medium">{children}</h6>,
-  ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
-  ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
-  li: ({ children }) => <li className="my-0.5">{children}</li>,
+  h1: ({ children }) => (
+    <h1 className="transcript-heading" data-level={1}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="transcript-heading" data-level={2}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="transcript-heading" data-level={3}>
+      {children}
+    </h3>
+  ),
+  h4: ({ children }) => (
+    <h4 className="transcript-heading" data-level={4}>
+      {children}
+    </h4>
+  ),
+  h5: ({ children }) => (
+    <h5 className="transcript-heading" data-level={5}>
+      {children}
+    </h5>
+  ),
+  h6: ({ children }) => (
+    <h6 className="transcript-heading" data-level={6}>
+      {children}
+    </h6>
+  ),
+  ul: ({ children }) => <ul className="transcript-list">{children}</ul>,
+  ol: ({ children }) => <ol className="transcript-list">{children}</ol>,
+  li: ({ children }) => <li className="transcript-list-item">{children}</li>,
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
+export type MessageResponseProps = Omit<ComponentProps<typeof Streamdown>, "className">;
 
 /**
- * A reply's markdown, drawn as it streams. Note that it is memoised on every
- * prop rather than on the words alone, as the registry has it, because a
- * mode or a class changed under the same words has to be drawn too. Nothing
- * is drawn until the HTML parser has landed (`markdown-html-parser.ts`),
- * because a reply drawn without it is not the reply drawn with it.
+ * A reply's markdown, drawn as it streams, in `.transcript-markdown`
+ * (tasks.css). Note that it is memoised on every prop rather than on the
+ * words alone, as the registry has it, because a mode changed under the same
+ * words has to be drawn too. Nothing is drawn until the HTML parser has
+ * landed (`markdown-html-parser.ts`), because a reply drawn without it is not
+ * the reply drawn with it.
  */
-export const MessageResponse = memo(({ className, ...props }: MessageResponseProps): ReactNode => {
+export const MessageResponse = memo((props: MessageResponseProps): ReactNode => {
   const parser = useAtomValue(markdownHtmlParserAtom);
   if (AsyncResult.isInitial(parser)) return null;
-  return (
-    <Streamdown
-      className={cn(
-        "select-text [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <Streamdown className="transcript-markdown" {...props} />;
 });
 
 MessageResponse.displayName = "MessageResponse";

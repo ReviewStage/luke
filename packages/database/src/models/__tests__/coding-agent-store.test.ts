@@ -31,6 +31,8 @@ import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
   archiveUnmovedCodingAgent,
+  continuationsOf,
+  createCodingAgent,
   delegationsOf,
   IDLE_ARCHIVE,
   linePlacesOf,
@@ -45,6 +47,7 @@ import {
   recordCodingAgentAuthor,
   recordCodingAgentPublished,
   recordTurnFastRefused,
+  renameCodingAgent,
   settleCodingAgentAuthor,
   turnUsagesOf,
   unarchiveCodingAgentFrom,
@@ -138,7 +141,7 @@ it.layer(getTestDB())("the coding-agent store's delegations", (it) => {
 
 it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
   it.effect(
-    "each line names what sent it, a member by the name their account holds now and none once it is gone, a line written with no sender names nothing, and another account reads none",
+    "each line names what sent it, a member by the name their account holds now and none once it is gone, an agent by the model it ran on and itself where it stands, a line written with no sender names nothing, and another account reads none",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -177,9 +180,26 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           name: "Nightly triage",
         });
         const byGitHub = yield* line("github", { kind: MESSAGE_SENDER.GITHUB, login: "octocat" });
+        // The sending agent is the teammate's, on no task, which the owner's line still names.
+        const sender = yield* tasklessAgent(teammate, yield* openWorkspace(teammate));
         const byAgent = yield* line("agent", {
           kind: MESSAGE_SENDER.AGENT,
+          agentId: sender.agentId,
           name: "Invite expiry",
+          model: "anthropic/claude-opus-5.5",
+        });
+        // A line that kept the agent but no model names none, never the model the agent runs on now.
+        const byChatAgent = yield* line("chat-agent", {
+          kind: MESSAGE_SENDER.AGENT,
+          agentId: sender.agentId,
+          name: "agent-1",
+        });
+        // A line whose agent is gone keeps the model it was sent under, and names no agent.
+        const byGoneAgent = yield* line("gone-agent", {
+          kind: MESSAGE_SENDER.AGENT,
+          agentId: randomUUID(),
+          name: "Old agent",
+          model: "openai/gpt-6.1-sol",
         });
         // A line as a build before senders were kept wrote it.
         const [earlier] = yield* db
@@ -195,7 +215,16 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             placedAt: new Date(),
           })
           .returning({ id: messages.id });
-        const ids = [byTeammate, byLuke, byAutomation, byGitHub, byAgent, earlier?.id ?? ""];
+        const ids = [
+          byTeammate,
+          byLuke,
+          byAutomation,
+          byGitHub,
+          byAgent,
+          byChatAgent,
+          byGoneAgent,
+          earlier?.id ?? "",
+        ];
 
         const senders = yield* lineSendersOf(target, ids);
         assert.deepEqual(
@@ -205,7 +234,24 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             { kind: MESSAGE_SENDER.LUKE },
             { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },
             { kind: MESSAGE_SENDER.GITHUB, login: "octocat" },
-            { kind: MESSAGE_SENDER.AGENT, name: "Invite expiry" },
+            {
+              kind: MESSAGE_SENDER.AGENT,
+              name: "Invite expiry",
+              model: "anthropic/claude-opus-5.5",
+              agent: { id: sender.agentId, taskId: undefined },
+            },
+            {
+              kind: MESSAGE_SENDER.AGENT,
+              name: "agent-1",
+              model: undefined,
+              agent: { id: sender.agentId, taskId: undefined },
+            },
+            {
+              kind: MESSAGE_SENDER.AGENT,
+              name: "Old agent",
+              model: "openai/gpt-6.1-sol",
+              agent: undefined,
+            },
             undefined,
           ],
         );
@@ -957,5 +1003,167 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, agentId)));
       assert.deepEqual(yield* pinnedOnes(agentId), []);
     }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agent started from another", (it) => {
+  it.effect(
+    "an agent started from another keeps that agent, the message it forked at, and its replay's counts, read by a teammate as by its starter, and one started afresh reads from none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+        const source = Option.getOrThrow(
+          yield* createCodingAgent(starter, {
+            taskId: plan.id,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            ...choice,
+            repository: "acme/api",
+          }),
+        ).agent;
+        const startedFrom = {
+          agentId: source.id,
+          messageId: randomUUID(),
+          steps: 12,
+          totalSteps: 40,
+        };
+        const forked = Option.getOrThrow(
+          yield* createCodingAgent(teammate, {
+            taskId: plan.id,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            ...choice,
+            repository: "acme/api",
+            startedFrom,
+          }),
+        ).agent;
+
+        assert.deepEqual(source.startedFrom, null);
+        assert.deepEqual(forked.startedFrom, startedFrom);
+        assert.deepEqual(
+          Option.getOrThrow(yield* readCodingAgent(starter, forked.id)).startedFrom,
+          startedFrom,
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent's continues and forks are read by its id oldest first, an archived one among them, by a teammate as by its starter, and by no outsider",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const startOn = (
+          by: string,
+          createdAt: string,
+          startedFrom?: { agentId: string; messageId?: string },
+        ) =>
+          Effect.gen(function* () {
+            const { agent } = Option.getOrThrow(
+              yield* createCodingAgent(by, {
+                taskId: plan.id,
+                planSnapshot: "# Billing",
+                prompt: null,
+                idempotencyKey: randomUUID(),
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                repository: "acme/api",
+                ...(startedFrom === undefined
+                  ? undefined
+                  : { startedFrom: { ...startedFrom, steps: 3, totalSteps: 3 } }),
+              }),
+            );
+            yield* Database.use((db) =>
+              db
+                .update(codingAgent)
+                .set({ createdAt: new Date(createdAt) })
+                .where(eq(codingAgent.id, agent.id)),
+            );
+            return agent.id;
+          });
+        const source = yield* startOn(starter, "2026-10-17T10:00:00Z");
+        const messageId = randomUUID();
+        const fork = yield* startOn(teammate, "2026-10-17T10:02:00Z", {
+          agentId: source,
+          messageId,
+        });
+        const continued = yield* startOn(starter, "2026-10-17T10:01:00Z", { agentId: source });
+        const again = yield* startOn(starter, "2026-10-17T10:03:00Z", { agentId: continued });
+        yield* archiveCodingAgent(starter, continued, true);
+
+        yield* renameCodingAgent(teammate, fork, "Bill by seat");
+        const expected = new Map([
+          [
+            source,
+            [
+              { agentId: continued, title: null },
+              { agentId: fork, title: "Bill by seat", messageId },
+            ],
+          ],
+          [continued, [{ agentId: again, title: null }]],
+        ]);
+        const asked = [source, continued, again];
+        assert.deepEqual(yield* continuationsOf(starter, asked), expected);
+        assert.deepEqual(yield* continuationsOf(teammate, asked), expected);
+        assert.deepEqual(yield* continuationsOf(outsider, asked), new Map());
+      }),
+  );
+
+  it.effect(
+    "a source started from more agents than its summary names keeps its oldest twenty, and hides none of another source's, however many it has",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const startOn = (createdAt: Date, agentId?: string) =>
+          Effect.gen(function* () {
+            const { agent } = Option.getOrThrow(
+              yield* createCodingAgent(starter, {
+                taskId: plan.id,
+                planSnapshot: "# Billing",
+                prompt: null,
+                idempotencyKey: randomUUID(),
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                repository: "acme/api",
+                ...(agentId === undefined
+                  ? undefined
+                  : { startedFrom: { agentId, steps: 1, totalSteps: 1 } }),
+              }),
+            );
+            yield* Database.use((db) =>
+              db.update(codingAgent).set({ createdAt }).where(eq(codingAgent.id, agent.id)),
+            );
+            return agent.id;
+          });
+        const at = (minute: number) => new Date(Date.UTC(2026, 9, 17, 10, minute));
+        const busy = yield* startOn(at(0));
+        const quiet = yield* startOn(at(0));
+        const continues: string[] = [];
+        for (let minute = 1; minute <= 41; minute += 1) {
+          continues.push(yield* startOn(at(minute), busy));
+        }
+        const latest = yield* startOn(at(50), quiet);
+
+        const read = yield* continuationsOf(starter, [busy, quiet]);
+
+        assert.deepEqual(
+          read.get(busy)?.map((each) => each.agentId),
+          continues.slice(0, 20),
+        );
+        assert.deepEqual(read.get(quiet), [{ agentId: latest, title: null }]);
+      }),
   );
 });

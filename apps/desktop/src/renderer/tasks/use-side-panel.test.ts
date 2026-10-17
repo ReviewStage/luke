@@ -162,22 +162,26 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
-test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its agent's new name", () => {
+test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its pull request's name, never its agent's", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Pull request: Invite flow"));
+  act(() => first.control().onPin({ changes: AGENT }, "Pull request"));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(
     second.control().pins.map(({ task, tab, label }) => ({ task, tab, label })),
-    [{ task: TASK, tab: { changes: AGENT }, label: "Pull request: Invite flow" }],
+    [{ task: TASK, tab: { changes: AGENT }, label: "Pull request" }],
   );
   // The panel's other choices read too, rather than the whole record being dropped.
   assert.deepEqual(second.control().tab, { changes: AGENT });
 
-  act(() => second.control().onRenamePins(TASK, new Map([[AGENT, "Expiring invites"]])));
-  assert.equal(second.control().pins[0]?.label, "Pull request: Expiring invites");
+  const agents = new Map([[AGENT, "Expiring invites"]]);
+  act(() => second.control().onRenamePins(TASK, { agents, pullRequests: new Map() }));
+  assert.equal(second.control().pins[0]?.label, "Pull request", "its pull request unread");
+  const pullRequests = new Map([[AGENT, "#42 Expire invitations"]]);
+  act(() => second.control().onRenamePins(TASK, { agents, pullRequests }));
+  assert.equal(second.control().pins[0]?.label, "#42 Expire invitations");
 
   // Shown from its pin on another task, it opens there, at the end of that task's strip.
   second.render({ task: OTHER_TASK, taskAgents: [OTHER_AGENT] });
@@ -292,4 +296,47 @@ test("a plan whose strip holds no tab draws no panel, and the next plan with a t
   assert.equal(panel.control().open, false);
   panel.render({ task: TASK, taskAgents: [] });
   assert.equal(panel.control().open, false, "hidden by the toggle, not by the empty strip");
+});
+
+test("beside the window's Inbox the panel stands for the item's plan with none of its fixed tabs, holds what the item opens there, and the plan's page finds its strip as it left it, a fixed tab it closed still closed and one it opened still open", () => {
+  const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+  let control: SidePanelControl | undefined;
+  function Probe({ inbox }: { inbox: boolean }) {
+    control = useSidePanel(
+      undefined,
+      inbox ? { id: TASK, holds: {}, bare: true } : usedTask(TASK),
+      inbox ? [] : [AGENT],
+      [],
+      [],
+      [],
+      inbox ? undefined : [AGENT],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (inbox: boolean) => act(() => root.render(createElement(Probe, { inbox })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render(false);
+  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose({ changes: AGENT }));
+
+  render(true);
+  assert.deepEqual(panel().strip, [{ changes: AGENT }], "no fixed tab stands beside the Inbox");
+  act(() => panel().onOpenFile({ path: "src/invites.ts", startLine: 3, endLine: 5 }, COMMIT));
+  assert.deepEqual(panel().strip, [{ changes: AGENT }, { file: "src/invites.ts" }]);
+  assert.deepEqual(panel().tab, { file: "src/invites.ts" });
+
+  render(false);
+  assert.deepEqual(panel().strip, [
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CALL,
+    { changes: AGENT },
+    { file: "src/invites.ts" },
+  ]);
 });

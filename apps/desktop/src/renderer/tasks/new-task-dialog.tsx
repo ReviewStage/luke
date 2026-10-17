@@ -3,7 +3,21 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { ComposeIcon, ProviderMark } from "@luke/ui";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
+import {
+  BUTTON_VARIANT,
+  Button,
+  Combobox,
+  ComposeIcon,
+  DIALOG_SIZE,
+  Dialog,
+  ErrorState,
+  ProviderMark,
+  Switch,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { searchTokens } from "@luke/ui/search-tokens";
 import {
   type LinearIssuesAsk,
@@ -15,15 +29,11 @@ import {
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useId, useRef, useState } from "react";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { WorkspaceTile } from "../desktop/workspace-tile";
-import { ModalShell } from "../modal-shell";
 import { rendererRuntime } from "../renderer-runtime";
 import { Highlighted } from "../search-field";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { Shortcut } from "../shortcut";
-import { BusyLabel } from "../spinner";
-import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { useNewTaskPlanning } from "./new-task-planning";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
@@ -76,6 +86,9 @@ import type { TasksControl } from "./use-tasks-tab";
  * the planning the card shows, and Luke is handed the issue to research.
  * Command-Return creates the task under the name as typed whatever is
  * highlighted, and Escape puts the issues away before it puts the card away.
+ * The field and its issues are `@luke/ui`'s `Combobox`, which reads those
+ * keys; with no issues standing, Return creates the task with any modifier
+ * held, since the name has no second line to begin.
  * With no issue matching, or no Linear connected, or its issues not read,
  * the field is the plain name it always was.
  */
@@ -85,6 +98,9 @@ const CREATE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER, bare: true };
 
 /** The chord that creates the task under the name as typed while Linear's issues stand under the field. */
 const TYPED_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
+
+/** The key of the last option under the field, which creates the task under the name as typed. */
+const TYPED_OPTION = "typed";
 
 /** What the name field says before anything is typed, by whether it also searches Linear. */
 const NAME_PLACEHOLDER = {
@@ -229,46 +245,6 @@ function useLinearSearch(
   return [AsyncResult.isSuccess(answer) ? answer.value : undefined, ask];
 }
 
-/** One issue under the name field: Linear's mark, its title with the words typed marked, then its key and state. */
-function IssueOption({
-  id,
-  issue,
-  tokens,
-  highlighted,
-  onHighlight,
-  onPick,
-}: {
-  id: string;
-  issue: LinearIssueSummary;
-  tokens: readonly string[];
-  highlighted: boolean;
-  onHighlight: () => void;
-  onPick: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      id={id}
-      type="button"
-      role="option"
-      tabIndex={-1}
-      className="menu-item"
-      aria-selected={highlighted}
-      onMouseMove={onHighlight}
-      onClick={onPick}
-    >
-      <span className="menu-item-glyph">
-        <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
-      </span>
-      <span className="task-compose-menu-name">
-        <Highlighted text={issue.title} tokens={tokens} />
-      </span>
-      <span className="task-compose-menu-detail">
-        {issue.state === undefined ? issue.identifier : `${issue.identifier} · ${issue.state}`}
-      </span>
-    </button>
-  );
-}
-
 /**
  * The card with its own state, mounted afresh on each opening so a
  * cancelled name is never offered again: the name, the repository chosen
@@ -314,8 +290,6 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const picked = matching ? matches[at] : undefined;
   const tokens = searchTokens(name);
   const field = useRef<HTMLInputElement>(null);
-  const listId = useId();
-  const optionId = useId();
   const titleId = useId();
   const planningId = useId();
   const planningNoteId = useId();
@@ -346,182 +320,134 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
     if (!starting) newTask.onClose();
   };
 
-  // Return starts what is highlighted, and Command-Return the name as typed;
-  // with no issues standing, Return creates the task with any modifier held,
-  // since the name has no second line to begin. The arrows wrap through the
-  // issues and the typed name's row after them.
-  const fieldKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (matching && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-      event.preventDefault();
-      const rows = matches.length + 1;
-      setHighlight((at + (event.key === "ArrowDown" ? 1 : -1) + rows) % rows);
-      return;
-    }
-    // Note that Escape goes no further while issues stand, because the card
-    // would put itself away with the name when only the issues were meant.
-    if (matching && event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      setDismissed(true);
-      return;
-    }
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    if (event.metaKey || event.ctrlKey) startTyped();
-    else start();
-  };
-
   return (
-    <ModalShell
-      className="new-task-dialog ph-no-capture"
+    <Dialog
+      size={DIALOG_SIZE.WIDE}
       labelledBy={titleId}
       busy={starting}
       initialFocus={field}
       onDismiss={close}
     >
-      <div className="new-plan-head">
-        <div className="new-task-title">
-          <h2 id={titleId} className="confirm-dialog-title">
-            {startsIn === undefined ? "New task" : "New task in"}
-          </h2>
-          <WorkspaceChip
-            workspaces={newTask.workspaces}
-            chosen={startsIn}
-            disabled={starting}
-            onChoose={(chosenId) => {
-              setWorkspaceId(chosenId);
-              setHighlight(0);
-              setDismissed(false);
-              searchLinear(name, chosenId);
-            }}
-          />
-        </div>
-        {/* Note that the word labels the switch, so a press on it turns the switch too. */}
-        <Tooltip label={planningNote}>
-          <span className="new-plan-planning">
-            <label htmlFor={planningId}>Plan</label>
-            <Switch
-              id={planningId}
-              checked={planning}
-              label="Plan with Luke"
-              describedBy={planningNoteId}
+      <div className="new-task ph-no-capture">
+        <div className="new-task-head">
+          <div className="new-task-title">
+            <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
+              {startsIn === undefined ? "New task" : "New task in"}
+            </Text>
+            <WorkspaceChip
+              workspaces={newTask.workspaces}
+              chosen={startsIn}
               disabled={starting}
-              onChange={setPlanning}
+              onChoose={(chosenId) => {
+                setWorkspaceId(chosenId);
+                setHighlight(0);
+                setDismissed(false);
+                searchLinear(name, chosenId);
+              }}
             />
-            <span id={planningNoteId} hidden>
-              {planningNote}
+          </div>
+          {/* Note that the word labels the switch, so a press on it turns the switch too. */}
+          <Tooltip label={planningNote}>
+            <span className="new-task-planning">
+              <label htmlFor={planningId}>Plan</label>
+              <Switch
+                id={planningId}
+                checked={planning}
+                label="Plan with Luke"
+                describedBy={planningNoteId}
+                disabled={starting}
+                onChange={setPlanning}
+              />
+              <span id={planningNoteId} hidden>
+                {planningNote}
+              </span>
             </span>
-          </span>
-        </Tooltip>
-      </div>
-      <div className="new-task-name" data-matching={String(matching)}>
-        <input
+          </Tooltip>
+        </div>
+        <Combobox
           ref={field}
-          type="text"
-          className="dialog-name-field"
-          role="combobox"
-          aria-label="Task name"
-          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-          aria-expanded={matching}
-          aria-controls={matching ? listId : undefined}
-          aria-autocomplete={searchesLinear ? "list" : undefined}
-          aria-activedescendant={matching ? `${optionId}-${at}` : undefined}
-          autoComplete="off"
+          label="Task name"
+          listLabel="Linear issues"
+          keyShortcuts={shortcutAria(CREATE_CHORD)}
           placeholder={searchesLinear ? NAME_PLACEHOLDER.LINEAR : NAME_PLACEHOLDER.PLAIN}
           maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
           spellCheck
           value={name}
           disabled={starting}
-          onChange={(event) => {
-            const typed = event.currentTarget.value;
+          onChange={(typed) => {
             setName(typed);
             setHighlight(0);
             setDismissed(false);
             searchLinear(typed, startsIn);
           }}
-          onKeyDown={fieldKey}
+          groups={[
+            {
+              label: "Linear issues",
+              options: matches.map((issue) => ({
+                id: issue.id,
+                label: <Highlighted text={issue.title} tokens={tokens} />,
+                icon: <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />,
+                detail:
+                  issue.state === undefined
+                    ? issue.identifier
+                    : `${issue.identifier} · ${issue.state}`,
+              })),
+            },
+            {
+              options: [
+                {
+                  id: TYPED_OPTION,
+                  label: `Create task “${name.trim()}”`,
+                  icon: <ComposeIcon />,
+                  hint: <Shortcut chord={TYPED_CHORD} />,
+                },
+              ],
+            },
+          ]}
+          open={matching}
+          active={at}
+          onActiveChange={setHighlight}
+          onChoose={(index) => {
+            const issue = matches[index];
+            if (issue === undefined) startTyped();
+            else startIssue(issue);
+          }}
+          onEnter={startTyped}
+          onEscape={() => setDismissed(true)}
         />
-        {/* Note that a press on a row is kept from taking focus, because the
-            field is where the keys are read. */}
-        {matching ? (
-          <div
-            id={listId}
-            className="new-task-matches"
-            role="listbox"
-            aria-label="Linear issues"
-            onMouseDown={(event) => event.preventDefault()}
-          >
-            <div className="menu-heading" aria-hidden="true">
-              Linear issues
-            </div>
-            {matches.map((issue, index) => (
-              <IssueOption
-                key={issue.id}
-                id={`${optionId}-${index}`}
-                issue={issue}
-                tokens={tokens}
-                highlighted={index === at}
-                onHighlight={() => setHighlight(index)}
-                onPick={() => startIssue(issue)}
-              />
-            ))}
-            <button
-              id={`${optionId}-${matches.length}`}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              className="menu-item"
-              aria-selected={at === matches.length}
-              onMouseMove={() => setHighlight(matches.length)}
-              onClick={startTyped}
+        {note === undefined ? null : <ErrorState>{note}</ErrorState>}
+        <div className="new-task-actions">
+          <RepositoryChip
+            key={repositories.scope}
+            place={CHIP_PLACE.FIELD}
+            align={PICKER_ALIGN.START}
+            value={repository}
+            chooser={repositories}
+            onChoose={setChosen}
+            onUnreached={() => setChosen(null)}
+          />
+          <div className="new-task-answers">
+            <Button disabled={starting} onClick={close}>
+              Cancel
+            </Button>
+            <Button
+              variant={BUTTON_VARIANT.PRIMARY}
+              aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+              busy={starting}
+              busyLabel={picked === undefined ? "Creating" : "Starting"}
+              onClick={start}
             >
-              <span className="menu-item-glyph">
-                <ComposeIcon />
-              </span>
-              <span className="task-compose-menu-name">Create task “{name.trim()}”</span>
-              <Shortcut chord={TYPED_CHORD} className="menu-item-hint" />
-            </button>
+              {picked === undefined ? "Create task" : `Start ${picked.identifier}`}
+              <Shortcut chord={CREATE_CHORD} />
+            </Button>
           </div>
-        ) : null}
+        </div>
       </div>
-      {note === undefined ? null : (
-        <p className="error-message" role="alert">
-          {note}
-        </p>
-      )}
-      <div className="confirm-dialog-actions">
-        <RepositoryChip
-          key={repositories.scope}
-          place={CHIP_PLACE.FIELD}
-          align={PICKER_ALIGN.START}
-          value={repository}
-          chooser={repositories}
-          onChoose={setChosen}
-          onUnreached={() => setChosen(null)}
-        />
-        <button type="button" className="toolbar-button" disabled={starting} onClick={close}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-          aria-busy={starting}
-          disabled={!canStart}
-          onClick={start}
-        >
-          <BusyLabel busy={starting} label={picked === undefined ? "Creating" : "Starting"}>
-            {picked === undefined ? "Create task" : `Start ${picked.identifier}`}
-          </BusyLabel>
-          <Shortcut chord={CREATE_CHORD} />
-        </button>
-      </div>
-    </ModalShell>
+    </Dialog>
   );
 }
 
-/** The card over the window while New task is asked, in the window's one modal frame (`../modal-shell.tsx`); nothing otherwise. */
+/** The card over the window while New task is asked, in `@luke/ui`'s shared `Dialog`; nothing otherwise. */
 export function NewTaskDialog({
   newTask,
 }: {

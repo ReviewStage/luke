@@ -213,6 +213,8 @@ export function UsersScreen({
         ? list.rows.filter((row) => `${row.name} ${row.email}`.toLowerCase().includes(needle))
         : list.rows;
       const failure = state.refreshFailure;
+      // Note that a miss may lie past a truncated roster's rows, so its note stays.
+      const truncatedTo = list.total > list.rows.length ? list.rows.length : undefined;
       const notice = (
         <RefreshFailureNotice failure={failure} refreshing={refreshing} onRetry={reload} />
       );
@@ -234,6 +236,9 @@ export function UsersScreen({
           <Refreshing refreshing={refreshing}>
             {notice}
             <Text tone={TEXT_TONE.MUTED}>{USERS_EMPTY}</Text>
+            {truncatedTo === undefined ? null : (
+              <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+            )}
           </Refreshing>
         ),
         children: (
@@ -251,10 +256,7 @@ export function UsersScreen({
                 favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
               />
             </div>
-            <RosterNote
-              truncatedTo={list.total > list.rows.length ? list.rows.length : undefined}
-              searched={list.search !== undefined}
-            />
+            <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
           </Refreshing>
         ),
       });

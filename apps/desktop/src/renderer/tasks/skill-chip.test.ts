@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
+import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
@@ -33,8 +33,8 @@ const RELEASE: SkillOption = {
 
 const roots: Root[] = [];
 
-// Set before any composer renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // A sent message is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -134,8 +134,8 @@ test("a skill's chip in the composer hangs the skill's card, what it is for unde
   });
 
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
-  assert.equal(card?.querySelector(".card-name")?.textContent, "/release");
-  assert.equal(card?.querySelector(".card-note")?.textContent, RELEASE.description);
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
+  assert.equal(card?.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
 });
 
 test("a sent chip's hover card is the plan card: the skill's mark and name, what it is for, and its file's line, which says and opens nothing, since the chip opens it", async () => {
@@ -149,9 +149,12 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   act(() => chip.focus());
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.ok(card, "the card is the window's plan card");
-  assert.ok(card.querySelector(".card-head .card-glyph svg"), "the head wears the skill's mark");
-  assert.equal(card.querySelector(".card-name")?.textContent, "/release");
-  assert.equal(card.querySelector(".card-note")?.textContent, RELEASE.description);
+  assert.ok(
+    card.querySelector(".luke-hover-card-head .luke-hover-card-glyph svg"),
+    "the head wears the skill's mark",
+  );
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "/release");
+  assert.equal(card.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
   assert.equal(card.querySelector(".task-card-detail")?.textContent, RELEASE.path);
   assert.equal(
     card.querySelector("button")?.textContent,
