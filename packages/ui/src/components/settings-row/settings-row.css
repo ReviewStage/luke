@@ -1,7 +1,8 @@
 /* settings-row.css -- a setting's words and its controls on one line, the
    words taking what room the controls leave and wrapping in it, and the
    controls dropping below the words to the row's end once the row is
-   narrower than 380px. */
+   narrower than 380px. A compact row stands bare, at a menu row's height,
+   and keeps its controls beside its words at any width. */
 
 @layer components {
   /* Note that the row is its own container, and its padding is its body's,
@@ -21,6 +22,18 @@
     min-width: 0;
     min-height: var(--luke-settings-row-min-height);
     padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
+  }
+
+  .luke-settings-row[data-density="compact"] > .luke-settings-row-body {
+    min-height: var(--luke-settings-row-compact-min-height);
+    padding: var(--luke-settings-row-compact-block) var(--luke-settings-row-compact-inline);
+  }
+
+  /* A compact row keeps its controls beside its words at any width, since
+     the popover it stands in is narrower than the 380px a card's row stacks
+     under; they wrap below only where they cannot fit at all. */
+  .luke-settings-row[data-density="compact"] .luke-settings-row-line {
+    flex-wrap: wrap;
   }
 
   .luke-settings-row-line {
@@ -89,13 +102,13 @@
      width is written here (`tokens/profiles.css`); a range rather than a
      379px maximum, so a fractional width under 380px stacks too. */
   @container luke-settings-row (width < 380px) {
-    .luke-settings-row-line {
+    .luke-settings-row:not([data-density="compact"]) .luke-settings-row-line {
       flex-direction: column;
       align-items: stretch;
       gap: var(--luke-space-8);
     }
 
-    .luke-settings-row-copy {
+    .luke-settings-row:not([data-density="compact"]) .luke-settings-row-copy {
       flex-basis: auto;
     }
   }

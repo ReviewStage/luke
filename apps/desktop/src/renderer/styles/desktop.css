@@ -5544,7 +5544,8 @@ button.integration-tool-head:hover,
   max-width: 100%;
 }
 
-.automation-form .settings-picker-chip {
+.automation-form .settings-picker-chip,
+.automation-form .settings-picker > .luke-chip {
   width: auto;
   min-width: min(200px, 100%);
 }
@@ -8686,7 +8687,8 @@ button.automation-run:hover {
   flex-shrink: 1;
 }
 
-.new-task-dialog .settings-picker-chip {
+.new-task-dialog .settings-picker-chip,
+.new-task-dialog .settings-picker > .luke-chip {
   width: auto;
   max-width: 100%;
 }
