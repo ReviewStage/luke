@@ -47,10 +47,18 @@ import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-me
 import { EmptyState } from "../empty-state";
 import { ReadFailure } from "../read-failure";
 import { Skeleton, SkeletonRegion } from "../skeleton";
+import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
+import {
+  type ConversationFiltersControl,
+  type ConversationHidden,
+  conversationHidden,
+  filteredConversation,
+  useConversationFilters,
+} from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
@@ -107,8 +115,11 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
  * end of the hunk it was made on, drawn as Files changed draws a diff with
  * its own lines lit (`file-diff.tsx`), then its comments; one resolved or
  * outdated by a later push is folded closed under its head, which says
- * which, until opened. Every name and word here is the repository's, so
- * the tab is left out of the screen recording (`ph-no-capture`).
+ * which, until opened. Over the conversation, stage-cli's two filters,
+ * Hide bots and Hide resolved, each counting what it leaves out and kept
+ * across launches (`conversation-filters.ts`). Every name and word here is
+ * the repository's, so the tab is left out of the screen recording
+ * (`ph-no-capture`).
  */
 
 /** The tab's own words. */
@@ -124,6 +135,15 @@ const PULL_REQUEST_WORDS = {
   NO_DESCRIPTION: "No description provided.",
   NO_CHECKS: "No checks have run on this pull request.",
   NO_CONVERSATION: "Nobody has commented yet.",
+  NO_MATCHING: "No matching comments.",
+  HIDE_BOTS: "Hide bots",
+  HIDE_RESOLVED: "Hide resolved",
+  /** What Hide bots says it leaves out, by how many. */
+  hiddenBots: (count: number) =>
+    `Hides ${count} ${count === 1 ? "comment or review" : "comments and reviews"} by bots`,
+  /** What Hide resolved says it leaves out, by how many. */
+  hiddenResolved: (count: number) =>
+    `Hides ${count} resolved review ${count === 1 ? "thread" : "threads"}`,
   /** What the conversation says of the earlier entries a read left on GitHub, by how many. */
   earlier: (count: number) => `${count} earlier ${count === 1 ? "comment" : "comments"} on GitHub`,
   /** What a review thread says of the replies a read left on GitHub, by how many. */
@@ -800,14 +820,16 @@ function DescriptionPart({
   );
 }
 
-/** The conversation as its read stands: its entries once landed, the earlier ones counted first; a skeleton while out, its failure with Retry. */
+/** The conversation as its read stands: its entries once landed, as the filters leave them, the earlier ones counted first; a skeleton while out, its failure with Retry. */
 function ConversationPart({
   parts,
+  filters,
   url,
   now,
   picture,
 }: {
   parts: OverviewParts;
+  filters: ConversationFiltersControl["filters"];
   /** The pull request's page, which the earlier entries left on GitHub open. */
   url: string | undefined;
   now: number;
@@ -833,6 +855,7 @@ function ConversationPart({
     );
   }
   const { conversation, earlier } = part.value;
+  const shown = filteredConversation(conversation, filters);
   return (
     <Section
       title="Conversation"
@@ -854,9 +877,11 @@ function ConversationPart({
             {PULL_REQUEST_WORDS.NO_CONVERSATION}
           </p>
         ) : null
+      ) : shown.length === 0 ? (
+        <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_MATCHING}</p>
       ) : (
         <ol className="pull-request-conversation">
-          {conversation.map((entry) => (
+          {shown.map((entry) => (
             <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
           ))}
         </ol>
@@ -1080,7 +1105,82 @@ function tabsOf(
   ];
 }
 
-/** The Conversation tab: the description, then the comments, reviews, and threads, in one scroll under the header. */
+/** One of the conversation's filters: its word, how many it would leave out once the conversation is read, and its switch, the word and the count pressing it too. */
+function ConversationFilter({
+  label,
+  count,
+  describe,
+  on,
+  onChange,
+}: {
+  label: string;
+  /** How many it would leave out; none until the conversation is read. */
+  count: number | undefined;
+  describe: (count: number) => string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}): React.JSX.Element {
+  const switchId = useId();
+  const noteId = useId();
+  const note = count === undefined ? undefined : describe(count);
+  const filter = (
+    <span className="pull-request-filter">
+      {/* Note that the word and the count label the switch, so a press on either turns it too. */}
+      <label htmlFor={switchId}>
+        {label}
+        {count === undefined ? null : (
+          <span className="pull-request-count" aria-hidden="true">
+            {count.toLocaleString()}
+          </span>
+        )}
+      </label>
+      <Switch
+        id={switchId}
+        checked={on}
+        label={label}
+        describedBy={note === undefined ? undefined : noteId}
+        onChange={onChange}
+      />
+      {note === undefined ? null : (
+        <span id={noteId} hidden>
+          {note}
+        </span>
+      )}
+    </span>
+  );
+  return note === undefined ? filter : <Tooltip label={note}>{filter}</Tooltip>;
+}
+
+/** The row over the conversation that stays put while it scrolls: Hide resolved and Hide bots, as stage-cli orders them, each counting what it leaves out once read. */
+function ConversationFilterRow({
+  control,
+  hidden,
+}: {
+  control: ConversationFiltersControl;
+  hidden: ConversationHidden | undefined;
+}): React.JSX.Element {
+  const { filters, change } = control;
+  return (
+    <div className="pull-request-filters">
+      <ConversationFilter
+        label={PULL_REQUEST_WORDS.HIDE_RESOLVED}
+        count={hidden?.resolved}
+        describe={PULL_REQUEST_WORDS.hiddenResolved}
+        on={filters.hideResolved}
+        onChange={(hideResolved) => change({ hideResolved })}
+      />
+      <ConversationFilter
+        label={PULL_REQUEST_WORDS.HIDE_BOTS}
+        count={hidden?.bots}
+        describe={PULL_REQUEST_WORDS.hiddenBots}
+        on={filters.hideBots}
+        onChange={(hideBots) => change({ hideBots })}
+      />
+    </div>
+  );
+}
+
+/** The Conversation tab: its filters, then the description, then the comments, reviews, and threads, in one scroll under them. */
 function ConversationView({
   agentId,
   parts,
@@ -1092,11 +1192,25 @@ function ConversationView({
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
+  const filters = useConversationFilters();
+  const conversation = landed(parts.conversation)?.conversation;
   return (
-    <div className="pull-request-page">
-      <DescriptionPart part={parts.pullRequest} picture={picture} />
-      <ConversationPart parts={parts} url={url} now={now} picture={picture} />
-    </div>
+    <>
+      <ConversationFilterRow
+        control={filters}
+        hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
+      />
+      <div className="pull-request-page">
+        <DescriptionPart part={parts.pullRequest} picture={picture} />
+        <ConversationPart
+          parts={parts}
+          filters={filters.filters}
+          url={url}
+          now={now}
+          picture={picture}
+        />
+      </div>
+    </>
   );
 }
 
