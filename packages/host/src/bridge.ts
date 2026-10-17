@@ -71,6 +71,14 @@ function args<Arguments extends BridgeArguments>(
 const noArgs = args<[]>((values) => values.length === 0);
 const oneBoolean = args<[boolean]>((values) => values.length === 1 && isWireBoolean(values[0]));
 
+/**
+ * The instant a surface event's guard reads it at. Note that the guard asks
+ * only whether the name and properties make an event, and the event that is
+ * counted is stamped by the analytics sender's own clock, so any valid
+ * instant will do and none is read from this machine here.
+ */
+const GUARD_EVENT_AT = 0;
+
 type SurfaceEventArguments = {
   [Name in ProductSurfaceEventName]: [name: Name, properties: ProductEventPropertiesFor<Name>];
 }[ProductSurfaceEventName];
@@ -177,7 +185,8 @@ export const BRIDGE = {
       (v) =>
         v.length === 2 &&
         isProductSurfaceEventName(v[0]) &&
-        productEventFromWire({ name: v[0], at: Date.now(), properties: v[1] ?? {} }) !== undefined,
+        productEventFromWire({ name: v[0], at: GUARD_EVENT_AT, properties: v[1] ?? {} }) !==
+          undefined,
     ),
   }),
   /**
