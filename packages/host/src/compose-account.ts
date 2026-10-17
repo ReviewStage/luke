@@ -24,7 +24,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@luke/gateway";
-import { VoiceCapabilityAssembler } from "@luke/voice";
+import { type OpenSocket, VoiceCapabilityAssembler } from "@luke/voice";
 import { Config, Effect, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
@@ -34,7 +34,6 @@ import { agentTraceDirectory } from "./devtrace/trace-directory.js";
 import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, Environment } from "./effect/seams.js";
-import { openSocketOverWs } from "./voice/socket-over-ws.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 
@@ -76,6 +75,8 @@ export interface AccountComposer extends Composer {
 
 interface AccountDependencies {
   settings: SettingsComposer;
+  /** How the voice sideband's socket is opened; the platform's own WebSocket, handed in. */
+  openSocket: OpenSocket;
 }
 
 /**
@@ -93,7 +94,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   never,
   HostKernelTag | Environment | AppIdentity | FileSystem.FileSystem | Path.Path | Scope.Scope
 > {
-  const { settings } = dependencies;
+  const { settings, openSocket } = dependencies;
   const kernel = yield* HostKernelTag;
   const environment = yield* Environment;
   const identity = yield* AppIdentity;
@@ -165,7 +166,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       ? Option.none<string>()
       : yield* Effect.orDie(agentTraceDirectory.parse(environment));
   const agentTrace = Option.isSome(traceDirectory)
-    ? yield* AgentTraceWriter.make({ directory: traceDirectory.value })
+    ? yield* AgentTraceWriter.make({ directory: traceDirectory.value, report })
     : undefined;
   if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
 
@@ -224,7 +225,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       packaged: identity.packaged,
       override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
     }),
-    openSocket: openSocketOverWs,
+    openSocket,
     refreshAccount: session.renewOnce,
   });
 

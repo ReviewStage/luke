@@ -448,6 +448,13 @@ export type ChatMessage = typeof chatMessageSchema.Type;
  */
 export const CHAT_CURSOR_START = "0";
 
+/**
+ * What a window's read of a workspace's chat names in its query: the
+ * workspace, and the cursor it reads on from, as the service last handed it
+ * back or the start.
+ */
+export const CHAT_QUERY = { WORKSPACE_ID: "workspaceId", AFTER: "after" } as const;
+
 /** Where a reader of a workspace's chat stands, as the service last handed it back. */
 export const chatCursorSchema = filledText(CHAT_BOUNDS.MAX_CURSOR_CHARS);
 

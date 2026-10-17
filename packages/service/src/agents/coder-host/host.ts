@@ -86,6 +86,7 @@ import {
   agentAway,
   CHAT_TOOL_REFUSAL,
   type ChatToolResult,
+  chatDigest,
   chatRejected,
   postAsAgent,
   readAsAgent,
@@ -335,6 +336,10 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     call: ChatCall,
   ): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp>;
+  /** What the agent has not read in its workspace's chat, as a turn opens with it (`chat.ts`); nothing where nothing waits, the conversation is no agent's, or the agent's starter has not turned Chat on. */
+  chatDigest(
+    admitted: AdmittedConversation,
+  ): Effect.Effect<string | undefined, never, DatabaseServices>;
   /**
    * Runs one of the agent's public reads, the brain's own
    * (`../public-research.ts`): a search or a page read, under the turn's
@@ -866,6 +871,23 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
+      ),
+
+    chatDigest: (admitted) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return undefined;
+        // A turn opens with the chat only where the agent's starter turned Chat on.
+        if (!(yield* chatEnabledFor(admitted.target.userId))) return undefined;
+        const { id: agentId, taskId: planId } = found.success;
+        return yield* chatDigest({
+          userId: admitted.target.userId,
+          planId,
+          self: { kind: MEMBER_KIND.AGENT, agentId },
+        });
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(undefined)),
       ),
 
     showPage: (admitted, input, sandbox) =>

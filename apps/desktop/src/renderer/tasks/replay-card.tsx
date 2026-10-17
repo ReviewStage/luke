@@ -8,14 +8,22 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { SplitIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { ActorLine, ActorRef } from "../actor-ref";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold";
-import { Message } from "../ai-elements/message";
+import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader } from "../ai-elements/task";
+import { TOOL_BLOCK } from "../ai-elements/tool";
 import { usePerson } from "../member-directory";
 import { linkChip } from "./mention-chip";
 import { useMentionDoors } from "./plan-mentions";
-import { leftOutLine, replayCount, replayLede, replayVerb, stepLine } from "./replay-card-model";
+import {
+  leftOutLine,
+  replayCount,
+  replayLede,
+  replayVerb,
+  STEP_VIEW,
+  stepView,
+} from "./replay-card-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
+import { TranscriptTool, TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenPlace } from "./use-open-link";
 
@@ -162,22 +170,47 @@ function usePublished(agentId: string, read: ReplayPlace["readPublished"]): Publ
   return published;
 }
 
-/** One step: who and its one line, opening onto its words exactly as they were sent. */
+/**
+ * One step, drawn as a transcript draws the same: a line as a sent
+ * message, its sender under it; the agent's words as its words; and a
+ * call as a call's row, folded onto its input and its result, which run
+ * long.
+ */
 function StepRow({ step }: { step: ReplayStep }): React.JSX.Element {
-  const { who, line } = stepLine(step);
-  return (
-    <Fold className="text-[12.5px]" data-replay-step={step.kind}>
-      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-        <span className="w-[4.5rem] shrink-0 font-medium text-foreground">{who}</span>
-        <span className="min-w-0 flex-1 truncate">{line}</span>
-      </FoldSummary>
-      <FoldBody>
-        <pre className="m-0 mb-1 ml-[5.25rem] whitespace-pre-wrap rounded-md bg-secondary px-2 py-1.5 font-mono text-[11.5px] text-foreground [overflow-wrap:anywhere]">
-          {step.words}
-        </pre>
-      </FoldBody>
-    </Fold>
-  );
+  const view = stepView(step);
+  switch (view.kind) {
+    case STEP_VIEW.LINE:
+      return (
+        <Message from={MESSAGE_ROLE.USER} data-replay-step={step.kind}>
+          <MessageContent>
+            <TranscriptWords text={view.words} />
+          </MessageContent>
+          <div className="message-meta">
+            <span className="message-sender">{view.sender}</span>
+          </div>
+        </Message>
+      );
+    case STEP_VIEW.SAID:
+      return (
+        <div data-replay-step={step.kind}>
+          <TranscriptWords text={view.words} />
+        </div>
+      );
+    case STEP_VIEW.CALL:
+      return (
+        <TranscriptTool
+          data-replay-step={step.kind}
+          state={view.state}
+          kind={view.call}
+          subject={view.subject}
+          input={{ kind: TOOL_BLOCK.TEXT, text: view.input }}
+          output={
+            view.output === undefined ? undefined : { kind: TOOL_BLOCK.TEXT, text: view.output }
+          }
+          errorText={view.errorText}
+        />
+      );
+  }
 }
 
 /** The foot: the branch and pull request the source published, where known, and the way to its whole transcript. */
@@ -199,7 +232,7 @@ function ReplayFoot({
       ? undefined
       : `#${pullRequest.number} ${pullRequest.title}`;
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-0 border-t border-dashed border-border pt-2 text-[12.5px] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-0 border-t border-dashed border-border pt-2 text-[12.5px] text-muted-foreground">
       {branch === undefined ? null : (
         <span className="min-w-0">
           Builds on <code>{branch}</code>
@@ -295,10 +328,10 @@ export function ReplayCard({
             <span className="text-muted-foreground"> · {replayCount(replay)}</span>
           </span>
         </PlanHeader>
-        <PlanContent className="flex flex-col gap-0.5">
-          <p className="m-0 mb-1.5 text-[12px] text-muted-foreground">{replayLede(name)}</p>
+        <PlanContent className="flex flex-col gap-3">
+          <p className="m-0 text-[12px] text-muted-foreground">{replayLede(name)}</p>
           {left === undefined ? null : (
-            <p className="m-0 mb-1 px-1 text-[12px] italic text-muted-foreground">{left}</p>
+            <p className="m-0 text-[12px] italic text-muted-foreground">{left}</p>
           )}
           {replay.steps.map((step, index) => (
             // Note that a step is keyed by its place, because the replay never changes once handed.

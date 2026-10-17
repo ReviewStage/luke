@@ -6,6 +6,12 @@ import {
   type CodingAgentInboxAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
+import {
   INBOX_CURSOR_START,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -15,6 +21,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
@@ -29,7 +36,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { relayout } from "#testing/resize-observer";
 import { runAppCommand, useAppKeymap } from "../app-commands";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { NO_LOOKS } from "../tasks/use-task-looks";
 import "../file-tree/index";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
@@ -593,6 +600,129 @@ test("a plan's document opens on its Edited by line, with no crumb over it", () 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
   assert.ok(first?.classList.contains("plan-edit-note"), "the Edited by line leads the document");
   assert.match(first?.textContent ?? "", /^Edited by .*Lee Park/u);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation, and another pull request's, or an archived agent's, opens on GitHub", () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: TASK.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Batch the invitations",
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const url = "https://github.com/acme/relay/pull/42";
+  const other = "https://github.com/acme/relay/pull/7";
+  const archived: CodingAgentSummary = {
+    ...agent,
+    id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+    title: "An earlier try",
+    archivedAt: 4,
+  };
+  const archivedUrl = "https://github.com/acme/relay/pull/9";
+  const opened: unknown[] = [];
+  const onGitHub: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      onMenuCommand: () => () => undefined,
+      recordSurfaceEvent: () => undefined,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      },
+    },
+  });
+  const task: Task = {
+    ...TASK,
+    repository: "acme/relay",
+    document: {
+      body: `## Rollout\n\nShipped in [@relay#42](${url}/), after [@relay#7](${other}) and [@relay#9](${archivedUrl}).\n`,
+      assumptions: [],
+    },
+  };
+  const base = tasksControl();
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: task.id,
+            region: { kind: DOCUMENT_REGION.READY, task },
+            sidePanel: {
+              ...base.sidePanel,
+              onPullRequestView: (agentId, view) => opened.push({ agentId, view }),
+              onChoose: (tab) => opened.push(tab),
+            },
+            agents: codingAgentsControl({
+              agents: [agent],
+              archived: [archived],
+              agentIds: [agent.id],
+              pullRequests: new Map([
+                [
+                  agent.id,
+                  {
+                    number: 42,
+                    title: "Send invitations in batches",
+                    url,
+                    state: PULL_REQUEST_STATE.OPEN,
+                    checks: CHECK_SUMMARY.PASSING,
+                    additions: 12,
+                    deletions: 3,
+                    changedFiles: 2,
+                  },
+                ],
+                [
+                  archived.id,
+                  {
+                    number: 9,
+                    title: "Send invitations at once",
+                    url: archivedUrl,
+                    state: PULL_REQUEST_STATE.CLOSED,
+                    checks: CHECK_SUMMARY.NONE,
+                    additions: 4,
+                    deletions: 1,
+                    changedFiles: 1,
+                  },
+                ],
+              ]),
+            }),
+          }),
+        }),
+      ),
+    ),
+  );
+  const chip = (name: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document .mention-chip")].find(
+      (each) => each.querySelector(".mention-chip-label")?.textContent?.includes(name),
+    );
+
+  const own = chip("relay#42");
+  assert.ok(own, "the agent's pull request is its chip");
+  act(() => own.click());
+  assert.deepEqual(opened, [
+    { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
+    { changes: agent.id },
+  ]);
+  assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
+
+  act(() => chip("relay#7")?.click());
+  assert.deepEqual(onGitHub, [other]);
+
+  // An archived agent's Pull request tab is not drawn on the task, so its pull request opens on GitHub.
+  act(() => chip("relay#9")?.click());
+  assert.deepEqual(onGitHub, [other, archivedUrl]);
+  assert.equal(opened.length, 2, "no tab was asked for");
   act(() => root.unmount());
   container.remove();
 });

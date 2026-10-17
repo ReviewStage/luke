@@ -6,6 +6,7 @@ import {
   type DuplicateGatewayMethod,
   Environment,
   type HostAssemblyTag,
+  HostSockets,
   hostAssemblyLayer,
   hostKernelLayer,
   IdSource,
@@ -15,6 +16,7 @@ import {
   ShutdownSignal,
   StateRoot,
 } from "@luke/host/effect";
+import { openTerminalSocketOverWs, openVoiceSocketOverWs } from "@luke/host/node";
 import { ConfigProvider, Layer } from "effect";
 import type { DesktopConfig } from "./desktop-config";
 
@@ -36,6 +38,10 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(SecretCipher, cipher),
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
+    Layer.succeed(HostSockets, {
+      openVoice: openVoiceSocketOverWs,
+      openTerminal: openTerminalSocketOverWs,
+    }),
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, which the entry's `before-quit` asks for.
     Layer.succeed(ShutdownSignal, { notify: () => config.quit() }),

@@ -3,8 +3,8 @@ import {
   SETTING_SECTION,
   type SettingsRowsInput,
 } from "@luke/settings";
+import { SettingsSection } from "@luke/ui";
 import { SchemaSettingRows } from "./schema-rows";
-import { SettingsGroup } from "./settings-group";
 import type { SettingsWrites } from "./writes";
 
 /**
@@ -23,17 +23,17 @@ export function AppearanceSection({
 }): React.JSX.Element {
   return (
     <>
-      <SettingsGroup>
+      <SettingsSection>
         <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.APPEARANCE} view={view} writes={writes} />
-      </SettingsGroup>
-      <SettingsGroup title="Diffs">
+      </SettingsSection>
+      <SettingsSection title="Diffs">
         <SchemaSettingRows
           page={SCHEMA_SETTINGS_PAGE.APPEARANCE}
           section={SETTING_SECTION.DIFFS}
           view={view}
           writes={writes}
         />
-      </SettingsGroup>
+      </SettingsSection>
     </>
   );
 }

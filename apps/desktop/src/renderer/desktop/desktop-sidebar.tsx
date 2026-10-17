@@ -1,8 +1,13 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { inPinOrder, type PinPlace, pinPositionsForMove } from "@luke/features/pin-order";
-import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
+import {
+  inPinOrder,
+  type PinPlace,
+  pinPositionsForInsert,
+  pinPositionsForMove,
+} from "@luke/features/pin-order";
+import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -47,7 +52,7 @@ import {
   sectionOrder,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import {
   FactoryIcon,
@@ -91,6 +96,7 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import {
   type DrawnSection,
+  PINNED_DROP_ZONE,
   SidebarSections,
   TASKS_DROP_ZONE,
   useSectionDialogs,
@@ -206,8 +212,8 @@ interface RowContext {
   readonly faces: boolean;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
   readonly inSight: boolean;
-  /** Hears a plan's row let go over a section, or over Tasks, while the account keeps sections; none while it does not. */
-  readonly dropOut: ((taskId: string, zone: string, at: number) => void) | undefined;
+  /** Hears a row let go over a section, Tasks, or Pinned, while the account keeps sections; none while it does not. */
+  readonly dropOut: ((row: TaskRow, zone: string, at: number) => void) | undefined;
 }
 
 /**
@@ -227,7 +233,7 @@ function TaskRows({
   repository?: (row: TaskRow) => string | undefined;
   face?: boolean;
 }): React.JSX.Element {
-  // Note that the rows keep the view's order, so a row is dragged only out of them, into a section.
+  // Note that the rows keep the view's order, so a row is dragged only out of them, into a section or Pinned.
   const { dropOut } = context;
   const drag = useRowDrag(undefined, {
     onDropOut:
@@ -235,7 +241,7 @@ function TaskRows({
         ? undefined
         : (from, zone, at) => {
             const row = rows[from];
-            if (row?.kind === TASK_ROW.TASK) dropOut(row.plan.id, zone, at);
+            if (row !== undefined) dropOut(row, zone, at);
           },
   });
   return (
@@ -336,19 +342,12 @@ function pinnedRows(
 }
 
 /**
- * Stands the row at `from` under Pinned at `to`: each pin the drop gives a
- * place takes it, a plan's and an agent's on the account and a tab's on
- * this Mac, so the section draws the new order at once. A drop the service
- * refuses any of puts the tabs' places back too, so the section is left in
- * no order of its own making.
+ * Gives each pin under Pinned the place a drop gave it, a plan's and an
+ * agent's on the account and a tab's on this Mac, so the section draws the
+ * new order at once. A drop the service refuses any of puts the tabs'
+ * places back too, so the section is left in no order of its own making.
  */
-function movePinned(
-  rows: readonly PinnedRow[],
-  from: number,
-  to: number,
-  tasks: TasksControl,
-): void {
-  const positions = pinPositionsForMove(rows, from, to, placeOf);
+function placePins(positions: ReadonlyMap<PinnedRow, string>, tasks: TasksControl): void {
   const tabs = new Map<number, string>();
   const before = new Map<number, string | undefined>();
   const moves = [...positions].flatMap(([row, position]) => {
@@ -360,6 +359,47 @@ function movePinned(
   });
   if (tabs.size > 0) tasks.sidePanel.onPlacePins(tabs);
   tasks.onMovePins(moves, () => tasks.sidePanel.onPlacePins(before));
+}
+
+/** Stands the row at `from` under Pinned at `to`. */
+function movePinned(
+  rows: readonly PinnedRow[],
+  from: number,
+  to: number,
+  tasks: TasksControl,
+): void {
+  placePins(pinPositionsForMove(rows, from, to, placeOf), tasks);
+}
+
+/**
+ * Pins a plan's or an agent's row carried into Pinned at `at` among the
+ * rows it draws: pinned now, and given a place there, as its neighbours are
+ * where they need one, wherever it lands, on top included
+ * (`pinPositionsForInsert`).
+ */
+function pinAt(rows: readonly PinnedRow[], row: TaskRow, at: number, tasks: TasksControl): void {
+  const place: PinPlace = { at: Date.now() };
+  const moving: PinnedRow =
+    row.kind === TASK_ROW.AGENT
+      ? { kind: TASK_ROW.AGENT, agent: row.agent, place }
+      : { kind: TASK_ROW.TASK, plan: row.plan, pin: undefined, place };
+  if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, true);
+  else tasks.onMarkTask(row.plan.id, TASK_MARK.PIN);
+  placePins(pinPositionsForInsert(rows, moving, at, placeOf), tasks);
+}
+
+/** Takes a row out of Pinned: a plan's or an agent's pin on the account, a tab's on this Mac. */
+function unpin(row: PinnedRow, tasks: TasksControl): void {
+  if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, false);
+  else if (row.pin === undefined) tasks.onMarkTask(row.plan.id, TASK_MARK.UNPIN);
+  else tasks.sidePanel.onUnpin(row.pin.task, row.pin.tab);
+}
+
+/** The write that takes a task out of the section it is kept in, a pinned one's included; none where it is in none. */
+function leaveSection(tasks: TasksControl, taskId: string): TaskSectionWrite[] {
+  return sectionEntries(tasks.taskSections).has(taskId)
+    ? [{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]
+    : [];
 }
 
 /** The rows of the list walked by ⌥↑ and ⌥↓ that Pinned holds: its plans and its agents, a pinned tab being its plan's. */
@@ -380,18 +420,35 @@ function PinnedRows({
   context,
   onOpenTab,
   movable,
+  onDropOut,
 }: {
   rows: readonly PinnedRow[];
   context: RowContext;
   onOpenTab: (pin: PinnedTab) => void;
   /** Whether a row is dragged to another place among them, which a fold drawing only some of them forbids. */
   movable: boolean;
+  /** Hears a row let go over a section or Tasks, while the account keeps sections; none while it does not. */
+  onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
 }): React.JSX.Element {
   const drag = useRowDrag(
     movable ? (from, to) => movePinned(rows, from, to, context.tasks) : undefined,
+    {
+      onDropOut:
+        onDropOut === undefined
+          ? undefined
+          : (from, zone, at) => {
+              const row = rows[from];
+              if (row !== undefined) onDropOut(row, zone, at);
+            },
+    },
   );
   return (
-    <ul className="sidebar-tasks" onPointerDown={drag}>
+    // An open Pinned keeps an order a row carried in lands at a place in; a folded one draws only some of its rows, so a drop lands on top.
+    <ul
+      className="sidebar-tasks"
+      data-row-drop-rows={onDropOut !== undefined && movable ? "" : undefined}
+      onPointerDown={drag}
+    >
       {rows.map((row) => {
         if (row.kind === TASK_ROW.AGENT) {
           const { agent } = row;
@@ -444,7 +501,10 @@ function PinnedRows({
  * stand as they were pinned. Its head folds it, and folded counts its pins.
  * The fold is kept across launches as a repository's is, and folded, the
  * open plan, or the pinned tab on show, still stands under it, as under a
- * repository's fold.
+ * repository's fold. While the account keeps sections it is a drop zone as
+ * a section is: a row carried in from Tasks or a section is pinned where it
+ * is let go, one carried out is unpinned, and it stands though nothing is
+ * pinned, saying so, so there is somewhere to drop the first pin.
  */
 function PinnedSection({
   rows,
@@ -452,6 +512,7 @@ function PinnedSection({
   shown,
   context,
   onOpenTab,
+  onDropOut,
 }: {
   rows: readonly PinnedRow[];
   folds: FoldedGroups;
@@ -459,11 +520,17 @@ function PinnedSection({
   shown: (row: PinnedRow) => boolean;
   context: RowContext;
   onOpenTab: (pin: PinnedTab) => void;
+  /** Hears a row let go over a section or Tasks, while the account keeps sections, which makes Pinned a drop zone too; none while it does not. */
+  onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
 }): React.JSX.Element {
   const folded = folds.pinnedFolded;
   const drawn = folded ? rows.filter(shown) : rows;
   return (
-    <nav className="sidebar-group" aria-label="Pinned">
+    <nav
+      className="sidebar-group"
+      aria-label="Pinned"
+      data-row-drop={onDropOut === undefined ? undefined : PINNED_DROP_ZONE}
+    >
       <SidebarSectionHead
         name="Pinned"
         folded={folded}
@@ -471,8 +538,18 @@ function PinnedSection({
         noun={PIN_NOUN}
         onToggle={folds.togglePinned}
       />
-      {drawn.length === 0 ? null : (
-        <PinnedRows rows={drawn} context={context} onOpenTab={onOpenTab} movable={!folded} />
+      {drawn.length === 0 ? (
+        folded ? null : (
+          <p className="sidebar-section-empty">Drag tasks here to pin them</p>
+        )
+      ) : (
+        <PinnedRows
+          rows={drawn}
+          context={context}
+          onOpenTab={onOpenTab}
+          movable={!folded}
+          onDropOut={onDropOut}
+        />
       )}
     </nav>
   );
@@ -1347,7 +1424,17 @@ function SidebarColumn({
     tasks.listed.tasks.filter((plan) => plan.pinnedAt === undefined),
   );
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
-  const dropTask = (taskId: string, zone: string, at: number) => {
+  // Note that the sidebar draws a task in one place, so a row dragged into
+  // Pinned leaves its section, and one dragged out of Pinned is unpinned and
+  // stands where it was let go, under Tasks or in a section.
+  const dropRow = (row: TaskRow, zone: string, at: number) => {
+    if (zone === PINNED_DROP_ZONE) {
+      if (row.kind === TASK_ROW.TASK) tasks.onWriteSections(leaveSection(tasks, row.plan.id));
+      pinAt(pinnedSection, row, at, tasks);
+      return;
+    }
+    if (row.kind !== TASK_ROW.TASK) return;
+    const taskId = row.plan.id;
     if (zone === TASKS_DROP_ZONE) {
       if (!sectioned.taskIds.has(taskId)) return;
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
@@ -1356,6 +1443,26 @@ function SidebarColumn({
     const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
     if (target === undefined) return;
     tasks.onWriteSections(placeWrites(target.entries, taskId, zone, at, Date.now()));
+  };
+  const dropTask = (taskId: string, zone: string, at: number) => {
+    const plan = tasks.listed.tasks.find((each) => each.id === taskId);
+    if (plan !== undefined) dropRow(taskRow(plan), zone, at);
+  };
+  // A tab pinned to the sidebar is no task, so it goes into no section, though Tasks unpins it as any pin.
+  const dropPinned = (row: PinnedRow, zone: string, at: number) => {
+    const plan = row.kind === TASK_ROW.TASK && row.pin === undefined ? row.plan : undefined;
+    if (zone === TASKS_DROP_ZONE) {
+      unpin(row, tasks);
+      if (plan !== undefined) tasks.onWriteSections(leaveSection(tasks, plan.id));
+      return;
+    }
+    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    if (target === undefined || plan === undefined) return;
+    unpin(row, tasks);
+    tasks.onWriteSections([
+      ...leaveSection(tasks, plan.id),
+      ...placeWrites(target.entries, plan.id, zone, at, Date.now()),
+    ]);
   };
   const { chosen } = overlay;
   const context: RowContext = {
@@ -1374,7 +1481,7 @@ function SidebarColumn({
     faces: createdBy === undefined,
     archived: archive.shown,
     inSight: overlay.inSight,
-    dropOut: sectionsShown ? dropTask : undefined,
+    dropOut: sectionsShown ? dropRow : undefined,
   };
   // A pinned tab is on show where its task is open and its column shows it:
   // an agent's or the Inbox in the task's own column, any other in the side panel. The
@@ -1528,13 +1635,15 @@ function SidebarColumn({
       {/* One scroller for both sections, so the pinned tasks scroll away
           with the rest rather than holding half the column. */}
       <div className="sidebar-section scroll-fade">
-        {tasks.signedIn && pinnedSection.length > 0 && !archive.shown ? (
+        {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin. */}
+        {tasks.signedIn && (pinnedSection.length > 0 || sectionsShown) && !archive.shown ? (
           <PinnedSection
             rows={pinnedSection}
             folds={folds}
             shown={pinnedShown}
             context={context}
             onOpenTab={chosen(openPinnedTab)}
+            onDropOut={sectionsShown ? dropPinned : undefined}
           />
         ) : null}
         {sectioned.sections.length > 0 ? (

@@ -63,7 +63,7 @@ import { defineEval } from "eve/evals";
  * shown and the writer keeps as a tool part the agent's tab draws. Told
  * a skill's `/name`, it loads the skill the session was offered. Told to
  * post in chat, it posts in its plan's channel, and another agent on the
- * plan told to read the chat reads that post as unread. The
+ * plan opens its next turn with that post among the chat it had not read. The
  * eve server runs in this process with the database the environment names,
  * so the eval reads the rows back from the same Postgres. Where no database
  * is named the eval skips rather than pretending.
@@ -332,8 +332,8 @@ export default defineEval({
       );
 
       // A chat post is a tool part of the agent's answer, accepted in its
-      // plan's channel, and another agent on the plan reads it as unread,
-      // named by its poster's handle.
+      // plan's channel, and another agent on the plan has its next turn open
+      // with it, as the chat it had not read, named by its poster's handle.
       // The reader is started first: a member joins the chat at its head, and the poster's first post
       // seats every agent of the plan not yet seated, so the reader stands before the post lands.
       // Chat is an experiment: the account turns it on, as Settings › Experimental does.
@@ -370,17 +370,15 @@ export default defineEval({
       (await t.target.attachSession(reading.sessionId)).succeeded();
       const readAnswer = (await readMessagesByConversationTyped(run, reader.conversationId)).at(-1);
       assert.ok(readAnswer);
-      const read = readAnswer.parts.find((part) => isToolUIPart(part));
-      assert.ok(read);
-      assert.equal(read.type, `tool-${CODER_TOOL.READ_CHAT}`);
       assert.ok(
         readAnswer.parts.some(
           (part) =>
             isTextUIPart(part) &&
-            part.text.startsWith(`${SCRIPTED_CHAT_HEARD} @agent-`) &&
+            part.text.startsWith(`${SCRIPTED_CHAT_HEARD} m `) &&
+            part.text.includes(" · @agent-") &&
             part.text.endsWith(`: ${CHAT_WORDS}`),
         ),
-        "the other agent reads the post as unread, named by its poster's handle",
+        "the other agent's turn opens with the post it had not read, named by its poster's handle",
       );
     } finally {
       await runtime.dispose();

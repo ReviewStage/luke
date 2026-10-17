@@ -30,6 +30,7 @@ import {
   type SettingsResetScope,
   type SettingsUpdateResult,
 } from "@luke/settings/wire";
+import { isRecord, unparsedWire } from "@luke/wire";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -63,19 +64,16 @@ const TEST_ACCOUNT = {
 function testCipher(available = true): SecretCipher {
   return {
     isAvailable: () => available,
-    encrypt: (plainText) => Buffer.from(`${CIPHER_PREFIX}${plainText}`, "utf8"),
+    encrypt: (plainText) => new TextEncoder().encode(`${CIPHER_PREFIX}${plainText}`),
     decrypt: (cipherText) => {
-      const value = cipherText.toString("utf8");
+      const value = new TextDecoder().decode(cipherText);
       if (!value.startsWith(CIPHER_PREFIX)) throw new Error("Unreadable ciphertext");
       return value.slice(CIPHER_PREFIX.length);
     },
   };
 }
 
-/**
- * Counts what reaches the cipher. Every call is a Keychain read on macOS, so
- // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-
+/** Text sealed by `testCipher` as an earlier build kept it at rest: Node's standard base64 of the cipher's bytes. */
 function sealed(plainText: string): string {
   return Buffer.from(`${CIPHER_PREFIX}${plainText}`, "utf8").toString("base64");
 }
@@ -356,6 +354,17 @@ test("round-trips an encrypted account without exposing either token in snapshot
   const settings = JSON.stringify(await reopened.snapshot());
   assert.equal(settings.includes(TEST_ACCOUNT.accessToken), false);
   assert.equal(settings.includes(TEST_ACCOUNT.refreshToken), false);
+});
+
+test("an account's ciphertext is kept as the standard base64 of the cipher's bytes, as earlier builds wrote it", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await storeIn(directory).setAccount(TEST_ACCOUNT);
+
+  const written = unparsedWire(JSON.parse(await readSettingsFile(directory)));
+  const tokens = { accessToken: TEST_ACCOUNT.accessToken, refreshToken: TEST_ACCOUNT.refreshToken };
+
+  assert.ok(isRecord(written) && isRecord(written.account), "the file holds an account");
+  assert.equal(written.account.tokenCipher, sealed(JSON.stringify(tokens)));
 });
 
 test("the Mac's session rides sealed beside the OAuth tokens, and reads back with them", async (t) => {
