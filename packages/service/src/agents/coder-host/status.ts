@@ -186,7 +186,7 @@ function archivedByOf(
   };
 }
 
-/** What every read of one agent says of it but its plan, its status read at `now`. */
+/** What every read of one agent says of it but its task, its status read at `now`. */
 function summaryFields(
   agent: CodingAgent,
   standing: AgentTurnStanding,
@@ -230,7 +230,7 @@ function summaryFields(
 }
 
 /**
- * One agent as the tabs draw it, on a plan or with none, its status read at
+ * One agent as the tabs draw it, on a task or with none, its status read at
  * `now`, and the member who started it named by `names`, the accounts' names
  * by id, where theirs stands.
  */
@@ -290,7 +290,7 @@ export function pageAccounts(agent: CodingAgent): readonly string[] {
     : summaryAccounts(agent);
 }
 
-/** One agent as its own page reads it, on a plan or with none, its status read at `now`. */
+/** One agent as its own page reads it, on a task or with none, its status read at `now`. */
 export function codingAgentPage(
   agent: CodingAgent,
   standing: AgentTurnStanding,

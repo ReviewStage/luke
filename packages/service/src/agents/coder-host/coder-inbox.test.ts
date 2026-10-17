@@ -16,13 +16,13 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
  * The coding agent's inbox tools, through their public functions against a
- * real dialect: a post under a key is one item the plan's inbox reads, a
+ * real dialect: a post under a key is one item the task's inbox reads, a
  * post under the same key replaces it and opens it again, a close takes it
  * back with why, a read answers the agent's items open first, and every
  * call answers the agent's whole inbox, answers and all. Nothing of
  * another account's agent is read or written.
  *
- * Synthetic accounts, plans, and words throughout.
+ * Synthetic accounts, tasks, and words throughout.
  */
 
 const openUser = Effect.gen(function* () {
@@ -32,7 +32,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one plan and one agent started on it, in its repository. */
+/** An account with one task and one agent started on it, in its repository. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });

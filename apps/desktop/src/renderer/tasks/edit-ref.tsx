@@ -25,16 +25,16 @@ import { agoText } from "./task-time";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
- * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the plan's ⋯ menu.
+ * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the task's ⋯ menu.
  *
  * The writer is read through `@luke/ui/actor-model`'s `editActor`, against
- * the workspace's members the plan's directory holds (`member-directory.tsx`),
+ * the workspace's members the task's directory holds (`member-directory.tsx`),
  * and named as one target that hangs its card. A person's card says what
  * they last did in the plan, and Luke's whose call he wrote on, when, and
  * what he wrote, both read off who last changed each section, which the
- * window already holds. A coding agent found among the plan's agents wears
+ * window already holds. A coding agent found among the task's agents wears
  * its harness and where its work stands, hangs its tab's card, and opens
- * its tab on a press where the place offers that; one the plan's list does
+ * its tab on a press where the place offers that; one the task's list does
  * not hold is named alone. Luke's edit on a call names whose call it was
  * too: "your call" for the reader's own, and the teammate on their face.
  */
@@ -46,7 +46,7 @@ const ACTOR_OF_GLYPH = {
   [GLYPH_STATE.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<GlyphState, ActorState>;
 
-/** The plan's coding agents, among which an agent's edit is found, and what opens one's tab where the place offers it. */
+/** The task's coding agents, among which an agent's edit is found, and what opens one's tab where the place offers it. */
 export interface EditAgents {
   readonly control: Pick<
     CodingAgentsControl,
@@ -66,7 +66,7 @@ export interface EditPlace {
   readonly now: number;
 }
 
-/** The agent an edit names, among the plan's agents, archived or not; none where the edit names none or the list holds no such agent. */
+/** The agent an edit names, among the task's agents, archived or not; none where the edit names none or the list holds no such agent. */
 function agentOf(
   edit: PlanLastEdit,
   agents: EditAgents | undefined,
@@ -80,7 +80,7 @@ function agentOf(
   );
 }
 
-/** Who wrote an edit, an agent wearing the harness and state the plan's list finds it in; nobody for the plan before history. */
+/** Who wrote an edit, an agent wearing the harness and state the task's list finds it in; nobody for the plan before history. */
 function writerOf(edit: PlanLastEdit, place: EditPlace): Actor | undefined {
   const agent = agentOf(edit, place.agents);
   const found: EditAgent | undefined =
@@ -117,28 +117,40 @@ function PersonRef({
   place,
   sentence = false,
   possessive = false,
+  faceOnly = false,
 }: {
   actor: Actor;
   place: EditPlace;
   sentence?: boolean;
   possessive?: boolean;
+  faceOnly?: boolean;
 }): React.JSX.Element {
   const card =
     actor.kind === ACTOR_KIND.PERSON ? (
       <PersonCard actor={actor} latest={latestLine(actor, place, true)} />
     ) : undefined;
-  return <ActorRef actor={actor} card={card} sentence={sentence} possessive={possessive} />;
+  return (
+    <ActorRef
+      actor={actor}
+      card={card}
+      sentence={sentence}
+      possessive={possessive}
+      faceOnly={faceOnly}
+    />
+  );
 }
 
-/** The writer of an edit as one target in a line; nothing for the plan before history, which nobody wrote. */
+/** The writer of an edit as one target in a line, or their face alone; nothing for the plan before history, which nobody wrote. */
 function WriterRef({
   edit,
   place,
   sentence,
+  faceOnly,
 }: {
   edit: PlanLastEdit;
   place: EditPlace;
   sentence: boolean;
+  faceOnly: boolean;
 }): React.JSX.Element | null {
   const agent = agentOf(edit, place.agents);
   const actor = writerOf(edit, place);
@@ -147,13 +159,15 @@ function WriterRef({
     const card = (
       <LukeCard sub={lukeSub(edit, place)} latest={latestLine(LUKE_ACTOR, place, false)} />
     );
-    return <ActorRef actor={actor} card={card} />;
+    return <ActorRef actor={actor} card={card} faceOnly={faceOnly} />;
   }
   if (actor.kind !== ACTOR_KIND.AGENT) {
-    return <PersonRef actor={actor} place={place} sentence={sentence} />;
+    return <PersonRef actor={actor} place={place} sentence={sentence} faceOnly={faceOnly} />;
   }
-  // An agent the plan's list does not hold is named alone, with no card to read and no tab to open.
-  if (agent === undefined || place.agents === undefined) return <ActorRef actor={actor} />;
+  // An agent the task's list does not hold is named alone, with no card to read and no tab to open.
+  if (agent === undefined || place.agents === undefined) {
+    return <ActorRef actor={actor} faceOnly={faceOnly} />;
+  }
   const { control, onOpen } = place.agents;
   const subject = agentSubject(control, agent.id, NOTHING_HELD, false);
   return (
@@ -161,6 +175,7 @@ function WriterRef({
       actor={{ ...actor, name: subject.name }}
       card={<AgentCard subject={subject} models={control.models} />}
       onOpen={onOpen === undefined ? undefined : () => onOpen(agent.id)}
+      faceOnly={faceOnly}
     />
   );
 }
@@ -199,23 +214,33 @@ export function editorsOf(edits: readonly PlanLastEdit[], place: EditPlace): rea
  * Who wrote an edit, and on whose call where Luke wrote it on one: "[Luke]
  * Luke during [Charles] Charles Pan’s call", "[Luke] Luke during your call",
  * "[Charles] Charles Pan". `sentence` names the reader "you" inside a line
- * that leads with other words. Drawn inside an `.actor-line`, whose words
- * carry their own spaces. Nothing for the plan before history.
+ * that leads with other words. With `faceOnly` it is the writer's face
+ * alone, their name and whose call it was said in the card it hangs and to
+ * a screen reader, as words, for a section's byline, which keeps to a
+ * heading's end. Drawn inside an
+ * `.actor-line`, whose words carry their own spaces. Nothing for the plan
+ * before history.
  */
 export function EditedBy({
   edit,
   place,
   sentence = false,
+  faceOnly = false,
 }: {
   edit: PlanLastEdit;
   place: EditPlace;
   sentence?: boolean;
+  faceOnly?: boolean;
 }): React.JSX.Element | null {
   if (edit.actor === PLAN_ACTOR.EARLIER) return null;
   return (
     <>
-      <WriterRef edit={edit} place={place} sentence={sentence} />
-      {edit.duringCall ? <CallOwner edit={edit} place={place} /> : null}
+      <WriterRef edit={edit} place={place} sentence={sentence} faceOnly={faceOnly} />
+      {!edit.duringCall ? null : faceOnly ? (
+        <span className="visually-hidden">{` during ${callWords(editCallOwner(edit, place.reader))}`}</span>
+      ) : (
+        <CallOwner edit={edit} place={place} />
+      )}
     </>
   );
 }

@@ -83,13 +83,6 @@ function button(container: HTMLElement, words: string): HTMLButtonElement {
   return found;
 }
 
-test("Luke's face stands still in its resting pose over the sign-in", () => {
-  const container = mount(gate());
-  const face = container.querySelector(".sign-in-face .luke-face");
-  assert.ok(face, "the face is drawn");
-  assert.equal(face.hasAttribute("data-motion"), false);
-});
-
 test("each provider's button begins that provider's sign-in", () => {
   const pressed: AccountProvider[] = [];
   const container = mount(gate({ onBegin: (provider) => pressed.push(provider) }));

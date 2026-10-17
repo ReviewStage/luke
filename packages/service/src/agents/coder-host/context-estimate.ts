@@ -7,6 +7,7 @@ import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
   ARCHIVE_AGENT_TOOL,
+  CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
@@ -112,6 +113,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.LIST_AGENTS]: {
     description: LIST_AGENTS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_AGENTS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_AGENT]: {
+    description: CODER_READ_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(CODER_READ_AGENT_TOOL.inputSchema),
   },
   [CODER_TOOL.MESSAGE_AGENT]: {
     description: MESSAGE_AGENT_TOOL.description,

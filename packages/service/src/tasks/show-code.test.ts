@@ -17,8 +17,8 @@ import { type CheckoutFiles, sandboxDouble } from "../testing/repository-sandbox
 import { runShowCode, SHOW_CODE_REFUSAL } from "./show-code.js";
 
 /**
- * The planning model's `show_code`, reading the lines it names from the
- * session's checkout of the plan's repository: the window of the file
+ * The brain's `show_code`, reading the lines it names from the
+ * session's checkout of the task's repository: the window of the file
  * around the lines pointed at is the call's answer, cut to the bounds, and
  * every file that cannot be shown is refused in words that say nothing was
  * shown. The sandbox is a double at eve's boundary, GitHub a script, and the
@@ -29,7 +29,7 @@ import { runShowCode, SHOW_CODE_REFUSAL } from "./show-code.js";
 
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-/** The installation connected to the plan's workspace, which reaches the repository. */
+/** The installation connected to the task's workspace, which reaches the repository. */
 const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
 
 const INVITE = [
@@ -54,7 +54,7 @@ const FILES: CheckoutFiles = {
   "wide.txt": "x".repeat(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS + 50),
 };
 
-/** An account holding one plan, on the repository given, in a workspace the installation is connected to, and the sandbox its session opens over the files, its checkout at the commit given. */
+/** An account holding one task, on the repository given, in a workspace the installation is connected to, and the sandbox its session opens over the files, its checkout at the commit given. */
 const openTask = (repository: string | null, commit?: string) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();

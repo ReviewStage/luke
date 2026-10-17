@@ -28,6 +28,11 @@ export function initializeCrashReporting(runMode: RunMode): void {
   Sentry.init({
     dsn: PACKAGED_SENTRY_DSN,
     enabled: sentryReportingEnabled(runMode.sendsNetwork, PACKAGED_SENTRY_DSN),
+    // Set tracesSampleRate to 1.0 to capture 100% of transactions for
+    // performance monitoring, as Sentry's Electron guide does. Sentry
+    // recommends adjusting this value in production.
+    tracesSampleRate: 1.0,
+    integrations: [Sentry.startupTracingIntegration()],
   });
 }
 

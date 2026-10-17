@@ -279,8 +279,8 @@ export function useVoiceSession(
     [drive, orchestrator],
   );
 
-  // The Plans tab's microphone, about the plan the panel had open: a call about
-  // that plan opened and heard, or its microphone toggled, as the main process
+  // The Tasks tab's microphone, about the task the panel had open: a call about
+  // that task opened and heard, or its microphone toggled, as the main process
   // forwards the press.
   useEffect(
     () => window.luke.onTasksTalk(({ taskId }) => drive(orchestrator.talkAboutTask(taskId))),
@@ -302,8 +302,8 @@ export function useVoiceSession(
   // it, so the device is open exactly while the key is down. A press during
   // a chord being recorded is held back in the main process, where the
   // recording is known; a release always lands, so a hold begun before the
-  // recording still ends. A press made while the panel has a plan open names
-  // that plan, and is heard on that plan's call.
+  // recording still ends. A press made while the panel has a task open names
+  // that task, and is heard on that task's call.
   // The call is told too, since a hold over Luke gone quiet flushes his avatar.
   useEffect(
     () =>

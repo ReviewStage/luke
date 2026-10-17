@@ -12,8 +12,8 @@
   <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20silicon-black" alt="macOS 14 or newer, Apple silicon">
 </p>
 
-Luke is a macOS app for planning a feature by voice before you hand it to a
-coding agent. You describe the feature, Luke reads your repository and asks
+Luke is a macOS app for working through a task by voice before you hand it to
+a coding agent. You describe the task, Luke reads your repository and asks
 about what you left open, and a second model writes the plan during the call.
 Then you press Start and a coding agent implements the plan in a sandbox and
 opens the pull request, or you copy the plan into Claude Code, Codex, or any

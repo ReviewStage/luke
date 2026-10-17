@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { task } from "../../schemas/plan.js";
+import { task } from "../../schemas/task.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import {
   keepPlanAttachment,

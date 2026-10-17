@@ -1,11 +1,11 @@
 /**
  * terminal-entry.ts -- which coding agent a terminal command is for: the rules every way of opening a terminal follows.
  *
- * A terminal belongs to one coding agent's sandbox, never to the plan, so
+ * A terminal belongs to one coding agent's sandbox, never to the task, so
  * every way in first decides which agent. Show terminal (⌘J) goes to an
  * existing Terminal tab; New terminal (⌘K, the panel's "+") adds a shell.
  * From an agent's own tab, its Changes tab, or its Terminal tab, both mean
- * that agent; from anywhere else on a plan with one agent, that agent. With
+ * that agent; from anywhere else on a task with one agent, that agent. With
  * several agents, ⌘J goes to the one whose terminal was used last and New
  * terminal asks, that one chosen to begin with; with none used yet both
  * ask; with no agent at all, the picker offers to start one. An archived
@@ -37,9 +37,9 @@ export type TerminalTarget =
 export interface TerminalContext {
   /** The agent whose own tab, Changes tab, or Terminal tab is where the developer is, if any. */
   readonly here: string | undefined;
-  /** The plan's agents not archived, in the plan's order. */
+  /** The task's agents not archived, in the task's order. */
   readonly agents: readonly string[];
-  /** The agent whose Terminal tab was shown last on the plan, if any. */
+  /** The agent whose Terminal tab was shown last on the task, if any. */
   readonly lastUsed: string | undefined;
 }
 

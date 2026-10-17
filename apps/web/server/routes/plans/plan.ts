@@ -5,7 +5,7 @@ import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
-/** One plan the caller owns, by the id its path carries: open it (GET), rename it (PATCH), or delete it (DELETE). */
+/** One task the caller owns, by the id its path carries: open it (GET), rename it (PATCH), or delete it (DELETE). */
 export default routeFromHttpRouter(
   tasksApp({
     resolveUserId: resolveHostedUserId,

@@ -55,7 +55,7 @@ import { githubWebhookApp } from "./github-webhook-app.js";
  * under the deployment's secret, a deployment with no secret refuses every
  * delivery, and a delivery about a pull request or its checks reads what the
  * agents on that branch published again through the installation connected
- * to the plan's workspace, which the agent's row keeps for the plan list.
+ * to the task's workspace, which the agent's row keeps for the task list.
  *
  * Synthetic accounts, secrets, repositories, and deliveries throughout.
  */
@@ -189,7 +189,7 @@ function pullRequestDelivery(action: string, ref: string) {
   return { action, repository, pull_request: { number: 41, title: "Ignored", head: { ref } } };
 }
 
-/** An account whose plan's workspace reaches the repository, with one agent on a plan about it, its row on the pull request's branch. */
+/** An account whose task's workspace reaches the repository, with one agent on a task about it, its row on the pull request's branch. */
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
