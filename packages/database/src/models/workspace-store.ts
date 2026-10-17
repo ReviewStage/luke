@@ -25,7 +25,7 @@ import { member, organization, user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import { task } from "../schemas/plan.js";
+import { task } from "../schemas/task.js";
 import { workspaceIntegrationConnection } from "../schemas/workspace-integration.js";
 import {
   PERSONAL_WORKSPACE_METADATA,
@@ -53,9 +53,9 @@ import {
  * ensuring at once settle on unique keys instead, the workspace's slug and
  * the account's row, and the one that loses adopts what the other made.
  * Whether an account is in a workspace is one condition, its `member` row,
- * which a statement elsewhere joins into its own where clause: a plan is
+ * which a statement elsewhere joins into its own where clause: a task is
  * read and written by every member of the workspace it names, so a store
- * gates a plan through `taskReachableBy` and `reachableTask` rather than by
+ * gates a task through `taskReachableBy` and `reachableTask` rather than by
  * the account that started it.
  * A workspace's photo is the plugin's own `organization.logo`, kept as a
  * `data:` URL of one of `WORKSPACE_PHOTO_TYPE`; a list names only a digest of
@@ -210,7 +210,7 @@ const insertPersonalWorkspace = SqlSchema.void({
 
 /**
  * The condition that the account is a member of the workspace: a literal id,
- * or the column of a row the statement reads, such as a plan's own
+ * or the column of a row the statement reads, such as a task's own
  * `organization_id`, so a statement gates on membership in its own where clause.
  */
 function memberOfWorkspace(userId: string, organizationId: string | SQLWrapper): SQL {
@@ -503,20 +503,20 @@ export function workspaceReachableBy(userId: string, organizationId: string | SQ
   return memberOfWorkspace(userId, organizationId);
 }
 
-/** A coding agent row's workspace: its own, or its plan's on a row the backfill has not reached yet. */
+/** A coding agent row's workspace: its own, or its task's on a row the backfill has not reached yet. */
 export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${codingAgent.taskId}))`;
 
-/** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no plan as much as one on a plan. */
+/** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no task as much as one on a task. */
 export function agentReachableBy(userId: string): SQL {
   return memberOfWorkspace(userId, AGENT_WORKSPACE);
 }
 
-/** The condition that the account may read and write the plan row a statement reads: it is a member of the plan's workspace. */
+/** The condition that the account may read and write the task row a statement reads: it is a member of the task's workspace. */
 export function taskReachableBy(userId: string): SQL {
   return memberOfWorkspace(userId, task.organizationId);
 }
 
-/** The plan under this id, where the account is a member of its workspace; any other id reads as no plan. */
+/** The task under this id, where the account is a member of its workspace; any other id reads as no task. */
 export function reachableTask(userId: string, taskId: string): SQL | undefined {
   return and(eq(task.id, taskId), taskReachableBy(userId));
 }
@@ -572,7 +572,7 @@ export function isWorkspaceMember(
  * Every workspace the account is a member of, its first one first and the
  * rest by name, each once however many installations it holds. An
  * installation suspended or removed is listed inactive rather than left
- * out, so its workspace's plans stay reachable; GitHub refuses its
+ * out, so its workspace's tasks stay reachable; GitHub refuses its
  * repository work on its own.
  */
 export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Workspace[]> {

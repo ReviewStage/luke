@@ -10,7 +10,7 @@ import { Atom } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
 
 /**
- * use-plan-looks.ts -- what changed since the developer last looked at a plan on this Mac: the open plan's sections, and the sidebar's unread plans.
+ * use-task-looks.ts -- what changed since the developer last looked at a task on this Mac: the open plan's sections, and the sidebar's unread tasks.
  *
  * A look is the plan opened, whichever of its column's tabs it opens on:
  * from then on, every save the developer has the plan open for is one they
@@ -19,23 +19,23 @@ import { useEffect, useRef, useState } from "react";
  * this one moves it, and each section a save by anyone but the developer
  * changed after it is a section changed since they last looked, held for the
  * visit until they dismiss it or leave. A section is known by its heading.
- * A save that lands while the plan is open is typed in before
+ * A save that lands while the task is open is typed in before
  * their eyes, the notetaker's on a call above all, so it never joins the
- * visit's changes. A plan never looked at on this Mac
+ * visit's changes. A task never looked at on this Mac
  * has no mark and nothing changed: every section would be new.
  *
  * The mark is a save's instant as the service stamped it, never this Mac's
  * clock, so a clock that disagrees with the service's moves nothing. It is
- * this window's to remember, kept in the renderer's own storage by plan id
- * and holding nothing of the plan but that instant; a deleted plan's entry
+ * this window's to remember, kept in the renderer's own storage by task id
+ * and holding nothing of the task but that instant; a deleted task's entry
  * is left behind, a few bytes nothing reads again.
  *
- * The sidebar reads the same marks: a plan saved after its mark is unread,
+ * The sidebar reads the same marks: a task saved after its mark is unread,
  * its name in the heavier weight, until a look moves the mark past the save.
- * The first list this Mac reads with unread plans marks every plan in it
- * not yet looked at where it stands, once, so the plans from before are not
- * all unread at once, and so does a list with no plan marked, another
- * account's; a plan arriving later with no mark, from another Mac, is
+ * The first list this Mac reads with unread tasks marks every task in it
+ * not yet looked at where it stands, once, so the tasks from before are not
+ * all unread at once, and so does a list with no task marked, another
+ * account's; a task arriving later with no mark, from another Mac, is
  * unread once anything has been saved in it since it started.
  *
  * A plan can also be marked unread by hand, as Mail, Slack, and Linear mark
@@ -80,10 +80,10 @@ type Looks = typeof storedLooks.Type;
 const decodeStored = Schema.decodeUnknownOption(storedLooks);
 const encodeStored = Schema.encodeSync(storedLooks);
 
-/** Where it is kept that the plans listed before this Mac read any as unread were marked as read. */
+/** Where it is kept that the tasks listed before this Mac read any as unread were marked as read. */
 const SEEDED_KEY = { NOW: "luke.taskLooksSeeded", EARLIER: "luke.planLooksSeeded" } as const;
 
-/** The marks as the window holds them, and whether the plans from before were marked. */
+/** The marks as the window holds them, and whether the tasks from before were marked. */
 interface KeptLooks {
   readonly marks: Looks;
   readonly seeded: boolean;
@@ -121,7 +121,7 @@ export interface TaskLooks {
 
 const NOTHING_CHANGED: ReadonlySet<string> = new Set();
 
-/** The looks of a document no plan's visit stands behind: nothing changed, and nothing to dismiss. */
+/** The looks of a document no task's visit stands behind: nothing changed, and nothing to dismiss. */
 export const NO_LOOKS: TaskLooks = { changed: NOTHING_CHANGED, dismiss: () => undefined };
 
 /** The newest save the developer looked at, or none where they never looked. */
@@ -146,7 +146,7 @@ function readLooks(): Looks {
   }
 }
 
-/** Whether the plans from before were marked, which a refused read counts as not. */
+/** Whether the tasks from before were marked, which a refused read counts as not. */
 function readSeeded(): boolean {
   try {
     return (
@@ -158,7 +158,7 @@ function readSeeded(): boolean {
   }
 }
 
-/** Keeps the marks and the seeding; a write that fails costs only a section lit or a plan unread again. */
+/** Keeps the marks and the seeding; a write that fails costs only a section lit or a task unread again. */
 function writeLooks(kept: KeptLooks): void {
   try {
     window.localStorage.setItem(STORAGE_KEY.NOW, encodeStored(kept.marks));
@@ -223,7 +223,7 @@ function sectionSavesOf(task: Task): readonly PlanSectionEdit[] {
 }
 
 /**
- * The instant of the newest save the plan names. Note that the document's
+ * The instant of the newest save the task names. Note that the document's
  * `updatedAt` stands among its revisions' instants, because the sidebar's row
  * reads that one, and the service stamps it apart from the revision's.
  */
@@ -357,7 +357,7 @@ export function useUnreadTasks(
 
   // Note that the seeding runs once the list is a read one, because the
   // empty list before the first read would mark nothing and count as done,
-  // and that it leaves a plan's look where one was taken, since the saves
+  // and that it leaves a task's look where one was taken, since the saves
   // after it are ones the developer has not seen.
   useEffect(() => {
     if (!seeding) return;

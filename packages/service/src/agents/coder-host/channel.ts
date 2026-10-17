@@ -20,7 +20,7 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
 /**
  * channel.ts -- how the coding-agent service's eve channel is configured.
  *
- * The same door as the planning brain's (`brain-host/door.ts`): whoever the
+ * The same door as the brain's (`brain-host/door.ts`): whoever the
  * inner walk admits is refused for a session or a conversation that is not
  * theirs before any route runs, and every message carries the request's
  * conversation and turn kind into the session's auth. Who walks in is the

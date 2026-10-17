@@ -14,8 +14,8 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
- * will. A plan deleted thirty days ago has its conversation purged, a
- * deleted plan's call that was still open when the plan went is removed
+ * will. A task deleted thirty days ago has its conversation purged, a
+ * deleted task's call that was still open when the task went is removed
  * once it has ended, a turn whose end eve never told the relay is settled as
  * abandoned, a voice session whose device detached and never came back is
  * ended on Luke's key, as a connection would have ended it, the Vercel
@@ -34,9 +34,9 @@ type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
-  /** Removes the ended calls of plans deleted since, a sweep's worth, answering how many went. */
+  /** Removes the ended calls of tasks deleted since, a sweep's worth, answering how many went. */
   purgeDeletedTaskCalls: (now: number) => SweepRead<number>;
-  /** Settles every turn still running past its kind's bound, an hour for a planning turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
+  /** Settles every turn still running past its kind's bound, an hour for a brain turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Ends every voice session whose device socket went without a hang-up longer ago than the grace. */
   sweepVoice: (now: number) => SweepRead<VoiceOrphanSweepOutcome>;
@@ -50,16 +50,27 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
 }
 
+/**
+ * How a run is told to the sweep's cron monitor: around the eight sweeps once
+ * the call is the cron's own. A call that is not the cron's, or one a
+ * deployment without its secret cannot authenticate, is not a run and tells
+ * it nothing, so a stranger cannot report a run that failed.
+ */
+interface SweepMonitor {
+  readonly run: <A, E, R>(sweep: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+}
+
 export interface MaintenanceSweepOptions extends MaintenanceSweeps {
   request: Request;
   /** CRON_SECRET, sealed; undefined means the env var is absent or blank and the schedule is off. */
   cronSecret: Redacted.Redacted | undefined;
+  monitor: SweepMonitor;
 }
 
 interface MaintenanceSweepAnswer {
   /** Deleted conversations purged past their retention window. */
   purged: number;
-  /** Ended calls of deleted plans removed. */
+  /** Ended calls of deleted tasks removed. */
   purgedCalls: number;
   /** Turns still running past their kind's bound, settled as failed for abandonment. */
   abandoned: number;
@@ -74,6 +85,23 @@ interface MaintenanceSweepAnswer {
   /** Pictures pasted into plans that no save named, deleted. */
   purgedPictures: number;
 }
+
+/** The eight sweeps in turn, each handed the same instant. */
+const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
+  sweeps: MaintenanceSweeps,
+): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
+  const now = yield* Clock.currentTimeMillis;
+  return {
+    purged: yield* sweeps.purgeCleared(now),
+    purgedCalls: yield* sweeps.purgeDeletedTaskCalls(now),
+    abandoned: yield* sweeps.sweepAbandonedTurns(now),
+    voice: yield* sweeps.sweepVoice(now),
+    sandboxes: yield* sweeps.sweepSandboxes(now),
+    terminals: yield* sweeps.sweepTerminalLeases(now),
+    automations: yield* sweeps.sweepAutomations(now),
+    purgedPictures: yield* sweeps.purgeUnsavedPictures(now),
+  };
+});
 
 export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaintenanceSweep")(
   function* (
@@ -94,17 +122,7 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
 
-    const now = yield* Clock.currentTimeMillis;
-    const answer: MaintenanceSweepAnswer = {
-      purged: yield* options.purgeCleared(now),
-      purgedCalls: yield* options.purgeDeletedTaskCalls(now),
-      abandoned: yield* options.sweepAbandonedTurns(now),
-      voice: yield* options.sweepVoice(now),
-      sandboxes: yield* options.sweepSandboxes(now),
-      terminals: yield* options.sweepTerminalLeases(now),
-      automations: yield* options.sweepAutomations(now),
-      purgedPictures: yield* options.purgeUnsavedPictures(now),
-    };
+    const answer = yield* options.monitor.run(sweepAll(options));
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },
 );

@@ -4,10 +4,10 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
 import { workspaceIdSchema } from "./task-wire.js";
 
 /**
- * repository-reach-wire.ts -- why a plan's repository is out of the workspace's reach, as a refusal carries it.
+ * repository-reach-wire.ts -- why a task's repository is out of the workspace's reach, as a refusal carries it.
  *
- * A plan's repository is reached through the one GitHub App installation
- * connected to the plan's workspace, and a `repository-not-reachable`
+ * A task's repository is reached through the one GitHub App installation
+ * connected to the task's workspace, and a `repository-not-reachable`
  * refusal says which part of that failed, so the desktop can say so and
  * offer the one thing that mends it rather than a Retry that cannot: no
  * installation connected, one GitHub no longer runs, one on another account
@@ -30,7 +30,7 @@ export const REPOSITORY_UNREACHED = {
   NOT_SELECTED: "not-selected",
   /** The installation sees every repository of the owner and not this one: renamed, transferred, or deleted. */
   GONE: "gone",
-  /** The owner's installation is connected to another workspace the account is in, which the plan can move to. */
+  /** The owner's installation is connected to another workspace the account is in, which the task can move to. */
   OTHER_WORKSPACE: "other-workspace",
 } as const;
 
@@ -54,7 +54,7 @@ const unreachedBare = (
     repository: githubRepositoryFullNameSchema,
   });
 
-/** One reason, with the repository as the plan names it and what that reason's remedy needs. */
+/** One reason, with the repository as the task names it and what that reason's remedy needs. */
 export const repositoryUnreachedSchema = EffectSchema.Union([
   unreachedBare(REPOSITORY_UNREACHED.NOT_CONNECTED),
   unreachedBare(REPOSITORY_UNREACHED.CONNECTION_LAPSED),

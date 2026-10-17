@@ -33,12 +33,12 @@ import {
 import type { AddEntry, HeldTranscripts } from "./strip-tabs";
 
 /**
- * task-summary.tsx -- the open plan's summary at its column's right: everything the plan's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
+ * task-summary.tsx -- the open task's summary at its column's right: everything the task's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
  *
- * The summary lists what the side panel's "+" and the plan's column's "+"
+ * The summary lists what the side panel's "+" and the task's column's "+"
  * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
- * `agentEntries`), under quiet headings: the plan's Inbox, counting what
- * waits on the developer, and the panel's kinds the plan has used, its
+ * `agentEntries`), under quiet headings: the task's Inbox, counting what
+ * waits on the developer, and the panel's kinds the task has used, its
  * coding agents, each agent's pull request whose Changes tab the panel
  * opens, its subagents, and the files Luke showed on it. An agent or a subagent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
@@ -86,7 +86,7 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs";
 const SUMMARY_PINNED_KEY = "luke.summary-pinned";
 
 /**
- * The least width of the plan's column, in CSS pixels, at which the summary
+ * The least width of the task's column, in CSS pixels, at which the summary
  * can stand pinned rather than as a rail: the document's measure and its page
  * insets either side (desktop.css's `--reading-width`, 720, and
  * `--page-inset`, 40) beside the column's own `--summary-width`, 240, so
@@ -98,7 +98,7 @@ const SUMMARY_PINNED_KEY = "luke.summary-pinned";
 const SUMMARY_WIDE = 1040;
 
 /**
- * The least width of the plan's column, in CSS pixels, at which the summary
+ * The least width of the task's column, in CSS pixels, at which the summary
  * stands as a rail rather than not at all. Note that below it the rail's
  * 56px and the document's page insets either side, 80, would leave the words
  * under 344px, and the toolbar's button hangs the same card the rail does.
@@ -143,7 +143,7 @@ const OPENED_FROM_CARD = '[role="menu"], [role="alertdialog"], [role="tooltip"]'
 
 /**
  * Whether the summary stands pinned where it fits, rather than collapsed to
- * its rail, and the press that turns it; and whether the plan's column, as
+ * its rail, and the press that turns it; and whether the task's column, as
  * last measured, has room for it pinned, which the column reports. Both are
  * held by the shell, whose panes glide as either turns how the summary
  * stands, the column's measure included.
@@ -204,7 +204,7 @@ export interface SummaryLayout {
 }
 
 /**
- * How the summary stands in the plan's `column`, measured whole: pinned
+ * How the summary stands in the task's `column`, measured whole: pinned
  * while it is pinned and the column holds it beside the document's measure,
  * a rail where the column spares the rail's room, and not drawn otherwise,
  * nor while it `holds` nothing to list. A card hangs only where the summary
@@ -346,7 +346,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
 /**
  * The card each row hangs, the one its tab hangs where it has one: an
  * agent's its tab's card, read from what its tab last held; a subagent's
- * its tab's card, from the session the plan's work holds; a file's its path
+ * its tab's card, from the session the task's work holds; a file's its path
  * and Luke's note; a pull request's its title, number, and what it
  * changes, under the agent whose it is; a page's a preview of its newest
  * version; the Inbox's what waits. The panel's kinds hang none, as their
@@ -793,11 +793,11 @@ export function TaskSummary({
   tasks: TasksControl;
   layout: SummaryLayout;
   cardId: string;
-  /** The plan's inbox, whose items stand its Inbox row and whose waiting ones it counts. */
+  /** The task's inbox, whose items stand its Inbox row and whose waiting ones it counts. */
   inbox: InboxBoardView;
   /** What the agents' tabs last drew, which their rows' cards preview as their tabs' cards do. */
   held: HeldTranscripts;
-  /** The plan's repository, whose showings alone a file row's card reads its note from. */
+  /** The task's repository, whose showings alone a file row's card reads its note from. */
   repository: string | null;
   /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;

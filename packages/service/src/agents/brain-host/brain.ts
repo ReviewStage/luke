@@ -77,21 +77,21 @@ import {
 } from "../repository-shell.js";
 
 /**
- * brain.ts -- what a plan conversation's turns run under: the planning model's instructions, its document, and its tools.
+ * brain.ts -- what a task conversation's turns run under: the brain's instructions, its document, and its tools.
  *
- * A plan conversation is the hosted brain's own loop, eve and the relay and
+ * A task conversation is the hosted brain's own loop, eve and the relay and
  * the store, run under a different prompt, a different standing context, and
  * a different tool list; nothing else about the turn changes. The
- * instructions below are the whole of the planning workflow: which question
+ * instructions below are the whole of the brain's workflow: which question
  * comes next, how a correction is taken, and when the plan is
  * complete are the model's judgment, and no code here tracks, scores, or
  * gates any of it. The service
  * hands the model the saved document at every turn and carries its tool
- * calls under the plan the conversation belongs to; it never reads the
+ * calls under the task the conversation belongs to; it never reads the
  * document for meaning and never turns a tool result into a requirement.
  */
 
-/** Each section of the default template as the developer reads it, what it holds, and when it is done, for the planning model. */
+/** Each section of the default template as the developer reads it, what it holds, and when it is done, for the brain. */
 const PLAN_SECTIONS = Object.values(PLAN_FIELD)
   .map(
     (field) =>
@@ -100,12 +100,12 @@ const PLAN_SECTIONS = Object.values(PLAN_FIELD)
   .join("\n");
 
 /**
- * The instructions a plan conversation's session runs under. "How to plan"
+ * The instructions a task conversation's session runs under. "How to plan"
  * is adapted from Matt Pocock's grilling skill,
  * https://github.com/mattpocock/skills/blob/c55ee46073ed923f86ce59a5eb3b6d895095d1b7/skills/productivity/grilling/SKILL.md
  * (MIT License, Copyright (c) 2026 Matt Pocock). Note that we leave out his
  * written round template and his sub-agent sentences, because the call is
- * spoken and the planning model reads the repository through its own tools;
+ * spoken and the brain reads the repository through its own tools;
  * what it dispatches is slow or separate work, to the `worker` subagent, in
  * our own words under "Working in parallel". His rounds become one standing queue,
  * because the voice read "ask the whole frontier in one round" as its own
@@ -263,9 +263,9 @@ Return the relevant facts and where the work stands now. Don't repeat the questi
 `;
 
 /**
- * The message a fresh call opens the planning model's turn with, sent as the
+ * The message a fresh call opens the brain's turn with, sent as the
  * session starts rather than at the developer's first words. It is general
- * on purpose, because nothing of the task has been said yet: the plan's name
+ * on purpose, because nothing of the task has been said yet: the task's name
  * and saved document reach the model as standing context beside it. Note
  * that it asks for no question, because a question queued now would be
  * asked before the developer has said what they want.
@@ -288,9 +288,9 @@ const SCRIBE_SECTIONS = Object.values(PLAN_FIELD)
   .join("\n");
 
 /**
- * The instructions the plan's notetaker runs under: the scribe that listens
- * to a planning call and takes notes into the plan while Luke and the
- * developer talk (`plans/plan-scribe.ts`). It decides nothing
+ * The instructions the task's notetaker runs under: the scribe that listens
+ * to a task's call and takes notes into the plan while Luke and the
+ * developer talk (`tasks/plan-scribe.ts`). It decides nothing
  * of the conversation; it records what was said, one note at a time.
  */
 export const SCRIBE_INSTRUCTIONS = `
@@ -392,7 +392,7 @@ function linearIssueText(stored: StoredTask): readonly string[] {
  * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
  * turn so what the notetaker saved and what the developer drew is what the
- * next turn reads. A plan that no longer stands gets the heading alone.
+ * next turn reads. A task that no longer stands gets the heading alone.
  */
 export function brainStandingContext(
   stored: StoredTask | undefined,
@@ -430,7 +430,7 @@ export interface HostedToolDeclaration {
   readonly endsTurn?: boolean;
 }
 
-/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, and the plan's coding agents. */
+/** What one brain tool call runs under: the task the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, and the task's coding agents. */
 export interface BrainCall {
   readonly task: PlanDocumentBinding;
   readonly repository: RepositoryCall;
@@ -438,7 +438,7 @@ export interface BrainCall {
   readonly agents: CodingAgentCall;
 }
 
-/** One tool a planning turn is offered: its declaration, and the call it carries under the plan the conversation belongs to. */
+/** One tool a brain turn is offered: its declaration, and the call it carries under the task the conversation belongs to. */
 interface BrainTool {
   readonly name: string;
   readonly description: string;
@@ -453,24 +453,24 @@ interface BrainTool {
   ) => Effect.Effect<WireRecord, never, BrainToolServices>;
 }
 
-/** What a planning call may reach: the store, the network for public research, GitHub through the App for the checkout, and the catalog a start's choice is checked against. */
+/** What a brain tool call may reach: the store, the network for public research, GitHub through the App for the checkout, and the catalog a start's choice is checked against. */
 type BrainToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 /**
- * The tools a planning turn is offered, in the order the model reads them.
+ * The tools a brain turn is offered, in the order the model reads them.
  * None writes the plan, which is the notetaker's; `queue_question` hands the
  * voice a question mid-turn (`queue-question.ts`); `show_code` reads lines of
- * the plan's repository from the session's checkout and puts them on the
+ * the task's repository from the session's checkout and puts them on the
  * developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
  * command in the same sandbox on the same checkout
  * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
- * answer what the repository cannot; `draw_on_board` draws on the plan's
+ * answer what the repository cannot; `draw_on_board` draws on the task's
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
  * hands back the board as the Mac draws it (`board-look.ts`);
  * `look_at_picture` hands back one of the plan's pictures (`picture-look.ts`); `show_page`
  * writes an interactive page for the side panel, the coding agents' tool
  * too (`page-tool.ts`); the four
- * agent tools read, message, and start the plan's coding agents
+ * agent tools read, message, and start the task's coding agents
  * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
  * carried as `queue_question` is by its journaled call (`end-call.ts`).
  * Every read's result goes back to the model as data, a look's as an image
@@ -569,10 +569,10 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
 const BRAIN_TOOLS_BY_NAME = new Map(BRAIN_TOOLS.map((tool) => [tool.name, tool]));
 
 /**
- * The tools eve puts beside the planning tools: one per declared subagent,
+ * The tools eve puts beside the brain's tools: one per declared subagent,
  * named by its directory under `apps/luke/subagents/`, and the two task controls
  * eve adds beside any agent tool, `task_wait` and `task_cancel`. eve runs
- * them, so they are no planning tool, but a turn's rows name them, and the
+ * them, so they are no brain tool, but a turn's rows name them, and the
  * writer holds every row to the hosted tool set. Their tasks are eve's
  * subagent tasks, not a Luke task.
  */
@@ -609,7 +609,7 @@ export const BRAIN_DELEGATE_TOOL = {
   }),
 } as const;
 
-/** The planning model's delegations by every name one was made under: its own \`delegate\`, and eve's \`worker\` subagent tool, which earlier transcripts name. */
+/** The brain's delegations by every name one was made under: its own \`delegate\`, and eve's \`worker\` subagent tool, which earlier transcripts name. */
 export const BRAIN_DELEGATION_TOOLS: ReadonlySet<string> = new Set([
   BRAIN_DELEGATE_TOOL.name,
   EVE_DELEGATION_TOOL.WORKER,
@@ -630,7 +630,7 @@ export const EVE_DELEGATION_INPUT = {
 } as const;
 
 /**
- * eve's own `load_skill`, which loads one of the skills the plan's
+ * eve's own `load_skill`, which loads one of the skills the task's
  * repository keeps (`../agent-runtime/skills.ts`), and what its call
  * carries, as eve declares it: the skill's name.
  */
@@ -639,15 +639,15 @@ const EVE_SKILL_TOOL = {
   INPUT: Schema.Struct({ skill: Schema.String }),
 } as const;
 
-/** The planning tools the root is offered: the planner's in the registry (`../agent-runtime/tools.ts`). */
+/** The brain's tools the root is offered: the brain's in the registry (`../agent-runtime/tools.ts`). */
 export const BRAIN_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.BRAIN);
 
-/** The planning tools the `worker` subagent is offered: the planning worker's in the registry, every read a background session can carry. */
+/** The brain's tools the `worker` subagent is offered: the brain's worker's in the registry, every read a background session can carry. */
 export const WORKER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.BRAIN_WORKER);
 
 /**
  * The instructions the `worker` subagent runs under. Note that it is told it
- * is nobody's voice, because the planning model reads its findings and
+ * is nobody's voice, because the brain reads its findings and
  * decides what reaches Luke; that its return is a summary with sources,
  * because the parent reads it whole into a turn of its own; and that the
  * repository's text never goes into a search, because the repository is
@@ -690,7 +690,7 @@ const RETIRED_AGENT_TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
   additionalProperties: true,
 });
 
-/** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's, with eve's delegation, its skill load, and every integration's calls beside them (`../connection-tools.ts`). */
+/** The brain's tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's, with eve's delegation, its skill load, and every integration's calls beside them (`../connection-tools.ts`). */
 export function brainToolSet(): ToolSet {
   return Object.fromEntries([
     ...BRAIN_TOOLS.map((tool) => [
@@ -728,16 +728,16 @@ export function tasksModelOutput(name: string, output: UnparsedWireValue): ToolM
     : lookModelOutput(output);
 }
 
-/** Why a planning call ran nothing, in words the model can act on. */
+/** Why a brain tool call ran nothing, in words the model can act on. */
 const BRAIN_REFUSAL = {
   NO_TOOL: "Not run: no tool of that name is offered here.",
   NO_TASK: "Not run: this task no longer exists.",
 } as const;
 
 /**
- * Carries one planning call under the plan the conversation belongs to, or
+ * Carries one brain tool call under the task the conversation belongs to, or
  * answers why it ran nothing: a name outside the list, or a conversation whose
- * plan no longer stands. Every outcome is a result the model reads.
+ * task no longer stands. Every outcome is a result the model reads.
  */
 export function runBrainTool(
   name: string,

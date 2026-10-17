@@ -1,0 +1,349 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "pullRequest": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "reviewers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "by": {
+                        "type": "object",
+                        "properties": {
+                          "login": {
+                            "type": "string"
+                          },
+                          "avatarUrl": {
+                            "type": "string"
+                          },
+                          "bot": {
+                            "type": "boolean"
+                          },
+                          "userId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "login",
+                          "bot"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "approved",
+                          "changes-requested",
+                          "dismissed",
+                          "commented",
+                          "requested"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "by",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 50
+                },
+                "conversation": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "comment",
+                          "review"
+                        ]
+                      },
+                      "by": {
+                        "type": "object",
+                        "properties": {
+                          "login": {
+                            "type": "string"
+                          },
+                          "avatarUrl": {
+                            "type": "string"
+                          },
+                          "bot": {
+                            "type": "boolean"
+                          },
+                          "userId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "login",
+                          "bot"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "approved",
+                          "changes-requested",
+                          "dismissed",
+                          "commented",
+                          "requested"
+                        ]
+                      },
+                      "html": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "threads": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string"
+                            },
+                            "line": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "startLine": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "originalLine": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "originalStartLine": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "side": {
+                              "type": "string",
+                              "enum": [
+                                "left",
+                                "right"
+                              ]
+                            },
+                            "startSide": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "left",
+                                    "right"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "diffHunk": {
+                              "type": "string"
+                            },
+                            "resolved": {
+                              "type": "boolean"
+                            },
+                            "outdated": {
+                              "type": "boolean"
+                            },
+                            "comments": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "by": {
+                                    "type": "object",
+                                    "properties": {
+                                      "login": {
+                                        "type": "string"
+                                      },
+                                      "avatarUrl": {
+                                        "type": "string"
+                                      },
+                                      "bot": {
+                                        "type": "boolean"
+                                      },
+                                      "userId": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "login",
+                                      "bot"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "html": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "body": {
+                                    "type": "string"
+                                  },
+                                  "at": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "by",
+                                  "html",
+                                  "body",
+                                  "at",
+                                  "url"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 50
+                            },
+                            "more": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "line",
+                            "startLine",
+                            "originalLine",
+                            "originalStartLine",
+                            "side",
+                            "startSide",
+                            "diffHunk",
+                            "resolved",
+                            "outdated",
+                            "comments",
+                            "more"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 100
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "by",
+                      "html",
+                      "body",
+                      "at",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 100
+                },
+                "earlier": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "reviewers",
+                "conversation",
+                "earlier"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "pullRequest"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "enum": [
+            "unanswered",
+            "not-found",
+            "no-repository",
+            "repository-not-reachable",
+            "github-unanswered",
+            "invalid-choice",
+            "message-too-long",
+            "agent-not-ready",
+            "agent-retired",
+            "plan-archived"
+          ]
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

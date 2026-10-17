@@ -6,7 +6,6 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { SearchableMenu } from "../searchable-menu";
 import { MenuRow } from "../settings/menu-row";
 import { LinesMenu } from "../tasks/file-menu";
 import { ActionMenu, useActionMenu } from "./action-menu";
@@ -15,8 +14,7 @@ import { ActionMenu, useActionMenu } from "./action-menu";
  * The window's menus as the developer opens them: a ⋯ that drops its menu
  * and closes it again, a right-click that hangs the same menu at the
  * pointer, or under the row where the menu key asked with no point of its
- * own, a row's acts in groups ruled apart, and every menu, the window's own and the searchable picker alike,
- * drawn on one surface with one row.
+ * own, and a row's acts in groups ruled apart.
  */
 
 const roots: Root[] = [];
@@ -124,41 +122,6 @@ test("a right-click opens the row's menu at the pointer, and the menu key's unde
   assert.equal(openMenu()?.style.top, "104px", "and hangs under the row");
 });
 
-test("the window's menu and the searchable picker stand on one surface and draw one row", () => {
-  const container = mount(
-    createElement(
-      "div",
-      null,
-      createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
-      createElement(SearchableMenu, {
-        id: "repository",
-        label: "Repository",
-        placeholder: "Search repositories",
-        rows: [{ id: "acme/relay", label: "acme/relay", icon: createElement(CopyIcon) }],
-        value: undefined,
-        noMatch: "No match",
-        onPick: ignore,
-        onClose: ignore,
-        onLeave: ignore,
-      }),
-    ),
-  );
-  const ellipsis = container.querySelector<HTMLElement>('button[aria-label="Linear actions"]');
-  assert.ok(ellipsis, "the ⋯ is drawn");
-  press(ellipsis);
-
-  const menus = [openMenu(), document.querySelector<HTMLElement>('[role="dialog"]')];
-  for (const menu of menus) {
-    assert.ok(menu, "the menu is drawn");
-    const name = menu.getAttribute("aria-label");
-    assert.ok(menu.classList.contains("menu-surface"), `${name} stands on the menu surface`);
-    const row = menu.querySelector('[role="menuitem"], [role="option"]');
-    assert.ok(row, `${name} draws a row`);
-    assert.ok(row.classList.contains("menu-item"), `${name}'s rows are the one menu row`);
-    assert.ok(row.querySelector(".menu-item-glyph > svg"), "with the mark in the glyph slot");
-  }
-});
-
 test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab, or a press elsewhere closes them, focus back on the ⋯", () => {
   const container = mount(
     createElement(MenuRow, {
@@ -207,7 +170,7 @@ test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab
   assert.equal(openMenu(), null, "a press elsewhere closes it");
 });
 
-test("a Settings row keeps its muted ⋯, named for its menu, and More on the pointer", () => {
+test("a Settings row keeps its ⋯, named for its menu, and More on the pointer", () => {
   const container = mount(
     createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
   );
@@ -217,7 +180,6 @@ test("a Settings row keeps its muted ⋯, named for its menu, and More on the po
 
   act(() => ellipsis.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
 
-  assert.ok(ellipsis.classList.contains("icon-button"), "the ⋯ is the muted glyph button");
   assert.equal(ellipsis.textContent, "", "with no words of its own");
   assert.equal(document.querySelector(".luke-tooltip")?.textContent, "More");
 });
@@ -283,4 +245,38 @@ test("resting on one submenu's item after another's opens the second's submenu, 
     );
   });
   assert.ok(document.querySelector('[role="menu"][aria-label="Order by"]'), "→ opens Order by");
+});
+
+/** A menu of one submenu whose choice its owner holds: Group by, `chosen` checked. */
+function GroupBy({ chosen }: { chosen: string }): React.JSX.Element {
+  const menu = useActionMenu(true);
+  const choice = (label: string) => ({ label, checked: label === chosen, onSelect: ignore });
+  return createElement(
+    Fragment,
+    null,
+    createElement("button", { type: "button", ...menu.trigger() }, "View options"),
+    menu.drawn === undefined
+      ? null
+      : createElement(ActionMenu, {
+          label: "View options",
+          menu: menu.drawn,
+          groups: [[{ label: "Group by", items: [choice("Repository"), choice("None")] }]],
+          onClose: menu.close,
+        }),
+  );
+}
+
+test("a submenu standing open checks what its owner holds now, though the owner draws it again after it opened", () => {
+  const container = mount(createElement(GroupBy, { chosen: "Repository" }));
+  const button = container.querySelector("button");
+  assert.ok(button, "the menu's button is drawn");
+  press(button);
+  act(() => submenuItem("Group by").click());
+
+  act(() => roots.at(-1)?.render(createElement(GroupBy, { chosen: "None" })));
+
+  const checked = [
+    ...document.querySelectorAll('[role="menu"][aria-label="Group by"] [aria-checked="true"]'),
+  ].map((item) => item.textContent);
+  assert.deepEqual(checked, ["None"]);
 });

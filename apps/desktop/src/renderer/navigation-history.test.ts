@@ -31,7 +31,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's history over the Plans tab as `plans` stands, restood by the returned setter. */
+/** The window's history over the Tasks tab as `plans` stands, restood by the returned setter. */
 function mount(initial: TasksControl) {
   let history: WindowHistory | undefined;
   let restand: ((tasks: TasksControl) => void) | undefined;

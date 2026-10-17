@@ -22,7 +22,7 @@ export interface PlanEditorProps {
   /** The text as the document holds it, which the editor opens on. */
   readonly markdown: string;
   readonly placement: PlanEditorPlacement | undefined;
-  /** Whether the editor takes the keyboard as it mounts, as a plan opened by a click or a key does and a page drawing it does not. */
+  /** Whether the editor takes the keyboard as it mounts, as a task opened by a click or a key does and a page drawing it does not. */
   readonly focus: boolean;
   readonly label: string;
   /** The read view's own classes, so the editor's words stand where the drawn words stood. */

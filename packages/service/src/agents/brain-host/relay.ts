@@ -56,7 +56,7 @@ import { keptPictures } from "./relay-pictures.js";
  * share: every event eve records for a session is read here, after eve has
  * written it, and told again as the `BrainRunEvent` the store writer
  * consumes, so the writer stays the sole consumer and the only thing that
- * writes a message row. The planning host composes it with the ask record,
+ * writes a message row. The brain host composes it with the ask record,
  * whose deliveries a turn's start binds and whose Stop it carries; the
  * coding-agent host composes it without, since a message to a coding agent
  * is written ahead of its turn as a line awaiting one and taken into the
@@ -204,7 +204,7 @@ export interface RelayStanding {
  */
 type RelayEffect<Value> = Effect.Effect<Value, QueryError | Schema.SchemaError, DatabaseServices>;
 
-/** The ask record a planning turn binds its deliveries to, and the Stop a waiting ask took, carried the moment the turn starts. */
+/** The ask record a brain turn binds its deliveries to, and the Stop a waiting ask took, carried the moment the turn starts. */
 interface RelayAskSeams {
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
   readonly binding: AskDeliveryBinding;
@@ -230,7 +230,7 @@ interface StreamRelaySeams {
   readonly report: (message: string) => void;
 }
 
-/** The plan's turn origin for each kind of turn a request opens, as the queued row records it. */
+/** The task's turn origin for each kind of turn a request opens, as the queued row records it. */
 const TURN_ORIGIN_OF_HOST_TURN = {
   [BRAIN_HOST_TURN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_HOST_TURN.SPOKEN]: TURN_ORIGIN.SPOKEN,

@@ -36,6 +36,7 @@ import {
   FolderIcon,
   HashIcon,
   InboxIcon,
+  ListTodoIcon,
   MessageSquareIcon,
   ZapIcon,
 } from "lucide-react";
@@ -75,7 +76,7 @@ import { useOpenLink } from "./use-open-link";
  * label starting with `@`, and wherever words are drawn, the link is drawn
  * as this chip: a pill on the words' line, the kind's glyph and the name the
  * mention was written with, cut to the chip's width. A press opens it: a
- * section of a plan, that plan scrolled to the section; a plan, the plan
+ * section of a task, that task scrolled to the section; a task, the task
  * at its top; a file, its tab, through the side panel's one door for a file
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
@@ -115,12 +116,12 @@ import { useOpenLink } from "./use-open-link";
  * A section is known by its heading's anchor, so a section of the plan
  * drawn here whose anchor no heading of the plan spells any longer is gone:
  * its chip keeps the name it was written with, struck through, its card
- * says it is no longer in the plan, and a press opens the plan at its top.
- * A section of another plan is drawn as found, since what that plan holds
+ * says it is no longer in the plan, and a press opens the task at its top.
+ * A section of another task is drawn as found, since what that task holds
  * is not at hand.
  *
  * Nothing the mention names rides on the chip's element: no attribute
- * carries its target, its plan, its heading, or its path, because only the
+ * carries its target, its task, its heading, or its path, because only the
  * attributes that carry words are masked when the panel is recorded
  * (`../session-replay.ts`), and a `data-` attribute is not one of them.
  * The chip's words are a text node, which the recording masks.
@@ -221,7 +222,7 @@ function pressOf(
     case MENTION_KIND.TASK:
       return () => doors.onOpenTask(mention);
     case MENTION_KIND.SECTION:
-      // A gone section opens the plan it was in, at its top.
+      // A gone section opens the task it was in, at its top.
       return () =>
         doors.onOpenTask(
           state === MENTION_STATE.FOUND
@@ -585,6 +586,8 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
       return <GearIcon />;
     case LINK_PLACE.PERSON:
       return <UserIcon />;
+    case LINK_PLACE.ISSUE:
+      return <ListTodoIcon aria-hidden="true" />;
   }
 }
 

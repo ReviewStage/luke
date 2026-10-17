@@ -2,7 +2,7 @@
  * session-sandbox-cleanup.ts -- the queue of eve sessions whose Vercel Sandbox the sweep still has to delete.
  *
  * Whatever lets go of a session for good queues it here in the transaction
- * that lets go of it: the purge of a deleted plan's conversations, and the
+ * that lets go of it: the purge of a deleted task's conversations, and the
  * deletion of an account. The sweep takes the queue a bounded batch at a
  * time, the sessions never tried first and then the ones tried longest
  * ago, so a few Vercel will not delete cannot hold up the rest; a session

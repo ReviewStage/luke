@@ -3,7 +3,7 @@
  *
  * A toast answers an act whose control is gone by the time it lands: a copy
  * made from a menu that closed with the press, a note sent from a dialog
- * that closed with the send, a plan archived from a menu, a change refused
+ * that closed with the send, a task archived from a menu, a change refused
  * where nothing beside it is left to say so, a coding agent's turn that
  * ended while the developer was looking elsewhere in the window, or an
  * inbox item an agent posted while they were. Each is a

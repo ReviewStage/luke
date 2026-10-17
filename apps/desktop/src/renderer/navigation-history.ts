@@ -1,11 +1,11 @@
 /**
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
- * A place is a plan's page, a plan's version history, the home page,
+ * A place is a task's page, a plan's version history, the home page,
  * the Inbox, or Settings, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
- * moves it, so a plan opened from the sidebar, by a key, by starting it, or
+ * moves it, so a task opened from the sidebar, by a key, by starting it, or
  * by the host itself is one more place visited all the same, and a move
  * through the history is the window arriving where the history already
  * stands. It lives as long as the window does, the way a browser tab's does.
@@ -18,8 +18,8 @@
  * whichever revision's sections are open, and going back to it opens it on
  * that version with those sections. Whatever is opened from it — a version's
  * source, a tab from the command palette, a notification's — is a visit
- * after it, though it opens on the same plan, so Back returns to it; only a
- * restore lands on the plan as Back would, where the plan stands behind.
+ * after it, though it opens on the same task, so Back returns to it; only a
+ * restore lands on the task as Back would, where the task stands behind.
  *
  * Each Automations page is a step of its own, the list and each automation's
  * page alike, so Back from an automation opened from the list returns to the
@@ -70,7 +70,7 @@ const PLACE_KIND = {
   SETTINGS: "settings",
 } as const;
 
-/** A place the window can stand on: a plan, or its version history where it stands, by its id, so a rename leaves it the same place. */
+/** A place the window can stand on: a task, or its version history where it stands, by its id, so a rename leaves it the same place. */
 type Place =
   | { readonly kind: typeof PLACE_KIND.TASK; readonly taskId: string }
   | {
@@ -217,7 +217,7 @@ function visited(trail: Trail, place: Place): Trail {
 /**
  * The nearest step one way along the trail the window can still go to,
  * skipping any it cannot reach and any that is the step it already stands
- * on, so a deleted plan between two visits of one page is passed over whole.
+ * on, so a deleted task between two visits of one page is passed over whole.
  */
 function nearest(
   trail: Trail,
@@ -242,14 +242,14 @@ export interface NavigationHistory {
 
 /** The window's history, with the way a restore leaves a plan's version history. */
 export interface WindowHistory extends NavigationHistory {
-  /** Leaves the version history for its plan: a step back where the plan is the step behind, else a visit. */
+  /** Leaves the version history for its task: a step back where the task is the step behind, else a visit. */
   onLeaveVersionHistory: () => void;
 }
 
 /**
  * The history over where the window stands. `place` is nothing until the
  * window knows where it is, so a launch records no page it never showed.
- * `reachable` says whether a place can still be gone to — a deleted plan
+ * `reachable` says whether a place can still be gone to — a deleted task
  * cannot — and `go` takes the window there; the move's own arrival is then
  * recognised as the place the history already stands on, and records nothing.
  */
@@ -312,15 +312,15 @@ function useHistory(input: {
 }
 
 /**
- * The window's history: Plans on the plan it is bound for — the one asked
+ * The window's history: Tasks on the task it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
- * or on that plan's version history, or the Inbox, or Settings on its page. A plan the
+ * or on that plan's version history, or the Inbox, or Settings on its page. A task the
  * account's list once held and holds no more is passed over, unless the list
- * itself could not be read, and so is an archived plan, which the developer
- * put out of the way, unless it is the plan the window is bound for, as it is
+ * itself could not be read, and so is an archived task, which the developer
+ * put out of the way, unless it is the task the window is bound for, as it is
  * from its own version history or from Settings opened over it. Note that a
- * plan no list has held yet is still a place, because the list may not have
- * landed or may not yet carry a plan just started; a plan that cannot be read
+ * task no list has held yet is still a place, because the list may not have
+ * landed or may not yet carry a task just started; a task that cannot be read
  * is a place too, and says so when it is gone back to. Going to a place
  * changes the tab only when it must, so a tab change is counted as any other.
  * A version history is gone back to where it stood, on its version and with
@@ -374,7 +374,7 @@ export function useWindowHistory(input: {
   const issuesPlace = plans.issuesView.place;
   const pageIssue = issuesPlace.kind === ISSUES_PAGE.ISSUE ? issuesPlace.issueId : undefined;
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
-  // A launch reopening the plan last open stands nowhere until it opens, so
+  // A launch reopening the task last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !plans.restoring;
   // Only grows, so writing it as the list is drawn is the same on every render.

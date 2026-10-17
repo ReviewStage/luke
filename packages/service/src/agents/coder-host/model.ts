@@ -26,6 +26,7 @@ import {
 } from "../../providers/model-catalog.js";
 import { type MeterSeams, meteredModel } from "../agent-runtime/meter.js";
 import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
+import { pictureBudgetMiddleware } from "./picture-budget.js";
 
 /**
  * model.ts -- the model one step of a coding agent runs on, reached at its provider directly on Luke's own key.
@@ -38,7 +39,7 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * model are handed to the provider as the catalog lists them. Each step
  * also asks for its reasoning in words, so the agent's tab can show what
  * it thought as the Work tab shows Luke's: OpenAI for a summary, as the
- * planning brain does, and Anthropic for its summarized thinking on a
+ * brain does, and Anthropic for its summarized thinking on a
  * model that thinks whether asked or not. A fast version runs as its base
  * model asked for Anthropic's fast speed, the SDK sending the beta header
  * that speed needs, on whichever key the step runs on: Anthropic's fast
@@ -63,6 +64,9 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * the work for the key's billing, and verified again once a step goes
  * through; a refusal of either kind fails the step in words that name the
  * account's key, which the agent's failure is read from.
+ *
+ * Every step's pictures are held to the provider's bounds before it is sent
+ * (`picture-budget.ts`), whichever key it runs on.
  */
 
 /** The one model an agent's title is generated on: the cheapest that names a task well, at Anthropic's own id. */
@@ -304,9 +308,10 @@ function fastAccessReport(
 }
 
 /**
- * The provider's model on the key: falling back from a refused fast call
- * where the step is a fast version, behind the account's middleware where
- * the key is the account's own, and the meter where it is Luke's.
+ * The provider's model on the key: its pictures held to the budget,
+ * falling back from a refused fast call where the step is a fast version,
+ * behind the account's middleware where the key is the account's own, and
+ * the meter where it is Luke's.
  */
 function modelOnKey(
   named: ProviderModel,
@@ -319,10 +324,11 @@ function modelOnKey(
     apiKey: Redacted.value(key.key),
     ...(fetch === undefined ? undefined : { fetch }),
   };
-  const provided =
+  const reached =
     named.provider === MODEL_PROVIDER.ANTHROPIC
       ? createAnthropic(settings)(named.modelId)
       : createOpenAI(settings).responses(named.modelId);
+  const provided = wrapLanguageModel({ model: reached, middleware: pictureBudgetMiddleware });
   const model = named.fast
     ? wrapLanguageModel({
         model: provided,

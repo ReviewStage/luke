@@ -58,15 +58,15 @@ it.effect(
 
         const pins = yield* sql<{
           readonly user_id: string;
-          readonly plan_id: string;
+          readonly task_id: string;
           readonly pinned_at: string;
         }>`
-          select user_id, plan_id, pinned_at::text as pinned_at from plan_pin
+          select user_id, task_id, pinned_at::text as pinned_at from task_pin
         `;
         assert.deepEqual(
           pins.map((pin) => ({
             userId: pin.user_id,
-            planId: pin.plan_id,
+            planId: pin.task_id,
             pinnedAt: new Date(pin.pinned_at).toISOString(),
           })),
           [

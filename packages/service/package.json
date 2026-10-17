@@ -1,6 +1,6 @@
 {
   "name": "@luke/service",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -55,6 +55,7 @@
     "./agents/brain-host/relay": "./src/agents/brain-host/relay.js",
     "./agents/brain-host/seed": "./src/agents/brain-host/seed.js",
     "./agents/brain-host/stop-carrier": "./src/agents/brain-host/stop-carrier.js",
+    "./agents/coder-host/chat": "./src/agents/coder-host/chat.js",
     "./agents/coder-host/account-keys": "./src/agents/coder-host/account-keys.js",
     "./agents/coder-host/bounds": "./src/agents/coder-host/bounds.js",
     "./agents/coder-host/channel": "./src/agents/coder-host/channel.js",
@@ -157,6 +158,7 @@
     "./maintenance/maintenance-bounds": "./src/maintenance/maintenance-bounds.js",
     "./maintenance/maintenance-sweep": "./src/maintenance/maintenance-sweep.js",
     "./maintenance/terminal-lease-sweep": "./src/maintenance/terminal-lease-sweep.js",
+    "./observability/sentry": "./src/observability/sentry.js",
     "./tasks/board-layout": "./src/tasks/board-layout.js",
     "./tasks/board-look": "./src/tasks/board-look.js",
     "./tasks/board-tool": "./src/tasks/board-tool.js",
@@ -243,6 +245,7 @@
     "@luke/settings": "workspace:*",
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@sentry/effect": "11.7.0",
     "@vercel/connect": "2.4.1",
     "@vercel/oidc": "4.0.0",
     "ai": "catalog:",

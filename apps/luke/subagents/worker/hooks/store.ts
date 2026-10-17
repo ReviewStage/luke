@@ -7,8 +7,8 @@ import { relayChildEvent } from "../../../host.js";
 /**
  * The relay from the worker's own stream into the store: every event eve
  * records for the worker's child session is told to the writer under the
- * child conversation of the planning model's call that started it, so the
- * Work tab can open the worker's session as it opens the planning model's.
+ * child conversation of the brain's call that started it, so the
+ * Work tab can open the worker's session as it opens the brain's.
  * eve runs a node's hooks for that node's sessions alone, which is why the
  * worker has a hook of its own beside the root's. A hook's failure is
  * eve's to log and never reaches the worker's task.

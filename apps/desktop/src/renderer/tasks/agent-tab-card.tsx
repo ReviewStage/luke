@@ -62,7 +62,7 @@ import { WorkingTime } from "./working-time";
  *
  * The step is read from what a tab already holds, never fetched on hover:
  * the transcript the agent's tab last drew (`HeldTranscript`), while it is
- * still the agent's latest, or a planning worker's session, which the plan
+ * still the agent's latest, or a brain's worker's session, which the task
  * holds whole. A card with nothing current to read says the name and the
  * time alone.
  */

@@ -77,7 +77,7 @@ export const ACTOR_SIZE = {
 export type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];
 
 /** How many CSS pixels across each size draws its disc, which `desktop.css`'s `--actor-size` says for the same size. */
-export const ACTOR_PIXELS = {
+const ACTOR_PIXELS = {
   [ACTOR_SIZE.MARK]: 14,
   [ACTOR_SIZE.INLINE]: 16,
   [ACTOR_SIZE.STACK]: 18,

@@ -1,6 +1,6 @@
 {
   "name": "@luke/database",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "The hosted store's Drizzle schema, queries, and migrations, and the test databases",
@@ -69,9 +69,9 @@
     "./schemas/issue": "./src/schemas/issue.js",
     "./schemas/mac-command": "./src/schemas/mac-command.js",
     "./schemas/personal-workspace": "./src/schemas/personal-workspace.js",
-    "./schemas/plan": "./src/schemas/plan.js",
     "./schemas/plan-attachment": "./src/schemas/plan-attachment.js",
     "./schemas/plan-comment": "./src/schemas/plan-comment.js",
+    "./schemas/task": "./src/schemas/task.js",
     "./schemas/plan-page": "./src/schemas/plan-page.js",
     "./schemas/plan-revision": "./src/schemas/plan-revision.js",
     "./schemas/plan-template-revision": "./src/schemas/plan-template-revision.js",

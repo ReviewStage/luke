@@ -3,8 +3,7 @@ import {
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
 } from "@luke/features/sign-in-provider";
-import { ProviderMark } from "@luke/ui";
-import { AUTH_BUTTON } from "@luke/ui/auth-surface";
+import { BUTTON_VARIANT, Button, ProviderMark } from "@luke/ui";
 import type { createAuthClient } from "better-auth/react";
 import { useState } from "react";
 
@@ -17,6 +16,36 @@ import { useState } from "react";
 
 /** The one call the buttons make, which every Better Auth client has. */
 type SocialSignIn = Pick<ReturnType<typeof createAuthClient>, "signIn">;
+
+/**
+ * One provider's button: its mark and "Continue with" its name, or the ring
+ * while its sign-in is opening, named for the provider it is opening. Every
+ * other choice stands unavailable while one opens.
+ */
+export function ProviderButton({
+  provider,
+  pending,
+  onPress,
+}: {
+  provider: SocialProvider;
+  /** The provider whose sign-in is opening, if one is. */
+  pending: SocialProvider | undefined;
+  onPress: () => void;
+}): React.JSX.Element {
+  const label = SOCIAL_PROVIDER_LABEL[provider];
+  return (
+    <Button
+      variant={BUTTON_VARIANT.OUTLINE}
+      icon={<ProviderMark provider={provider} className="shrink-0" />}
+      busy={pending === provider}
+      busyLabel={`Opening ${label}`}
+      disabled={pending !== undefined && pending !== provider}
+      onClick={onPress}
+    >
+      {`Continue with ${label}`}
+    </Button>
+  );
+}
 
 export function SignInChoices({ client }: { readonly client: SocialSignIn }): React.JSX.Element {
   const [pending, setPending] = useState<SocialProvider>();
@@ -36,22 +65,14 @@ export function SignInChoices({ client }: { readonly client: SocialSignIn }): Re
   return (
     <>
       <div className="mt-8 mb-4 grid gap-3">
-        {Object.values(SOCIAL_PROVIDER).map((provider) => {
-          return (
-            <button
-              key={provider}
-              type="button"
-              className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
-              disabled={pending !== undefined}
-              onClick={() => void begin(provider)}
-            >
-              <ProviderMark provider={provider} className="size-[15px] shrink-0" />
-              {pending === provider
-                ? "Opening…"
-                : `Continue with ${SOCIAL_PROVIDER_LABEL[provider]}`}
-            </button>
-          );
-        })}
+        {Object.values(SOCIAL_PROVIDER).map((provider) => (
+          <ProviderButton
+            key={provider}
+            provider={provider}
+            pending={pending}
+            onPress={() => void begin(provider)}
+          />
+        ))}
       </div>
       {failed ? (
         <p className="m-0 text-attention" role="alert">

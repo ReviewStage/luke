@@ -97,7 +97,7 @@ export function TrashIcon(): React.JSX.Element {
 
 /**
  * A push pin tilted the way 📌 is, as Slack, Notion, and Linear draw theirs:
- * keeps a plan at the head of the sidebar. Its paths are Tabler Icons'
+ * keeps a task at the head of the sidebar. Its paths are Tabler Icons'
  * `pin` (https://tabler.io/icons, MIT licence, copyright (c) 2020-2026
  * Paweł Kuna), drawn in our stroke.
  */
@@ -112,7 +112,7 @@ export function PinIcon(): React.JSX.Element {
 }
 
 /**
- * The tilted pin struck through: lets a pinned plan back among the rest. Its
+ * The tilted pin struck through: lets a pinned task back among the rest. Its
  * paths are Tabler Icons' `pinned-off` (https://tabler.io/icons, MIT licence,
  * copyright (c) 2020-2026 Paweł Kuna), drawn in our stroke.
  */
@@ -127,7 +127,7 @@ export function UnpinIcon(): React.JSX.Element {
   );
 }
 
-/** A box under its lid: puts a plan away under Archived. */
+/** A box under its lid: puts a task away under Archived. */
 export function ArchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -138,7 +138,7 @@ export function ArchiveIcon(): React.JSX.Element {
   );
 }
 
-/** A box with an arrow rising out of it: brings an archived plan back. */
+/** A box with an arrow rising out of it: brings an archived task back. */
 export function UnarchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -309,7 +309,7 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow back up and to the left: the way back to the plan a call is about. */
+/** An arrow back up and to the left: the way back to the task a call is about. */
 export function ReturnIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -515,7 +515,7 @@ export function AgentPlaceholderIcon(): React.JSX.Element {
   return <Glyph>{null}</Glyph>;
 }
 
-/** A page with its corner turned down and lines of text on it: the plan's own document. */
+/** A page with its corner turned down and lines of text on it: the task's own document. */
 export function DocumentIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -545,7 +545,7 @@ export function PlayIcon(): React.JSX.Element {
   );
 }
 
-/** A board on its stand with a line drawn across it: the plan's whiteboard. */
+/** A board on its stand with a line drawn across it: the task's whiteboard. */
 export function BoardIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

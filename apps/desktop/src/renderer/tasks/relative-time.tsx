@@ -8,7 +8,7 @@ import { agoText, momentText, sinceText } from "./task-time";
  * row, a file note, and a card all say "3h" for the same save, and each
  * keeps its own class for where it stands in its row; a line of words, as a
  * menu's "Last edited by you · 2h ago" is, says it with "ago" after a count
- * (`agoText`), the plan's own "Edited by" line's word. The full moment hangs
+ * (`agoText`), the task's own "Edited by" line's word. The full moment hangs
  * in the window's pill rather than the system's `title`, as every other hint
  * here does. Note that a time drawn on a hover card raises no pill
  * (`hint={false}`), because a pill hung from a card stands over the card and

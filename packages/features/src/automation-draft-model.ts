@@ -378,8 +378,8 @@ export function automationDraft(
 /**
  * What stops a draft saving, at the field it is about: a name and a task
  * written, a schedule Luke reads and that fires no more often than its
- * floor, and a repository chosen where the automation is not on a plan,
- * whose repository is its plan's.
+ * floor, and a repository chosen where the automation is not on a task,
+ * whose repository is its task's.
  */
 export function draftProblems(
   draft: AutomationDraft,
@@ -497,7 +497,7 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
  * What a draft changes of the automation it opened as, each field only
  * where it moved, or nothing where none did. The task keeps the model the
  * automation runs on, which this editor does not show, and a repository is
- * sent only where the automation is not on a plan.
+ * sent only where the automation is not on a task.
  */
 export function changeOf(
   draft: AutomationDraft,

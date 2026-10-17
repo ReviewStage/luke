@@ -159,6 +159,8 @@ export function choiceSetting<
   visible?: (view: SettingsVisibility) => boolean;
   /** A control whose options are observed, or whose empty token is its own. */
   control?: SettingControl<Value | undefined>;
+  /** The empty search field's words, for a list long enough that its pop-up searches. */
+  search?: string;
 }): AppSettingSchemaEntry<Field, Value | undefined, Id, Default> {
   const optionLabel = spec.optionLabel ?? spec.token;
   const byToken: Map<string, Value> = new Map(
@@ -180,6 +182,7 @@ export function choiceSetting<
   };
   const control: SettingControl<Value | undefined> = spec.control ?? {
     value: (stored) => tokenOf(stored),
+    search: spec.search,
     options: (): readonly SettingOption[] =>
       spec.values.map((value) => {
         const picture = spec.optionPicture?.(value);

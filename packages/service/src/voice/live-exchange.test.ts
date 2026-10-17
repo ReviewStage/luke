@@ -55,7 +55,7 @@ import { hostedLiveExchange } from "./live-exchange.js";
  * acceptance in the parts this build can run: a spoken ask runs a turn
  * through the ask door and is spoken from the service's own appends, its
  * words and Luke's landing as segments and one user message; an ask once the
- * plan is gone reaches nobody; and the plan's notetaker saves what was said.
+ * task is gone reaches nobody; and the plan's notetaker saves what was said.
  * Every row is an account's this test created.
  */
 
@@ -170,7 +170,7 @@ function fakeEve(): FakeEve {
   return eve;
 }
 
-/** An account holding one plan, and the plan's conversation every call about it lands in. */
+/** An account holding one task, and the task's conversation every call about it lands in. */
 interface TaskTarget extends ConversationTarget {
   readonly taskId: string;
 }

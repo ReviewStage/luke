@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { realpathSync, writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
+import { temporaryDirectory } from "@luke/runtime/testing";
+import { build, type Plugin } from "esbuild";
 import { test } from "vitest";
 import {
   expectedExternals,
@@ -9,6 +12,7 @@ import {
   externalsDrift,
   functionBundlePlan,
   INLINE_EXCEPTION,
+  undeclaredImports,
 } from "../server/function-bundles";
 import { webFunctions } from "../server/function-layout";
 import { apiRewrites, readApiRewritesTable, rewritesDrifted } from "../server/function-rewrites";
@@ -48,4 +52,35 @@ test("every function bundle loads exactly the externals the record expects", {
       [],
     );
   }
+});
+
+test("a module esbuild injects is bundled, not an undeclared dependency", async (t) => {
+  // Note that we resolve the folder, because esbuild reports macOS's /tmp as /private/tmp.
+  const root = realpathSync(await temporaryDirectory(t, "luke-undeclared-imports-"));
+  writeFileSync(join(root, "entry.js"), 'import pad from "left-pad";\nexport default pad;\n');
+  // A virtual module handed to `inject`, as Sentry's esbuild plugin hands its release stub.
+  const stub = join(root, "_injected-stub");
+  const injecting: Plugin = {
+    name: "injecting",
+    setup(builder) {
+      builder.onResolve({ filter: /_injected-stub/ }, (args) => ({ path: args.path }));
+      builder.onLoad({ filter: /_injected-stub/ }, () => ({
+        contents: "globalThis.injected = 1;",
+      }));
+    },
+  };
+  const result = await build({
+    absWorkingDir: root,
+    entryPoints: [join(root, "entry.js")],
+    bundle: true,
+    write: false,
+    metafile: true,
+    format: "esm",
+    platform: "node",
+    external: ["left-pad"],
+    inject: [stub],
+    plugins: [injecting],
+    logLevel: "silent",
+  });
+  assert.deepEqual(undeclaredImports(result.metafile, root, new Set()), ["left-pad"]);
 });
