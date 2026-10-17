@@ -2,14 +2,12 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import { repositoryLabel } from "@luke/ui/task-list-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -22,13 +20,11 @@ import { MemberDirectory } from "../member-directory";
 import type { PlanEditorHandle } from "../plan-editor/contract";
 import { mountPlanEditor } from "../plan-editor/plan-editor";
 import { PlanBody } from "./plan-body";
-import { TaskCrumb } from "./task-crumb";
 import { TRANSCRIPT_CODE_AND_TABLE_COMPONENTS } from "./transcript-markdown";
 
 /**
  * The plan's document at the widths a column leaves it: however narrow, the
- * crumb wraps rather than cutting its names to a letter, and who can edit is
- * never cut; the "Edited by" line wraps rather than squeezing a name to
+ * "Edited by" line wraps rather than squeezing a name to
  * nothing; the title breaks only a word wider than the column, at a smaller
  * size in a narrow one; a list item breaks a long path at the edge; and a
  * table, read or edited, keeps each word whole and scrolls, fading the edge
@@ -106,7 +102,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The plan's document, its crumb over it, drawn in a column `width` pixels wide, as the window draws it. */
+/** The plan's document drawn in a column `width` pixels wide, as the window draws it. */
 async function drawnAt(width: number): Promise<HTMLElement> {
   layContainersAt({ "plan-document": width });
   Object.defineProperty(window, "luke", {
@@ -124,25 +120,10 @@ async function drawnAt(width: number): Promise<HTMLElement> {
   const column = document.body.appendChild(document.createElement("section"));
   column.className = "desktop-document";
   root = createRoot(column);
-  const crumb = createElement(TaskCrumb, {
-    workspace: LONG_WORKSPACE,
-    repository: PLAN.repository,
-    archived: false,
-    doors: {
-      personal: false,
-      onOpenWorkspace: () => undefined,
-      repository: {
-        label: (named) => repositoryLabel(named, []),
-        pictures: false,
-        read: () => new Promise<TasksRepositoriesAnswer>(() => undefined),
-      },
-    },
-  });
   const body = createElement(PlanBody, {
     task: PLAN,
     live: false,
     reader: { readerId: undefined },
-    crumb,
   });
   act(() =>
     root?.render(
@@ -171,35 +152,6 @@ function titleEms(column: HTMLElement): number {
     getComputedStyle(find(column, ".task-title .markdown-heading")).fontSize,
   );
 }
-
-test("a 720px column draws the crumb on one line, the names giving way before who can edit", async () => {
-  const column = await drawnAt(COLUMN.WIDE);
-  const crumb = find(column, 'nav[aria-label="Where this task is"]');
-
-  assert.notEqual(getComputedStyle(crumb).flexWrap, "wrap");
-  assert.equal(getComputedStyle(find(crumb, ".task-crumb-people")).flexShrink, "0");
-  assert.match(crumb.textContent ?? "", /3 can edit$/u);
-});
-
-test("a column under 480px wraps the crumb, the separator and the repository together, rather than cutting the names to a letter", async () => {
-  for (const width of [COLUMN.NARROWEST, COLUMN.NARROW]) {
-    const column = await drawnAt(width);
-    const crumb = find(column, 'nav[aria-label="Where this task is"]');
-
-    assert.equal(getComputedStyle(crumb).flexWrap, "wrap", `at ${width}px`);
-    assert.equal(getComputedStyle(find(crumb, ".task-crumb-people")).flexShrink, "0");
-    const step = find(crumb, ".task-crumb-step");
-    assert.ok(
-      step.querySelector(".task-crumb-separator"),
-      "the separator wraps with its repository",
-    );
-    assert.equal(step.textContent, "customer-identity-and-access-management-service");
-    act(() => root?.unmount());
-    root = undefined;
-    document.body.innerHTML = "";
-    document.head.innerHTML = "";
-  }
-});
 
 test("the Edited by line wraps between its words and names at every width, so no name is squeezed to nothing", async () => {
   for (const width of [COLUMN.NARROWEST, COLUMN.WIDE]) {

@@ -685,9 +685,8 @@ function DocumentUnit({
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
- * none are. `crumb`, where given, stands over the "Edited by" line and
- * says where the plan lives (`task-crumb.tsx`). `readMark` is whether the
- * plan is marked unread, which the title's ⋯ offers to flip.
+ * none are. `readMark` is whether the plan is marked unread, which the
+ * title's ⋯ offers to flip.
  */
 export function PlanBody({
   task,
@@ -702,7 +701,6 @@ export function PlanBody({
   sectionLinks,
   reader = NO_READER,
   agents,
-  crumb,
 }: {
   task: Task;
   live: boolean;
@@ -723,8 +721,6 @@ export function PlanBody({
   reader?: TaskReader;
   /** The plan's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
   agents?: EditAgents;
-  /** Where the plan lives and who can edit it, over the "Edited by" line; a Settings page draws none. */
-  crumb?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -915,7 +911,6 @@ export function PlanBody({
             : undefined
         }
       >
-        {page === undefined ? crumb : null}
         {page === undefined ? editedNote : null}
         <ChangedLine looks={looks} marks={marks} />
         <div className={BODY_CLASS}>
