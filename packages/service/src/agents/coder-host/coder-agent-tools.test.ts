@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
+import { sweepAbandonedTurns, TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   archiveCodingAgent,
@@ -29,6 +30,7 @@ import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
 } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -43,6 +45,7 @@ import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
+  BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -228,7 +231,8 @@ async function claimed(
 /**
  * eve's coding-agent service as a script beside the fake GitHub, whose
  * installation reaching the repository is connected to the workspace:
- * every message to a session answered taken, every cancel answered as
+ * every message to a session answered taken, or refused as a session eve
+ * no longer runs where `retired` says, every cancel answered as
  * `cancelStatus` says, and each written down.
  */
 async function fakeCoderEve(
@@ -236,6 +240,7 @@ async function fakeCoderEve(
   branches: readonly string[] = [],
   beforeGitHub?: () => Promise<void>,
   cancelStatus = "accepted",
+  retired = false,
 ) {
   installations += 1;
   const installation: InstallationFixture = {
@@ -264,6 +269,12 @@ async function fakeCoderEve(
       return Response.json({ sessionId: sessionId() }, { status: 202 });
     }
     if (pathname.endsWith("/cancel")) return Response.json({ status: cancelStatus });
+    if (retired) {
+      return Response.json(
+        { code: "session_not_active", error: "The session is no longer active.", ok: false },
+        { status: 409 },
+      );
+    }
     return Response.json(
       { sessionId: pathname.slice("/eve/coder/v1/session/".length), deliveryId: "delivery-1" },
       { status: 202 },
@@ -1355,6 +1366,177 @@ test("archive_agent refuses an agent whose turn a Stop was asked of but which st
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: ARCHIVE_AGENT_REFUSAL.WORKING,
   });
+});
+
+/** The agent as the caller's `list_agents` and `read_agent` read it: its status, and why where it failed. */
+async function standingAsRead(
+  call: Awaited<ReturnType<typeof peerCaller>>,
+  agentId: string,
+): Promise<readonly unknown[]> {
+  const listed = await call(CODER_TOOL.LIST_AGENTS, {});
+  const row = (Array.isArray(listed.agents) ? listed.agents : []).find(
+    (agent) => isRecord(agent) && agent.id === agentId,
+  );
+  const read = await call(CODER_TOOL.READ_AGENT, { agentId });
+  const agent = isRecord(read.agent) ? read.agent : {};
+  return [
+    isRecord(row) ? row.status : undefined,
+    isRecord(row) ? row.failureReason : undefined,
+    agent.status,
+    agent.failureReason,
+  ];
+}
+
+test("an agent whose session eve no longer runs reads as running until a message to it is refused as ended for good, then as failed for its session's end, which archive_agent archives and stop_agent answers as idle", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId, [], undefined, "no_active_turn", true);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  await turnOn(agents.teammates, false);
+
+  assert.deepEqual(await standingAsRead(call, agents.teammates.id), [
+    CODING_AGENT_STATUS.RUNNING,
+    undefined,
+    CODING_AGENT_STATUS.RUNNING,
+    undefined,
+  ]);
+  assert.deepEqual(
+    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.RETIRED },
+  );
+  const failed = [
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_FAILURE.SESSION_ENDED,
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_FAILURE.SESSION_ENDED,
+  ];
+  assert.deepEqual(await standingAsRead(call, agents.teammates.id), failed);
+  assert.deepEqual(
+    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }, "call-2"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.RETIRED },
+  );
+  assert.deepEqual(
+    await standingAsRead(call, agents.teammates.id),
+    failed,
+    "a second refusal settles nothing again",
+  );
+
+  assert.deepEqual(await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-3"), {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    agent: {
+      id: agents.teammates.id,
+      title: OPUS,
+      task: { id: plans.billing, name: "Billing", archived: false },
+      onYourTask: false,
+      status: CODING_AGENT_STATUS.FAILED,
+    },
+    stopped: false,
+  });
+  assert.deepEqual(
+    eve.sent.filter((sent) => sent.path.endsWith("/cancel")),
+    [],
+    "an idle agent's Stop asks eve nothing",
+  );
+  const archived = await call(
+    CODER_TOOL.ARCHIVE_AGENT,
+    { agentId: agents.teammates.id, reason: "Its session ended." },
+    "call-4",
+  );
+  assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
+  const read = await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id));
+  assert.notEqual(Option.getOrThrow(read).archivedAt, null);
+});
+
+/** A turn of the agent's that eve began and that failed on its model call, as eve ends one. */
+async function failedTurnOn(agent: StartedAgent): Promise<void> {
+  const target = { userId: agent.userId, conversationId: agent.conversationId };
+  const turnId = randomUUID();
+  const turn = { conversationId: sessionKey(target.conversationId), turnId };
+  await database.run(
+    Effect.gen(function* () {
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_1" });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: NOW + 1,
+      });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        sequence: 2,
+        status: BRAIN_REQUEST_STATUS.FAILED,
+        failure: BRAIN_REQUEST_FAILURE.MODEL,
+        responseIds: [],
+        at: NOW + 2,
+      });
+    }),
+  );
+}
+
+test("list_agents and read_agent say why each failed agent failed: a turn failed midway, a session that never started, a turn the sweep abandoned, and a failure after an earlier turn completed", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const bob = agents.teammates.userId;
+  const midway = agents.teammates;
+  await failedTurnOn(midway);
+  const unstarted = await agentOn(bob, plans.billing);
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db
+        .update(codingAgent)
+        .set({ createdAt: new Date(0) })
+        .where(eq(codingAgent.id, unstarted.id)),
+    ),
+  );
+  const abandoned = await agentOn(bob, plans.billing);
+  await turnOn(abandoned, false);
+  await database.run(
+    sweepAbandonedTurns({ writer }, { now: NOW + TURN_ABANDON.CODING_AGENT_AFTER_MS + 1 }),
+  );
+  const afterCompleted = await agentOn(bob, plans.billing);
+  await turnOn(afterCompleted, true);
+  await failedTurnOn(afterCompleted);
+
+  const failed = (failure: string) => [
+    CODING_AGENT_STATUS.FAILED,
+    failure,
+    CODING_AGENT_STATUS.FAILED,
+    failure,
+  ];
+  assert.deepEqual(await standingAsRead(call, midway.id), failed(CODING_AGENT_FAILURE.MODEL));
+  assert.deepEqual(
+    await standingAsRead(call, unstarted.id),
+    failed(CODING_AGENT_FAILURE.NOT_STARTED),
+  );
+  assert.deepEqual(
+    await standingAsRead(call, abandoned.id),
+    failed(CODING_AGENT_FAILURE.ABANDONED),
+  );
+  assert.deepEqual(
+    await standingAsRead(call, afterCompleted.id),
+    failed(CODING_AGENT_FAILURE.MODEL),
+  );
+});
+
+test("a message refused as ended for good leaves an agent whose turn had already ended as that turn ended", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId, [], undefined, "accepted", true);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  await turnOn(agents.teammates, true);
+
+  assert.deepEqual(
+    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.RETIRED },
+  );
+  assert.deepEqual(await standingAsRead(call, agents.teammates.id), [
+    CODING_AGENT_STATUS.COMPLETED,
+    undefined,
+    CODING_AGENT_STATUS.COMPLETED,
+    undefined,
+  ]);
 });
 
 test("an agent whose starter has left the workspace archives no agent of it", async () => {

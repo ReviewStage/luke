@@ -216,7 +216,8 @@ export const CODING_AGENT_TOOL_REFUSAL = {
   NOT_READY:
     "Not sent: that agent's session is still coming up; the same message a moment later is taken.",
   RETIRED:
-    "Not sent: that agent's session has ended for good, so nothing reaches it; only a new agent goes on from here.",
+    "Not sent: that agent's session has ended for good, so nothing reaches it; it is idle now, and reads as failed " +
+    "where it was at work, so it may be archived, and only a new agent goes on from here.",
   UNAVAILABLE: "Not sent: the service could not take the message just now.",
   ARCHIVED:
     "Not sent: that agent's task is archived, so its agents take no message until a member unarchives it.",
@@ -501,13 +502,17 @@ export const LIST_AGENTS_TOOL = {
     "List the coding agents of your workspace, on any task or none and started by any member, " +
     "yourself left out: each with its id, its title (how the developer sees it named), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
-    "completed, failed, cancelled), its repository and the branch its sandbox is on if a turn " +
+    "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
+    "sandbox is on if a turn " +
     "has ended, one line of what it last did, its task (id, name, and whether archived; null for " +
     "an agent on no task) and whether that is the task you work on, and whether the agent is " +
     "archived, and its mention, the `[@title](link)` to name it by in your words, " +
     `the newest started first and at most ${WORKSPACE_AGENTS_LIST_LIMIT}. Pass thisTask ` +
     "for only your task's agents, or a taskId for another task's. Call it to find the agent you " +
-    "or the developer mean.",
+    "or the developer mean. Failed covers a session that ended for good, which no message " +
+    "reaches again: tell the developer, or start a new agent to go on from its work. An agent " +
+    "still running long after its last activity may have lost its session; a message to it " +
+    "refused as ended for good settles it as failed.",
   inputSchema: AGENT_LIST_INPUT,
 } as const;
 

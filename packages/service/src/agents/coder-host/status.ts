@@ -207,6 +207,9 @@ export function codingAgentFailureOf(
   if (turn === undefined) return CODING_AGENT_FAILURE.NOT_STARTED;
   if (turn.status !== TURN_STATUS.FAILED) return undefined;
   if (turn.failure === BRAIN_REQUEST_FAILURE.ABANDONED) return CODING_AGENT_FAILURE.ABANDONED;
+  if (turn.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED) {
+    return CODING_AGENT_FAILURE.SESSION_ENDED;
+  }
   if (turn.failure !== BRAIN_REQUEST_FAILURE.MODEL) return CODING_AGENT_FAILURE.OTHER;
   const detail = turn.failureDetail ?? "";
   const named = FAILURE_WORDS.find(([, words]) => words.some((word) => detail.includes(word)));

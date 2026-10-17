@@ -330,6 +330,7 @@
             "fast_own_key",
             "fast_not_enabled",
             "context_overflow",
+            "session_ended",
             "other"
           ]
         },
