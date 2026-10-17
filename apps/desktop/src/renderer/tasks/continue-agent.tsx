@@ -2,7 +2,7 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { ArrowRightIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { DRAFT_PLACE, useDraftWriter } from "../composer-drafts";
+import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import {
   CONTINUE_LABEL,
@@ -19,7 +19,8 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * It ends a failed turn's end line, and the note of a box closed because
  * the agent's session has ended, whose words and files the press carries
  * into the new agent as its note, so nothing typed is lost, and lets go of
- * once it landed. The press is held busy while it is out, and says beside
+ * once it landed, unless they were changed meanwhile, in another window,
+ * when the newer words stay. The press is held busy while it is out, and says beside
  * itself why it did not start. Once any agent of the task continues this
  * one (`continuationsOf`), each is named in its place by its chip, which
  * opens its tab, so one agent is not continued twice. Nothing stands where
@@ -27,10 +28,20 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * agent on none.
  */
 
-/** What a closed box hands the press: its words and the files attached to them. */
+/** What a closed box hands the press: its words and the files attached to them, and the agent's task, under which they are kept. */
 export interface ContinueCarry {
   readonly words: string;
   readonly attachments: readonly CodingAgentAttachment[];
+  readonly planId: string | null;
+}
+
+/** Whether a draft still holds what a press carried: the same words and the same files in order. */
+function holdsCarried(draft: Draft, carry: ContinueCarry): boolean {
+  return (
+    draft.text === carry.words &&
+    draft.attachments.length === carry.attachments.length &&
+    draft.attachments.every((file, index) => file === carry.attachments[index])
+  );
 }
 
 export function ContinueAgent({
@@ -68,9 +79,11 @@ export function ContinueAgent({
       (failed) => {
         setBusy(false);
         setNote(failed);
-        // The words went on into the new agent, so the closed box lets them go.
+        // The words went on into the new agent, so the closed box lets them go, where nothing newer stands.
         if (failed === undefined && carry !== undefined) {
-          writer.drop((place) => place.kind === DRAFT_PLACE.AGENT && place.agentId === agentId);
+          writer.update({ kind: DRAFT_PLACE.AGENT, planId: carry.planId, agentId }, (now) =>
+            holdsCarried(now, carry) ? EMPTY_DRAFT : now,
+          );
         }
       },
     );

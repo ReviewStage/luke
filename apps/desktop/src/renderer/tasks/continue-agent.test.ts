@@ -27,7 +27,7 @@ import { composerEditor, installEditorBundle, installEditorLayout } from "#testi
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
+import { DRAFT_PLACE, type DraftWriter, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
 import { AgentTab } from "./agent-tab";
 import {
   CONTINUE_TRAIL,
@@ -117,8 +117,17 @@ async function settle(): Promise<void> {
 }
 
 /** Lays words and files in the agent's box before its tab draws, as a draft kept from before. */
-function Seeded({ words, files }: { words: string; files: readonly CodingAgentAttachment[] }) {
+function Seeded({
+  words,
+  files,
+  onWriter,
+}: {
+  words: string;
+  files: readonly CodingAgentAttachment[];
+  onWriter?: (writer: DraftWriter) => void;
+}) {
   const writer = useDraftWriter();
+  onWriter?.(writer);
   useEffect(() => {
     writer.update({ kind: DRAFT_PLACE.AGENT, planId: TASK, agentId: SOURCE }, () => ({
       ...EMPTY_DRAFT,
@@ -143,7 +152,12 @@ async function drawnTab(input: {
   onUnarchive?: () => void;
   answer?: () => Promise<Failure | undefined>;
   message?: CodingAgentAgentAnswer;
-  seed?: { words: string; files: readonly CodingAgentAttachment[] };
+  seed?: {
+    words: string;
+    files: readonly CodingAgentAttachment[];
+    onWriter?: (writer: DraftWriter) => void;
+  };
+  messages?: readonly CodingAgentMessage[];
 }) {
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -176,7 +190,7 @@ async function drawnTab(input: {
       reads += 1;
       if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       return Promise.resolve({
-        messages: [...MESSAGES],
+        messages: [...(input.messages ?? MESSAGES)],
         cursor: "2:0",
         status: input.status,
         title: null,
@@ -214,7 +228,9 @@ async function drawnTab(input: {
     container,
     continued,
     opened,
-    endLine: () => container.querySelector<HTMLElement>(".agent-end-line"),
+    endLine: () =>
+      container.querySelector<HTMLElement>(".agent-end-line") ??
+      container.querySelector<HTMLElement>("[data-ended]"),
     note: () => container.querySelector<HTMLElement>(".agent-composer-note"),
     buttons,
   };
@@ -386,4 +402,78 @@ test("a box closed on an ended agent that another already continues names it in 
     note.querySelector("[data-continued]")?.textContent ?? "",
     /Continued in.*Fix the tile \(2\)/,
   );
+});
+
+test("a failed agent that never wrote a line still offers Continue on the line that says how it ended", async () => {
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.NOT_STARTED,
+    messages: [],
+  });
+  const line = tab.endLine() ?? assert.fail("the empty tab says how it ended");
+
+  assert.match(line.textContent ?? "", /^Failed/);
+  assert.equal(tab.buttons(line).length, 1);
+});
+
+test("a failed agent whose box closed on its ending offers Continue in the box's note alone, so the words it holds are never left behind", async () => {
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.SANDBOX,
+    message: { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED },
+    seed: { words: "Finish the tests.", files: [] },
+  });
+  assert.equal(tab.buttons(tab.endLine() ?? assert.fail("the turn ends on its line")).length, 1);
+  const send =
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ??
+    assert.fail("the box offers Send");
+  await act(async () => send.click());
+  await settle();
+
+  assert.equal(tab.buttons(tab.endLine() ?? assert.fail("the line stands")).length, 0);
+  assert.equal(tab.buttons(tab.note() ?? assert.fail("the box says why it closed")).length, 1);
+});
+
+test("words changed in the closed box while its continue is out stay once it lands, since the new agent was handed the earlier ones", async () => {
+  let writer: DraftWriter | undefined;
+  let land: (failure: Failure | undefined) => void = () => undefined;
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.COMPLETED,
+    message: { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED },
+    seed: {
+      words: "Fix tests",
+      files: [],
+      onWriter: (each) => {
+        writer = each;
+      },
+    },
+    answer: () =>
+      new Promise((resolve) => {
+        land = resolve;
+      }),
+  });
+  const send =
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ??
+    assert.fail("the box offers Send");
+  await act(async () => send.click());
+  await settle();
+  const [button] = tab.buttons(tab.note() ?? assert.fail("the box says why it closed"));
+  assert.ok(button);
+  act(() => button.click());
+
+  // Another window writes on in the same draft while the Start is out.
+  act(() =>
+    writer?.update({ kind: DRAFT_PLACE.AGENT, planId: TASK, agentId: SOURCE }, (was) => ({
+      ...was,
+      text: "Fix tests and lint",
+    })),
+  );
+  await act(async () => land(undefined));
+  await settle();
+
+  assert.deepEqual(
+    tab.continued.map((each) => each.note),
+    ["Fix tests"],
+  );
+  assert.equal(composerEditor(tab.container).textContent, "Fix tests and lint");
 });

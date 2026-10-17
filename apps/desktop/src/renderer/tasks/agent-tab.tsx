@@ -1294,6 +1294,7 @@ function AgentTranscriptView({
       ) : (
         <p className="m-0" data-ended={ended === undefined ? undefined : ""}>
           {ended ?? lead.startingLine}
+          {ended === undefined ? null : endTrail}
         </p>
       )}
     </ConversationEmptyState>
@@ -1643,7 +1644,9 @@ export function AgentTab({
           onOpenTarget,
           openGitHub,
         })}
+        // Note that a box closed on an ended agent offers the press itself, carrying its words.
         endTrail={
+          composer.closed === undefined &&
           endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
             <ContinueAgent agentId={agent.id} control={control} onOpenAgent={openAgent} />
           ) : undefined
@@ -1653,7 +1656,11 @@ export function AgentTab({
             agentId={agent.id}
             control={control}
             onOpenAgent={openAgent}
-            carry={{ words: composer.draft, attachments: composer.attachments }}
+            carry={{
+              words: composer.draft,
+              attachments: composer.attachments,
+              planId: agent.planId,
+            }}
           />
         }
       />
