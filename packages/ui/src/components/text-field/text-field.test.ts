@@ -97,6 +97,42 @@ test("Enter answers onEnter, except the Enter that commits an input method's com
   assert.equal(page.querySelector("output")?.textContent, "1");
 });
 
+test("Escape answers onEscape and is kept from the page, except the Escape an input method's composition takes", () => {
+  const escapes: string[] = [];
+  const page = render(
+    createElement(
+      "div",
+      null,
+      createElement(TextField, {
+        label: "Name",
+        value: "",
+        onChange: () => undefined,
+        onEscape: () => escapes.push("name"),
+      }),
+      createElement(TextArea, {
+        label: "Notes",
+        value: "",
+        onChange: () => undefined,
+        onEscape: () => escapes.push("notes"),
+      }),
+    ),
+  );
+  const pageEscapes: boolean[] = [];
+  const listen = (event: KeyboardEvent) => pageEscapes.push(event.defaultPrevented);
+  window.addEventListener("keydown", listen);
+  try {
+    const area = page.querySelector("textarea") ?? assert.fail("no text area");
+    press(fieldNamed(page, "Name"), { key: "Escape", cancelable: true });
+    press(area, { key: "Escape", cancelable: true });
+    press(area, { key: "Escape", cancelable: true, isComposing: true });
+    press(area, { key: "Escape", cancelable: true, keyCode: 229 });
+  } finally {
+    window.removeEventListener("keydown", listen);
+  }
+  assert.deepEqual(escapes, ["name", "notes"]);
+  assert.deepEqual(pageEscapes, [true, true, false, false]);
+});
+
 test("a text area holds the many lines its caller holds and hands back every change", () => {
   function Notes(): React.JSX.Element {
     const [notes, setNotes] = useState("");

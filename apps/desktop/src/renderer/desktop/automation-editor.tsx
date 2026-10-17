@@ -77,6 +77,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextArea,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
@@ -1354,6 +1355,8 @@ function EditorForm({
 }): React.JSX.Element {
   // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
   const review = readCodeReviewSettings(draft.prompt);
+  // The prompt's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  const prompt = useRef<HTMLTextAreaElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
   const owners = [
     { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
@@ -1419,14 +1422,15 @@ function EditorForm({
           onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
         />
       )}
-      <SettingsGroup title="Prompt">
-        <textarea
-          className="automation-prompt"
-          aria-label="Prompt"
+      <SettingsGroup title="Prompt" framed={false}>
+        <TextArea
+          ref={prompt}
+          label="Prompt"
+          rows={5}
           placeholder="Find the flakiest test in CI this week and fix it."
           value={draft.prompt}
-          onKeyDown={releaseOnEscape}
-          onChange={(event) => onDraft({ prompt: event.target.value })}
+          onEscape={() => prompt.current?.blur()}
+          onChange={(text) => onDraft({ prompt: text })}
         />
         <Problem problem={problems[DRAFT_FIELD.PROMPT]} />
       </SettingsGroup>

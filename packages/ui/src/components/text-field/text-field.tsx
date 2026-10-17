@@ -16,7 +16,9 @@ import type { FieldControl } from "../form-field/form-field.js";
  * changes reach `onChange` as they come, as any other typing does, but the
  * Enter that commits a composition is the input method's, not the
  * caller's, so a TextField's `onEnter` answers only an Enter pressed while
- * nothing is being composed.
+ * nothing is being composed. An `onEscape` keeps its press likewise: the
+ * Escape that cancels a composition is the input method's, and one pressed
+ * otherwise is the field's, kept from whatever stands around it.
  */
 
 /** What a one-line field holds: words, a search, an address, or a secret. */
@@ -69,6 +71,8 @@ type TextEntryProps = Named & {
   maxLength?: number | undefined;
   /** Whether the system's spell check marks the words; off for a name, an identifier, or code. */
   spellCheck?: boolean | undefined;
+  /** What an Escape does, pressed while no input method is composing; the press is marked taken, so a page Escape would close passes it by. */
+  onEscape?: (() => void) | undefined;
 };
 
 /** The attributes a text entry carries for its field, or its own name where it has none. */
@@ -97,6 +101,13 @@ function composing(event: KeyboardEvent): boolean {
   return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
+/** Answers an Escape with `onEscape`, keeping the press, where one is given and nothing is composing. */
+function answerEscape(event: KeyboardEvent, onEscape: (() => void) | undefined): void {
+  if (event.key !== "Escape" || onEscape === undefined || composing(event)) return;
+  event.preventDefault();
+  onEscape();
+}
+
 /** One line of text, answering Enter with `onEnter` where it is given. */
 export function TextField({
   type = TEXT_FIELD_TYPE.TEXT,
@@ -121,6 +132,7 @@ export function TextField({
       {...entryAttributes(props)}
       onChange={(event) => props.onChange(event.target.value)}
       onKeyDown={(event) => {
+        answerEscape(event, props.onEscape);
         if (event.key !== "Enter" || onEnter === undefined || composing(event)) return;
         event.preventDefault();
         onEnter();
@@ -159,6 +171,7 @@ export function TextArea({
       style={grow ? cssCustomProperties({ "--luke-text-area-rows": rows }) : undefined}
       {...entryAttributes(props)}
       onChange={(event) => props.onChange(event.target.value)}
+      onKeyDown={(event) => answerEscape(event, props.onEscape)}
       onPaste={onPaste}
     />
   );
