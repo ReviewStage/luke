@@ -23,6 +23,7 @@ import {
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
 } from "../coding-agent-wire.js";
+import { transcriptNowAnswerSchema } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { exactBodyInput, exactInput, hostedProcedure } from "./base.js";
 
@@ -44,9 +45,9 @@ const transcriptQuery = { after: queryValue };
 /** An agent's or a worker's transcript read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`). */
 const agentTranscriptQuery = { ...transcriptQuery, wait: queryValue };
 
-/** A page of an agent's or a worker's transcript, with whether the held read would have held on it where it was read at once (`transcriptNowAnswerSchema`). */
+/** A page of an agent's or a worker's transcript, with whether the held read would have held on it, and how soon the clock alone may end that, where it was read at once (`transcriptNowAnswerSchema`). */
 const agentTranscriptAnswerSchema = EffectSchema.Struct({
-  ...codingAgentMessagesAnswerSchema.fields,
+  ...transcriptNowAnswerSchema.fields,
   holds: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 

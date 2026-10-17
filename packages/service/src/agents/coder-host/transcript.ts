@@ -29,6 +29,7 @@ import {
 } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { startingGraceEdge } from "@luke/features/coding-agent-status";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -168,7 +169,7 @@ const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** The agent's status now, read from its newest turn and whether a line awaits one, when that run began, and why where that turn failed. */
+/** The agent's status now, read from its newest turn and whether a line awaits one, when that run began, why where that turn failed, and the instant the clock alone would move it, where one stands. */
 const statusNow = (target: ConversationTarget, createdAt: Date) =>
   Effect.gen(function* () {
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
@@ -180,7 +181,13 @@ const statusNow = (target: ConversationTarget, createdAt: Date) =>
     const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
     const failureReason =
       status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
-    return { status, runStartedAt, failureReason, turn };
+    const graceEdge = startingGraceEdge(
+      turn === undefined
+        ? undefined
+        : { status: turn.status, cancelRequested: turn.cancelRequestedAt !== null },
+      { createdAt: createdAt.getTime(), now, lineAwaits },
+    );
+    return { status, runStartedAt, failureReason, turn, graceEdge };
   });
 
 /**
@@ -418,7 +425,11 @@ function pagePast(
   tools: ToolSet,
   after: MessageCursor,
   createdAt: Date,
-): TranscriptEffect<{ readonly page: TranscriptPage; readonly turn: NewestTurn }> {
+): TranscriptEffect<{
+  readonly page: TranscriptPage;
+  readonly turn: NewestTurn;
+  readonly graceEdge: number | undefined;
+}> {
   return Effect.gen(function* () {
     const { read, cursor } = yield* listMessagesPast(
       target.userId,
@@ -427,7 +438,10 @@ function pagePast(
       after,
       CODING_AGENT_BOUNDS.MESSAGES_PAGE,
     );
-    const { status, runStartedAt, failureReason, turn } = yield* statusNow(target, createdAt);
+    const { status, runStartedAt, failureReason, turn, graceEdge } = yield* statusNow(
+      target,
+      createdAt,
+    );
     const records = read.ok ? read.value : [];
     const journalTurns = yield* journalTurnsOf(target.userId, records);
     const lines = lineIdsAmong(records);
@@ -444,6 +458,7 @@ function pagePast(
         ...(failureReason === undefined ? undefined : { failureReason }),
       },
       turn,
+      graceEdge,
     };
   });
 }
@@ -502,25 +517,28 @@ export type TitleAwaited = TranscriptEffect<boolean>;
 /** A read that waits on no title: one whose deployment generates none. */
 export const NO_TITLE_AWAITED: TitleAwaited = Effect.succeed(false);
 
-/** Whether the agent's own title may still land: the agent untitled, its newest turn one of the turns it is titled in, and that turn completed inside the title call's bound, which is when that call is made. */
-function ownTitleMayLand(target: ConversationTarget, since: Date): TranscriptEffect<boolean> {
+/** When the turn the agent's own title may still land after completed: the agent untitled, its newest turn one of the turns it is titled in, and that turn completed inside the title call's bound, which is when that call is made; none where it may not land. */
+function ownTitleWindow(
+  target: ConversationTarget,
+  since: Date,
+): TranscriptEffect<Option.Option<Date>> {
   return Effect.gen(function* () {
     const own = yield* readCodingAgentOfConversation(target.userId, target.conversationId);
-    if (Option.isNone(own) || own.value.title !== null) return false;
+    if (Option.isNone(own) || own.value.title !== null) return Option.none();
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const newest = turns.get(target.conversationId);
     const completed =
       newest?.status === TURN_STATUS.SETTLED &&
       newest.settledAt !== null &&
       newest.settledAt >= since;
-    if (!completed) return false;
+    if (!completed || newest.settledAt === null) return Option.none();
     const ran = yield* turnsBefore(
       target.userId,
       target.conversationId,
       CODER.TITLE_TURNS,
       undefined,
     );
-    return !ran.earlier;
+    return ran.earlier ? Option.none() : Option.some(newest.settledAt);
   });
 }
 
@@ -540,7 +558,43 @@ export function titleMayLand(
     const since = new Date(now - Duration.toMillis(CODER.TITLE_TIMEOUT));
     const untitled = yield* untitledDelegationsSince(parent, since);
     if (childConversationId !== undefined) return untitled.has(childConversationId);
-    return untitled.size > 0 || (yield* ownTitleMayLand(parent, since));
+    return untitled.size > 0 || Option.isSome(yield* ownTitleWindow(parent, since));
+  });
+}
+
+/** When the window of every title a read waits on has closed, in epoch milliseconds; none where it waits on none. */
+export type TitleEdge = TranscriptEffect<number | undefined>;
+
+/** A read that waits on no title, so no window closes: one whose deployment generates none. */
+export const NO_TITLE_EDGE: TitleEdge = Effect.succeed(undefined);
+
+/**
+ * The instant past which no title `titleMayLand` waits on can land any
+ * more, the clock alone having closed each one's window: the latest of a
+ * worker's start or the agent's completed turn, past the title call's own
+ * bound. A reader that holds on a title reads again then rather than on a
+ * clock of its own.
+ */
+export function titleWindowEdge(
+  parent: ConversationTarget,
+  childConversationId?: string,
+): TitleEdge {
+  return Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const bound = Duration.toMillis(CODER.TITLE_TIMEOUT);
+    const since = new Date(now - bound);
+    const untitled = yield* untitledDelegationsSince(parent, since);
+    const named = (child: string) =>
+      untitled.has(child) && (childConversationId === undefined || child === childConversationId);
+    const workers =
+      untitled.size === 0
+        ? []
+        : (yield* delegationsOf(parent)).filter((each) => named(each.childConversationId));
+    const own =
+      childConversationId === undefined ? yield* ownTitleWindow(parent, since) : Option.none();
+    const opened = [...workers.map((each) => each.createdAt), ...Option.toArray(own)];
+    if (opened.length === 0) return undefined;
+    return Math.max(...opened.map((at) => at.getTime())) + bound + 1;
   });
 }
 
@@ -591,17 +645,22 @@ export function transcriptPast(
   );
 }
 
-/** A page read at once, and whether the held read would have held on it for more. */
+/** A page read at once, whether the held read would have held on it for more, and, where it would, how soon the clock alone may change that. */
 export interface TranscriptNow {
   readonly page: TranscriptPage;
   readonly holds: boolean;
+  /** Milliseconds from now until an agent past its grace or a title's window closing may end the hold, which no row changing says; absent where nothing but a row may. */
+  readonly wakeIn?: number;
 }
 
 /**
  * The transcript past the cursor as it stands, never held, with whether
  * `transcriptPast` would have held on it: for a reader that follows the
  * transcript's live statements (`transcript-live.ts`) and reads again once
- * they move, rather than having the service look on a clock.
+ * they move, rather than having the service look on a clock. Where it would
+ * hold, the page says how soon the clock alone may end that, as the agent
+ * passing the grace its first turn had to land in or the window of a title
+ * it waits on closing (`titleEdge`), so the reader reads again then.
  */
 export function transcriptNow(
   target: ConversationTarget,
@@ -610,10 +669,19 @@ export function transcriptNow(
   agent: Pick<AgentStanding, "createdAt">,
   own?: OwnAgent,
   titleAwaited: TitleAwaited = NO_TITLE_AWAITED,
+  titleEdge: TitleEdge = NO_TITLE_EDGE,
 ): TranscriptEffect<TranscriptNow, ModelCatalog> {
   return Effect.gen(function* () {
-    const { page, turn } = yield* pagePast(target, tools, after, agent.createdAt);
+    const { page, turn, graceEdge } = yield* pagePast(target, tools, after, agent.createdAt);
     const holds = yield* holdsFor(page, titleAwaited);
-    return { page: yield* withUsage(target, tools, page, turn, own), holds };
+    const read = { page: yield* withUsage(target, tools, page, turn, own), holds };
+    if (!holds) return read;
+    const waiting = WAITING_STATUSES.has(page.status);
+    const edges = [waiting ? graceEdge : yield* titleEdge].filter(
+      (edge): edge is number => edge !== undefined,
+    );
+    if (edges.length === 0) return read;
+    const now = yield* Clock.currentTimeMillis;
+    return { ...read, wakeIn: Math.max(1, Math.min(...edges) - now) };
   });
 }
