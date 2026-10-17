@@ -1,3 +1,16 @@
+import { Skeleton as LineBone, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { ChartFrameSkeleton } from "./charts/chart-frame";
+import {
+  METRIC_STATUS,
+  MetricCardSkeleton,
+  SectionHeading,
+  STAT_CELL,
+  STAT_GROUP_COLUMNS,
+  STAT_PAIR,
+  STAT_ROW,
+  StatGroup,
+} from "./charts/stat-card";
+
 /**
  * The first load's stand-in: the page's own layout with bones where the data
  * will land, so the answer replaces the skeleton without moving what the
@@ -15,7 +28,7 @@
  * time, so a section added to a page is a line here, not a page-shaped copy
  * that drifts from the page the moment either moves.
  */
-export function Skeleton({
+function Skeleton({
   className,
   circle = false,
 }: {
@@ -58,7 +71,6 @@ export const SKELETON_SHAPE = {
   TABLE: "table",
   LINES: "lines",
   HEALTH: "health",
-  SEARCH: "search",
   MASTHEAD: "masthead",
   STATIC: "static",
 } as const;
@@ -72,8 +84,8 @@ interface SkeletonTextLine {
 /** One region of a loading page, in the order the page stacks them. */
 export type SkeletonShape =
   | { kind: typeof SKELETON_SHAPE.HEADING; label: string }
-  | { kind: typeof SKELETON_SHAPE.STAT_GROUP; columns: 2 | 3 }
-  | { kind: typeof SKELETON_SHAPE.STAT_CARDS; count: 1 | 2 | 3 | 4; columns: 1 | 2 | 3 | 4 }
+  | { kind: typeof SKELETON_SHAPE.STAT_GROUP }
+  | { kind: typeof SKELETON_SHAPE.STAT_CARDS; count: 1 | 2 | 4; columns: 1 | 2 | 4 }
   /** One chart card, or the pair a page sets side by side. */
   | { kind: typeof SKELETON_SHAPE.CHART; plots: readonly SkeletonPlot[] }
   | { kind: typeof SKELETON_SHAPE.CALENDAR }
@@ -82,11 +94,9 @@ export type SkeletonShape =
       kind: typeof SKELETON_SHAPE.TABLE;
       rows: number;
       numericColumns: number;
-      starGutter?: boolean;
     }
   | { kind: typeof SKELETON_SHAPE.LINES; bones: readonly string[] }
   | { kind: typeof SKELETON_SHAPE.HEALTH }
-  | { kind: typeof SKELETON_SHAPE.SEARCH }
   | {
       kind: typeof SKELETON_SHAPE.MASTHEAD;
       avatar?: boolean;
@@ -103,37 +113,12 @@ function bones(count: number): readonly number[] {
 const STAT_CARDS_GRID = {
   1: "grid gap-3",
   2: "grid grid-cols-2 gap-3",
-  3: "grid grid-cols-2 gap-3 min-[720px]:grid-cols-3",
-  4: "grid grid-cols-2 gap-3 min-[720px]:grid-cols-4",
 } as const;
 
-function SkeletonStatCard({ grouped }: { grouped: boolean }): React.JSX.Element {
-  return (
-    <div
-      className={
-        grouped ? "min-w-0 bg-card px-5 py-4" : "rounded-lg border border-border bg-card px-5 py-4"
-      }
-    >
-      <SkeletonLine box="h-4" bone="h-3 w-24" />
-      <div className="mt-2">
-        <SkeletonLine box="h-9" bone="h-7 w-20" />
-      </div>
-      <div className="mt-1">
-        <SkeletonLine box="h-5" bone="h-3.5 w-32" />
-      </div>
-    </div>
-  );
-}
-
+/** Only the sign-in methods chart has no trend across from its heading. */
 function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <SkeletonLine box="h-4" bone="h-3 w-36" />
-        <SkeletonLine box="h-4" bone="h-3 w-56" />
-      </div>
-      <Skeleton className={`w-full ${plot}`} />
-    </div>
+    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false} plot={plot} />
   );
 }
 
@@ -142,39 +127,26 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
  * and seven day rows with the grid's own gaps.
  */
 function SkeletonCalendarCard(): React.JSX.Element {
-  return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4">
-        <SkeletonLine box="h-4" bone="h-3 w-52" />
-      </div>
-      <Skeleton className="h-[156px] w-full" />
-      <div className="mt-4">
-        <SkeletonLine box="h-4" bone="h-3 w-96 max-w-full" />
-      </div>
-    </div>
-  );
+  return <ChartFrameSkeleton aside={false} legend plot="h-[156px]" />;
 }
 
 function SkeletonAccountsTable({
   rows,
   numericColumns,
-  starGutter,
 }: {
   rows: number;
   numericColumns: number;
-  starGutter: boolean;
 }): React.JSX.Element {
   const columns = bones(numericColumns);
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center gap-6 border-b border-border px-5 py-3">
-        {starGutter ? <div className="w-4 shrink-0" /> : null}
         <div className="min-w-0 flex-1">
-          <SkeletonLine box="h-4" bone="h-3 w-16" />
+          <SkeletonLine box="h-[18px]" bone="h-3 w-16" />
         </div>
         {columns.map((column) => (
           <div key={column} className="flex w-14 shrink-0 justify-end">
-            <SkeletonLine box="h-4" bone="h-3 w-10" />
+            <SkeletonLine box="h-[18px]" bone="h-3 w-10" />
           </div>
         ))}
       </div>
@@ -183,11 +155,10 @@ function SkeletonAccountsTable({
           key={row}
           className="flex items-center gap-6 border-b border-border px-5 py-3 last:border-0"
         >
-          {starGutter ? <div className="w-4 shrink-0" /> : null}
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Skeleton circle className="size-8 shrink-0" />
             <div className="min-w-0">
-              <SkeletonLine box="h-5" bone="h-3.5 w-36" />
+              <SkeletonLine box="h-[18px]" bone="h-3.5 w-36" />
               <SkeletonLine box="h-4" bone="h-3 w-44" />
             </div>
           </div>
@@ -205,26 +176,38 @@ function SkeletonAccountsTable({
 function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Element {
   switch (shape.kind) {
     case SKELETON_SHAPE.HEADING:
-      return <h2 className="mt-12 mb-4 text-lg font-semibold tracking-[-0.01em]">{shape.label}</h2>;
+      return <SectionHeading>{shape.label}</SectionHeading>;
     case SKELETON_SHAPE.STAT_GROUP:
       return (
-        <div
-          className={`grid divide-border overflow-hidden rounded-lg border border-border bg-card ${
-            shape.columns === 3
-              ? "divide-y min-[720px]:grid-cols-3 min-[720px]:divide-x min-[720px]:divide-y-0"
-              : "divide-y min-[520px]:grid-cols-2 min-[520px]:divide-x min-[520px]:divide-y-0"
-          }`}
-        >
-          {bones(shape.columns).map((card) => (
-            <SkeletonStatCard key={card} grouped />
+        <StatGroup>
+          {bones(STAT_GROUP_COLUMNS).map((card) => (
+            <MetricCardSkeleton key={card} grouped />
           ))}
-        </div>
+        </StatGroup>
       );
     case SKELETON_SHAPE.STAT_CARDS:
+      // Note that four cards stand in the loaded page's two wrapping pairs,
+      // so the bones break where the figures will rather than at a breakpoint
+      // of their own.
+      if (shape.columns === 4) {
+        return (
+          <div className={STAT_ROW}>
+            {bones(2).map((pair) => (
+              <div key={pair} className={STAT_PAIR}>
+                {bones(2).map((card) => (
+                  <div key={card} className={STAT_CELL}>
+                    <MetricCardSkeleton />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      }
       return (
         <div className={STAT_CARDS_GRID[shape.columns]}>
           {bones(shape.count).map((card) => (
-            <SkeletonStatCard key={card} grouped={false} />
+            <MetricCardSkeleton key={card} />
           ))}
         </div>
       );
@@ -232,7 +215,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <div
           className={
-            shape.plots.length > 1 ? "grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]" : undefined
+            shape.plots.length > 1
+              ? "grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+              : undefined
           }
         >
           {shape.plots.map((plot) => (
@@ -254,13 +239,7 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
         </div>
       );
     case SKELETON_SHAPE.TABLE:
-      return (
-        <SkeletonAccountsTable
-          rows={shape.rows}
-          numericColumns={shape.numericColumns}
-          starGutter={shape.starGutter === true}
-        />
-      );
+      return <SkeletonAccountsTable rows={shape.rows} numericColumns={shape.numericColumns} />;
     case SKELETON_SHAPE.LINES:
       return (
         <>
@@ -272,36 +251,31 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
     case SKELETON_SHAPE.HEALTH:
       return (
         <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
-          <div className="rounded-lg border border-border bg-card px-5 py-4">
-            <SkeletonLine box="h-4" bone="h-3 w-20" />
-            <div className="mt-2">
-              <SkeletonLine box="h-7" bone="h-5 w-32" />
+          <MetricCardSkeleton>
+            <div className={METRIC_STATUS}>
+              <LineBone width="128px" />
             </div>
-            <div className="mt-1">
-              <SkeletonLine box="h-5" bone="h-3.5 w-40" />
+          </MetricCardSkeleton>
+          <MetricCardSkeleton hint={false}>
+            <div>
+              {bones(5).map((row) => (
+                <div key={row} className="border-b border-border py-3 last:border-0">
+                  {/* Note that the tracks start at zero, so the bones give way in a
+                  narrow card rather than holding it wider than its column. */}
+                  <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-4">
+                    <Text as={TEXT_ELEMENT.DIV}>
+                      <LineBone width="192px" />
+                    </Text>
+                    <div className="flex justify-end">
+                      <Text as={TEXT_ELEMENT.DIV}>
+                        <LineBone width="96px" />
+                      </Text>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-          <div className="rounded-lg border border-border bg-card px-5 py-4">
-            <div className="mb-1">
-              <SkeletonLine box="h-4" bone="h-3 w-24" />
-            </div>
-            {bones(5).map((row) => (
-              <div
-                key={row}
-                className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0"
-              >
-                <SkeletonLine box="h-5" bone="h-3.5 w-48" />
-                <SkeletonLine box="h-4" bone="h-3 w-24" />
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    case SKELETON_SHAPE.SEARCH:
-      return (
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-          <Skeleton className="h-[34px] w-full max-w-[320px]" />
-          <SkeletonLine box="h-4" bone="h-3 w-28" />
+          </MetricCardSkeleton>
         </div>
       );
     case SKELETON_SHAPE.MASTHEAD:
@@ -310,7 +284,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
           {shape.avatar ? <Skeleton circle className="size-14 shrink-0" /> : null}
           <div>
             {shape.title === undefined ? null : (
-              <h1 className="text-2xl font-semibold tracking-[-0.01em]">{shape.title}</h1>
+              <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
+                {shape.title}
+              </Text>
             )}
             {shape.lines.map((line, index) => (
               <div
@@ -330,9 +306,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
 
 /**
  * What separates one region from the next. A heading carries its own margins,
- * so the region under it needs none; a masthead and the search row keep the
- * clearance the real pages give them; and words that draw themselves bring
- * whatever spacing they were written with.
+ * so the region under it needs none; a masthead keeps the clearance the real
+ * pages give it; and words that draw themselves bring whatever spacing they
+ * were written with.
  */
 function shapeSpacing(
   shape: SkeletonShape,
@@ -342,14 +318,10 @@ function shapeSpacing(
     case SKELETON_SHAPE.HEADING:
     case SKELETON_SHAPE.STATIC:
       return undefined;
-    case SKELETON_SHAPE.SEARCH:
-      return "mt-8";
     case SKELETON_SHAPE.MASTHEAD:
       return "mt-6";
     default:
-      if (previous?.kind === SKELETON_SHAPE.HEADING) return undefined;
-      // The roster's table keeps the clearance its search row is drawn with.
-      return previous?.kind === SKELETON_SHAPE.SEARCH ? "mt-4" : "mt-3";
+      return previous?.kind === SKELETON_SHAPE.HEADING ? undefined : "mt-3";
   }
 }
 

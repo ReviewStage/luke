@@ -17,6 +17,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -134,19 +135,15 @@ afterEach(() => {
 
 /** The words drawn as a transcript draws them, in a window holding `STATE`, every place a chip opened kept. */
 async function drawn(text: string, opened: LinkPlace[]): Promise<HTMLElement> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(STATE),
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-        ),
-    },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(STATE),
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+      ),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -251,4 +248,32 @@ test("an agent's chip the window knows no harness for has its name say whose it 
   const chip = container.querySelector<HTMLElement>('.mention-chip[data-kind="agent"]');
 
   assert.equal(chip?.querySelector(".mention-chip-label")?.textContent, "Agent");
+});
+
+test("an agent's chip the window holds wears its harness's mark, on another task's words or none, and the card it hangs wears it too", async () => {
+  const container = await drawn(
+    `${HOME}/plan/${PLAN}/agent/${AGENT} and ${HOME}/agent/${TRIAGE_AGENT}`,
+    [],
+  );
+  const agentChips = [
+    ...container.querySelectorAll<HTMLElement>('.mention-chip[data-kind="agent"]'),
+  ];
+
+  const worn = agentChips.map((chip) => {
+    const onChip = chip.querySelector(".mention-chip-glyph .harness-mark") !== null;
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    const onCard =
+      document.querySelector(".luke-tooltip-card [data-mention-card] .harness-mark") !== null;
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+    return [onChip, onCard];
+  });
+
+  assert.deepEqual(worn, [
+    [true, true],
+    [true, true],
+  ]);
 });

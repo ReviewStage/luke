@@ -11,24 +11,20 @@
  * validates and hands to the voice window, which holds the call.
  */
 
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { IconButton, ReturnIcon } from "@luke/ui";
-import { type CallCardModel, callCard, callCardVideoStatus } from "@luke/ui/call-card-model";
+import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
-import { type ActHandle, useAct } from "../act";
-import { useKeyboardModality } from "../keyboard-modality";
+import type { ActHandle } from "../act";
 import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts";
 import { Tooltip } from "../tooltip";
 import { useAppState, useExperiment } from "../use-app-state";
 import { useVoiceView } from "../use-voice-view";
-import { useAvatarView } from "./avatar-view";
 import { CallVideoTile, VideoToggle } from "./call-video-tile";
-import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the task it opens. */
 function returnLabel(taskName: string): string {
@@ -128,7 +124,7 @@ export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): Ca
  * own tile stands over the name while the avatar does, with its Video off
  * and no end of its own, and Video on stands beside the name once it is down.
  */
-function CallCard({
+export function CallCard({
   card,
   speakerMuted,
   controls,
@@ -260,30 +256,5 @@ export function ColumnFoot({
       <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
       {children}
     </div>
-  );
-}
-
-/**
- * The floating window's root: the card over the document it is handed. On
- * a video call it views the avatar's video from the panel, which runs the
- * avatar (`avatar-view.ts`), while its card draws the avatar live; main
- * grows the window to hold the tile on the same document.
- */
-export function CallWindowCard(): React.JSX.Element {
-  useKeyboardModality();
-  useStaleHoverAfterMove();
-  const { tell } = useAct();
-  const state = useAppState();
-  const { view } = useVoiceView();
-  const videoStatus = useCardVideoStatus();
-  const track = useAvatarView(videoStatus === AVATAR_STATUS.LIVE);
-  return (
-    <CallCard
-      card={callCard({ view, tasks: state?.tasks ?? IDLE_TASKS_VIEW })}
-      speakerMuted={view.speakerMuted}
-      controls={callControls(tell, view.speakerMuted)}
-      video={cardVideo(videoStatus, track, tell)}
-      surface={CALL_CARD_SURFACE.WINDOW}
-    />
   );
 }

@@ -101,16 +101,18 @@ export function AdminDashboard(): React.JSX.Element {
   // the screens below take the shell as a frame to apply themselves, only
   // around the answers that earn it. The content region is a div because the
   // `main` landmark belongs to whatever stands inside it — a page's own root
-  // or a centered card's — and each render path stands exactly one.
+  // or a centered card's — and each render path stands exactly one. The shell
+  // is the viewport's height because a page owns its own scroll; a centered
+  // card taller than what is left scrolls in the region instead.
   const shell = (tab: AdminTab, content: React.JSX.Element) => (
-    <div className="flex min-h-screen flex-col min-[720px]:flex-row">
+    <div className="flex h-dvh flex-col min-[720px]:flex-row">
       <AdminSidebar
         active={tab}
         collapsed={sidebarFolded}
         onToggle={toggleSidebar}
         onNavigate={navigate}
       />
-      <div className="min-w-0 flex-1">{content}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">{content}</div>
     </div>
   );
 

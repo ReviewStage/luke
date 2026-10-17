@@ -1,21 +1,28 @@
-/* error-state.css -- a failure among the rows: the fault's glyph in red,
-   the sentence in the muted ink of the words around it, and Retry beside it
-   or under its first word. Alone in a region it is `EmptyState`, and draws
+/* error-state.css -- a failure among the rows, laid out as a row: the
+   fault's glyph in red where a row's glyph stands, the sentence in the muted
+   ink of the words around it, and Retry at the row's end, its glyph alone
+   where the row is narrow. Alone in a region it is `EmptyState`, and draws
    nothing here. */
 
 @layer components {
+  /* Every part stands on the row's first line, a control tall, so the glyph,
+     the words, and Retry share one middle; a sentence too long for its room
+     wraps in its own column under its first line. The row is the container
+     its narrow look asks about, so it fills the width it is given. */
   .luke-error-state {
     display: flex;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     align-items: flex-start;
     gap: var(--luke-icon-gap);
     margin: 0;
     color: var(--luke-color-text-muted);
+    container: luke-error-state / inline-size;
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
   }
 
-  /* The glyph stands on the sentence's first line, which is a control tall,
-     at Retry's own glyph's size. */
   .luke-error-state-glyph {
     display: flex;
     height: var(--luke-control-height);
@@ -29,27 +36,31 @@
     height: var(--luke-control-icon);
   }
 
-  /* Retry keeps the words' line and goes onto the next, whole, where the
-     line has no room for it. */
-  .luke-error-state-body {
-    display: flex;
-    min-width: 0;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: var(--luke-space-8);
-  }
-
-  /* The sentence's own line is a control tall, whether Retry stands on it
-     or under it, so the glyph is centred on the words either way. */
+  /* The words' first line is centred in the control's height, as the glyph
+     and Retry are, and any line after it runs on below. */
   .luke-error-state-words {
-    display: flex;
-    min-height: var(--luke-control-height);
-    align-items: center;
+    min-width: 0;
+    flex: 1;
+    padding-block: calc((var(--luke-control-height) - var(--luke-type-caption-leading)) / 2);
   }
 
-  /* Retry is drawn back by its own inset, so its glyph stands a gap after
-     the words, or under their first letter where it wraps. */
-  .luke-error-state-body > .luke-button {
-    margin-inline-start: calc(-1 * var(--luke-control-inset));
+  /* Narrow, Retry is drawn as a glyph alone is (`IconButton`): a control's
+     square in the muted ink, its words kept for a reader and drawn nowhere. */
+  @container luke-error-state (max-width: 360px) {
+    .luke-error-state > .luke-button {
+      --luke-button-ink: var(--luke-color-text-muted);
+      width: var(--luke-control-height);
+      padding: 0;
+    }
+
+    .luke-error-state > .luke-button .luke-button-words {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
   }
 }

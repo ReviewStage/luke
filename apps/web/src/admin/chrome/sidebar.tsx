@@ -269,7 +269,7 @@ export function AdminSidebar({
       <nav
         aria-label="Admin sections"
         style={{ width: sidebarRailWidth(collapsed) }}
-        className="sticky top-0 hidden h-screen shrink-0 overflow-hidden border-r border-border bg-card transition-[width] duration-150 ease-out min-[720px]:flex motion-reduce:transition-none"
+        className="hidden h-full shrink-0 overflow-hidden border-r border-border bg-card transition-[width] duration-150 ease-out min-[720px]:flex motion-reduce:transition-none"
       >
         <div
           style={{ width: SIDEBAR_WIDTH.EXPANDED }}

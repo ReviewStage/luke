@@ -29,13 +29,15 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * where eve is a development server, the development principal. A coding
  * agent is started, messaged, and stopped by routes still holding the
  * developer's own bearer, which reach eve as that developer; what the
- * deployment does here is carry the two things the voice brain does for the
+ * deployment does here is carry the three things the voice brain does for the
  * developer in a planning call, and a coding agent does for the member who
  * started it (`agents/coding-agent-tools.ts`), since neither session holds
  * a bearer of the account's: a message it sends an
- * agent, admitted only on a session the named account's agent recorded, and
- * the opening that starts an agent, admitted only on a conversation the
- * named account owns, as every other caller is. The channel's policy for a message that
+ * agent, admitted only on a session the named account's agent recorded, the
+ * opening that starts an agent, admitted only on a conversation the named
+ * account owns, as every other caller is, and the cancel that stops the
+ * agent a continue took over from, admitted only on a session the named
+ * account reaches. The channel's policy for a message that
  * arrives while a turn is under way is `steer`: the message joins the turn
  * at its next step, and a model call still generating is cut short and run
  * again with it, because a message to a coding agent is the developer's
@@ -83,6 +85,14 @@ const UPLOAD_POLICY = {
  * principal; the opening is minted the same way, so the agent's session
  * runs as the developer whether the developer or Luke started it. A caller
  * of another role adds its row here and nowhere else.
+ * Note that the table holds no row for a cancel, and needs none: a cancel
+ * opens no turn, so the deployment's authenticator admits one on every
+ * channel without asking the table (`brain-host/auth.ts`), and here mints it
+ * as the account's own principal like the rest. What bounds it is the door's
+ * ownership check, which admits it only on a session a conversation the
+ * named account reaches recorded. It is how a continue the voice brain or a
+ * coding agent starts (`start_agent`'s `from`) stops the agent it took over
+ * from, as the developer's own Stop would (`coder-host/start.ts`).
  */
 export const CODER_DEPLOYMENT_TURNS = {
   [DEPLOYMENT_ACT.OPEN]: {
