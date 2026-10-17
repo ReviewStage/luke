@@ -57,6 +57,13 @@ export const CODING_AGENT_BOUNDS = {
   MAX_CHOICE_CHARS: 200,
   /** The most characters one message to an agent may spell, trimmed: room for a pasted failure and the words around it, well inside one model call. */
   MAX_MESSAGE_CHARS: 16_000,
+  /**
+   * The most characters a `start_agent` call's prompt may spell, trimmed, and its note apart:
+   * room for an orchestrator's brief to a worker on a long plan, quoted whole. Both together,
+   * with the headings around them, stay under a task's own bound (`TASK_BOUNDS.MAX_BODY_CHARS`),
+   * which a start on the plan already hands an agent whole as its first message.
+   */
+  MAX_START_WORDS_CHARS: 64_000,
   /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
   MAX_CALL_ID_CHARS: 128,
   /** The most spoken lines one planning turn names as its ask, and the most characters of one line's id, which the voice's ledger mints. */
