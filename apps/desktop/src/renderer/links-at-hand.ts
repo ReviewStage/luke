@@ -1,10 +1,10 @@
 import { LINK_PLACE, type LinkPlace, linkOf, type ReadLink } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { LINK_COPY, useCopyToast } from "./copy-feedback";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel";

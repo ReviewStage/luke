@@ -12,13 +12,15 @@ import "@luke/brand/motion-tokens.css";
 import "./catalog.css";
 
 /**
- * main.tsx -- the catalog's entry: the document takes the view's profile and
- * theme before the first render, as an app's root carries them in its markup,
- * then the page is drawn.
+ * main.tsx -- the catalog's entry: the document takes the view's profile,
+ * theme, and density before the first render, as an app's root carries them
+ * in its markup, then the page is drawn.
  */
 
 const view = readView(window.location.search);
-for (const [name, value] of Object.entries(surfaceAttributes(view.profile, view.theme))) {
+for (const [name, value] of Object.entries(
+  surfaceAttributes(view.profile, view.theme, view.density),
+)) {
   document.documentElement.setAttribute(name, value);
 }
 

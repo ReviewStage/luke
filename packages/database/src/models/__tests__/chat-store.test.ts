@@ -28,6 +28,7 @@ import {
   type ChatPost,
   channelNamed,
   channelOf,
+  channelReads,
   channelsOf,
   chatHead,
   chatPast,
@@ -1793,6 +1794,27 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         );
         const next = yield* room.posted(room.first, "Next.", { channelId: general.id });
         assert.deepEqual(yield* unread(general.id), [next.id]);
+      }),
+  );
+
+  it.effect(
+    "a member's own cursor in each channel it read is read back, and an account not in the workspace reads none",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
+        const posted = yield* room.posted(room.first, "For everyone.", { channelId: general.id });
+        assert.deepEqual(yield* channelReads(room.owner, room.workspace, room.second.id), []);
+        yield* readTo(room.owner, room.workspace, room.second.id, general.id, posted.seq);
+        assert.deepEqual(yield* channelReads(room.owner, room.workspace, room.second.id), [
+          { channelId: general.id, readSeq: posted.seq },
+        ]);
+        // Another member's cursors are its own.
+        assert.deepEqual(yield* channelReads(room.owner, room.workspace, room.ada.id), []);
+        assert.deepEqual(
+          yield* channelReads(yield* openAccount(), room.workspace, room.second.id),
+          [],
+        );
       }),
   );
 
