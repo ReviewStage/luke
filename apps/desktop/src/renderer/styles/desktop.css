@@ -7705,13 +7705,14 @@ button.automation-run:hover {
   border-radius: var(--control-radius);
 }
 
-/* Confirm dialog -------------------------------------------------------------- */
+/* Dialog parts ---------------------------------------------------------------- */
 
-/* An irreversible act asks the way every desktop app asks: the window dims
-   behind a centred card, which is `@luke/ui`'s shared dialog
-   (`luke-dialog`). Its body (the question, a list of choices, a note being
-   written) is the part that gives way and scrolls, so its title and its
-   answers stay on screen however short the window is. */
+/* The title, body, and answers of the window's dialogs not yet on
+   `@luke/ui`'s `ConfirmDialog` (New task, Send feedback, Move to
+   workspace), in `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a
+   list of choices, a note being written) is the part that gives way and
+   scrolls, so its title and its answers stay on screen however short the
+   window is. */
 .confirm-dialog-title {
   margin: 0;
   font-size: 15px;

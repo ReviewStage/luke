@@ -1,9 +1,14 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { ArchiveIcon, UnarchiveIcon } from "@luke/ui";
+import {
+  ArchiveIcon,
+  ConfirmDialog,
+  type DialogQuestion,
+  UnarchiveIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
-import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
 import { agentStillWriting, agentTabLabel } from "../tasks/coding-agent-model";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
