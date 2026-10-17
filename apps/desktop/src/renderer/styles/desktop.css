@@ -3115,9 +3115,10 @@ ul.actor-stack {
 /* A line over a version: what it is compared with, or why it is not drawn. */
 .version-note {
   margin-top: 0;
-  margin-bottom: var(--space-16);
-  color: var(--text-secondary);
-  font-size: 12.5px;
+  margin-bottom: var(--luke-space-16);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
 }
 
 /* A unit only one side holds is drawn whole: one written in on the green
@@ -6265,9 +6266,9 @@ button.automation-run:hover {
   display: flex;
   width: 100%;
   align-items: flex-start;
-  gap: var(--space-8);
-  padding: var(--space-8) var(--row-inset);
-  border-radius: 9px;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--row-inset);
+  border-radius: var(--luke-control-radius);
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
@@ -6277,11 +6278,11 @@ button.automation-run:hover {
    and no more than its hover does, so the chosen row keeps its stronger
    fill. */
 :where(.version-item:hover) > .version-row {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .version-row[aria-current="true"] {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 /* Who wrote the version, beside its two lines, as the rest of the window
@@ -6295,22 +6296,25 @@ button.automation-run:hover {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
 }
 
 .version-row-head {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
+/* Who wrote a version, in the label's type; when, and what it did, in the
+   caption's. */
 .version-row-author {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 600;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6319,9 +6323,10 @@ button.automation-run:hover {
   flex: none;
   min-width: var(--sidebar-plan-mark);
   margin-left: auto;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
+  line-height: var(--luke-type-caption-leading);
   text-align: right;
 }
 
@@ -6333,8 +6338,9 @@ button.automation-run:hover {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* A row's ⋯ stands in its time's place, which is always as wide as it, while
@@ -6348,12 +6354,11 @@ button.automation-run:hover {
 
 .version-row-actions {
   position: absolute;
-  top: var(--space-8);
+  top: var(--luke-space-8);
   right: var(--row-inset);
   display: flex;
-  height: 1lh;
+  height: var(--luke-type-label-leading);
   align-items: center;
-  font-size: 12.5px;
   opacity: 0;
 }
 
@@ -6412,7 +6417,7 @@ button.automation-run:hover {
 
 .version-sections-back {
   width: auto;
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--luke-space-8);
 }
 
 /* Who wrote the revision, on the one line over its sections: a row of its
@@ -6423,12 +6428,11 @@ button.automation-run:hover {
   min-width: 0;
   flex: none;
   align-items: center;
-  gap: var(--space-8);
-  margin: 0 0 var(--space-8);
-  padding: var(--space-6) var(--row-inset);
-  border-radius: 9px;
+  gap: var(--luke-space-8);
+  margin: 0 0 var(--luke-space-8);
+  padding: var(--luke-space-6) var(--row-inset);
+  border-radius: var(--luke-control-radius);
   background: none;
-  font-size: 12px;
   text-align: left;
   white-space: nowrap;
 }
@@ -6438,30 +6442,33 @@ button.automation-run:hover {
 }
 
 .version-sections-source:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
+/* A section a revision changed, its name in the label's type and the word
+   beside it in the caption's. */
 .version-section-row {
   display: flex;
   width: 100%;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--row-inset);
-  border-radius: 9px;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--row-inset);
+  border-radius: var(--luke-control-radius);
   background: none;
-  color: var(--text-primary);
-  font-size: 12.5px;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
 .version-section-row:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .version-section-row[aria-current="true"] {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .version-section-name {
@@ -6474,34 +6481,38 @@ button.automation-run:hover {
 .version-section-change {
   flex: none;
   margin-left: auto;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
+/* The list's foot, a row in the caption's type whose failure wraps under
+   its words rather than being cut short. */
 .version-earlier {
-  margin-top: var(--space-8);
-  padding: var(--space-8) var(--row-inset);
-  border-radius: 9px;
+  margin-top: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--row-inset);
+  border-radius: var(--luke-control-radius);
   background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-align: left;
 }
 
 .version-earlier:hover:not(:disabled) {
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 /* The page while a version is read (`version-view.tsx`): each section's
    heading a block in a heading's type over its lines in the body's, as far
    apart as the plan's own sections stand. */
 .version-skeleton-section + .version-skeleton-section {
-  margin-top: var(--space-24);
+  margin-top: var(--luke-space-24);
 }
 
 .version-skeleton-heading {
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--luke-space-8);
   font-size: 1.35em;
 }
 
@@ -6516,13 +6527,15 @@ button.automation-run:hover {
 .version-skeleton-row {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-8) var(--row-inset);
-  font-size: 12px;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-8) var(--row-inset);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .version-skeleton-author {
-  font-size: 12.5px;
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
 }
 
 /* No call bar stands below a version, so it needs no room under its last line. */

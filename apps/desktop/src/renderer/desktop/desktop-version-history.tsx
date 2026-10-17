@@ -6,7 +6,15 @@ import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import type { DialogConfirm } from "@luke/ui";
-import { BackIcon, EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
+import {
+  BackIcon,
+  EllipsisIcon,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  Skeleton,
+  SkeletonRegion,
+  useMenu,
+} from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
@@ -20,7 +28,6 @@ import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
 import { RetryRowLabel } from "../retry-button";
 import { Shortcut } from "../shortcut";
-import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
 import { centreWithin } from "../tasks/code-pane";
 import {
@@ -374,7 +381,9 @@ function LogSkeleton(): React.JSX.Element {
     <SkeletonRegion label="Reading the versions…">
       {LOG_SKELETON.map((row) => (
         <div key={row.author} className="version-skeleton-row">
-          <Skeleton width={row.author} className="version-skeleton-author" />
+          <div className="version-skeleton-author">
+            <Skeleton width={row.author} />
+          </div>
           <Skeleton width={row.summary} />
         </div>
       ))}
@@ -382,7 +391,12 @@ function LogSkeleton(): React.JSX.Element {
   );
 }
 
-/** The foot of the list while an older page stands: read on its press, and offered again after a read that failed. */
+/**
+ * The foot of the list while an older page stands: read on its press, and
+ * offered again after a read that failed. Note that it is a row rather than
+ * `@luke/ui`'s Button, because its failure and Retry run to two lines in a
+ * column the sidebar's width, which a control's one line would cut short.
+ */
 function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.Element {
   const [reading, setReading] = useState(false);
   const [failed, setFailed] = useState(false);
