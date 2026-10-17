@@ -1680,6 +1680,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("choices" in params ? { choices: params.choices } : undefined),
           ...("values" in params ? { values: params.values } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
+          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
