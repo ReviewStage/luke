@@ -188,3 +188,32 @@ test("a page with no title, banner, or footer draws only its main and its sectio
   expect(page.getByRole("contentinfo").all().length).toBe(0);
   expect(page.getByRole("main").element().textContent).toBe("Line 1Line 2");
 });
+
+test("a lead with no title still opens the page, above content that brings its own heading", async () => {
+  await mount(
+    createElement(PublicPage, {
+      lead: "Read how Luke came to be.",
+      children: createElement("h1", null, "About"),
+    }),
+    WEB,
+  );
+  const lead = page.getByText("Read how Luke came to be.");
+  await expect.element(lead).toBeVisible();
+  expect(box(heading("About", 1)).top).toBeGreaterThan(box(lead.element()).bottom);
+});
+
+test("a page that is a title alone closes as near under it as a page closes under its last section", async () => {
+  const end = (last: Element): number =>
+    box(page.getByRole("main").element()).bottom - box(last).bottom;
+  const titled = await mount(createElement(PublicPage, { title: "About" }), WEB);
+  const alone = end(heading("About", 1));
+  titled.container.remove();
+  await mount(
+    createElement(PublicPage, {
+      title: "About",
+      children: createElement(PublicSection, { children: "Who we are" }),
+    }),
+    WEB,
+  );
+  expect(Math.abs(alone - end(page.getByText("Who we are").element()))).toBeLessThanOrEqual(1);
+});

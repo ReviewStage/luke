@@ -71,10 +71,10 @@ export function PublicPage({
   /** What the page is, as its `h1`; a page whose content brings its own leaves it out. */
   title?: ReactNode;
   titleStyle?: PublicTitle;
-  /** A sentence or two under the title on what the page is for. */
+  /** A sentence or two under the title on what the page is for, or opening a page whose content brings its title. */
   lead?: ReactNode;
-  /** The page's sections, or the content of a page that is one. */
-  children: ReactNode;
+  /** The page's sections, or the content of a page that is one; a title alone may leave it out. */
+  children?: ReactNode;
 }): React.JSX.Element {
   return (
     <div className="luke-public-page">
@@ -84,15 +84,17 @@ export function PublicPage({
         </header>
       ) : null}
       <main className="luke-public-page-column luke-public-page-main">
-        {said(title) ? (
+        {said(title) || said(lead) ? (
           <div className="luke-public-page-intro">
-            <h1 className="luke-public-page-title" data-style={titleStyle}>
-              {title}
-            </h1>
+            {said(title) ? (
+              <h1 className="luke-public-page-title" data-style={titleStyle}>
+                {title}
+              </h1>
+            ) : null}
             {said(lead) ? <p className="luke-public-page-lead">{lead}</p> : null}
           </div>
         ) : null}
-        <div className="luke-public-page-sections">{children}</div>
+        {said(children) ? <div className="luke-public-page-sections">{children}</div> : null}
       </main>
       {said(footer) ? (
         <footer className="luke-public-page-footer">
