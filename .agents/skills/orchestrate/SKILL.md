@@ -161,10 +161,14 @@ reads it `failed` or still `running`. Post an inbox to-do (`post_to_inbox`
 with a `task` response) naming the worker's mention and PR and asking the
 user to Continue it in the app, then wait for it. Never start a replacement
 worker from scratch. Continue starts a new agent, named after the dead one
-with "(continued)", on its transcript and its work: find it with
-`list_agents`, message it the PR's url and branch to keep pushing to, and
-your agent id to report to, and track it in the dead worker's place. It
-takes over the same PR and opens none of its own.
+with "(continued)", on its transcript and with its work copied to a snapshot
+branch, and tells it to open a PR from that branch. So the to-do gives the
+user a note to send with Continue, which reaches the new agent before it
+acts: "Open no PR. Keep PR <url>: fetch `<pr-branch>`, carry your snapshot
+branch's commits past its tip onto it, push them to `<pr-branch>`, and work
+there from now on. Report to agent <your agent id>." Then find the new agent
+with `list_agents`, send it the same words if it has not taken them up, and
+track it in the dead worker's place, on `<pr-branch>`.
 
 ## Step 3: Restack
 
