@@ -14,6 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
@@ -47,6 +48,7 @@ function settingsOn(microphone: MicrophoneControl): SettingsPanelProps {
       onOpenSettings: ignore,
       onTest: ignore,
     },
+    capabilities: DESKTOP_CAPABILITIES,
     updates: {
       update: {
         status: UPDATE_STATUS.IDLE,
@@ -83,18 +85,17 @@ function microphoneAt(
 
 const roots: Root[] = [];
 
-/** Draws Settings on the Voice page and answers the container. */
-function draw(microphone: MicrophoneControl): HTMLElement {
+/** Draws Settings on the Voice page and answers the container, and how to draw it again at another answer. */
+function draw(microphone: MicrophoneControl) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(SettingsPanel, settingsOn(microphone))),
-    ),
-  );
-  return container;
+  const registry = AtomRegistry.make();
+  const redraw = (next: MicrophoneControl) =>
+    root.render(onRegistry(registry, createElement(SettingsPanel, settingsOn(next))));
+  act(() => redraw(microphone));
+  return { container, redraw };
 }
 
 function button(container: HTMLElement, name: string): HTMLButtonElement | undefined {
@@ -123,7 +124,7 @@ afterEach(() => {
 });
 
 test("while voice cannot run, the page says how to turn it on and offers nothing else", () => {
-  const container = draw(microphoneAt(MICROPHONE_STATUS.GRANTED, { voiceAvailable: false }));
+  const { container } = draw(microphoneAt(MICROPHONE_STATUS.GRANTED, { voiceAvailable: false }));
 
   assert.match(container.textContent ?? "", new RegExp(VOICE_KEYLESS_NOTE));
   assert.ok(!headings(container).includes("Permissions"));
@@ -131,22 +132,26 @@ test("while voice cannot run, the page says how to turn it on and offers nothing
   assert.equal(button(container, "Allow"), undefined);
 });
 
-test("before macOS has been asked, Allow requests the microphone and the controls wait", () => {
-  let requests = 0;
-  const container = draw(
-    microphoneAt(MICROPHONE_STATUS.NOT_DETERMINED, { onRequest: () => (requests += 1) }),
+test("before macOS has been asked, Allow asks, and the controls stand once macOS allows", () => {
+  // Note that the request stands in for macOS's prompt, which answers by
+  // handing the panel a granted microphone.
+  const { container, redraw } = draw(
+    microphoneAt(MICROPHONE_STATUS.NOT_DETERMINED, {
+      onRequest: () => redraw(microphoneAt(MICROPHONE_STATUS.GRANTED)),
+    }),
   );
+  assert.equal(button(container, "Open Privacy & Security in System Settings"), undefined);
+  assert.ok(!headings(container).includes("Conversation"));
 
   act(() => button(container, "Allow")?.click());
 
-  assert.equal(requests, 1);
-  assert.equal(button(container, "Open Privacy & Security in System Settings"), undefined);
-  assert.ok(!headings(container).includes("Conversation"));
+  assert.ok(headings(container).includes("Conversation"));
+  assert.equal(button(container, "Allow"), undefined);
 });
 
 test("once macOS refused, the row says where to allow it and opens System Settings", () => {
   let opened = 0;
-  const container = draw(
+  const { container } = draw(
     microphoneAt(MICROPHONE_STATUS.DENIED, { onOpenSettings: () => (opened += 1) }),
   );
 
@@ -162,7 +167,7 @@ test("once macOS refused, the row says where to allow it and opens System Settin
 });
 
 test("once the microphone is allowed, the conversation's controls stand under it", () => {
-  const container = draw(microphoneAt(MICROPHONE_STATUS.GRANTED));
+  const { container } = draw(microphoneAt(MICROPHONE_STATUS.GRANTED));
 
   assert.deepEqual(
     headings(container).filter((each) => each === "Permissions" || each === "Conversation"),

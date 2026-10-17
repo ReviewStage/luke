@@ -12,19 +12,24 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxMessagedView,
+  type CodingAgentInboxMessageParams,
   type CodingAgentListAnswer,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
+  INBOX_BOUNDS,
   INBOX_CURSOR_START,
   INBOX_FIELD,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
+  type InboxMessage,
 } from "@luke/features/inbox-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
@@ -32,6 +37,7 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -41,11 +47,12 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -56,6 +63,7 @@ import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
+import { appBridge } from "../app-bridge";
 import { runAppCommand, useAppKeymap } from "../app-commands";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
@@ -138,6 +146,7 @@ const READER = { userId: "user-reader", name: "Dana Reyes" };
 const RETRY: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-000000000002", "How is a failed email retried?", 5_000),
   status: INBOX_STATUS.ANSWERED,
+  settledAt: 5_000,
   answeredBy: READER,
   answer: {
     reply: INBOX_REPLY.CHOSE,
@@ -195,8 +204,8 @@ let pageAgents = new Map<string, CodingAgentSummary>();
 /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
 let imageReads: (() => void)[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -220,98 +229,88 @@ beforeEach(() => {
   listedWorkspace = undefined;
   automations = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   pageAgents = new Map();
   imageReads = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
-          Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
-          return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
-          const agent = pageAgents.get(request.payload.agentId);
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value:
-              agent === undefined
-                ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
-                : {
-                    agent: {
-                      id: agent.id,
-                      planId: null,
-                      model: agent.model,
-                      effort: agent.effort,
-                      title: agent.title,
-                      createdAt: agent.createdAt,
-                      status: agent.status,
-                      turnId: null,
-                      automationId: null,
-                      workspaceId: "workspace-acme",
-                      repository: "acme/relay",
-                    },
+  fakeAppBridge({
+    act: (request: Act) => {
+      const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
+        Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+        return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+        const agent = pageAgents.get(request.payload.agentId);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value:
+            agent === undefined
+              ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
+              : {
+                  agent: {
+                    id: agent.id,
+                    planId: null,
+                    model: agent.model,
+                    effort: agent.effort,
+                    title: agent.title,
+                    createdAt: agent.createdAt,
+                    status: agent.status,
+                    turnId: null,
+                    automationId: null,
+                    workspaceId: "workspace-acme",
+                    repository: "acme/relay",
                   },
-          });
-        }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        if (request.kind === ACT_KIND.TASKS_TREE) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: {
-              folder: {
-                path: "",
-                repository: "acme/relay",
-                branch: "main",
-                entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
-                truncated: false,
-              },
+                },
+        });
+      }
+      if (request.kind === ACT_KIND.TASKS_TREE) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            folder: {
+              path: "",
+              repository: "acme/relay",
+              branch: "main",
+              entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
+              truncated: false,
             },
-          });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+          },
+        });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+        return new Promise((resolve) =>
+          imageReads.push(() =>
+            resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+            }),
+          ),
+        );
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+        const { agentId, after } = request.payload;
+        if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
+        agentReads.push(agentId);
+        if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        const items = agentInboxes.get(agentId) ?? [];
+        const hold = holdAgentRead;
+        if (hold !== undefined) {
           return new Promise((resolve) =>
-            imageReads.push(() =>
-              resolve({
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
-              }),
-            ),
+            hold(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } })),
           );
         }
-        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-          const { agentId, after } = request.payload;
-          if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
-          agentReads.push(agentId);
-          if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-          const items = agentInboxes.get(agentId) ?? [];
-          const hold = holdAgentRead;
-          if (hold !== undefined) {
-            return new Promise((resolve) =>
-              hold(() =>
-                resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } }),
-              ),
-            );
-          }
-          return done({ items, cursor: "1" });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
-          const { taskId, after } = request.payload;
-          // A read past the cursor is held open while nothing changes, as the service holds it.
-          if (after !== INBOX_CURSOR_START) return heldRead(taskId);
-          return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        return done({ items, cursor: "1" });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
+        const { taskId, after } = request.payload;
+        // A read past the cursor is held open while nothing changes, as the service holds it.
+        if (after !== INBOX_CURSOR_START) return heldRead(taskId);
+        return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -510,7 +509,11 @@ test("a settled choice folds what its agent offered to one line saying who picke
       ["false", "Retry once", null],
     ],
   );
-  assert.equal(pane.querySelector(".composer-editor"), null, "a settled item takes no answer");
+  assert.equal(
+    pane.querySelector(".composer-editor")?.getAttribute("aria-label"),
+    "Message Alerts…",
+    "a settled item takes no answer, only a message on its thread",
+  );
   const reply = pane.querySelector<HTMLElement>('[data-inbox-comment="answered"]');
   assert.ok(reply, "the developer's answer is their own comment");
   assert.equal(reply.querySelector("[data-inbox-pick]")?.textContent, "Retry 3 times over an hour");
@@ -1445,7 +1448,7 @@ test("the chosen item keeps its place when its own plan folds, so J still reache
   act(() => keys.unmount());
 });
 
-test("a settled item offers, where its box stood, the next item that needs you, by its agent's tile and title and J where J reaches it, a press opening it; an item that waits offers none", async () => {
+test("a settled item offers, over its box, the next item that needs you, by its agent's tile and title and J where J reaches it, a press opening it; an item that waits offers none", async () => {
   const { page } = mount();
   await settle();
   const offered = () =>
@@ -1506,16 +1509,13 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
 /** Every answer the pane sends, written down and left unanswered, so the box stays as it was. */
 function heldAnswers(): CodingAgentInboxAnswerParams[] {
   const sent: CodingAgentInboxAnswerParams[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
-        sent.push(request.payload);
-        return new Promise(() => undefined);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
+      sent.push(request.payload);
+      return new Promise(() => undefined);
     },
   });
   return sent;
@@ -1675,20 +1675,17 @@ test("an answer file whose read failed says so under the files, and Retry reads 
   };
   inboxes = new Map([[BILLING.id, [answered]]]);
   let failing = true;
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: failing
-            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-            : { contentType: "application/pdf", base64: "JVBERg==" },
-        });
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: failing
+          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          : { contentType: "application/pdf", base64: "JVBERg==" },
+      });
     },
   });
   const { page } = mount();
@@ -1829,16 +1826,13 @@ test("what an item's box said of a dictation that failed stays with that item, a
       removeEventListener: () => undefined,
     }),
   });
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) =>
-        request.kind === ACT_KIND.MICROPHONE_REQUEST
-          ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
-          : bridge.act(request),
-    },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) =>
+      request.kind === ACT_KIND.MICROPHONE_REQUEST
+        ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
+        : bridge.act(request),
   });
   const { page } = mount();
   await settle();
@@ -1863,29 +1857,26 @@ test("what an item's box said of a dictation that failed stays with that item, a
 /** The repository's one skill read for the box, and every GitHub page a press opened, written down. */
 function skillReads(): string[] {
   const opened: string[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.TASKS_SKILLS) {
-          const release = {
-            name: "release",
-            description: "Use to cut a release.",
-            path: ".agents/skills/release/SKILL.md",
-          };
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
-          });
-        }
-        if (request.kind === ACT_KIND.GITHUB_OPEN) {
-          opened.push(request.payload.url);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        return bridge.act(request);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.TASKS_SKILLS) {
+        const release = {
+          name: "release",
+          description: "Use to cut a release.",
+          path: ".agents/skills/release/SKILL.md",
+        };
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
+        });
+      }
+      if (request.kind === ACT_KIND.GITHUB_OPEN) {
+        opened.push(request.payload.url);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
+      return bridge.act(request);
     },
   });
   return opened;
@@ -2043,23 +2034,20 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
   const { page } = mount();
   await settle();
   const listReads: Act[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
-          const asked = request.payload.itemId === noted.id ? noted : bare;
-          const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { item: answered, taken: true },
-          });
-        }
-        return bridge.act(request);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+        const asked = request.payload.itemId === noted.id ? noted : bare;
+        const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { item: answered, taken: true },
+        });
+      }
+      return bridge.act(request);
     },
   });
   const press = (name: string) =>
@@ -2719,4 +2707,318 @@ test("an item a link names under an agent nothing waits on any more, read before
   await settle();
 
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+});
+
+/** A teammate of the reader's, who writes on a thread. */
+const TEAMMATE = { userId: "user-teammate", name: "Charles Pan" };
+
+/** One message on a thread, by `author`, its words and when. */
+function threadMessage(
+  id: string,
+  author: { readonly member: typeof READER } | "agent",
+  text: string,
+  createdAt: number,
+): InboxMessage {
+  return author === "agent"
+    ? { id, author: INBOX_MESSAGE_AUTHOR.AGENT, text, createdAt }
+    : { id, author: INBOX_MESSAGE_AUTHOR.MEMBER, member: author.member, text, createdAt };
+}
+
+/** The shown item's thread as a reader meets it: each comment's kind, its writer's face, its writer by name, and a message's words. */
+function threadOf(page: HTMLElement): (string | null | undefined)[][] {
+  return [...itemPane(page).querySelectorAll<HTMLElement>(".inbox-thread > li")].map((entry) => [
+    entry.dataset.inboxComment ?? (entry.dataset.inboxEarlier === undefined ? "?" : "earlier"),
+    entry.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    wordsOf(entry.querySelector(".inbox-comment-name")),
+    wordsOf(entry.querySelector("[data-inbox-message-text]")),
+  ]);
+}
+
+/** Every message the pane sends, written down and answered by `answer`, the item as the service would hand it back by default. */
+function heldMessages(
+  answer: (params: CodingAgentInboxMessageParams) => CodingAgentInboxMessagedView,
+): CodingAgentInboxMessageParams[] {
+  const sent: CodingAgentInboxMessageParams[] = [];
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return bridge.act(request);
+      sent.push(request.payload);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request.payload) });
+    },
+  });
+  return sent;
+}
+
+/** The message as the service answers it: written on the thread by the reader, the item otherwise as it stood. */
+function writtenOn(item: InboxItem, id: string) {
+  return (params: CodingAgentInboxMessageParams): CodingAgentInboxMessagedView => ({
+    item: {
+      ...item,
+      updatedAt: 9_000,
+      messages: [
+        ...(item.messages ?? []),
+        {
+          ...threadMessage(id, { member: READER }, params.text, 9_000),
+          ...(params.attachments === undefined
+            ? undefined
+            : {
+                files: params.attachments.map((file, at) => ({
+                  attachmentId: `a1b2c3d4-0000-4000-8000-0000000000${String(70 + at)}`,
+                  name: file.name,
+                  mediaType: file.mediaType,
+                })),
+              }),
+        },
+      ],
+    },
+  });
+}
+
+test("a thread draws its messages after the question in the order they were written, the answer among them: a teammate's by their face and name, the reader's own as You, and the agent's by its tile and name, their mentions as chips", async () => {
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
+  const threaded: InboxItem = {
+    ...RETRY,
+    updatedAt: 5_300,
+    messages: [
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000001",
+        { member: TEAMMATE },
+        "Should it page at night too?",
+        4_500,
+      ),
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000002",
+        "agent",
+        "Only in business hours.",
+        5_100,
+      ),
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000003",
+        { member: READER },
+        `See ${file}`,
+        5_200,
+      ),
+    ],
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, threaded]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  assert.deepEqual(threadOf(page), [
+    ["asked", "agent", "Alerts", null],
+    ["message", "person", "Charles Pan", "Should it page at night too?"],
+    ["answered", "person", "You", null],
+    ["message", "agent", "Alerts", "Only in business hours."],
+    ["message", "person", "You", "See rollout-store.ts"],
+  ]);
+  const mine = itemPane(page).querySelectorAll('[data-inbox-comment="message"]')[2];
+  assert.equal(mine?.querySelector(".mention-chip")?.textContent, "rollout-store.ts");
+});
+
+test("a message written on a settled item's thread from its box goes as a message, never an answer, and lands on the thread in place, scrolled into view, the item still answered and the box emptied", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  const answers = heldAnswers();
+  const sent = heldMessages(writtenOn(RETRY, "c1b2c3d4-0000-4000-8000-000000000010"));
+  const pane = itemPane(page);
+  const board = pane.querySelector<HTMLElement>(".inbox-board") ?? assert.fail("the thread");
+  // The thread is taller than its board, so the new comment lands under its foot.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this === board) return DOMRect.fromRect({ y: 0, height: 400 });
+    if (this.matches("[data-message-id]")) return DOMRect.fromRect({ y: 900, height: 60 });
+    return DOMRect.fromRect();
+  });
+
+  typeInComposer(pane, "Page on-call at night too.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ itemId, text, attachments }) => ({ itemId, text, attachments })),
+    [{ itemId: RETRY.id, text: "Page on-call at night too.", attachments: undefined }],
+  );
+  assert.deepEqual(answers, [], "the item is not answered again");
+  assert.deepEqual(threadOf(page).at(-1), [
+    "message",
+    "person",
+    "You",
+    "Page on-call at night too.",
+  ]);
+  assert.deepEqual(subjectOf(page), ["How is a failed email retried?", "Answered", false]);
+  assert.equal(composerEditor(pane).textContent, "", "the box lets its words go");
+  assert.equal(board.scrollTop, 560, "the board scrolls its own new comment's foot into view");
+});
+
+test("a message refused says why under the box, which keeps its words, and leaves nothing on the thread", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED }));
+  const pane = itemPane(page);
+
+  typeInComposer(pane, "Page on-call at night too.");
+  act(() => pane.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  await settle();
+
+  assert.equal(
+    pane.querySelector('.agent-composer [role="alert"]')?.textContent,
+    "This task is archived. Unarchive it first.",
+  );
+  assert.equal(pane.querySelector('[data-inbox-comment="message"]'), null);
+  assert.equal(composerEditor(pane).textContent, "Page on-call at night too.");
+  assert.deepEqual(subjectOf(page), ["How is a failed email retried?", "Answered", false]);
+});
+
+test("files alone make a message: sent from a settled item's box with no words, and drawn on the thread as the files alone", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  const sent = heldMessages(writtenOn(RETRY, "c1b2c3d4-0000-4000-8000-000000000020"));
+  const pane = itemPane(page);
+  const send = () =>
+    pane.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ?? assert.fail("no Send");
+  assert.equal(send().disabled, true, "an empty box sends nothing");
+
+  await handFiles(page, [new File(["boom\n"], "trace.txt", { type: "text/plain" })], "pick");
+  act(() => send().click());
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text, attachments }) => ({ text, attachments })),
+    [
+      {
+        text: "",
+        attachments: [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }],
+      },
+    ],
+  );
+  const message =
+    pane.querySelector('[data-inbox-comment="message"]') ?? assert.fail("the message is drawn");
+  assert.deepEqual(attachedNames(message), ["trace.txt"]);
+  assert.equal(message.querySelector("[data-inbox-message-text]"), null, "no empty words");
+});
+
+test("an open item's box still answers it: its note goes as the answer and never as a message, and its thread's messages stand over it", async () => {
+  const waiting: InboxItem = {
+    ...THRESHOLD,
+    messages: [
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000030",
+        { member: TEAMMATE },
+        "Is 80% too eager?",
+        2_500,
+      ),
+    ],
+  };
+  inboxes = new Map([
+    [BILLING.id, [waiting, RETRY]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  const answers = heldAnswers();
+  const messages = heldMessages(writtenOn(waiting, "c1b2c3d4-0000-4000-8000-000000000031"));
+  const pane = itemPane(page);
+  assert.deepEqual(threadOf(page), [
+    ["asked", "agent", "Alerts", null],
+    ["message", "person", "Charles Pan", "Is 80% too eager?"],
+  ]);
+  assert.equal(
+    composerEditor(pane).getAttribute("aria-label"),
+    "Add a note, or answer in your own words",
+  );
+
+  typeInComposer(pane, "Use 90%");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    answers.map(({ itemId, reply, note }) => ({ itemId, reply, note })),
+    [{ itemId: THRESHOLD.id, reply: INBOX_REPLY.ANSWERED, note: "Use 90%" }],
+  );
+  assert.deepEqual(messages, []);
+});
+
+test("a thread read cut to its latest messages says the earlier ones are in the agent's tab, the agent's name opening it", async () => {
+  const long: InboxItem = {
+    ...RETRY,
+    messages: Array.from({ length: INBOX_BOUNDS.MAX_MESSAGES_READ }, (_, at) =>
+      threadMessage(
+        `d1b2c3d4-0000-4000-8000-${String(at).padStart(12, "0")}`,
+        { member: TEAMMATE },
+        `Note ${String(at)}`,
+        5_000 + at,
+      ),
+    ),
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, long]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page, asked } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  const earlier =
+    itemPane(page).querySelector<HTMLElement>("[data-inbox-earlier]") ??
+    assert.fail("the cut is said");
+  assert.equal(wordsOf(earlier), "Earlier messages are in Alerts’s tab");
+  assert.equal(threadOf(page)[1]?.[0], "earlier", "the line stands before the messages");
+  act(() => earlier.querySelector<HTMLButtonElement>("button")?.click());
+  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+});
+
+test("an answer left unsent on an item a teammate answers meanwhile is let go rather than becoming a message, and a message being written on a settled item outlasts the reads after it", async () => {
+  let deliver: (outcome: ReadOutcome) => void = () => undefined;
+  heldRead = () =>
+    new Promise((resolve) => {
+      deliver = resolve;
+    });
+  const { page } = mount();
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(readTitle(page), "Alert at 80%?");
+  typeInComposer(pane, "Use 90%");
+  await settle();
+
+  const answered: InboxItem = {
+    ...THRESHOLD,
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: TEAMMATE,
+    answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+    settledAt: 3_500,
+    updatedAt: 3_500,
+  };
+  act(() =>
+    deliver({ status: ACT_OUTCOME_STATUS.DONE, value: { items: [answered, RETRY], cursor: "2" } }),
+  );
+  await settle();
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Message Alerts…");
+  assert.equal(composerEditor(pane).textContent, "", "the unsent answer is not a message");
+
+  typeInComposer(pane, "Thanks, Charles.");
+  await settle();
+  act(() =>
+    deliver({ status: ACT_OUTCOME_STATUS.DONE, value: { items: [answered, RETRY], cursor: "3" } }),
+  );
+  await settle();
+  assert.equal(composerEditor(pane).textContent, "Thanks, Charles.");
 });
