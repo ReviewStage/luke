@@ -20,7 +20,9 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
@@ -100,9 +102,15 @@ export interface CodingAgentActsDependencies {
     codingAgentChanges(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentChangesAnswerView>;
-    codingAgentOverview(
+    codingAgentOverviewPullRequest(
       params: CodingAgentPullRequestParams,
-    ): Effect.Effect<CodingAgentOverviewAnswerView>;
+    ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+    codingAgentOverviewChecks(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
+    codingAgentOverviewConversation(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
     codingAgentGitHubImage(
       params: CodingAgentGitHubImageParams,
     ): Effect.Effect<CodingAgentGitHubImageView>;
@@ -169,7 +177,9 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_PAGE
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
   | typeof ACT_KIND.CODING_AGENTS_CHANGES
-  | typeof ACT_KIND.CODING_AGENTS_OVERVIEW
+  | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST
+  | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS
+  | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION
   | typeof ACT_KIND.CODING_AGENTS_GITHUB_IMAGE
   | typeof ACT_KIND.PROVIDER_KEYS_READ
   | typeof ACT_KIND.PROVIDER_KEYS_SAVE
@@ -304,9 +314,17 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHANGES, sender);
       return host.codingAgentChanges(params);
     },
-    [ACT_KIND.CODING_AGENTS_OVERVIEW]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW, sender);
-      return host.codingAgentOverview(params);
+    [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, sender);
+      return host.codingAgentOverviewPullRequest(params);
+    },
+    [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, sender);
+      return host.codingAgentOverviewChecks(params);
+    },
+    [ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION, sender);
+      return host.codingAgentOverviewConversation(params);
     },
     // Note that the image's answer, a failure among them, is the panel's to read, as an agent's picture's is.
     [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: (params, sender) => {

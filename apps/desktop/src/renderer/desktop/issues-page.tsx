@@ -11,6 +11,7 @@ import {
 import { useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { LinkWorkspaceProvider } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
@@ -120,10 +121,12 @@ function ListPage({
           </button>
         </div>
       </header>
-      {/* The board scrolls in Factory's own scroller, whose width stacks its columns on a narrow window. */}
+      {/* The board scrolls sideways in its own scroller, each column scrolling its cards; a failure is said in the list's. */}
       <div
         className={
-          onBoard ? "factory-scroll scroll-fade-top" : "automations-scroll scroll-fade-top"
+          onBoard && read !== undefined && "issues" in read
+            ? "issue-board-scroll"
+            : "automations-scroll scroll-fade-top"
         }
       >
         {read === undefined ? null : "failure" in read ? (
@@ -294,6 +297,16 @@ function DetailPage({
  * issue hands its row the keyboard.
  */
 export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
+  // Every Copy link on these pages is written under the listed workspace, whose issues they are.
+  return (
+    <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
+      <IssuesPages tasks={plans} />
+    </LinkWorkspaceProvider>
+  );
+}
+
+/** The Issues pages themselves, under the workspace their links are written in. */
+function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   const view = plans.issuesView;
   const workspace = plans.workspace;
   const issues = useIssues(workspace?.id);

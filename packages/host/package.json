@@ -1,6 +1,6 @@
 {
   "name": "@luke/host",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "The desktop's Node kernel: everything that executes, persists, schedules, or holds an account, reached only through the Gateway",

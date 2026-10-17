@@ -29,6 +29,7 @@ import {
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
   CODING_AGENT_WORKSPACE_QUERY,
+  type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
@@ -54,15 +55,26 @@ import {
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
 import { readEither } from "@luke/wire/effect";
-import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
+import { Cache, Clock, Effect, Layer, Option, type Redacted, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { githubImage } from "../github/github-images.js";
-import { changesPeople, namedOverview } from "../github/github-people.js";
+import {
+  changesPeople,
+  namedOverviewConversation,
+  namedOverviewPullRequest,
+} from "../github/github-people.js";
 import { githubReadOrRefusal } from "../github/github-refusal.js";
-import { pullRequestFiles, pullRequestOverview } from "../github/pull-requests.js";
+import {
+  type PullRequestReadFailure,
+  pullRequestChecks,
+  pullRequestConversation,
+  pullRequestDeployments,
+  pullRequestFiles,
+  pullRequestOverview,
+} from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -180,11 +192,14 @@ import {
  * The agent's changes (`GET /api/agents/{id}/changes`) are the files of
  * the pull request that answer names, read from GitHub afresh on each ask
  * (`github/pull-requests.ts`), each with its patch, or none where the
- * agent has opened none yet. Its overview (`GET /api/agents/{id}/overview`),
- * which its Pull request tab draws, is the same pull request's description,
- * branches, mergeability, checks one by one, reviewers, and conversation,
- * read afresh on each ask on the same terms, its words as GitHub renders
- * them. An image those words name (`GET /api/agents/{id}/github-image`) is
+ * agent has opened none yet. Its overview, which its Pull request tab
+ * draws, is read afresh on each ask on the same terms in three reads the
+ * tab asks for at once and draws as each lands: the pull request itself,
+ * its description, branches, mergeability, author, and the reviewers it
+ * asks for (`GET /api/agents/{id}/overview/pull-request`); its head's checks
+ * one by one and its deployments (`GET /api/agents/{id}/overview/checks`); and its conversation
+ * and where its reviewers stand (`GET /api/agents/{id}/overview/conversation`),
+ * its words as GitHub renders them. An image those words name (`GET /api/agents/{id}/github-image`) is
  * read on a token for the agent's repository too, an upload re-signed by its
  * asset's id (`github/github-images.ts`), and answered as bytes.
  * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
@@ -213,8 +228,12 @@ const AGENTS_PATH = {
   PULL_REQUEST: "/api/agents/pull-request",
   /** GET reads the agent's changes, its pull request's files; the rewrite moves the path's agent id into the `id` query. */
   CHANGES: "/api/agents/changes",
-  /** GET reads the agent's pull request's overview, as its Pull request tab draws it; the rewrite moves the path's agent id into the `id` query. */
-  OVERVIEW: "/api/agents/overview",
+  /** GET reads the agent's pull request itself, as its Pull request tab's overview draws it; the rewrite moves the path's agent id into the `id` query. */
+  OVERVIEW_PULL_REQUEST: "/api/agents/overview-pull-request",
+  /** GET reads the checks on the agent's pull request's head, as its overview draws them; the rewrite moves the path's agent id into the `id` query. */
+  OVERVIEW_CHECKS: "/api/agents/overview-checks",
+  /** GET reads the agent's pull request's conversation, as its overview draws it; the rewrite moves the path's agent id into the `id` query. */
+  OVERVIEW_CONVERSATION: "/api/agents/overview-conversation",
   /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
   GITHUB_IMAGE: "/api/agents/github-image",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
@@ -819,16 +838,23 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   });
 });
 
+/** One of the overview's reads of the agent's pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
+type OverviewRead<A> = (
+  token: Redacted.Redacted,
+  agent: CodingAgent,
+  pullRequest: CodingAgentPullRequest,
+) => Effect.Effect<A | null, PullRequestReadFailure, AgentsServices>;
+
 /**
- * GET reads the agent's pull request's overview: the pull request its kept
- * published answer names, read whole from GitHub afresh on a token minted
- * for the agent's repository, its people named against the workspace's
- * members (`github-people.ts`), with who its row says it writes as; none
- * where it names no pull request yet, or the repository no longer holds it.
+ * GET reads one part of the agent's pull request's overview: the pull
+ * request its kept published answer names, read from GitHub afresh on a
+ * token minted for the agent's repository; none where it names no pull
+ * request yet. Each part is a route of its own, so each lands on its own.
  */
-const overviewEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewEndpoint")(function* (
+const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   seams: CodingAgentsAppSeams,
   published: PublishedCache,
+  read: OverviewRead<A>,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET) {
@@ -838,10 +864,9 @@ const overviewEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewEndpoint")(
   const { userId, agent } = yield* reachedAgent(seams, request);
   const { pullRequest } = yield* keptPublished(published, userId, agent);
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
-  const overview = yield* Effect.gen(function* () {
+  const part = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
-    const read = yield* pullRequestOverview(token, agent.repository, pullRequest.number);
-    return Option.isNone(read) ? null : yield* namedOverview(agent, read.value);
+    return yield* read(token, agent, pullRequest);
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
@@ -856,7 +881,61 @@ const overviewEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewEndpoint")(
       }
     }),
   );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: overview });
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part });
+});
+
+/**
+ * GET reads the agent's pull request itself: its description, branches,
+ * mergeability, who opened it, and who it asks for a review, its people
+ * named against the workspace's members (`github-people.ts`), with who its
+ * row says it writes as; none where the repository no longer holds it.
+ */
+const overviewPullRequestEndpoint = /* @__PURE__ */ Effect.fn(
+  "web/agentOverviewPullRequestEndpoint",
+)(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
+  return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
+    Effect.flatMap(pullRequestOverview(token, agent.repository, pullRequest.number), (read) =>
+      Option.isNone(read) ? Effect.succeed(null) : namedOverviewPullRequest(agent, read.value),
+    ),
+  );
+});
+
+/**
+ * GET reads the checks on the agent's pull request's head, failures first,
+ * up to the bound, and its head's deployments beside them: three requests
+ * to GitHub at once whatever their number, the check runs, the commit
+ * statuses, and the deployments.
+ */
+const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewChecksEndpoint")(
+  function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
+    return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
+      Effect.map(
+        Effect.all(
+          [
+            pullRequestChecks(token, agent.repository, pullRequest.number),
+            pullRequestDeployments(token, agent.repository, pullRequest.number),
+          ],
+          { concurrency: "unbounded" },
+        ),
+        ([checks, deployments]) => ({ checks, deployments }),
+      ),
+    );
+  },
+);
+
+/**
+ * GET reads the agent's pull request's conversation: its comments, its
+ * reviews and their threads, and where each reviewer stands by their
+ * reviews, its people named against the workspace's members.
+ */
+const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
+  "web/agentOverviewConversationEndpoint",
+)(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
+  return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
+    Effect.flatMap(pullRequestConversation(token, agent.repository, pullRequest), (read) =>
+      namedOverviewConversation(agent, pullRequest.number, read),
+    ),
+  );
 });
 
 /**
@@ -1153,8 +1232,18 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
         ),
         HttpRouter.add(
           ANY_METHOD,
-          AGENTS_PATH.OVERVIEW,
-          hostedRefusing(overviewEndpoint(seams, published)),
+          AGENTS_PATH.OVERVIEW_PULL_REQUEST,
+          hostedRefusing(overviewPullRequestEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.OVERVIEW_CHECKS,
+          hostedRefusing(overviewChecksEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.OVERVIEW_CONVERSATION,
+          hostedRefusing(overviewConversationEndpoint(seams, published)),
         ),
         HttpRouter.add(
           ANY_METHOD,

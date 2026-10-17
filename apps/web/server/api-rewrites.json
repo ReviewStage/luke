@@ -148,8 +148,16 @@
     "dest": "/api/default.js?route=agents/changes&id=$1"
   },
   {
-    "src": "/api/agents/([^/]+)/overview",
-    "dest": "/api/default.js?route=agents/overview&id=$1"
+    "src": "/api/agents/([^/]+)/overview/pull-request",
+    "dest": "/api/default.js?route=agents/overview-pull-request&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/overview/checks",
+    "dest": "/api/default.js?route=agents/overview-checks&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/overview/conversation",
+    "dest": "/api/default.js?route=agents/overview-conversation&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/github-image",
