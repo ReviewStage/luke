@@ -3002,11 +3002,11 @@ button.pull-request-check:hover {
 }
 
 /* A box closed for good (`agent-composer.tsx`) wears the held look a box
-   sending does, faded and taking no press, so the note and Continue under
-   it read as the way on. */
+   sending does, faded, so the note and Continue under it read as the way
+   on. Note that it still takes a press, because its controls are disabled
+   one by one and its branch and changes chips still open what they name. */
 .agent-composer[data-closed] > form {
   opacity: 0.6;
-  pointer-events: none;
 }
 
 /* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
