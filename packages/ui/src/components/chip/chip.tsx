@@ -17,7 +17,7 @@ import { ChipFrame, type ChipFrameProps } from "./chip-frame.js";
  *   its words leading, so a picker and the buttons beside it read as one
  *   column.
  * - a filter, one of a row of pills that narrow a list to one kind (⌘K's
- *   All, Plans, Files), is a quiet capsule until it stands pressed
+ *   All, Tasks, Files), is a quiet capsule until it stands pressed
  *   (`aria-pressed`), when it fills inside the selection's hairline; its
  *   caller holds which one is pressed.
  *
