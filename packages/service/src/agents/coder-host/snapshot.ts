@@ -18,6 +18,10 @@
  * again once it is done, however it ended, unless a developer's terminal
  * holds it, a turn of the source began meanwhile, or another Start's copy
  * still holds it past this one's own hold; one already up stays as it was.
+ * That stop's calls to Vercel run on a fiber of its own, so the Start never
+ * waits on them, and one they never confirmed is stopped by the scheduled
+ * sweep once the copy's hold lapses. A copy that fails logs the tail of what
+ * it printed on stderr, credential-shaped runs redacted.
  * Files named the way credentials are kept are never copied. No copy is
  * made where the task moved to another repository since the source
  * started, since the new agent's checkout would not hold the branch. The
@@ -36,6 +40,7 @@ import { TURN_STATUS } from "@luke/wire";
 import { Clock, Duration, Effect, Option, type Redacted, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
+import { redactCredentials } from "../brain-host/relay.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
 import { githubTokenPolicy } from "../terminal/agent-sandbox.js";
 import {
@@ -52,8 +57,10 @@ export const SNAPSHOT = {
   TIMEOUT: Duration.seconds(30),
   /** How often a woken sandbox is asked whether it is up yet. */
   WAKE_POLL: Duration.seconds(1),
-  /** The most the stop of a woken sandbox is waited on, once the copy is done or given up. */
+  /** The most the background stop of a woken sandbox runs, once the copy is done or given up. */
   STOP_TIMEOUT: Duration.seconds(10),
+  /** How many characters of a failed copy's stderr are logged, from its end. */
+  STDERR_TAIL: 600,
 } as const;
 
 /** Why the source's work was not copied: the Start already made its agent, the task moved repository since the source started, the source never opened a sandbox, the copy failed, or it ran past its bound. */
@@ -150,6 +157,19 @@ function runningSession(sandbox: ListedSandbox | undefined): string | undefined 
   return sandbox?.status === "running" ? sandbox.currentSessionId : undefined;
 }
 
+/**
+ * The end of a failed copy's stderr as a log line takes it: credential-shaped
+ * runs redacted and its lines joined into one, then its last `STDERR_TAIL`
+ * characters kept. Note that the redaction comes before the cut, so a cut
+ * never leaves the tail of a credential standing.
+ */
+function stderrTail(stderr: string): string {
+  const line = redactCredentials(stderr)
+    .trim()
+    .replace(/\s*\n\s*/gu, " / ");
+  return line.slice(-SNAPSHOT.STDERR_TAIL);
+}
+
 /** The sandbox's running session, waiting for one woken to come up. */
 const upSession = (api: VercelSandboxApi, sessionId: string, name: string) =>
   Effect.gen(function* () {
@@ -165,28 +185,43 @@ const upSession = (api: VercelSandboxApi, sessionId: string, name: string) =>
     return runningSession(listed[0]) as string;
   });
 
+/** A woken sandbox's stop failing, logged and let go, since the copy's outcome stands whatever the stop came to. */
+const stopMissed = (why: string) =>
+  Effect.logWarning(`a woken source sandbox was not stopped again: ${why}`);
+
 /**
- * Every sandbox of the session that is up, stopped, unless it must stay up;
- * its own failures logged and let go, since the copy's outcome stands
- * whatever the stop came to. It lists the sandbox again rather than trusting
- * a session it was handed, so a wake interrupted before it answered is
- * stopped too.
+ * Every sandbox of the session that is up, stopped, within the stop's bound.
+ * It lists the sandbox again rather than trusting a session it was handed,
+ * so a wake interrupted before it answered is stopped too.
  */
-const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
+const stopUp = (api: VercelSandboxApi, sessionId: string) =>
   Effect.gen(function* () {
-    if (yield* ask.keepUp) return;
-    for (const sandbox of yield* api.listTagged(ask.sessionId)) {
+    for (const sandbox of yield* api.listTagged(sessionId)) {
       if (sandbox.currentSessionId === undefined || !UP_STATUSES.has(sandbox.status ?? "")) {
         continue;
       }
       yield* api.stopSession(sandbox.currentSessionId);
     }
   }).pipe(
+    Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
+    Effect.catch((failure) => stopMissed(String(failure))),
+  );
+
+/**
+ * The sandbox this step woke stopped again, unless it must stay up. Whether
+ * it stays up is read here, and the stop itself, Vercel's list and stop, is
+ * forked detached, so it outlives the Start's own fiber and the Start never
+ * waits on it; one it never confirms is the sweep's once the copy's hold
+ * lapses.
+ */
+const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
+  Effect.gen(function* () {
+    if (yield* ask.keepUp) return;
+    yield* Effect.forkDetach(stopUp(api, ask.sessionId));
+  }).pipe(
     Effect.interruptible,
     Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
-    Effect.catch((failure) =>
-      Effect.logWarning(`a woken source sandbox was not stopped again: ${String(failure)}`),
-    ),
+    Effect.catch((failure) => stopMissed(String(failure))),
   );
 
 /** The copy inside the scope a woken sandbox's stop is registered on. */
@@ -208,7 +243,9 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     });
     const printed = ran.exitCode === 0 ? printedCommits(ran.stdout) : undefined;
     if (printed === undefined) {
-      yield* Effect.logWarning(`the source's work was not copied: the copy exited ${ran.exitCode}`);
+      yield* Effect.logWarning(
+        `the source's work was not copied: the copy exited ${ran.exitCode}: ${stderrTail(ran.stderr)}`,
+      );
       return { copied: false, miss: SNAPSHOT_MISS.FAILED } as const;
     }
     return {
