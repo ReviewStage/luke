@@ -148,8 +148,7 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await act(async () => buttonNamed(page, "Accept invitation").click());
   expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true");
 
-  // Note that accepting makes Better Auth read the session again on a timer,
-  // after which the route answers spent, so the clock moves past that.
+  // Note that accepting rereads the session on a timer, after which the route answers spent.
   offer = offerRead({ refused: INVITATION_OFFER_REFUSAL.SPENT });
   await act(async () => settleAccept({ status: 200, body: { invitation: {}, member: {} } }));
   await act(async () => vi.advanceTimersByTimeAsync(SESSION_REREAD_DELAY_MS));
