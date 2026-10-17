@@ -5686,6 +5686,20 @@ button.picture-frame {
   white-space: pre-wrap;
 }
 
+/* A comment drawn as Markdown: its blocks close together, as a short
+   message's are, rather than with a page's breaks between them. */
+.comment-words.markdown {
+  white-space: normal;
+}
+
+.comment-words.markdown :is(p, ul, ol, pre, blockquote) {
+  margin: 0;
+}
+
+.comment-words.markdown > * + * {
+  margin-top: var(--space-6);
+}
+
 .comment-words[data-clamped="true"] {
   display: -webkit-box;
   overflow: hidden;
@@ -5833,6 +5847,17 @@ button.picture-frame {
 
 .comment-text::placeholder {
   color: var(--text-secondary);
+}
+
+/* The agent box's editor as a comment's field: its placeholder and its
+   paragraphs at the comment field's padding and type. */
+.comment-field .agent-composer-placeholder {
+  padding: var(--space-8) var(--space-8) 0;
+  font-size: 13px;
+}
+
+.comment-composer p {
+  margin: 0;
 }
 
 .comment-field-foot {

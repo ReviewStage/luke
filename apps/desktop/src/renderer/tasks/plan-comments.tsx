@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import { textChange } from "@luke/features/plan-comment-anchor";
@@ -33,6 +34,7 @@ import {
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
 } from "@luke/ui/plan-comments";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   ArrowUpIcon,
   CheckIcon,
@@ -59,13 +61,28 @@ import {
 import { ActorLine, ActorMark, ActorRef } from "../actor-ref";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
+import { editorBundleAtom } from "../editor-bundle";
+import { MarkdownMessage } from "../markdown-message";
 import { usePerson } from "../member-directory";
-import type { EditorSpan, PlanEditorHandle } from "../plan-editor/contract";
+import {
+  COMPOSER_INPUT,
+  type ComposerEditorHandle,
+  type EditorSpan,
+  type PlanEditorHandle,
+  type PlanEditorModule,
+} from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref";
+import { ComposerField } from "./composer-field";
 import type { EditAgents } from "./edit-ref";
+import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
+import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
+import { type PlanMentionsValue, useMentionLink, usePlanMentions } from "./plan-mentions";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
+import { plainWords } from "./tool-call-model";
+import { useKnownNames } from "./use-known-names";
+import { useOpenLink } from "./use-open-link";
 
 /**
  * plan-comments.tsx -- comments on the open plan, beside its words: each open thread in the margin level with the words it is on, or behind a count at the line's end where the column has no room for a margin, a thread started from words selected or from a block's own button, and each thread answered, resolved, reopened, edited, and deleted where it stands.
@@ -370,7 +387,7 @@ function CommentEntry({
         </span>
       </div>
       {editing === undefined ? (
-        <div className="comment-words">{entry.words}</div>
+        <CommentWords words={entry.words ?? ""} />
       ) : (
         <div className="comment-field comment-editing">
           <CommentText
@@ -435,26 +452,128 @@ function CommentEntry({
   );
 }
 
-/**
- * A comment's words as they are typed: Return sends, Shift-Return breaks the
- * line, and Esc lets the field go. A plain field, so the field's own undo
- * and redo change its words and never the plan's.
- */
-function CommentText({
+/** A comment's words as Markdown, its mentions drawn as their chips, as a message's are. */
+function CommentWords({ words }: { words: string }): React.JSX.Element {
+  const link = useMentionLink();
+  const openLink = useOpenLink();
+  return (
+    <MarkdownMessage
+      words={words}
+      className="comment-words markdown"
+      link={link}
+      openLink={openLink}
+    />
+  );
+}
+
+/** A comment's field: the agent box's editor, where its bundle has loaded and the page offers mentions, with `@` picking them; a plain field otherwise. Return posts, Shift-Return breaks the line, Escape cancels. */
+function CommentText(props: CommentTextProps): React.JSX.Element {
+  const bundle = useAtomValue(editorBundleAtom);
+  const mentions = usePlanMentions();
+  // Note that a bundle that never loads leaves the plain field, so a comment can always be written.
+  if (AsyncResult.isFailure(bundle) || mentions === undefined)
+    return <PlainCommentText {...props} />;
+  return (
+    <MentionCommentText
+      {...props}
+      module={AsyncResult.isSuccess(bundle) ? bundle.value : undefined}
+      mentions={mentions}
+    />
+  );
+}
+
+interface CommentTextProps {
+  readonly value: string;
+  readonly label: string;
+  readonly onChange: (value: string) => void;
+  readonly onSubmit: () => void;
+  readonly onCancel: () => void;
+  readonly autoFocus?: boolean;
+}
+
+/** The comment's field on the agent box's editor: mentions as chips, written as their links. */
+function MentionCommentText({
   value,
   label,
   onChange,
   onSubmit,
   onCancel,
   autoFocus = false,
-}: {
-  value: string;
-  label: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-  autoFocus?: boolean;
+  module,
+  mentions,
+}: CommentTextProps & {
+  module: PlanEditorModule | undefined;
+  mentions: PlanMentionsValue;
 }): React.JSX.Element {
+  const editor = useRef<ComposerEditorHandle | undefined>(undefined);
+  const room = useRef<HTMLDivElement>(null);
+  const known = useKnownNames();
+  const picker = useMentionPicker({
+    source: mentions,
+    room,
+    // Note that the list rises over the card, since the cards under it in the margin would stand over it.
+    side: MENTION_MENU_SIDE.ABOVE,
+    onChoose: (mention) => editor.current?.chooseMention(mention),
+  });
+  return (
+    <ComposerField
+      module={module}
+      editor={editor}
+      room={room}
+      draft={value}
+      setDraft={onChange}
+      placeholder={label}
+      label={label}
+      // Note that the box's own padding and type give way to the comment field's, as twMerge keeps the last.
+      className="comment-composer px-2 pt-2 pb-0.5 text-[13px] min-h-[36px] max-h-[calc(8*1.45em+10px)]"
+      input={COMPOSER_INPUT.EDITABLE}
+      maxLength={PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS}
+      skills={NO_SKILLS}
+      aria={{ "aria-placeholder": label }}
+      onKey={(event) => {
+        if (picker.onKey(event)) return true;
+        if (event.key !== "Escape") return false;
+        event.preventDefault();
+        onCancel();
+        return true;
+      }}
+      onEnter={onSubmit}
+      onPasteFiles={() => false}
+      onTrigger={() => undefined}
+      chip={() => null}
+      mentions={{
+        onTrigger: picker.onTrigger,
+        chip: (mention) => <MentionNodeChip mention={mention} doors={mentions.doors} />,
+        pasted: (words) =>
+          pastedMentionNode(words, mentions.doors.place, {
+            known,
+            planId: mentions.taskId,
+            text: mentions.text,
+          }),
+      }}
+      focus={autoFocus}
+    >
+      {picker.menu}
+    </ComposerField>
+  );
+}
+
+/** A comment takes no skills, which are an agent's. */
+const NO_SKILLS: ReadonlySet<string> = new Set();
+
+/**
+ * A comment's words as they are typed: Return sends, Shift-Return breaks the
+ * line, and Esc lets the field go. A plain field, so the field's own undo
+ * and redo change its words and never the plan's.
+ */
+function PlainCommentText({
+  value,
+  label,
+  onChange,
+  onSubmit,
+  onCancel,
+  autoFocus = false,
+}: CommentTextProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const element = field.current;
@@ -711,7 +830,7 @@ function ThreadCard({
         {/* Note that the words and the replies are one press that opens the thread, the writer's name its own. */}
         <button type="button" className="comment-open">
           <span className="comment-words" data-clamped="true">
-            {first?.words}
+            {plainWords(first?.words ?? "")}
           </span>
           {replies.length === 0 ? null : (
             <span className="comment-replies">
