@@ -9,7 +9,6 @@ import {
   type CodingAgentPullRequest,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   CopyIcon,
@@ -30,7 +29,7 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act";
+import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -355,7 +354,6 @@ export function AgentChangesTab({
   /** Whether the tree beside File and Changes tabs is open, and its toggle. */
   tree: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
-  const { tell } = useAct();
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
@@ -424,7 +422,7 @@ export function AgentChangesTab({
               : { repository, listFolder: changed.folders, onOpen: choose },
         }}
         beside={<ChangeBeside file={shownFile} />}
-        onGitHub={() => tell(ACT_KIND.GITHUB_OPEN, { url: `${pullRequest.url}/files` })}
+        onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
         menu={
           <>
             <DiffSettingsButton roomy={roomy} />

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { Skeleton, SkeletonRegion } from "./skeleton.js";
+import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "./skeleton.js";
 
 /**
  * skeleton.test.ts -- a placeholder region tells a reader what it is
@@ -39,6 +39,7 @@ test("a region says what it is reading, busy, and its blocks say nothing", () =>
       children: [
         createElement(Skeleton, { key: "a", width: "60%" }),
         createElement(Skeleton, { key: "b" }),
+        createElement(Skeleton, { key: "c", shape: SKELETON_SHAPE.BLOCK }),
       ],
     }),
   );

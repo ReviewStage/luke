@@ -15,6 +15,7 @@ import {
   type AvatarStopReason,
 } from "@luke/features";
 import type { ACT_KIND, ActPayload } from "@luke/host/acts";
+import type { AppStateStore } from "@luke/host/client";
 import type { HostAvatar } from "@luke/host/effect";
 import {
   AVATAR_END_REASON,
@@ -30,7 +31,6 @@ import {
   type LiveAvatarState,
 } from "@luke/voice/live-session";
 import { Effect, type Scope, Stream } from "effect";
-import type { AppStateStore } from "../app-state";
 import type { PanelManager } from "../window/panel-manager";
 
 /** The avatar as the panel reports it. */
