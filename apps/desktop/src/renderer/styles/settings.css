@@ -56,6 +56,14 @@
   border-top: 0;
 }
 
+/* Settings › Coding agents › Default model: a refusal of any of its rows
+   stands under them all, inside the last row's rule. */
+.luke-settings-section-card > .luke-settings-row + .error-message {
+  margin-top: calc(-1 * var(--luke-space-4));
+  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
+  border-top: 0;
+}
+
 /* Sized to the heading it labels rather than to a grid: the glyph is a letter
    in the line, not an element beside it. */
 .settings-icon {
