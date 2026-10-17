@@ -322,7 +322,7 @@ test("with nothing waiting, the home's Inbox says so in the Inbox's own words, a
   await settle();
 
   const section = page.querySelector('section[aria-labelledby="home-inbox"]');
-  const note = section?.querySelector(".sidebar-note");
+  const note = section?.querySelector("p");
   assert.equal(note?.textContent, "Nothing needs you");
   assert.equal(section?.querySelector("svg"), null);
 });

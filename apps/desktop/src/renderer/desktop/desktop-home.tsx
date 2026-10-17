@@ -1,6 +1,16 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
-import { ErrorState, FolderIcon, WingFace } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ErrorState,
+  FolderIcon,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  WingFace,
+} from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -67,16 +77,15 @@ function recentTasks(plans: readonly TaskSummary[]): TaskSummary[] {
 /** New task, with its chord: the home page's, and the empty Factory's (`desktop-factory.tsx`). */
 function NewTaskButton({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="primary-button"
+    <Button
+      variant={BUTTON_VARIANT.PRIMARY}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
       disabled={!plans.signedIn}
       onClick={plans.onNewTask}
     >
       New task
       <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} />
-    </button>
+    </Button>
   );
 }
 
@@ -177,13 +186,15 @@ function HomeInbox({
         </ul>
       )}
       {waiting.failed ? (
-        <div className="sidebar-note">
+        <div className="home-note">
           <ErrorState onRetry={waiting.onRetry}>Some items could not be read.</ErrorState>
         </div>
       ) : empty && waiting.reading ? (
         <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
       ) : empty ? (
-        <p className="sidebar-note">{NEEDS_YOU.NONE}</p>
+        <div className="home-note">
+          <Text tone={TEXT_TONE.MUTED}>{NEEDS_YOU.NONE}</Text>
+        </div>
       ) : null}
     </section>
   );
@@ -205,7 +216,7 @@ function HomeRecent({
         Recent
       </h2>
       {plans.listFailed ? (
-        <div className="sidebar-note">
+        <div className="home-note">
           <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
         </div>
       ) : null}
@@ -233,7 +244,9 @@ function Welcome({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       <span className="home-welcome-face" aria-hidden="true">
         <WingFace />
       </span>
-      <h1 className="home-title">Start your first task</h1>
+      <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
+        Start your first task
+      </Text>
       <NewTaskButton tasks={tasks} />
     </section>
   );
@@ -265,7 +278,9 @@ export function DesktopHome({
       <div className="home-scroll scroll-fade-top">
         <div className="home-column" ref={setColumn}>
           <header className="home-head">
-            <h1 className="home-title">{greeting(accountName)}</h1>
+            <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
+              {greeting(accountName)}
+            </Text>
             <NewTaskButton tasks={tasks} />
           </header>
           <HomeInbox tasks={tasks} now={now} />
