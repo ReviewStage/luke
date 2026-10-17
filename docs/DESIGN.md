@@ -13,8 +13,9 @@ way to pass that review is to build from them.
 One spring drives everything that needs to travel: `--spring`, and
 `--spring-fast` (the same damping ratio at a higher frequency) for what is
 small or arrives over the window: a switch's thumb, and a menu, tooltip,
-dialog, palette, or toast rising into place. Settings pages change at once; task navigation
-does not travel. The window's panes are the one exception to the spring: the
+dialog, palette, or toast rising into place. Settings pages change at once;
+task navigation does not travel. The window's panes are the one exception to
+the spring: the
 sidebar and the side panel open, close, and fill the window on `--motion-pane`
 over `--duration-pane`, a plain ease-out, because a pane stands on the
 window's own edge and a spring's overshoot would part the two for a frame.
@@ -81,10 +82,11 @@ a list that arrives together by `--row-stagger` per step.
 ## Proving it
 
 A motion change is verified, not eyeballed: drive the real app and sample the
-moving edges over time in a headless run with CDP sampling. `scripts/evidence.sh`
-cannot stand in for that: it captures still frames of the fixture with every
-duration zeroed, so it shows where a motion lands, never the motion. The claim to check is always the
-same: nothing that holds text changes size mid-motion, and each move runs as
+moving edges over time in a headless run with CDP sampling.
+`scripts/evidence.sh` cannot stand in for that: it captures still frames of
+the fixture with every duration zeroed, so it shows where a motion lands,
+never the motion. The claim to check is always the same: nothing that holds
+text changes size mid-motion, and each move runs as
 one transition. Chromium serializes `inset()` with collapsed components;
 parse computed clip-paths accordingly before trusting a sample.
 
@@ -110,7 +112,8 @@ a dialog's corner, a type role's size and leading, and each profile sets every
 role its own way. A palette (`palettes.css`) names each colour by its role,
 for each profile in each theme. A component reads roles and the palette, never
 a base value at its call site, so it moves with its profile. Both profiles set
-the same roles and every palette the same names; `tokens.test.ts` holds them to it.
+the same roles and every palette the same names; `tokens.test.ts` holds them
+to it.
 Each app's older names (`--space-8`, `--control-height`, `--text-primary`,
 `--hairline`, …) are aliases of the roles under that app's profile
 (`legacy.css`), kept until nothing reads them; the desktop's and the site's
@@ -222,14 +225,16 @@ marks it `/* no ring: … */` with what shows focus instead; menus mark a row
 with its fill. An unmarked one is a bug, and so is a ring drawn off the tokens.
 
 Every menu and popover is one surface, from the menu tokens: the desktop
-profile's menu roles, and `--menu-glyph` and `--menu-shadow` in `desktop.css`'s
-`:root`. It is the `--surface-popover` ground in a `--hairline-strong` edge, the
-`--menu-radius` corner and `--menu-shadow` under it, its items `--menu-inset`
+profile's menu roles, and `--menu-glyph` and `--menu-shadow` in
+`desktop.css`'s `:root`. It is the `--surface-popover` ground in a
+`--hairline-strong` edge, the `--menu-radius` corner and `--menu-shadow`
+under it, its items `--menu-inset`
 from its edge, each row `--menu-row-height` tall with a `--menu-row-radius`
 highlight and a `--menu-glyph` glyph. The corner is the row's corner plus the
 inset, so a highlighted row follows the menu's curve; the profile sets the
-three as plain values, so a change to one is a change to the others. A plan's menu, a picker,
-a submenu, a crumb's tree, the find bar, a tooltip card, and the context
+three as plain values, so changing one means changing the others to match. A
+plan's menu, a picker, a submenu, a crumb's tree, the find bar, a tooltip
+card, and the context
 popover all draw it, and none of them may
 spend its own corner, shadow, ground, or row. The command palette is a
 dialog rather than a menu, so it keeps a dialog's 14px corner and deeper
@@ -259,10 +264,10 @@ that is enforced, and says why.
 ## Copy: delete what describes, keep what instructs
 
 A line of text earns its place on the surface only by saying something its
-control cannot. This is "Trivial comments are the enemy" (`docs/STYLE.md`) pointed at the
-screen: never narrate. A subtitle restating the toggle above it repeats what
-the reader can already see, and costs them the reading every time the page
-opens rather than once.
+control cannot. This is "Trivial comments are the enemy" (`docs/STYLE.md`)
+pointed at the screen: never narrate. A subtitle restating the toggle above
+it repeats what the reader can already see, and costs them the reading every
+time the page opens rather than once.
 
 Three categories, and only the first is ever cut:
 
