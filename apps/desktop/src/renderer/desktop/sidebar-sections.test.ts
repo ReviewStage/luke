@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
+  TASK_SECTION_ICON_COLOR,
   TASK_SECTION_ICON_KIND,
   TASK_SECTION_WRITE,
   type TaskSections,
@@ -30,8 +31,10 @@ import { DesktopSidebar } from "./desktop-sidebar";
  * drawn only while their experiment is on, each over the tasks kept in it,
  * which Tasks then leaves out, and reached from a task's menu, whose Move
  * to section writes the move and whose section's Delete asks first; and
- * a task dragged between Pinned, Tasks, and a section, pinned, unpinned, and
- * moved where it is let go while the experiment is on. Synthetic throughout.
+ * the dialog's icon picker, every Lucide glyph in a color and every emoji,
+ * found by one search; and a task dragged between Pinned, Tasks, and a
+ * section, pinned, unpinned, and moved where it is let go while the
+ * experiment is on. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -116,6 +119,58 @@ async function settle(): Promise<void> {
   });
 }
 
+const STARS = "0a1b2c3d-0000-4000-8000-000000000003";
+const LOST = "0a1b2c3d-0000-4000-8000-000000000004";
+
+/** Launch, Stars in a teal telescope, a glyph only Lucide whole draws, and Lost, in a glyph no Lucide knows. */
+const GLYPHS: TaskSections = {
+  sections: [
+    ...SECTIONS.sections,
+    {
+      id: STARS,
+      workspaceId: WORKSPACE.id,
+      title: "Stars",
+      icon: {
+        kind: TASK_SECTION_ICON_KIND.GLYPH,
+        glyph: "telescope",
+        color: TASK_SECTION_ICON_COLOR.TEAL,
+      },
+      createdAt: 2,
+    },
+    {
+      id: LOST,
+      workspaceId: WORKSPACE.id,
+      title: "Lost",
+      icon: { kind: TASK_SECTION_ICON_KIND.GLYPH, glyph: "no-such-glyph" },
+      createdAt: 3,
+    },
+  ],
+  entries: SECTIONS.entries,
+};
+
+/** Lets what the sidebar and the picker load on demand land: Lucide whole, and the emoji. */
+async function settleLoaded(): Promise<void> {
+  await act(async () => {
+    await Promise.all([import("lucide-react"), import("unicode-emoji-json/data-by-group.json")]);
+  });
+  await settle();
+}
+
+/** Types `words` into a field, as a person would. */
+function typeInto(field: HTMLInputElement, words: string): void {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The dialog's field labelled `label`, failing where none is drawn. */
+function dialogField(label: string): HTMLInputElement {
+  const found = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
+  return found ?? assert.fail(`no ${label} field`);
+}
+
 /** The sidebar listing both tasks over `sections`, each write it asks heard by `writes`. */
 function sidebarOver(sections: TaskSections, writes: TaskSectionWrite[]) {
   const tasks = tasksControl({
@@ -168,11 +223,12 @@ function openMoveToSection(sidebar: HTMLElement, name: string): void {
   act(() => item("Move to section").click());
 }
 
-/** The dialog's button whose words or label are `label`, failing where none is drawn. */
+/** The dialog's button whose words are `label`, or else whose label is, failing where none is drawn; Lucide's Save glyph is no Save button. */
 function dialogButton(label: string): HTMLButtonElement {
-  const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === label || button.getAttribute("aria-label") === label,
-  );
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>("button")];
+  const found =
+    buttons.find((button) => button.textContent === label) ??
+    buttons.find((button) => button.getAttribute("aria-label") === label);
   return found ?? assert.fail(`no ${label} button`);
 }
 
@@ -349,6 +405,7 @@ test("choosing No icon and saving clears a section's icon", async () => {
 
   act(() => actions.click());
   act(() => item("Edit section").click());
+  await settleLoaded();
   assert.equal(dialogButton("🚀").getAttribute("aria-pressed"), "true");
   act(() => dialogButton("No icon").click());
   await act(async () => dialogButton("Save").click());
@@ -558,4 +615,135 @@ test("with the experiment off, Pinned takes no task dragged at it and its pins s
     [PINNED.id],
   );
   assert.ok((asked.moves[0]?.position ?? "") > second.pinPosition, "it sorts after Pin review");
+});
+
+test("a section's glyph beyond the suggested ones is drawn in its color, and one no Lucide knows draws none", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([], GLYPHS);
+  await settleLoaded();
+
+  // Note that each check reads words off the nodes, since a failed check printing a node prints the whole document.
+  const glyphOf = (title: string) =>
+    sectionHeader(sidebar, title).querySelector(".sidebar-repository-glyph")?.firstElementChild;
+  assert.equal(glyphOf("Stars")?.tagName.toLowerCase(), "svg");
+  assert.equal(glyphOf("Stars")?.getAttribute("data-icon-color"), TASK_SECTION_ICON_COLOR.TEAL);
+  assert.equal(glyphOf("Lost")?.getAttribute("class"), "section-glyph-blank");
+  assert.equal(glyphOf("Lost")?.childElementCount, 0);
+  openMoveToSection(sidebar, "Invite expiry");
+  assert.equal(
+    item("Stars").querySelector("svg")?.getAttribute("data-icon-color"),
+    TASK_SECTION_ICON_COLOR.TEAL,
+  );
+});
+
+test("an icon found by searching, in a color chosen, is the new section's", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  typeInto(dialogField("Section title"), "Stars");
+  await settleLoaded();
+  act(() => dialogButton("Teal").click());
+  typeInto(dialogField("Search icons"), "telescope");
+  act(() => dialogButton("Telescope").click());
+  await act(async () => dialogButton("Create section").click());
+
+  const made = writes[0];
+  assert.equal(made?.kind, TASK_SECTION_WRITE.CREATE);
+  assert.deepEqual(made.icon, {
+    kind: TASK_SECTION_ICON_KIND.GLYPH,
+    glyph: "telescope",
+    color: TASK_SECTION_ICON_COLOR.TEAL,
+  });
+});
+
+test("a color chosen recolors the glyph a section wears", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes, GLYPHS);
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Stars"]');
+  assert.ok(actions);
+
+  act(() => actions.click());
+  act(() => item("Edit section").click());
+  await settleLoaded();
+  assert.equal(dialogButton("Telescope").getAttribute("aria-pressed"), "true");
+  act(() => dialogButton("No color").click());
+  await act(async () => dialogButton("Save").click());
+
+  assert.deepEqual(writes, [
+    {
+      kind: TASK_SECTION_WRITE.EDIT,
+      id: STARS,
+      title: "Stars",
+      icon: { kind: TASK_SECTION_ICON_KIND.GLYPH, glyph: "telescope" },
+    },
+  ]);
+});
+
+test("Enter in the Emoji tab's search chooses the first emoji it found", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  typeInto(dialogField("Section title"), "Errands");
+  act(() => dialogButton("Emoji").click());
+  await settleLoaded();
+  const search = dialogField("Search emoji");
+  typeInto(search, "pickup truck");
+  act(() => {
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await act(async () => dialogButton("Create section").click());
+
+  const made = writes[0];
+  assert.equal(made?.kind, TASK_SECTION_WRITE.CREATE);
+  assert.deepEqual(made.icon, { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🛻" });
+});
+
+test("the arrows move the grid's one tab stop with the focus", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([]);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  await settleLoaded();
+  const folder = dialogButton("Folder");
+  act(() => folder.focus());
+  act(() => {
+    folder.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  });
+
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Star");
+  assert.equal(dialogButton("Star").getAttribute("tabindex"), "0");
+  assert.equal(folder.getAttribute("tabindex"), "-1");
+});
+
+test("editing a section in an emoji the grid leaves out names it in the emoji field", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const newest: TaskSections = {
+    sections: [
+      {
+        id: LAUNCH,
+        workspaceId: WORKSPACE.id,
+        title: "Launch",
+        icon: { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🫩" },
+        createdAt: 1,
+      },
+    ],
+    entries: SECTIONS.entries,
+  };
+  const sidebar = await mountSidebar([], newest);
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  assert.ok(actions);
+
+  act(() => actions.click());
+  act(() => item("Edit section").click());
+  await settleLoaded();
+
+  assert.equal(dialogField("Any emoji").value, "🫩");
 });
