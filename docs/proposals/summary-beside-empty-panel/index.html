@@ -1,0 +1,546 @@
+<!doctype html>
+<!-- The design show for docs/proposals/summary-beside-empty-panel.md: today's pinned summary beside an empty side panel, and five ways out of it. Drawn by hand on the desktop stylesheet's tokens (base.css, desktop.css at f3444923), not by the app's components. Open it in a browser: it fetches nothing. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luke · The summary beside an empty side panel</title>
+<style>
+  :root {
+    --desktop-ground: #0c0c0e;
+    --desktop-sidebar: #111114;
+    --desktop-well: #0f0f12;
+    --sidebar-ink: rgba(255, 255, 255, 0.7);
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.56);
+    --text-tertiary: rgba(255, 255, 255, 0.5);
+    --raised: rgba(255, 255, 255, 0.05);
+    --raised-strong: rgba(255, 255, 255, 0.09);
+    --selected: rgba(255, 255, 255, 0.2);
+    --hairline: rgba(255, 255, 255, 0.08);
+    --accent: #4f8cff;
+    --note: #ffd479;
+    --control-height: 30px;
+    --control-radius: 8px;
+    --space-4: 4px; --space-8: 8px; --space-12: 12px; --space-16: 16px; --space-24: 24px; --space-40: 40px;
+    --bar: 44px;
+    --summary-width: 220px;
+    --rail-width: 48px;
+    --panel-width: 340px;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --desktop-ground: #fcfcfc;
+    --desktop-sidebar: #f3f3f4;
+    --desktop-well: #f8f8f9;
+    --sidebar-ink: rgba(0, 0, 0, 0.68);
+    --text-primary: rgba(0, 0, 0, 0.88);
+    --text-secondary: rgba(0, 0, 0, 0.6);
+    --text-tertiary: rgba(0, 0, 0, 0.5);
+    --raised: rgba(0, 0, 0, 0.035);
+    --raised-strong: rgba(0, 0, 0, 0.07);
+    --selected: rgba(0, 0, 0, 0.1);
+    --hairline: rgba(0, 0, 0, 0.08);
+    --accent: #2f6fe4;
+    --note: #9a6a1e;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    background: #1b1b1f;
+    color: var(--text-primary);
+  }
+  :root[data-theme="light"] body { background: #e4e4e8; }
+  header.show {
+    max-width: 1320px; margin: 0 auto; padding: 24px 0 12px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  }
+  header.show h1 { font-size: 17px; margin: 0 16px 0 0; font-weight: 600; }
+  .seg { border: 0; margin: 0; min-inline-size: auto; display: inline-flex; background: var(--raised-strong); border-radius: 9px; padding: 2px; gap: 2px; }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-secondary); font: inherit;
+    padding: 4px 10px; border-radius: 7px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--desktop-ground); color: var(--text-primary); box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .blurb {
+    max-width: 1320px; margin: 0 auto 12px; color: var(--text-secondary); min-height: 40px;
+  }
+  .blurb b { color: var(--text-primary); font-weight: 600; }
+  .verdict { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 5px; font-size: 11px; font-weight: 600; }
+  .verdict.bad { background: rgba(255, 126, 126, .18); color: #ff9b9b; }
+  .verdict.good { background: rgba(111, 220, 164, .18); color: #6fdca4; }
+  :root[data-theme="light"] .verdict.bad { color: #b42318; }
+  :root[data-theme="light"] .verdict.good { color: #137a48; }
+
+  /* The window. */
+  .window {
+    max-width: 1320px; height: 720px; margin: 0 auto 16px;
+    display: flex; overflow: clip; border-radius: 12px;
+    border: 1px solid var(--hairline); background: var(--desktop-ground);
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  }
+  .sidebar {
+    width: 220px; flex: none; background: var(--desktop-sidebar); padding: 12px;
+    display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--hairline);
+  }
+  .lights { display: flex; gap: 8px; height: 20px; align-items: center; margin: 0 0 16px 4px; }
+  .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+  .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+  .sidebar .heading, .section-heading {
+    font-size: 11px; font-weight: 600; color: var(--text-tertiary); margin: 12px 8px 4px; letter-spacing: .01em;
+  }
+  .row {
+    display: flex; align-items: center; gap: 8px; height: var(--control-height); padding: 0 8px;
+    border: 0; background: transparent; color: var(--sidebar-ink); font: inherit; text-align: left;
+    border-radius: var(--control-radius); cursor: pointer; width: 100%; white-space: nowrap; overflow: hidden;
+  }
+  .row:hover { background: var(--raised); }
+  .row[aria-current="true"] { background: var(--raised-strong); color: var(--text-primary); }
+  .row .label { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .row .end { margin-left: auto; color: var(--text-tertiary); font-size: 11px; display: flex; align-items: center; gap: 4px; }
+  .glyph { display: flex; flex: none; color: var(--text-secondary); }
+  svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  .main { flex: 1; display: flex; min-width: 0; }
+  .column { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .bar {
+    height: var(--bar); flex: none; display: flex; align-items: center; gap: 4px;
+    padding: 0 12px; border-bottom: 1px solid var(--hairline);
+  }
+  .tab {
+    display: inline-flex; align-items: center; gap: 6px; height: var(--control-height); padding: 0 6px 0 8px;
+    border-radius: var(--control-radius); color: var(--text-secondary); cursor: pointer; white-space: nowrap;
+    border: 0; background: transparent; font: inherit; max-width: 170px;
+  }
+  .tab .label { overflow: hidden; text-overflow: ellipsis; }
+  .tab:hover { background: var(--raised); }
+  .tab[aria-selected="true"] { background: var(--raised-strong); color: var(--text-primary); }
+  .tab .x { display: inline-flex; border-radius: 4px; padding: 1px; opacity: .7; }
+  .tab .x:hover { background: var(--raised-strong); opacity: 1; }
+  .tab .x svg { width: 12px; height: 12px; }
+  .icon-button {
+    display: inline-flex; align-items: center; justify-content: center; width: var(--control-height); height: var(--control-height);
+    border: 0; background: transparent; color: var(--text-secondary); border-radius: var(--control-radius); cursor: pointer; flex: none;
+  }
+  .icon-button:hover { background: var(--raised); color: var(--text-primary); }
+  .icon-button[aria-pressed="true"] { background: var(--raised-strong); color: var(--text-primary); }
+  .spacer { flex: 1; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .doc { flex: 1; padding: 32px 40px; overflow: hidden; display: flex; justify-content: center; }
+  .doc-inner { width: 100%; max-width: 560px; }
+  .doc h2 { font-size: 22px; margin: 0 0 16px; font-weight: 650; }
+  .doc h3 { font-size: 14px; margin: 22px 0 8px; font-weight: 600; }
+  .doc p { margin: 0 0 8px; color: var(--text-secondary); }
+  .line { height: 9px; border-radius: 5px; background: var(--raised-strong); margin: 0 0 10px; }
+
+  .summary { width: var(--summary-width); flex: none; padding: 8px 12px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .summary[data-mode="rail"] { width: var(--rail-width); padding: 8px 9px; align-items: center; gap: 2px; }
+  .summary .section-heading { margin: 4px 8px; }
+  .summary .row { color: var(--text-primary); }
+  .open-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .count { background: var(--accent); color: #fff; border-radius: 9px; font-size: 10px; font-weight: 600; padding: 0 5px; line-height: 16px; }
+  .detail { color: var(--text-tertiary); margin-left: 6px; }
+
+  .panel {
+    width: var(--panel-width); flex: none; display: flex; flex-direction: column;
+    background: var(--desktop-well); border-left: 1px solid var(--hairline);
+    animation: slide .22s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes slide { from { transform: translateX(40px); opacity: 0; } }
+  .panel .bar { gap: 2px; padding: 0 8px; }
+  .panel-content { flex: 1; overflow: hidden; padding: 12px; }
+  .panel-content .row { color: var(--text-primary); }
+  .no-tabs-line { color: var(--text-tertiary); margin: 4px 8px 12px; }
+  .empty-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-tertiary); text-align: center; padding: 0 24px; }
+  .empty-state svg { width: 22px; height: 22px; }
+  .tab-body p { color: var(--text-secondary); margin: 6px 4px; }
+  .callout {
+    margin: 0 8px 12px; padding: 8px 10px; border-radius: 8px; background: var(--raised); color: var(--text-secondary); font-size: 12px;
+  }
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--desktop-sidebar);
+    color: var(--text-primary); border: 1px solid var(--hairline); padding: 6px 12px; border-radius: 8px; font-size: 12px;
+    opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast[data-shown="true"] { opacity: 1; }
+  footer { max-width: 1320px; margin: 0 auto 32px; color: var(--text-tertiary); font-size: 12px; }
+  kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; }
+</style>
+</head>
+<body>
+<header class="show">
+  <h1>The summary beside an empty side panel</h1>
+  <fieldset class="seg" id="options" aria-label="Option"></fieldset>
+  <fieldset class="seg" id="theme" aria-label="Appearance">
+    <button type="button" data-theme="dark" aria-pressed="true">Dark</button>
+    <button type="button" data-theme="light" aria-pressed="false">Light</button>
+  </fieldset>
+  <button type="button" class="seg" id="reset" style="border:0;cursor:pointer;color:inherit;font:inherit;padding:6px 10px">Reset</button>
+</header>
+<p class="blurb" id="blurb"></p>
+<div class="window" id="window"></div>
+<footer>
+  Try it: close the panel's last tab with its ×, switch to <b>Invite emails</b> in the sidebar (a plan with no tab open), press the panel toggle at the top right, and choose summary rows.
+  Drawn by hand on the desktop stylesheet's tokens; not the app's components. Nothing is sent.
+</footer>
+<div class="toast" id="toast"></div>
+<script>
+const ICON = {
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  board: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  code: '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  call: '<path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/>',
+  agent: '<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><path d="M8 16h.01"/><path d="M16 16h.01"/>',
+  pr: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  sub: '<path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/>',
+  term: '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  panel: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>',
+  list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+  chevR: '<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>',
+  chevL: '<path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/>',
+  overview: '<path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/>',
+  plan: '<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>',
+};
+const svg = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
+
+const KINDS = [
+  { id: "board", label: "Board", icon: "board" },
+  { id: "code", label: "Code", icon: "code" },
+  { id: "call", label: "Call", icon: "call" },
+];
+
+// Two synthetic plans: one with a full summary, one that holds a call but
+// whose strip is empty.
+const PLANS = {
+  refresh: {
+    name: "Token refresh fails",
+    used: ["board", "code", "call"],
+    inbox: 1,
+    agents: [{ id: "agent:fix", label: "Fix the refresh race" }],
+    changes: [{ id: "pr:42", label: "#42 Fix the refresh", icon: "pr" }],
+    subagents: [{ id: "sub:search", label: "Find every refresh caller", icon: "sub" }],
+    files: [
+      { id: "file:store", label: "session-store.ts", detail: "apps/web", icon: "file" },
+      { id: "file:refresh", label: "refresh.ts", detail: "packages/auth", icon: "file" },
+    ],
+    doc: ["Token refresh fails after sleep", "Two tabs refresh at once and the second one wins with a stale token."],
+  },
+  invites: {
+    name: "Invite emails",
+    used: ["call"],
+    inbox: 0,
+    agents: [{ id: "agent:copy", label: "Rewrite the invite copy" }],
+    changes: [],
+    subagents: [],
+    files: [{ id: "file:invite", label: "invite.tsx", detail: "apps/web/emails", icon: "file" }],
+    doc: ["Invite emails", "The invite reads like a receipt. Make it say who invited you and to what."],
+  },
+};
+
+const OPTIONS = {
+  today: {
+    label: "Today",
+    blurb: '<b>Today.</b> The pinned summary and the empty panel list nearly the same rows, side by side. The summary says <i>Tabs</i>; the panel beside it says <i>No tabs open</i>. The panel\'s “+” offers the same rows a third time.<span class="verdict bad">the report</span>',
+  },
+  a: {
+    label: "(a) Goes with last tab",
+    blurb: '<b>(a) The panel goes with its last tab.</b> Close the last tab and the panel slides shut, as VS Code closes an empty editor group. A plan with no tab open shows no panel; Show panel there reopens the tab last closed, else the first kind the plan holds, else Call. The summary is the one list.<span class="verdict good">recommended</span>',
+  },
+  b: {
+    label: "(b) Panel is the summary",
+    blurb: '<b>(b) The empty panel is the summary.</b> While the panel is open with no tab, the summary leaves the column and becomes the panel\'s page, like a browser\'s New Tab page. The column gets its width back; a row opens its tab and the summary returns to the column.',
+  },
+  c1: {
+    label: "(c1) Panel defers",
+    blurb: '<b>(c1) The panel gives way.</b> While the summary is pinned, the empty panel draws a quiet empty state pointing at it, and no list. The cheapest fix, but a 340px pane still stands empty.',
+  },
+  c2: {
+    label: "(c2) Summary yields",
+    blurb: '<b>(c2) The summary gives way.</b> While the panel is open, the summary folds to its rail, so only the panel lists anything. The summary also folds while you use a tab it summarises.',
+  },
+  d: {
+    label: "(d) Linked lists",
+    blurb: '<b>(d) Link the two.</b> Both lists stay. “Tabs” becomes “Views”, a row whose tab is open wears a blue dot, and the empty panel says where the summary is. Explains the duplication rather than removing it; the dots are worth having under any option.',
+  },
+  e: {
+    label: "(e) Overview tab",
+    blurb: '<b>(e) The summary becomes the panel\'s home tab.</b> An Overview tab always leads the strip and cannot close, so the panel is never empty. The column\'s pinned summary, rail and card go. A redesign rather than a fix.',
+  },
+};
+
+let state;
+function reset() {
+  state = {
+    option: state?.option ?? "today",
+    plan: "refresh",
+    panelOpen: true,
+    tabs: { refresh: [], invites: [] },
+    chosen: { refresh: undefined, invites: undefined },
+    closed: { refresh: ["code", "call"], invites: [] },
+  };
+}
+reset();
+
+function rowsOf(planId) {
+  const plan = PLANS[planId];
+  const kinds = KINDS.filter((kind) => plan.used.includes(kind.id));
+  return { plan, kinds };
+}
+
+function lookOf(planId, id) {
+  const plan = PLANS[planId];
+  const kind = KINDS.find((each) => each.id === id);
+  if (kind) return kind;
+  if (id === "overview") return { id, label: "Overview", icon: "overview" };
+  if (id.startsWith("term:")) return { id, label: "Terminal", icon: "term" };
+  return [...plan.changes, ...plan.subagents, ...plan.files].find((each) => each.id === id);
+}
+
+function toast(words) {
+  const el = document.getElementById("toast");
+  el.textContent = words;
+  el.dataset.shown = "true";
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (el.dataset.shown = "false"), 1600);
+}
+
+// Acts ------------------------------------------------------------------
+
+function openTab(id) {
+  const tabs = state.tabs[state.plan];
+  if (!tabs.includes(id)) tabs.push(id);
+  state.chosen[state.plan] = id;
+  state.closed[state.plan] = state.closed[state.plan].filter((each) => each !== id);
+  state.panelOpen = true;
+  render();
+}
+
+function closeTab(id) {
+  const tabs = state.tabs[state.plan];
+  const at = tabs.indexOf(id);
+  tabs.splice(at, 1);
+  state.closed[state.plan].unshift(id);
+  if (state.chosen[state.plan] === id) state.chosen[state.plan] = tabs[Math.min(at, tabs.length - 1)];
+  if (tabs.length === 0 && state.option === "a") toast("The last tab closed, so the panel went with it");
+  if (tabs.length === 0 && state.option === "a") state.panelOpen = false;
+  render();
+}
+
+function togglePanel() {
+  const tabs = state.tabs[state.plan];
+  if (state.option === "a" && !panelShown() && tabs.length === 0) {
+    // Show panel on an empty strip reopens a tab first.
+    const plan = PLANS[state.plan];
+    const pick = state.closed[state.plan][0] ?? plan.used[0] ?? "call";
+    toast(`Show panel reopened ${lookOf(state.plan, pick).label}`);
+    openTab(pick);
+    return;
+  }
+  state.panelOpen = !state.panelOpen;
+  if (state.option === "a" && tabs.length === 0) state.panelOpen = false;
+  render();
+}
+
+function choosePlan(id) {
+  state.plan = id;
+  render();
+}
+
+function panelShown() {
+  if (!state.panelOpen) return false;
+  if (state.option === "a") return state.tabs[state.plan].length > 0;
+  return true;
+}
+
+// Drawing ---------------------------------------------------------------
+
+function rowButton({ id, label, icon, detail, end, onPick, current }) {
+  return `<button type="button" class="row" data-pick="${onPick ?? ""}" data-id="${id}" ${current ? 'aria-current="true"' : ""}>
+    <span class="glyph">${svg(icon)}</span>
+    <span class="label">${label}${detail ? `<span class="detail">${detail}</span>` : ""}</span>
+    ${end ? `<span class="end">${end}</span>` : ""}
+  </button>`;
+}
+
+function summaryList(planId, { marks, tabsHeading }) {
+  const { plan, kinds } = rowsOf(planId);
+  const open = state.tabs[planId];
+  const shown = panelShown();
+  const mark = (id) => (marks && shown && open.includes(id) ? '<span class="open-dot" title="Open in the panel"></span>' : "");
+  const sections = [];
+  const tabsRows = [];
+  if (plan.inbox > 0) tabsRows.push(rowButton({ id: "inbox", label: "Inbox", icon: "inbox", end: `<span class="count">${plan.inbox}</span>`, onPick: "toast" }));
+  for (const kind of kinds) tabsRows.push(rowButton({ ...kind, end: mark(kind.id), onPick: "open" }));
+  sections.push([tabsHeading, tabsRows]);
+  sections.push(["Coding agents", plan.agents.map((agent) => rowButton({ ...agent, icon: "agent", onPick: "agent" }))]);
+  if (plan.changes.length) sections.push(["Changes", plan.changes.map((each) => rowButton({ ...each, end: mark(each.id), onPick: "open" }))]);
+  if (plan.subagents.length) sections.push(["Subagents", plan.subagents.map((each) => rowButton({ ...each, end: mark(each.id), onPick: "open" }))]);
+  if (plan.files.length) sections.push(["Files", plan.files.map((each) => rowButton({ ...each, end: mark(each.id), onPick: "open" }))]);
+  return sections
+    .map(([heading, rows]) => `<div><p class="section-heading">${heading}</p>${rows.join("")}</div>`)
+    .join("");
+}
+
+function railList(planId) {
+  const { kinds } = rowsOf(planId);
+  return `<button type="button" class="icon-button" data-pick="expand" title="Expand summary">${svg("chevL")}</button>` +
+    kinds.map((kind) => `<button type="button" class="icon-button" data-pick="open" data-id="${kind.id}" title="${kind.label}">${svg(kind.icon)}</button>`).join("");
+}
+
+function noTabsList(planId) {
+  const plan = PLANS[planId];
+  const rows = [
+    ...KINDS.map((kind) => rowButton({ ...kind, onPick: "open" })),
+  ];
+  const more = [
+    ["Changes", plan.changes],
+    ["Subagents", plan.subagents],
+    ["Files", plan.files],
+    ["Terminal", plan.agents.map((agent) => ({ id: `term:${agent.id}`, label: agent.label, icon: "term" }))],
+  ];
+  return rows.join("") + more
+    .filter(([, list]) => list.length)
+    .map(([heading, list]) => `<p class="section-heading">${heading}</p>${list.map((each) => rowButton({ ...each, onPick: "open" })).join("")}`)
+    .join("");
+}
+
+function tabBody(id) {
+  const look = lookOf(state.plan, id);
+  if (id === "overview") return summaryList(state.plan, { marks: true, tabsHeading: "Views" });
+  return `<div class="tab-body"><p><b style="color:var(--text-primary)">${look.label}</b></p>${'<div class="line"></div>'.repeat(3)}<div class="line" style="width:70%"></div>${'<div class="line"></div>'.repeat(4)}<div class="line" style="width:40%"></div></div>`;
+}
+
+function render() {
+  document.getElementById("blurb").innerHTML = OPTIONS[state.option].blurb;
+  for (const button of document.querySelectorAll("#options button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.option === state.option));
+  }
+  const option = state.option;
+  const planId = state.plan;
+  const plan = PLANS[planId];
+  const tabs = option === "e" ? ["overview", ...state.tabs[planId]] : state.tabs[planId];
+  const chosen = option === "e" ? state.chosen[planId] ?? "overview" : state.chosen[planId];
+  const shown = panelShown();
+  const empty = state.tabs[planId].length === 0;
+
+  // How the summary stands in the column.
+  let summaryMode = "column";
+  if (option === "e") summaryMode = "none";
+  if (option === "b" && shown && empty) summaryMode = "none";
+  if (option === "c2" && shown) summaryMode = "rail";
+
+  const tabsHeading = option === "d" ? "Views" : "Tabs";
+  const summary =
+    summaryMode === "none"
+      ? ""
+      : summaryMode === "rail"
+        ? `<aside class="summary" data-mode="rail">${railList(planId)}</aside>`
+        : `<aside class="summary">${summaryList(planId, { marks: option === "d", tabsHeading })}</aside>`;
+
+  let panelContent = "";
+  if (shown) {
+    if (option === "e" || !empty) {
+      panelContent = tabBody(chosen ?? tabs[0]);
+    } else if (option === "b") {
+      panelContent = summaryList(planId, { marks: false, tabsHeading: "Tabs" });
+    } else if (option === "c1") {
+      panelContent = `<div class="empty-state">${svg("panel")}<div>No tabs open</div><div style="font-size:12px">Open one from the summary, or with +</div></div>`;
+    } else if (option === "d") {
+      panelContent = `<p class="no-tabs-line">Open a tab</p><div class="callout">The summary at your left lists what this plan holds; a blue dot marks what is open here.</div>${noTabsList(planId)}`;
+    } else {
+      panelContent = `<p class="no-tabs-line">No tabs open</p>${noTabsList(planId)}`;
+    }
+  }
+  const strip = tabs
+    .map((id) => {
+      const look = lookOf(planId, id);
+      const closable = id !== "overview";
+      return `<button type="button" class="tab" role="tab" data-tab="${id}" aria-selected="${id === (chosen ?? tabs[0])}">
+        <span class="glyph">${svg(look.icon)}</span><span class="label">${look.label}</span>
+        ${closable ? `<span class="x" data-close="${id}" title="Close tab">${svg("x")}</span>` : ""}
+      </button>`;
+    })
+    .join("");
+  const panel = shown
+    ? `<aside class="panel" aria-label="Panel">
+        <div class="bar">${strip}<button type="button" class="icon-button" data-pick="plus" title="Open a tab">${svg("plus")}</button><span class="spacer"></span></div>
+        <div class="panel-content">${panelContent}</div>
+      </aside>`
+    : "";
+
+  document.getElementById("window").innerHTML = `
+    <nav class="sidebar">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <p class="heading">Plans</p>
+      ${Object.entries(PLANS)
+        .map(([id, each]) => `<button type="button" class="row" data-plan="${id}" ${id === planId ? 'aria-current="true"' : ""}><span class="glyph">${svg("plan")}</span><span class="label">${each.name}</span>${state.tabs[id].length === 0 ? '<span class="end">no tabs</span>' : ""}</button>`)
+        .join("")}
+    </nav>
+    <div class="main">
+      <section class="column">
+        <div class="bar">
+          <button type="button" class="tab" aria-selected="true"><span class="glyph">${svg("plan")}</span><span class="label">Plan</span></button>
+          <span class="spacer"></span>
+          ${option === "e" ? "" : `<button type="button" class="icon-button" aria-pressed="${summaryMode === "column"}" title="Toggle pinned summary">${svg("list")}</button>`}
+          <button type="button" class="icon-button" data-pick="toggle" aria-pressed="${shown}" title="${shown ? "Hide panel" : "Show panel"} (⌥⌘B)">${svg("panel")}</button>
+        </div>
+        <div class="body">
+          <article class="doc"><div class="doc-inner">
+            <h2>${plan.doc[0]}</h2>
+            <p>${plan.doc[1]}</p>
+            <h3>What we know</h3>
+            ${'<div class="line"></div>'.repeat(3)}<div class="line" style="width:60%"></div>
+            <h3>The fix</h3>
+            ${'<div class="line"></div>'.repeat(4)}<div class="line" style="width:45%"></div>
+            <h3>Open questions</h3>
+            ${'<div class="line"></div>'.repeat(2)}<div class="line" style="width:70%"></div>
+          </div></article>
+          ${summary}
+        </div>
+      </section>
+      ${panel}
+    </div>`;
+}
+
+document.getElementById("options").innerHTML = Object.entries(OPTIONS)
+  .map(([id, each]) => `<button type="button" data-option="${id}" aria-pressed="false">${each.label}</button>`)
+  .join("");
+
+document.addEventListener("click", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const option = target.closest("[data-option]");
+  if (option) { state.option = option.dataset.option; reset(); render(); return; }
+  const theme = target.closest("button[data-theme]");
+  if (theme) {
+    document.documentElement.dataset.theme = theme.dataset.theme;
+    for (const each of document.querySelectorAll("#theme button")) each.setAttribute("aria-pressed", String(each === theme));
+    return;
+  }
+  if (target.closest("#reset")) { reset(); render(); return; }
+  const close = target.closest("[data-close]");
+  if (close) { closeTab(close.dataset.close); return; }
+  const tab = target.closest("[data-tab]");
+  if (tab) { state.chosen[state.plan] = tab.dataset.tab; render(); return; }
+  const plan = target.closest("[data-plan]");
+  if (plan) { choosePlan(plan.dataset.plan); return; }
+  const pick = target.closest("[data-pick]");
+  if (!pick) return;
+  const kind = pick.dataset.pick;
+  if (kind === "toggle") togglePanel();
+  else if (kind === "open") openTab(pick.dataset.id);
+  else if (kind === "agent") toast("An agent opens in the plan's column");
+  else if (kind === "plus") toast("The “+” menu lists the same rows");
+  else if (kind === "expand") toast("Expands the summary as a card over the rail");
+  else toast("Opens in the panel");
+});
+
+render();
+</script>
+</body>
+</html>
