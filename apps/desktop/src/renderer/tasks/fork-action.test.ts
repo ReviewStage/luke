@@ -2,16 +2,23 @@
 
 import assert from "node:assert/strict";
 import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentMessagesAnswerView,
+} from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
+  type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { AGENT_LEAD, AgentMessage } from "./agent-tab";
+import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab";
 import { agentForkDoors, ForkProvider } from "./fork-action";
 import type { AgentFork } from "./fork-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
@@ -33,6 +40,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  Reflect.deleteProperty(window, "luke");
 });
 
 function summary(id: string, extra: Partial<CodingAgentSummary> = {}): CodingAgentSummary {
@@ -170,4 +178,107 @@ test("under a message, Forked to names the agents of the task forked at it in th
 test("a message no agent was forked at names none", () => {
   const view = drawn({ listed: [summary(SOURCE), summary("other", { createdAt: 2 })] });
   assert.equal(view.container.querySelector("[data-forked-to]"), null);
+});
+
+/** An agent's reply as its transcript carries it, its words whole or still being written. */
+function reply(id: string, text: string): CodingAgentMessage {
+  return {
+    id,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "step-start" }, { type: "text", text }],
+    startedAt: 2_000,
+    finishedAt: 9_000,
+  };
+}
+
+function line(id: string, text: string): CodingAgentMessage {
+  return { id, role: MESSAGE_ROLE.USER, parts: [{ type: "text", text }] };
+}
+
+/** The ids of the messages an agent's tab offers to fork at, over a page of `messages`, for an agent of `status`. */
+async function forkedAtInTab(
+  status: CodingAgentStatus,
+  messages: readonly CodingAgentMessage[],
+): Promise<readonly (string | null)[]> {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+    },
+  });
+  const agent = summary(SOURCE, { status, brief: CODING_AGENT_BRIEF.PROMPT });
+  // Note that only the first read answers, because a read past the cursor waits on the service.
+  let reads = 0;
+  const control = codingAgentsControl({
+    agents: [agent],
+    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
+      reads += 1;
+      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      return Promise.resolve({ messages: [...messages], cursor: "2:0", status, title: null });
+    },
+  });
+  const forks: AgentFork[] = [];
+  const doors = agentForkDoors({
+    agent,
+    control,
+    onFork: (fork) => forks.push(fork),
+    cards: undefined,
+    onOpenTarget: undefined,
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        ForkProvider,
+        { value: doors },
+        createElement(AgentTab, {
+          agent,
+          control,
+          shown: true,
+          onOpenSubagent: () => undefined,
+          onHeld: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  for (const button of container.querySelectorAll<HTMLButtonElement>(
+    `button[aria-label="${FORK_LABEL}"]`,
+  )) {
+    act(() => button.click());
+  }
+  return forks.map((fork) => fork.messageId);
+}
+
+test("while an agent works, the newest of its replies, which the running turn may still be writing, offers no fork, and every earlier one does; once it settles, every reply does", async () => {
+  const LATEST = "6b3a4f5e-7d8c-4b9a-8c3d-4e5f6a7b8c9d";
+  const settled = [
+    line("task", "Queue the invite email."),
+    reply(TURN, "Moved it onto the queue."),
+    line("line-1", "Now add a retry."),
+    reply(LATEST, "Adding the retry"),
+  ];
+
+  for (const working of [CODING_AGENT_STATUS.RUNNING, CODING_AGENT_STATUS.STARTING]) {
+    assert.deepEqual(
+      await forkedAtInTab(working, settled),
+      [TURN],
+      `${working}: the newest reply is open`,
+    );
+  }
+  assert.deepEqual(await forkedAtInTab(CODING_AGENT_STATUS.COMPLETED, settled), [TURN, LATEST]);
+  // A turn that has not written a reply of its own yet may still be writing to the newest one there is.
+  assert.deepEqual(
+    await forkedAtInTab(CODING_AGENT_STATUS.RUNNING, [
+      line("task", "Queue the invite email."),
+      reply(TURN, "Moved it onto the queue."),
+      line("line-1", "Now add a retry."),
+    ]),
+    [],
+  );
 });

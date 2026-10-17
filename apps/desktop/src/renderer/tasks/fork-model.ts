@@ -17,6 +17,7 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { ACT_KIND, ActPayload } from "@luke/host/acts";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { choiceRequest } from "./coding-agent-model";
 import { cardTitle } from "./tool-call-model";
 
@@ -94,6 +95,21 @@ export function forkStart(input: {
     ...(disabledServers.length === 0 ? undefined : { disabledServers }),
     ...(choice === undefined ? undefined : choiceRequest(choice)),
   };
+}
+
+/**
+ * The reply a running turn may still be writing, which no fork may cut,
+ * since a fork keeps whole rows and would keep it half-written: the newest
+ * of the agent's own messages while it may still write, and none once it
+ * has settled.
+ */
+export function openReply(
+  messages: readonly { readonly id: string; readonly role: string }[],
+  writing: boolean,
+): string | undefined {
+  return writing
+    ? messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT)?.id
+    : undefined;
 }
 
 /**

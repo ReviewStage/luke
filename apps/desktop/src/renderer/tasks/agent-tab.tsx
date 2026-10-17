@@ -83,6 +83,7 @@ import {
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
 import { ForkedToLine } from "./fork-action";
+import { openReply } from "./fork-model";
 import { linkChip } from "./mention-chip";
 import {
   agentMessagePlace,
@@ -967,8 +968,11 @@ export function AgentMessage({
   origin,
   arrived = NO_ARRIVED,
   planId,
+  forkable = true,
 }: {
   message: CodingAgentMessage;
+  /** Whether its tab may offer to fork at it: not the reply a running turn may still be writing (`openReply`). */
+  forkable?: boolean;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
@@ -1099,7 +1103,7 @@ export function AgentMessage({
                 <CopyMessageAction
                   words={words}
                   messageId={message.id}
-                  forkable
+                  forkable={forkable}
                   className={SENT_ACTIONS_CLASS}
                 />
               )
@@ -1195,6 +1199,7 @@ function AgentTranscriptView({
     const opening = replay === undefined || first === undefined ? undefined : replayOpening(first);
     // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
     const placed = placedMessages(messages);
+    const open = openReply(messages, working);
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
@@ -1213,6 +1218,7 @@ function AgentTranscriptView({
                 planId={message === plan ? planId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
+                forkable={message.id !== open}
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
