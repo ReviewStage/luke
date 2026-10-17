@@ -3224,7 +3224,7 @@ ul.actor-stack {
    they cover neither the call's controls nor the side panel beside the
    column. */
 .desktop-call-bar .voice-caption {
-  bottom: calc(100% + var(--space-12));
+  bottom: calc(100% + var(--luke-space-12));
   left: calc(50% - var(--summary-room) / 2);
   width: min(var(--caption-width-max), 100% - 2 * var(--page-inset) - var(--summary-room));
 }
@@ -3251,7 +3251,7 @@ ul.actor-stack {
 /* Anywhere no call bar is drawn (Settings, the home page, a panel
    filling the window) they float at the window's foot over the work column. */
 .desktop-shell > .voice-caption {
-  bottom: var(--space-24);
+  bottom: var(--luke-space-24);
   left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
   width: var(--caption-width);
 }
