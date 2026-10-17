@@ -21,7 +21,10 @@
  * an agent or a task of any other workspace answers exactly as one that
  * names nothing, and an id that is no UUID names no row. A title, the
  * agent's or a worker's, is read after the page, since it can land after a
- * turn ends, which a held read may span.
+ * turn ends, which a held read may span. An agent's or a worker's
+ * transcript read with `wait=none` is answered at once rather than held,
+ * with whether the held read would have held on it, for a reader following
+ * its live statements (`live-wire.ts`).
  */
 
 import { childTitlesOf } from "@luke/database/models/child-titles";
@@ -39,6 +42,7 @@ import {
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
 } from "@luke/features/coding-agent-wire";
+import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
 import { readEither } from "@luke/wire/effect";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { ORPCError } from "@orpc/server";
@@ -70,11 +74,13 @@ import {
   CURSOR_START,
   cursorOfWire,
   cursorToWire,
+  delegationNow,
   delegationPast,
   NO_TITLE_AWAITED,
   type TitleAwaited,
   type TranscriptPage,
   titleMayLand,
+  transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
 import {
@@ -173,9 +179,19 @@ function wireMessages(
   return messages as CodingAgentMessagesAnswer["messages"];
 }
 
-/** A page of an agent's or a worker's transcript as the wire answers it. */
-function transcriptAnswer(page: TranscriptPage, title: string | null): CodingAgentMessagesAnswer {
+/** Whether a transcript read asks for the page at once rather than held, as a reader following its live statements does (`live-wire.ts`). */
+function readsNow(wait: string | undefined): boolean {
+  return wait === TRANSCRIPT_NOW_QUERY.NONE;
+}
+
+/** A page of an agent's or a worker's transcript as the wire answers it, with whether the held read would have held on it where it was read at once. */
+function transcriptAnswer(
+  page: TranscriptPage,
+  title: string | null,
+  holds?: boolean,
+): CodingAgentMessagesAnswer & { readonly holds?: boolean } {
   return {
+    ...(holds === undefined ? undefined : { holds }),
     messages: wireMessages(page.messages),
     cursor: cursorToWire(page.cursor),
     status: page.status,
@@ -241,9 +257,18 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
       const { agent, target } = yield* reachedAgent(context.userId, input.id);
       const titleAwaited = yield* titleAwaitedOf(target);
-      const page = yield* hostedStoreOrUnavailable(
-        transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent, titleAwaited),
-      );
+      const cursor = cursorOfWire(after);
+      const { page, holds } = readsNow(input.wait)
+        ? yield* hostedStoreOrUnavailable(
+            transcriptNow(target, CODER_TOOL_SET, cursor, agent, agent, titleAwaited),
+          )
+        : {
+            page: yield* hostedStoreOrUnavailable(
+              transcriptPast(target, CODER_TOOL_SET, cursor, agent, agent, titleAwaited),
+            ),
+            holds: undefined,
+          };
+      // The title is read after the page, since it lands after a turn ends, which a held read may span.
       const titled = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agent.id));
       return transcriptAnswer(
         page,
@@ -251,6 +276,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           onNone: () => agent.title,
           onSome: (now: CodingAgent) => now.title,
         }),
+        holds,
       );
     }),
 
@@ -271,29 +297,37 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
     agentWorker: signedIn.agentWorker.effect(function* ({ input, context }) {
       const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
       const callId = yield* callNamed(input.call);
+      const now = readsNow(input.wait);
       const { agent, target } = yield* reachedAgent(context.userId, input.id);
       const conversationId = childConversationId(agent.conversationId, callId);
-      const read = yield* hostedStoreOrUnavailable(delegationPast(target, conversationId, agent));
+      const read = yield* hostedStoreOrUnavailable(
+        (now ? delegationNow : delegationPast)(target, conversationId, agent),
+      );
       if (read.delegation === undefined) {
         if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
         return transcriptAnswer(
           { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
           null,
+          now ? true : undefined,
         );
       }
       const titleAwaited = yield* titleAwaitedOf(target, conversationId);
-      const page = yield* hostedStoreOrUnavailable(
-        transcriptPast(
-          { userId: agent.userId, conversationId },
-          CODER_TOOL_SET,
-          cursorOfWire(after),
-          { createdAt: read.delegation.createdAt },
-          undefined,
-          titleAwaited,
-        ),
-      );
+      const worker = { userId: agent.userId, conversationId };
+      const cursor = cursorOfWire(after);
+      const started = { createdAt: read.delegation.createdAt };
+      const { page, holds } = now
+        ? yield* hostedStoreOrUnavailable(
+            transcriptNow(worker, CODER_TOOL_SET, cursor, started, undefined, titleAwaited),
+          )
+        : {
+            page: yield* hostedStoreOrUnavailable(
+              transcriptPast(worker, CODER_TOOL_SET, cursor, started, undefined, titleAwaited),
+            ),
+            holds: undefined,
+          };
+      // The title is read after the page, since it lands beside the worker's start, which a held read may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
-      return transcriptAnswer(page, titles.get(conversationId) ?? null);
+      return transcriptAnswer(page, titles.get(conversationId) ?? null, holds);
     }),
 
     task: signedIn.task.effect(function* ({ input, context }) {

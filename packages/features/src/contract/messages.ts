@@ -41,17 +41,26 @@ const byCall = { id: EffectSchema.String, call: EffectSchema.String };
 /** A transcript read past a cursor. */
 const transcriptQuery = { after: queryValue };
 
+/** An agent's or a worker's transcript read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`). */
+const agentTranscriptQuery = { ...transcriptQuery, wait: queryValue };
+
+/** A page of an agent's or a worker's transcript, with whether the held read would have held on it where it was read at once (`transcriptNowAnswerSchema`). */
+const agentTranscriptAnswerSchema = EffectSchema.Struct({
+  ...codingAgentMessagesAnswerSchema.fields,
+  holds: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
 /** A workspace's chat, named in the query, with any key beside it taken as it comes. */
 const chatQuery = EffectSchema.StructWithRest(EffectSchema.Struct({ workspaceId: queryValue }), [
   EffectSchema.Record(EffectSchema.String, EffectSchema.Unknown),
 ]);
 
 export const messagesContract = {
-  /** One agent's transcript past the cursor, held while it runs. */
+  /** One agent's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   agent: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/messages" }))
-    .input(EffectSchema.Struct({ ...byId, ...transcriptQuery }))
-    .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
+    .input(EffectSchema.Struct({ ...byId, ...agentTranscriptQuery }))
+    .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
   /** One message handed to an agent, answering the agent as it then stands. */
   send: hostedProcedure
     .meta(
@@ -64,11 +73,11 @@ export const messagesContract = {
     )
     .input(exactBodyInput(EffectSchema.Struct(byId), codingAgentMessageRequestSchema))
     .output(EffectSchema.flip(codingAgentAnswerSchema)),
-  /** One agent's worker's transcript past the cursor, held while it runs. */
+  /** One agent's worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   agentWorker: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))
-    .input(EffectSchema.Struct({ ...byCall, ...transcriptQuery }))
-    .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
+    .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
+    .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
   /** One task's conversation, past the cursor and held while a turn runs, or a page of its turns. */
   task: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/messages" }))

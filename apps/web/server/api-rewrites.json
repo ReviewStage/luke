@@ -400,6 +400,10 @@
     "dest": "/api/default.js?route=live/agent-inbox"
   },
   {
+    "src": "/api/live/agent-transcript",
+    "dest": "/api/default.js?route=live/agent-transcript"
+  },
+  {
     "src": "/api/live/inbox",
     "dest": "/api/default.js?route=live/inbox"
   },

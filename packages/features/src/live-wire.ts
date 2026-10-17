@@ -13,6 +13,7 @@ import {
   accountInboxTaskSchema,
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
+import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
 import {
   INBOX_BOUNDS,
   INBOX_STATUS,
@@ -433,3 +434,73 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
     ...items.filter((item) => item.status !== INBOX_STATUS.OPEN).toSorted(ordered),
   ];
 }
+
+/**
+ * A coding agent's transcript, or one of its workers', sealed for
+ * following: the address, and the statements a page past the reader's
+ * cursor is read from, which move where the service's held read would wake
+ * (`packages/service/src/agents/coder-host/transcript-live.ts`): its
+ * messages, its turns, its conversation's journal revision and title, the
+ * agent's title, and its workers' titles and delegations. The page itself
+ * is still read from the service, once they move. The service answers
+ * `not-found` for an agent the account does not reach, and `unavailable`
+ * where its deployment has no Realtime, and the desktop holds its read open
+ * as before.
+ */
+export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    messages: sealedLiveQuerySchema,
+    turns: sealedLiveQuerySchema,
+    conversation: sealedLiveQuerySchema,
+    agent: sealedLiveQuerySchema,
+    workers: sealedLiveQuerySchema,
+  }),
+});
+
+export type AgentTranscriptLiveAnswer = typeof agentTranscriptLiveAnswerSchema.Type;
+
+/** A transcript's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
+export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
+  messages: EffectSchema.Array(EffectSchema.Struct({ rows: countedNumber, seq: countedNumber })),
+  turns: EffectSchema.Array(
+    EffectSchema.Struct({
+      status: EffectSchema.String,
+      rows: countedNumber,
+      stopped: countedNumber,
+      changedAt: countedNumber,
+    }),
+  ),
+  conversation: EffectSchema.Array(
+    EffectSchema.Struct({
+      title: EffectSchema.NullOr(EffectSchema.String),
+      revision: countedNumber,
+    }),
+  ),
+  agent: EffectSchema.Array(
+    EffectSchema.Struct({ title: EffectSchema.NullOr(EffectSchema.String) }),
+  ),
+  workers: EffectSchema.Array(
+    EffectSchema.Struct({
+      id: EffectSchema.String,
+      title: EffectSchema.NullOr(EffectSchema.String),
+      callId: EffectSchema.NullOr(EffectSchema.String),
+    }),
+  ),
+});
+
+/** The query a transcript read is asked at once by rather than held, and the one word it takes. */
+export const TRANSCRIPT_NOW_QUERY = { WAIT: "wait", NONE: "none" } as const;
+
+/**
+ * A page of the transcript read at once rather than held, for a reader
+ * following its live statements: the page the held read answers, and
+ * whether that read would have held on it for more, which is when the
+ * reader waits for the statements to move before it reads again.
+ */
+export const transcriptNowAnswerSchema = EffectSchema.Struct({
+  ...codingAgentMessagesAnswerSchema.fields,
+  holds: EffectSchema.Boolean,
+});
+
+export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;

@@ -152,6 +152,7 @@ import {
   inboxReadStateSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
+import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
@@ -294,6 +295,7 @@ import { messagesProcedures } from "./messages-procedures.js";
 const ORIGIN = "https://luke.test";
 const TASK_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
+const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
@@ -591,7 +593,7 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), chatPictures.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript and the chat land on the hosted oRPC router. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript, its worker's, and the chat land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const url = new URL(request.url);
@@ -599,6 +601,11 @@ const standing = (
         const id = url.searchParams.get("id");
         if (pathname === AGENT_MESSAGES && id !== null) {
           url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
+          return routed(new Request(url, request), webServices);
+        }
+        const call = url.searchParams.get("call");
+        if (pathname === SUBAGENT_MESSAGES && id !== null && call !== null) {
+          url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages`;
           return routed(new Request(url, request), webServices);
         }
         if (pathname === CHAT) return routed(request, webServices);
@@ -628,6 +635,7 @@ function request(
     id?: string;
     after?: string;
     call?: string;
+    wait?: string;
     archived?: string | undefined;
     attachment?: string;
     picture?: string;
@@ -642,6 +650,7 @@ function request(
   if (init.archived !== undefined) url.searchParams.set("archived", init.archived);
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
+  if (init.wait !== undefined) url.searchParams.set("wait", init.wait);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
@@ -5744,6 +5753,49 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         yield* joinWorkspace(task.workspaceId, other);
         const teammate = yield* fetch(at(other, agentPicture.id));
         assert.equal(teammate.status, HOSTED_HTTP_STATUS.OK, "a member of the agent's workspace");
+      }),
+  );
+
+  it.effect(
+    "a transcript read with wait=none is answered at once, never held, with whether the held read would have held on it: the agent's own and a worker's whose call is not recorded yet",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        // Nothing stands yet and the agent is starting, which the held read would hold on; this answers at once.
+        const own = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0", wait: "none" })),
+        );
+        assert.deepEqual(own.messages, []);
+        assert.equal(own.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(own.holds, true);
+
+        const worker = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(SUBAGENT_MESSAGES, owner, {
+              id: agent.id,
+              call: "call-7",
+              after: "0:0",
+              wait: "none",
+            }),
+          ),
+        );
+        assert.deepEqual(worker.messages, []);
+        assert.equal(worker.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(worker.holds, true);
+
+        assert.deepEqual(
+          yield* ask(request(AGENT_MESSAGES, other, { id: agent.id, wait: "none" })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
       }),
   );
 });
