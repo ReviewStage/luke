@@ -4832,6 +4832,89 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a transcript of more rows than are read keeps its newest rows, so a continue replays where it ended and a fork at a late message is found, and an unreadable row past a fork's cut refuses only a continue",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const source = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
+        const turns = REPLAY_BOUNDS.MAX_ROWS + 50;
+        const ids: string[] = [];
+        // Note that the rows go in by the thousand, because one insert a row would take minutes.
+        for (let from = 0; from < turns; from += 1_000) {
+          const rows = Array.from({ length: Math.min(1_000, turns - from) }, (_, at) => ({
+            userId: stored.userId,
+            conversationId: stored.conversationId,
+            seq: from + at + 2,
+            clientId: randomUUID(),
+            role: MESSAGE_ROLE.ASSISTANT,
+            // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
+            parts: [text(`Step ${from + at}.`)] as never,
+            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            placedAt: new Date(),
+          }));
+          const written = yield* Database.use((db) =>
+            db.insert(messages).values(rows).returning({ id: messages.id }),
+          );
+          ids.push(...written.map((row) => row.id));
+        }
+        const startFrom = (from: WireBoundaryInput) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+
+        yield* startFrom({ agentId: source.id });
+        assert.equal(
+          openedParts(eve).parts.replay?.steps.at(-1)?.summary,
+          `Said: Step ${turns - 1}.`,
+        );
+        const late = turns - 10;
+        yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
+        assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
+
+        // A fork with more rows after it than are read names no files as if they were all it edited.
+        yield* startFrom({ agentId: source.id, messageId: ids[10] ?? "" });
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Which files it edited after that message could not all be read/u,
+        );
+
+        // A fork with exactly as many rows after it as are read still names what they edited, here nothing.
+        yield* startFrom({
+          agentId: source.id,
+          messageId: ids[turns - 1 - REPLAY_BOUNDS.MAX_ROWS] ?? "",
+        });
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Its file tools edited no file after that message/u,
+        );
+
+        // A row past the cut that does not read refuses a continue, but not a fork that needs none of it.
+        yield* transcriptRow(stored, turns + 2, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        const fork = yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
+        assert.equal(fork.from?.steps, openedParts(eve).parts.replay?.steps.length);
+        assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Which files it edited after that message could not all be read/u,
+        );
+      }),
+  );
+
+  it.effect(
     "a long transcript keeps its newest steps within the bound, and a continue of a continue carries the first source's kept steps ahead of its own within the same bound",
     () =>
       Effect.gen(function* () {
