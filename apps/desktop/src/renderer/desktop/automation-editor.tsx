@@ -491,11 +491,12 @@ function ScheduleRows({
       />
       {schedule.kind === SCHEDULE_KIND.CUSTOM ? (
         <SettingsRow label="Cron">
-          {() => (
+          {(control) => (
             <span className="automation-field">
               <TextField
                 ref={cron}
                 label="Cron"
+                describedBy={control["aria-describedby"]}
                 font={TEXT_FIELD_FONT.MONO}
                 spellCheck={false}
                 value={schedule.cron}
@@ -507,7 +508,7 @@ function ScheduleRows({
         </SettingsRow>
       ) : (
         <SettingsRow label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}>
-          {() => (
+          {(control) => (
             <>
               {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
                 <Picker
@@ -537,6 +538,7 @@ function ScheduleRows({
                     ref={time}
                     type={TEXT_FIELD_TYPE.TIME}
                     label="Time"
+                    describedBy={control["aria-describedby"]}
                     value={clockValue(schedule.hour, schedule.minute)}
                     onEscape={() => time.current?.blur()}
                     onChange={(text) => {
@@ -863,11 +865,12 @@ function CodeReviewGroup({
         label="Rules file"
         description="Read from the base branch, beside AGENTS.md and CLAUDE.md."
       >
-        {() => (
+        {(control) => (
           <span className="automation-field">
             <TextField
               ref={rulesFile}
               label="Rules file"
+              describedBy={control["aria-describedby"]}
               font={TEXT_FIELD_FONT.MONO}
               spellCheck={false}
               value={settings.rulesFile}
