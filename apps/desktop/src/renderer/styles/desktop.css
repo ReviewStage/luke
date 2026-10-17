@@ -2591,7 +2591,7 @@ ul.actor-stack {
   color: var(--text-tertiary);
 }
 
-.luke-chip[data-look="field"] :is(.chip-name, .model-label) {
+.luke-chip[data-look="field"] .chip-name {
   flex: 1;
   text-align: left;
 }
