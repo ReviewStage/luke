@@ -1847,14 +1847,16 @@
   color: var(--luke-color-text-muted);
 }
 
-.pull-request-review-body {
+/* Words sent to GitHub as Markdown (`markdown-field.tsx`): Write and
+   Preview over the field, the preview drawn in the field's own box. */
+.markdown-field {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
 }
 
-.pull-request-review-preview {
+.markdown-field-preview {
   box-sizing: border-box;
   width: 100%;
   min-height: 96px;
@@ -1865,7 +1867,7 @@
   border-radius: var(--luke-radius-10);
 }
 
-.pull-request-review-preview > p:only-child {
+.markdown-field-preview > p:only-child {
   margin: 0;
 }
 
@@ -2545,6 +2547,31 @@ button.pull-request-check:hover {
   border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
   background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
   color: var(--luke-color-text);
+}
+
+/* The comment box at the foot of the Conversation
+   (`pull-request-comment-box.tsx`): the words with their preview, GitHub's
+   refusal under them, and Comment at the row's end. */
+.pull-request-comment-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.pull-request-comment-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pull-request-comment-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pull-request-comment-foot {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* The earlier entries a read left on GitHub, counted where they would stand. */

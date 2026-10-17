@@ -59,6 +59,7 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Enable auto-merge",
   [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disable auto-merge",
   [PULL_REQUEST_ACTION.DEQUEUE]: "Remove from queue",
+  [PULL_REQUEST_ACTION.COMMENT]: "Comment",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */

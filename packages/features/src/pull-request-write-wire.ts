@@ -71,6 +71,8 @@ export const PULL_REQUEST_ACTION = {
   RESOLVE_THREAD: "resolve-thread",
   /** A resolved review thread of the pull request opened again. */
   UNRESOLVE_THREAD: "unresolve-thread",
+  /** A comment on the pull request itself, at the foot of its conversation. */
+  COMMENT: "comment",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
@@ -95,7 +97,7 @@ const threadIdSchema = EffectSchema.NonEmptyString.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
 );
 
-/** A reply's words, Markdown, never blank; GitHub's bound. */
+/** A reply's or a comment's words, Markdown, never blank; GitHub's bound. */
 const replyBodySchema = reviewBodySchema.check(EffectSchema.isPattern(/\S/u));
 
 /** One change, as the tab asks the service to make it (POST). */
@@ -131,6 +133,10 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.UNRESOLVE_THREAD),
     threadId: threadIdSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.COMMENT),
+    body: replyBodySchema,
   }),
 ]);
 

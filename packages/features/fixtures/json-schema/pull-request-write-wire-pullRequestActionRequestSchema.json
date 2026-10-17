@@ -213,6 +213,26 @@
         "threadId"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "comment"
+          ]
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 65536
+        }
+      },
+      "required": [
+        "action",
+        "body"
+      ],
+      "additionalProperties": false
     }
   ]
 }
