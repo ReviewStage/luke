@@ -12,10 +12,12 @@ import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
+import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
+import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
 /**
@@ -44,11 +46,13 @@ export const EXAMPLES: readonly Example[] = [
   DIALOGS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
+  TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   SEGMENTED_EXAMPLE,
+  SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,

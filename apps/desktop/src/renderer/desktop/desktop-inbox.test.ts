@@ -540,7 +540,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   act(() => {
     answerer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-actor-card='person']");
+  const card = document.querySelector(".luke-tooltip-card [data-actor-card='person']");
   assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
 
@@ -659,7 +659,7 @@ test("an image that lands before its item's own read does is drawn all the same"
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
-  const standing = document.querySelector(`.tooltip-card ${card}`);
+  const standing = document.querySelector(`.luke-tooltip-card ${card}`);
   assert.ok(standing, "a card is hung");
   return [...standing.querySelectorAll("button")]
     .map((button) => button.textContent ?? "")
@@ -667,7 +667,7 @@ function openings(card: string): string[] {
 }
 
 function standingCard(): readonly [string | null | undefined, string | null | undefined] {
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "an agent's card is hung");
   return [
     card.querySelector(".card-name")?.textContent,
@@ -765,7 +765,7 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
   });
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
   // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
-  const card = document.querySelector<HTMLElement>(".tooltip-card [data-tab-card]");
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card [data-tab-card]");
   act(() => {
     card?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     card?.click();
@@ -799,7 +799,7 @@ test("an item's mark hangs a card naming the teammate who started its agent, as 
     act(() => {
       mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const words = wordsOf(document.querySelector(".tooltip-card [data-tab-card]"));
+    const words = wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]"));
     act(() => root?.unmount());
     root = undefined;
     document.body.innerHTML = "";
@@ -1670,7 +1670,7 @@ function hoveredCard(control: Element, card: string): string | null {
   act(() => {
     control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return wordsOf(document.querySelector(`.tooltip-card ${card}`));
+  return wordsOf(document.querySelector(`.luke-tooltip-card ${card}`));
 }
 
 test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
@@ -1700,7 +1700,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.deepEqual(openings('[data-actor-card="automation"]'), [], "no Open automation");
   const name = document.querySelector<HTMLButtonElement>(
-    '.tooltip-card [data-actor-card="automation"] .card-name button',
+    '.luke-tooltip-card [data-actor-card="automation"] .card-name button',
   );
   assert.equal(name?.textContent, "Nightly flake sweep", "the card's name is a button");
   act(() => name?.click());
@@ -1729,7 +1729,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.equal(
-    document.querySelector('.tooltip-card [data-actor-card="automation"] button')?.textContent,
+    document.querySelector('.luke-tooltip-card [data-actor-card="automation"] button')?.textContent,
     undefined,
     "the crumb's card offers nothing to press, since the crumb opens the automation",
   );

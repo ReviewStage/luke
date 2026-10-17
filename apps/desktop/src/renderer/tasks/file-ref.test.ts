@@ -106,7 +106,7 @@ function cardOn(element: Element | null | undefined): (string | null | undefined
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-file-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
     card.querySelector(".card-name")?.textContent,

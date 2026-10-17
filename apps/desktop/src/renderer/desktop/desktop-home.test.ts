@@ -526,7 +526,7 @@ test("a waiting row wears its agent's tile, whose card names the teammate who st
   act(() => {
     mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Started by.*Charles Pan/u);
   const face = card?.querySelector<HTMLImageElement>('.actor-mark[data-kind="person"] img');
   assert.equal(
@@ -586,7 +586,7 @@ test("a waiting row of an agent with no plan names the automation that started i
   act(() => {
     mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Sweep the flaky tests.*Started by.*Nightly flake sweep/u);
 });
 

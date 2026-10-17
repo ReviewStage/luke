@@ -181,5 +181,5 @@ test("a Settings row keeps its ⋯, named for its menu, and More on the pointer"
   act(() => ellipsis.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
 
   assert.equal(ellipsis.textContent, "", "with no words of its own");
-  assert.equal(document.querySelector(".tooltip")?.textContent, "More");
+  assert.equal(document.querySelector(".luke-tooltip")?.textContent, "More");
 });
