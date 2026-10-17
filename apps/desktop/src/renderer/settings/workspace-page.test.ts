@@ -26,6 +26,7 @@ import {
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
@@ -34,6 +35,9 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -115,6 +119,8 @@ let refuseLaterReads = false;
 let inviteHeld: Promise<void> | undefined;
 /** Whether the browser could not be opened on GitHub's page. */
 let refuseGitHubOpen = false;
+/** Where the next Linear sign-in waits before the browser is sent, so a test can hold it on the wire. */
+let linearConnectHeld: Promise<void> | undefined;
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
@@ -224,6 +230,13 @@ function answer(request: Act): Promise<ActOutcome> {
     case ACT_KIND.WORKSPACE_INVITATION_CANCEL:
       invitations = invitations.filter((one) => one.id !== request.payload.invitationId);
       return Promise.resolve(done(invitations));
+    case ACT_KIND.WORKSPACE_LINEAR_CONNECT:
+      if (linearConnectHeld !== undefined) {
+        const held = linearConnectHeld;
+        linearConnectHeld = undefined;
+        return held.then(() => done(undefined));
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
       if (refuseGitHubOpen) {
         return Promise.resolve({
@@ -304,7 +317,6 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done(undefined));
     }
     case ACT_KIND.WORKSPACE_LEAVE:
-    case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
@@ -328,16 +340,15 @@ beforeEach(() => {
   refuseLaterReads = false;
   inviteHeld = undefined;
   refuseGitHubOpen = false;
+  linearConnectHeld = undefined;
   refuseRename = false;
   refusePhoto = false;
   refuseRole = false;
   automations = undefined;
   macRepositories = [];
   githubRepositories = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ act: answer });
+  handCapabilities(DESKTOP_CAPABILITIES);
 });
 
 afterEach(() => {
@@ -1461,6 +1472,8 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
 }
 
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
@@ -1495,15 +1508,12 @@ test("the owner invites an address as a role, sees it pending with its link to c
       ],
       [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
       [
-        ACT_KIND.WINDOW_COPY_TEXT,
-        { words: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com" },
-      ],
-      [
         ACT_KIND.WORKSPACE_INVITATION_CANCEL,
         { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },
       ],
     ],
   );
+  assert.deepEqual(copied, ["https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com"]);
 });
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
@@ -1743,6 +1753,27 @@ test("an admin's Linear row in Integrations connects Linear for the workspace at
   assert.deepEqual(linearSent(), [[ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId: ACME.id }]]);
 });
 
+test("an admin's Linear Connect is named Connecting while the browser is sent, and Connect again once it is", async () => {
+  let release: () => void = () => undefined;
+  linearConnectHeld = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const connect = button(rowNamed(githubGroup(page), "Linear"), "Connect");
+
+  act(() => connect.click());
+  const during = [connect.getAttribute("aria-label"), connect.getAttribute("aria-busy")];
+  release();
+  await settle();
+
+  assert.deepEqual(during, ["Connecting", "true"]);
+  assert.deepEqual(
+    [connect.getAttribute("aria-label"), connect.getAttribute("aria-busy")],
+    [null, null],
+  );
+  assert.equal(page.querySelector('[role="alert"]'), null);
+});
+
 test("a connected workspace's Linear reads connected for everyone and stands quiet, its ⋯ disconnects after asking, and a member sees it read only", async () => {
   const connected = WITH_LINEAR;
   const admin = await mount(connected);
@@ -1781,6 +1812,17 @@ test("in the window, each member's ⋯ opens their profile first, in the workspa
   await chooseAction(memberNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);
+});
+
+test("on a platform without this Mac's terminal, the Workspace page draws no Repositories group beside its Integrations", async () => {
+  githubRepositories = ["acme/app"];
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MAC_TERMINAL));
+  const { page } = await mount(ACME);
+  const group = (section: string) =>
+    page.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${section}"]`);
+
+  assert.equal(group(SETTINGS_SECTION.GITHUB_REPOSITORIES) !== null, true, "the page is drawn");
+  assert.equal(group(SETTINGS_SECTION.MAC_REPOSITORIES) !== null, false);
 });
 
 test("the Repositories group lists the workspace's repositories and those set here, and saves a command typed on this Mac", async () => {

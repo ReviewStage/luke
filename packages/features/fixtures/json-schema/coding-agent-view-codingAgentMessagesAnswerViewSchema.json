@@ -99,6 +99,20 @@
                     "enum": [
                       true
                     ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "agentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
                   }
                 },
                 "required": [
@@ -315,6 +329,8 @@
             "not_started",
             "fast_own_key",
             "fast_not_enabled",
+            "context_overflow",
+            "session_ended",
             "other"
           ]
         },

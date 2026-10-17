@@ -204,8 +204,10 @@ function userJson(fixture: UserFixture) {
   };
 }
 
-/** What a repository answers on its own paths, where a test scripts one; nothing hands the request on to not found. */
-export type RepositoryScript = (sent: SentToGitHub) => Response | undefined;
+/** What a repository answers on its own paths, where a test scripts one, at once or once a step of the test's own is done; nothing hands the request on to not found. */
+export type RepositoryScript = (
+  sent: SentToGitHub,
+) => Response | undefined | Promise<Response | undefined>;
 
 /** GitHub's own record of an installation, as `GET /app/installations/{id}` and `GET /user/installations` answer it. */
 function installationJson(installation: InstallationFixture) {
@@ -242,14 +244,14 @@ export function githubReaching(
 ): FakeGitHub {
   const bot = people.bot === undefined ? GITHUB_FIXTURE_BOT : people.bot;
   const notFound = () => Response.json({ message: "Not Found" }, { status: 404 });
-  return fakeGitHub((sent) => {
+  return fakeGitHub(async (sent) => {
     if (sent.url === TOKEN_ENDPOINT) {
       return new URLSearchParams(sent.body).get("code") === GITHUB_FIXTURE_REFUSED_CODE
         ? Response.json({ error: "bad_verification_code" })
         : Response.json({ access_token: GITHUB_FIXTURE_AUTHORIZED_TOKEN, token_type: "bearer" });
     }
     const { pathname } = new URL(sent.url);
-    const scripted = repository(sent);
+    const scripted = await repository(sent);
     if (scripted !== undefined) return scripted;
     if (APP_TOKEN.test(pathname) && sent.method === "DELETE") {
       return new Response(null, { status: 204 });

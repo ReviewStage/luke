@@ -6,7 +6,7 @@ import { SectionHeading, StatCard } from "../charts/stat-card";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, RefreshFailureNotice } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
-import { AccountAvatar, PageHeader, type ViewerAccount } from "../chrome/page-header";
+import { AccountAvatar, AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { accountHref, dayReadPath, plainLeftClick, tabHref } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
@@ -169,14 +169,12 @@ export function DayScreen({
       const soFar = stillFilling ? "so far today" : undefined;
 
       return frame(
-        <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
-          <PageHeader
-            title="Day"
-            account={account}
-            onSignOut={signOut}
-            controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
-          />
-
+        <AdminPage
+          title="Day"
+          account={account}
+          onSignOut={signOut}
+          controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
+        >
           <RefreshFailureNotice
             failure={state.refreshFailure}
             refreshing={refreshing}
@@ -236,7 +234,7 @@ export function DayScreen({
               />
             ) : null}
           </div>
-        </main>,
+        </AdminPage>,
       );
     }
   }

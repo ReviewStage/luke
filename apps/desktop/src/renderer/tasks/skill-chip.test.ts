@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
+import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
@@ -33,8 +33,8 @@ const RELEASE: SkillOption = {
 
 const roots: Root[] = [];
 
-// Set before any composer renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // A sent message is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));

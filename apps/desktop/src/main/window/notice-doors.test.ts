@@ -44,6 +44,7 @@ function doors() {
     toPanels: ignore,
     inboxToPanels: ignore,
     failedRunToPanels: ignore,
+    chatToPanels: ignore,
     onAnswered: (status) => answers.push(status),
     report: ignore,
   });
