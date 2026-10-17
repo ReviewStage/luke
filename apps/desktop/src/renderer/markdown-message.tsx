@@ -137,15 +137,6 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
     const threads = covering.flatMap((each) =>
       each.kind === MARKDOWN_MARK.COMMENT && each.thread !== undefined ? [each.thread] : [],
     );
-    // Note that a block's threads are named apart from the words', so words a block thread and a word thread both cover keep the word's mark, and the block still draws its edge.
-    const blockThreads = covering.flatMap((each) =>
-      each.kind === MARKDOWN_MARK.COMMENT && each.block === true && each.thread !== undefined
-        ? [each.thread]
-        : [],
-    );
-    const wordsCovered = covering.some(
-      (each) => each.kind === MARKDOWN_MARK.COMMENT && each.block !== true,
-    );
     const drawn = mark === undefined ? undefined : MARK_DRAWN[mark.kind];
     parts.push(
       selected
@@ -164,13 +155,6 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
                 ...(threads.length === 0 ? undefined : { dataThreads: threads.join(" ") }),
                 ...(covering.some((each) => each.active === true)
                   ? { dataActive: "true" }
-                  : undefined),
-                ...(blockThreads.length > 0 && !wordsCovered ? { dataBlock: "true" } : undefined),
-                ...(blockThreads.length === 0
-                  ? undefined
-                  : { dataBlockThreads: blockThreads.join(" ") }),
-                ...(covering.some((each) => each.block === true && each.active === true)
-                  ? { dataBlockActive: "true" }
                   : undefined),
               },
               children: [{ type: "text", value }],
@@ -524,20 +508,8 @@ function drawnMarked(
     first?.type === "element" && first.properties.dataActive === "true"
       ? { "data-active": "true" }
       : undefined;
-  const block =
-    first?.type === "element"
-      ? {
-          ...(first.properties.dataBlock === "true" ? { "data-block": "true" } : undefined),
-          ...(isWireString(first.properties.dataBlockThreads)
-            ? { "data-block-threads": first.properties.dataBlockThreads }
-            : undefined),
-          ...(first.properties.dataBlockActive === "true"
-            ? { "data-block-active": "true" }
-            : undefined),
-        }
-      : undefined;
   return (
-    <Mark className={marks.className} {...threads} {...active} {...block}>
+    <Mark className={marks.className} {...threads} {...active}>
       {drawn}
     </Mark>
   );

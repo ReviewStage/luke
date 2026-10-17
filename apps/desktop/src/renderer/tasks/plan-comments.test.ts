@@ -376,7 +376,7 @@ test("deleting a thread asks first, and only the confirm deletes it", async () =
   ]);
 });
 
-test("words a block thread and a word thread both cover keep the word's mark, and the block still names its thread for its edge", () => {
+test("words a block thread and a word thread both cover are marked once, naming both threads, as a block's other words name its own", () => {
   const paragraph = "Admins can withdraw an invite. A withdrawn link never grants access again.";
   const block = threadOn(ID.GONE, paragraph, "Is this v1?", {
     scope: PLAN_COMMENT_SCOPE.BLOCK,
@@ -388,14 +388,13 @@ test("words a block thread and a word thread both cover keep the word's mark, an
   const shared = container.querySelector<HTMLElement>(
     `mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`,
   );
-  const blockOnly = [
-    ...container.querySelectorAll<HTMLElement>(`mark.plan-comment-mark[data-block-threads]`),
-  ].find((mark) => !(mark.dataset.threads ?? "").includes(ID.OPEN));
+  const blockOnly = [...container.querySelectorAll<HTMLElement>("mark.plan-comment-mark")].find(
+    (mark) => mark.dataset.threads === ID.GONE,
+  );
 
-  assert.ok(shared, "the word thread's words are marked");
-  assert.equal(shared.dataset.block, undefined, "and washed as words, not as a block");
-  assert.ok((shared.dataset.blockThreads ?? "").includes(ID.GONE));
-  assert.equal(blockOnly?.dataset.block, "true", "the rest of the block reads as the block's");
+  assert.deepEqual(shared?.dataset.threads?.split(" ").sort(), [ID.GONE, ID.OPEN].sort());
+  assert.ok(blockOnly, "the rest of the block is marked as the block thread's");
+  assert.equal(container.querySelectorAll(".comment-block-edge").length, 0, "and draws no bar");
 });
 
 test("Send to posts the draft standing in the field, then sends the thread to Luke", async () => {
@@ -649,4 +648,94 @@ test("on a plan's page a reply is written in the agent box's editor, its words p
     asked.map(({ action }) => [action.action, "words" in action ? action.words : undefined]),
     [[PLAN_COMMENT_ACTION.REPLY, "Agreed."]],
   );
+});
+
+test("a thread at rest draws its comment's mentions as their chips, as it does open, and a press on one opens the thread too", async () => {
+  installEditorBundle();
+  installEditorLayout();
+  const mentioned = threadOn(ID.OPEN, "**single-use link** that expires", "", {
+    entries: [
+      {
+        id: `${ID.OPEN.slice(0, -4)}aaaa`,
+        kind: PLAN_COMMENT_ENTRY.COMMENT,
+        writer: {
+          actor: PLAN_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-charles", name: "Charles Pan" },
+        },
+        words: `See [@Goal](https://tryluke.dev/acme/plan/${PLAN.id}#goal) first.`,
+        at: 1,
+      },
+    ],
+  });
+  const { container } = wide(() =>
+    drawn("page", [mentioned], () => true, PLAN, undefined, PAGE_MENTIONS),
+  );
+  await act(async () => undefined);
+
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.equal(card?.dataset.open, "false");
+  assert.ok(card?.querySelector(".comment-clamp .mention-chip"), "the chip stands at rest too");
+
+  act(() => card?.querySelector<HTMLElement>(".comment-clamp .mention-chip")?.click());
+  assert.equal(
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`)?.dataset.open,
+    "true",
+    "a press on the chip opens the thread with it",
+  );
+});
+
+test("a thread being started goes on a press away while empty, and stays holding a draft", () => {
+  const { container } = wide(() => drawn("page", []));
+  const startOn = () => {
+    const paragraph = [...container.querySelectorAll("p")].find((p) =>
+      p.textContent?.startsWith("Admins can withdraw"),
+    );
+    assert.ok(paragraph);
+    act(() => paragraph.dispatchEvent(new Event("pointerover", { bubbles: true })));
+    act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
+  };
+  const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
+  const away = () =>
+    act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+
+  startOn();
+  assert.ok(pending(), "the thread is being started");
+  away();
+  assert.equal(pending(), null, "empty, it goes");
+
+  startOn();
+  const field = pending()?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(field, "Worth a setting?");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  away();
+  assert.ok(pending(), "holding a draft, it stays");
+});
+
+test("on a plan's page a comment's field offers dictation, and the plain field none", async () => {
+  installEditorBundle();
+  installEditorLayout();
+  const withMentions = drawn("page", THREADS, () => true, PLAN, undefined, PAGE_MENTIONS);
+  act(() =>
+    withMentions.container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  await act(async () => undefined);
+  const plain = drawn("page");
+  act(() =>
+    plain.container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+
+  const dictate = (container: HTMLElement) =>
+    container.querySelector(
+      `.comment-card[data-thread="${ID.OPEN}"] .comment-field-tools button[aria-label^="Dictate"]`,
+    );
+  assert.ok(dictate(withMentions.container), "the editor's field takes a dictation");
+  assert.equal(dictate(plain.container), null, "the plain field does not");
 });
