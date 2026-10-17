@@ -72,9 +72,11 @@
   }
 
   /* The title's acts are centred on its first line, whatever a control's
-     height is beside the title's leading, and wrap under it when they would
-     leave a long title too little room, and wrap among themselves past the
-     line's width, so no act stands outside the page. */
+     height is beside the title's leading. They share the title's line
+     while the title fits beside them unbroken, however narrow the page;
+     a title too long for that takes the line and they wrap under it, and
+     wrap among themselves past the line's width, so no act stands outside
+     the page. */
   .luke-detail-page-header {
     display: flex;
     flex-wrap: wrap;
@@ -84,8 +86,8 @@
   }
 
   .luke-detail-page-heading {
-    flex: 1 1 240px;
-    min-width: min(100%, 240px);
+    flex: 1 1 auto;
+    min-width: 0;
     overflow-wrap: anywhere;
   }
 
