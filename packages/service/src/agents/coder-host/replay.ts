@@ -567,8 +567,15 @@ const editedAfter = (source: CodingAgent, cutSeq: number) =>
       if (past.read.value.length < PAGE_ROWS) return [...files];
       cursor = { seq: past.cursor.seq, revision: Number.MAX_SAFE_INTEGER };
     }
-    // More rows stand past the cap, so the files named would pass for all of them.
-    return undefined;
+    // Note that a row past the cap makes the files named some of them only, so one more is looked for.
+    const past = yield* listMessagesPast(
+      source.userId,
+      source.conversationId,
+      CODER_TOOL_SET,
+      cursor,
+      1,
+    );
+    return past.read.ok && past.read.value.length === 0 ? [...files] : undefined;
   });
 
 /** The steps a source's transcript replays, cut after the message named: refused where that message is none of its journals. */

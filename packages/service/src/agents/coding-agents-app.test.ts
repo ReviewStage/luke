@@ -4886,6 +4886,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           /Which files it edited after that message could not all be read/u,
         );
 
+        // A fork with exactly as many rows after it as are read still names what they edited, here nothing.
+        yield* startFrom({
+          agentId: source.id,
+          messageId: ids[turns - 1 - REPLAY_BOUNDS.MAX_ROWS] ?? "",
+        });
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Its file tools edited no file after that message/u,
+        );
+
         // A row past the cut that does not read refuses a continue, but not a fork that needs none of it.
         yield* transcriptRow(stored, turns + 2, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
         assert.deepEqual(
