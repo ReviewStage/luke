@@ -6,7 +6,7 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { SplitIcon, TextQuoteIcon } from "lucide-react";
+import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
@@ -298,10 +298,11 @@ function ReplaySteps({ steps }: { steps: readonly ReplayStep[] }): React.JSX.Ele
       {page.from === 0 ? null : (
         <button
           type="button"
-          className="ai-trigger m-0 cursor-pointer self-start border-0 text-[11.5px] text-muted-foreground"
+          className="m-0 flex h-7 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           data-replay-earlier=""
           onClick={drawMore}
         >
+          <ChevronsUpIcon className="size-4 shrink-0" aria-hidden="true" />
           {earlierStepsLine(page)}
         </button>
       )}
