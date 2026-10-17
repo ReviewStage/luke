@@ -1,10 +1,28 @@
 import type { AdminIntegration, AdminMetrics } from "@luke/service/admin/admin-metrics";
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
+import {
+  BADGE_TONE,
+  Badge,
+  GAP,
+  Inline,
+  JUSTIFY,
+  LAYOUT_ELEMENT,
+  Stack,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  Text,
+} from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { RetentionGrid } from "../charts/retention-grid";
 import { SignInMethodsChart, SignupsChart } from "../charts/signups-chart";
-import { SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
+import {
+  METRIC_STATUS,
+  MetricCard,
+  SectionHeading,
+  StatCard,
+  StatGroup,
+} from "../charts/stat-card";
 import { UsageChart } from "../charts/usage-chart";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, RefreshFailureNotice, WindowSwitcher } from "../chrome/controls";
@@ -29,7 +47,7 @@ const readMetrics: AdminReader<AdminMetrics> = async (response) =>
 /** The dashboard's own sections, in the order the loaded page states them. */
 const DASHBOARD_SHAPES: readonly SkeletonShape[] = [
   { kind: SKELETON_SHAPE.HEADING, label: "User activity" },
-  { kind: SKELETON_SHAPE.STAT_GROUP, columns: 3 },
+  { kind: SKELETON_SHAPE.STAT_GROUP },
   { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.SIGNUPS, SKELETON_PLOT.SIGN_IN_METHODS] },
   { kind: SKELETON_SHAPE.HEADING, label: "Signup retention · weekly cohorts" },
   { kind: SKELETON_SHAPE.RETENTION },
@@ -41,29 +59,24 @@ const DASHBOARD_SHAPES: readonly SkeletonShape[] = [
   { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 3 },
   { kind: SKELETON_SHAPE.STATIC, node: <TopAccountsNote /> },
   { kind: SKELETON_SHAPE.HEADING, label: "Reliability" },
-  { kind: SKELETON_SHAPE.STAT_GROUP, columns: 2 },
   { kind: SKELETON_SHAPE.LINES, bones: ["w-full", "w-full", "w-2/5"] },
   { kind: SKELETON_SHAPE.HEADING, label: "System health" },
   { kind: SKELETON_SHAPE.HEALTH },
 ];
 
+/** The database's status, the health card's figure: its word, and a dot that repeats it. */
+const DATABASE_STATUS = `inline-flex items-center gap-2 ${METRIC_STATUS}`;
+
+/** One integration in the health card's list: its name, and whether its keys are set. */
 function IntegrationRow({ integration }: { integration: AdminIntegration }): React.JSX.Element {
   return (
-    <li className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0">
-      <span className="text-sm">{integration.label}</span>
-      <span
-        className="inline-flex items-center gap-2 font-mono text-xs"
-        data-tone={integration.configured ? "complete" : "attention"}
-      >
-        <span
-          className="inline-block size-2 rounded-full data-[on=true]:bg-complete data-[on=false]:bg-attention"
-          data-on={integration.configured}
-          aria-hidden="true"
-        />
-        <span className={integration.configured ? "text-complete" : "text-attention"}>
+    <li className="border-b border-border py-3 last:border-0">
+      <Inline justify={JUSTIFY.BETWEEN} gap={GAP.FIELD}>
+        <Text as={TEXT_ELEMENT.SPAN}>{integration.label}</Text>
+        <Badge tone={integration.configured ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
           {integration.configured ? "Configured" : "Not configured"}
-        </span>
-      </span>
+        </Badge>
+      </Inline>
     </li>
   );
 }
@@ -174,7 +187,7 @@ export function DashboardScreen({
             aria-busy={refreshing}
           >
             <SectionHeading>User activity</SectionHeading>
-            <StatGroup columns={3}>
+            <StatGroup>
               <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} grouped />
               {/* The hint already carries the window total, so the run this count
               is read against rides the title attribute instead. */}
@@ -234,7 +247,7 @@ export function DashboardScreen({
             <TopAccountsNote />
 
             <SectionHeading>Reliability</SectionHeading>
-            <p className="mt-3 text-sm text-muted-foreground">
+            <Text tone={TEXT_TONE.MUTED}>
               The service's own tables hold no rejection signal: nothing is refused on the usage
               counts above. Per-request error rates and client-side failures are recorded as
               product-analytics events, which live with{" "}
@@ -251,16 +264,16 @@ export function DashboardScreen({
                 "the analytics processor"
               )}{" "}
               rather than in this database.
-            </p>
+            </Text>
 
             <SectionHeading>System health</SectionHeading>
             <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
-              <div className="rounded-lg border border-border bg-card px-5 py-4">
-                <div className="font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
-                  Database
-                </div>
+              <MetricCard
+                label="Database"
+                hint={`probe round-trip ${formatNumber(db.latencyMs)} ms`}
+              >
                 <div
-                  className="mt-2 inline-flex items-center gap-2 text-xl font-semibold"
+                  className={DATABASE_STATUS}
                   data-tone={db.reachable ? "complete" : "attention"}
                 >
                   <span
@@ -272,20 +285,14 @@ export function DashboardScreen({
                     {db.reachable ? "Reachable" : "Unreachable"}
                   </span>
                 </div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  probe round-trip {formatNumber(db.latencyMs)} ms
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-card px-5 py-4">
-                <div className="mb-1 font-mono text-xs tracking-[0.2px] text-muted-foreground uppercase">
-                  Integrations
-                </div>
-                <ul className="m-0 list-none p-0">
+              </MetricCard>
+              <MetricCard label="Integrations">
+                <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.NONE}>
                   {metrics.systemHealth.integrations.map((integration) => (
                     <IntegrationRow key={integration.key} integration={integration} />
                   ))}
-                </ul>
-              </div>
+                </Stack>
+              </MetricCard>
             </div>
           </div>
         </AdminPage>,
