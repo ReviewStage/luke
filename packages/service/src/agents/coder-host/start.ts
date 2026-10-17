@@ -185,7 +185,7 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
 > {
   const { offered, defaultChoice } = yield* accountModelChoices(userId);
   return yield* Effect.fromResult(validateModelChoice(offered, named ?? defaultChoice)).pipe(
-    Effect.mapError((reason) => new ModelChoiceRefused({ reason })),
+    Effect.mapError((reason) => new ModelChoiceRefused({ reason, offered })),
   );
 });
 

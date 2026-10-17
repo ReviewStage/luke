@@ -647,6 +647,22 @@ test("list_models says the default is no longer offered where the catalog droppe
   assert.equal(unnamed.status, ACTION_RESULT_STATUS.REJECTED);
   assert.equal(eve.sent.length, 0);
 
+  // A refusal lists the models the start was checked against, even where the catalog fails on any later read.
+  let reads = 0;
+  const flaky = Layer.succeed(ModelCatalog, {
+    read: Effect.suspend(() => {
+      reads += 1;
+      return reads === 1
+        ? Effect.succeed([sol])
+        : Effect.fail(new ModelCatalogUnavailable({ cause: "offline" }));
+    }),
+    lukeFastAccess: Effect.succeed(undefined),
+  });
+  const once = await peerCaller(hostOf(true), agents.caller, eve.services, flaky);
+  const refused = await once(CODER_TOOL.START_AGENT, { model: SOL, effort: "max" }, "call-max");
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.ok(String(refused.reason).endsWith("The choices are: openai/gpt-6.1-sol (low, high)."));
+
   const unreadable = Layer.succeed(ModelCatalog, {
     read: Effect.fail(new ModelCatalogUnavailable({ cause: "offline" })),
     lukeFastAccess: Effect.succeed(undefined),

@@ -664,13 +664,6 @@ const offeredModels = Effect.flatMap(ModelCatalog, (catalog) =>
   Effect.orElseSucceed(catalog.read, (): readonly OfferedModel[] => []),
 );
 
-/** The models the member may start an agent on, as a start is checked against them (`accountModelChoices`); none where they cannot be read, as a refusal then lists none. */
-const startableModels = (userId: string) =>
-  accountModelChoices(userId).pipe(
-    Effect.map((choices) => choices.offered),
-    Effect.orElseSucceed((): readonly OfferedModel[] => []),
-  );
-
 const readAgent = (
   agent: CodingAgent,
   task: AgentTaskReading,
@@ -1035,9 +1028,8 @@ export function runStartAgent(
       if (Result.isFailure(started)) {
         const refusal = started.failure;
         if (refusal instanceof ModelChoiceRefused) {
-          return agentToolRejected(
-            choiceRefusal(choice, yield* startableModels(callerUserId(caller))),
-          );
+          // The choices are the models the start was checked against, so no second read can lose them.
+          return agentToolRejected(choiceRefusal(choice, refusal.offered));
         }
         return agentToolRejected(startRefusalWords(refusal));
       }

@@ -141,9 +141,10 @@ export const MODEL_CHOICE_REFUSAL = {
 
 export type ModelChoiceRefusal = (typeof MODEL_CHOICE_REFUSAL)[keyof typeof MODEL_CHOICE_REFUSAL];
 
-/** The catalog refused the choice, for the reason named. */
+/** The catalog refused the choice, for the reason named, beside the models it was checked against, which a refusal lists as the choices there are. */
 export class ModelChoiceRefused extends Data.TaggedError("ModelChoiceRefused")<{
   readonly reason: ModelChoiceRefusal;
+  readonly offered: readonly OfferedModel[];
 }> {}
 
 /** The catalog the instance read, offered as a service so one read serves every route that checks against it. */
@@ -468,7 +469,7 @@ export function acceptedModelChoice(
     const catalog = yield* ModelCatalog;
     const offered = offeredToAccount(yield* catalog.read, anthropicFastAccess);
     return yield* Effect.fromResult(validateModelChoice(offered, choice)).pipe(
-      Effect.mapError((reason) => new ModelChoiceRefused({ reason })),
+      Effect.mapError((reason) => new ModelChoiceRefused({ reason, offered })),
     );
   });
 }
