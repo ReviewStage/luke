@@ -190,10 +190,15 @@ function field(): HTMLInputElement {
   return input;
 }
 
+/** The toggles in the group named Filter. */
+function filterChips(): HTMLButtonElement[] {
+  const group = document.querySelector('fieldset[aria-label="Filter"]');
+  assert.ok(group, "the filters are drawn");
+  return [...group.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")];
+}
+
 function chooseFilter(name: string): void {
-  const chip = [...document.querySelectorAll<HTMLButtonElement>(".command-palette-filter")].find(
-    (each) => each.textContent === name,
-  );
+  const chip = filterChips().find((each) => each.textContent === name);
   assert.ok(chip, `the ${name} filter is drawn`);
   act(() => chip.click());
 }
@@ -285,7 +290,7 @@ test("choosing a page opens Settings on that page", () => {
 
 /** The filter whose chip stands pressed. */
 function chosenFilter(): string | null | undefined {
-  return document.querySelector(".command-palette-filter[aria-pressed='true']")?.textContent;
+  return filterChips().find((each) => each.getAttribute("aria-pressed") === "true")?.textContent;
 }
 
 /** Presses a key in the search field, answering whether the field kept it for itself. */
