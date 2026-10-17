@@ -5567,10 +5567,9 @@ button.picture-frame {
 
 /* Comments on the plan (`plan-comments.tsx`) -------------------------------- */
 
-/* The words a thread is on: a wash under them and an edge beneath, stronger
-   while its thread is open or the pointer is on them. A thread on a whole
-   block washes nothing and marks the block by a bar at its end instead, which
-   the margin draws. */
+/* The words a thread is on, a block's whole or a few of them alike: a wash
+   under them and an edge beneath, stronger while its thread is open or the
+   pointer is on them. */
 .plan-comment-mark {
   padding-bottom: 1px; /* off-scale: the edge sits a hair under the words, as an underline does */
   border-bottom: 1.5px solid var(--comment-mark-edge);
@@ -5587,21 +5586,10 @@ button.picture-frame {
   background: var(--comment-mark-active);
 }
 
-.plan-comment-mark[data-block="true"] {
-  padding-bottom: 0;
-  border-bottom: 0;
-  background: none;
-}
-
-.plan-comment-mark[data-block="true"][data-active="true"] {
-  background: var(--comment-mark);
-}
-
 /* Words under two threads in the editor stand in a mark inside another,
-   which the read view draws as one mark; inside a word thread's mark the
-   inner one adds nothing, so they read the same in both. A block thread's
-   mark washes nothing, so a word thread's inside it keeps its own. */
-.plan-comment-mark:not([data-block="true"]) .plan-comment-mark {
+   which the read view draws as one mark; the inner one adds nothing, so they
+   read the same in both. */
+.plan-comment-mark .plan-comment-mark {
   padding-bottom: 0;
   border-bottom: 0;
   background: none;
@@ -5635,10 +5623,6 @@ button.picture-frame {
   pointer-events: auto;
 }
 
-.comment-layer > .comment-block-edge {
-  pointer-events: none;
-}
-
 .comment-margin {
   position: absolute;
   top: 0;
@@ -5667,20 +5651,6 @@ button.picture-frame {
   }
 }
 
-/* The bar at the end of a block a thread is on whole, stronger while it is open. */
-.comment-block-edge {
-  position: absolute;
-  right: calc(var(--luke-space-12) * -1);
-  width: 3px; /* off-scale: a bar, as the summary's selected row wears */
-  border-radius: 2px;
-  background: var(--comment-mark-edge);
-  pointer-events: none;
-}
-
-.comment-block-edge[data-active="true"] {
-  background: var(--comment-mark-active-edge);
-}
-
 /* A block's own comment button, under the pointer, just outside the column's end, where a section's ⋯ hangs. */
 .comment-block-button {
   position: absolute;
@@ -5707,35 +5677,28 @@ button.picture-frame {
 }
 
 /* Where the margin folds: a count at the end of a line holding marks, and the open thread floating under it. */
-/* A line's comments at its end where no margin fits: a quiet tag in the
-   marks' own wash, the glyph and how many, lifting to the open thread's
-   look while its threads stand under it. */
+/* A line's comments at its end where no margin fits: a plain toolbar
+   button (`.toolbar-button`), the glyph and how many, filled on hover and
+   while its threads stand under it, as the toolbar's buttons are. */
 .comment-count {
   position: absolute;
   right: calc((var(--luke-control-height) + var(--luke-space-6)) * -1);
-  display: inline-flex;
-  height: 20px; /* off-scale: a tag a size under a row's mark, so it sits on the line it counts */
-  align-items: center;
+  height: 24px; /* off-scale: a size under a control's, so it sits on the line it counts */
   gap: 3px; /* off-scale: a 12px glyph's gap to its digits */
   padding: 0 var(--luke-space-6);
-  border: 1px solid var(--comment-mark-edge);
-  border-radius: var(--luke-menu-row-radius);
-  background: var(--comment-mark);
   color: var(--luke-color-text-muted);
-  font-size: 11px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
-  transition: background var(--duration-hover) ease;
+  font-weight: 500;
 }
 
 .comment-count svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
 }
 
-.comment-count:hover,
 .comment-count[aria-expanded="true"] {
-  border-color: var(--comment-mark-active-edge);
-  background: var(--comment-mark-active);
+  background: var(--luke-color-fill-selected);
   color: var(--luke-color-text);
 }
 
@@ -5806,6 +5769,28 @@ button.picture-frame {
   font-weight: 600;
 }
 
+/* The writer gives way first, cut short at its end, so the time and the
+   tools beside it always stand whole. */
+.comment-head > :first-child {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The row's end: the time, and in its place under the pointer the thread's
+   tools, both in one cell, so the row never reflows and nothing stands
+   over the writer's name. */
+.comment-head-end {
+  display: grid;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+}
+
+.comment-head-end > * {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
 .comment-time {
   color: var(--luke-color-text-subtle);
   font-size: 11.5px;
@@ -5839,7 +5824,8 @@ button.picture-frame {
   margin-top: var(--luke-space-6);
 }
 
-.comment-words[data-clamped="true"] {
+/* A thread at rest shows its first comment's first lines, chips and all. */
+.comment-clamp {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -5859,6 +5845,13 @@ button.picture-frame {
   text-align: left;
 }
 
+/* The keyboard on a thread at rest rings its card, since its button may
+   hold nothing to see but its name for a screen reader. */
+.comment-card[data-open="false"]:has(> .comment-open:focus-visible) {
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: calc(var(--luke-focus-ring-width) / -2);
+}
+
 .comment-replies {
   display: flex;
   align-items: center;
@@ -5874,20 +5867,26 @@ button.picture-frame {
 
 /* A comment's tools stand at its corner under the pointer or the keyboard. */
 .comment-tools {
-  position: absolute;
-  top: 0;
-  right: calc(var(--luke-space-6) * -1);
   display: flex;
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-overlay);
+  margin-right: calc(var(--luke-space-6) * -1);
   opacity: 0;
   transition: opacity var(--duration-hover) ease;
 }
 
-.comment-entry:hover > .comment-tools,
+.comment-head-end > .comment-time {
+  transition: opacity var(--duration-hover) ease;
+}
+
+.comment-entry:hover .comment-tools,
 .comment-tools:focus-within,
 .comment-tools:has([aria-expanded="true"]) {
   opacity: 1;
+}
+
+.comment-entry:hover .comment-head-end > .comment-time,
+.comment-head-end:has(.comment-tools:focus-within) > .comment-time,
+.comment-head-end:has([aria-expanded="true"]) > .comment-time {
+  opacity: 0;
 }
 
 .comment-tools .icon-button {
@@ -6005,11 +6004,60 @@ button.picture-frame {
 }
 
 .comment-field-foot {
+  --luke-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
   display: flex;
+  min-height: 26px; /* off-scale: as its tools */
   align-items: center;
   justify-content: space-between;
   gap: var(--luke-space-6);
   padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+}
+
+.comment-field-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin-left: auto;
+}
+
+/* A dictation stands in the foot's place while it records, at its height. */
+.comment-field-foot .dictation-strip {
+  height: 26px; /* off-scale: as the foot's tools */
+  flex: 1;
+}
+
+/* A thread's first comment is the card itself: its words on the card's own
+   surface, no well inside it, its tools along the card's foot. */
+.comment-field[data-variant="first"] {
+  margin-top: 0;
+  border: 0;
+  background: none;
+}
+
+.comment-field[data-variant="first"] :is(.comment-composer, .comment-text) {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.comment-field[data-variant="first"] .agent-composer-placeholder {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.comment-field[data-variant="first"] .comment-field-foot {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+/* A reply waits as one quiet line on the raised ground under the thread's
+   comments; its tools come up as it is used, and stay while it holds words. */
+.comment-field[data-variant="reply"] {
+  border-color: transparent;
+  background: var(--luke-color-fill-hover);
+}
+
+.comment-field[data-variant="reply"]:not(:focus-within, [data-held="true"]) .comment-field-foot {
+  display: none;
 }
 
 /* Send to, at the field's start, as the composer's model chip stands at its foot. */

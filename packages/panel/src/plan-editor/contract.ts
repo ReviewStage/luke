@@ -59,8 +59,6 @@ export interface EditorAnchor {
   readonly thread: string;
   readonly from: number;
   readonly to: number;
-  /** Whether the thread is on its block whole, which its mark draws as the read view does: no wash, a bar at the block's end. */
-  readonly block?: boolean;
 }
 
 /**
