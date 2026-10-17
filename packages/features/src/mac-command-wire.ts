@@ -9,7 +9,11 @@ import { wireUuidSchema } from "./service-wire.js";
  * setting on holds `GET /api/mac-commands` open, and is answered with every
  * command waiting for the account, each claimed for that Mac as it goes; it
  * runs each in a login shell from the home folder and posts what it
- * printed (POST). Nothing is asked of the developer first. Every request
+ * printed (POST). A Mac that follows the account's commands over Neon
+ * Realtime instead (`live-wire.ts`) claims each by its id
+ * (`POST /api/mac-commands/claim`) and says it is listening on a timer of
+ * its own (`POST /api/mac-commands/listening`), since its subscription
+ * writes nothing. Nothing is asked of the developer first. Every request
  * refuses a key it does not name, as every request frame on this wire does.
  */
 
@@ -70,4 +74,14 @@ export type MacCommandResult = typeof macCommandResultSchema.Type;
 export const macCommandSettleRequestSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   result: macCommandResultSchema,
+});
+
+/** One command the Mac heard of over Realtime, claimed by its id (POST). */
+export const macCommandClaimRequestSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+});
+
+/** The command claimed for this Mac, to run; `not-found` where another Mac took it, its call withdrew it, or it waited too long. */
+export const macCommandClaimAnswerSchema = EffectSchema.Struct({
+  command: macCommandSchema,
 });

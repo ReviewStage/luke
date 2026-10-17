@@ -12,6 +12,7 @@ import {
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
 import { INBOX_STATUS, type InboxItem, inboxItemSchema, inboxReplySchema } from "./inbox-wire.js";
+import { type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -178,4 +179,41 @@ export function inboxOfLiveRows(rows: typeof scopeInboxLiveRowsSchema.Type): rea
     ...items.filter((item) => item.status === INBOX_STATUS.OPEN).toSorted(ordered),
     ...items.filter((item) => item.status !== INBOX_STATUS.OPEN).toSorted(ordered),
   ];
+}
+
+/**
+ * The commands the account's agents queued for its Mac, sealed for
+ * following: the address, and the commands no Mac has claimed yet as one
+ * statement. The Mac claims each it hears of (`mac-command-wire.ts`), on the
+ * service's clock, so a command left waiting too long is refused there. The
+ * service answers `unavailable` where its deployment has no Realtime, and
+ * the Mac holds its read open as before.
+ */
+export const macCommandsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ commands: sealedLiveQuerySchema }),
+});
+
+export type MacCommandsLiveAnswer = typeof macCommandsLiveAnswerSchema.Type;
+
+/** One unclaimed command as its row delivers it: the command, and when it was queued in epoch milliseconds. */
+const macCommandLiveRowSchema = EffectSchema.Struct({
+  ...macCommandSchema.fields,
+  queuedAt: countedNumber,
+});
+
+/** The unclaimed commands as Realtime delivers them, decoded at the boundary before anything reads them. */
+export const macCommandsLiveRowsSchema = EffectSchema.Struct({
+  commands: EffectSchema.Array(macCommandLiveRowSchema),
+});
+
+/** The unclaimed commands, the earliest queued first, so the Mac claims them in the order they were asked for. */
+export function macCommandsOfLiveRows(
+  rows: typeof macCommandsLiveRowsSchema.Type,
+): readonly MacCommand[] {
+  return rows.commands
+    .toSorted((a, b) =>
+      a.queuedAt !== b.queuedAt ? a.queuedAt - b.queuedAt : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    )
+    .map(({ queuedAt: _queuedAt, ...command }) => command);
 }

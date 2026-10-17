@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { readTask } from "@luke/database/models/task-store";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { Effect, Layer, Option } from "effect";
@@ -41,6 +42,10 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * one plan's inbox, or one agent's, the same way: its open items and its
  * latest settled ones as one statement, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
+ *
+ * `GET /api/live/mac-commands` answers the commands no Mac of the account
+ * has claimed, as one statement, for the Mac to claim each by its id
+ * (`../agents/mac-commands-app.ts`).
  * Nothing else here reads a row: the store is read by Realtime.
  */
 
@@ -141,6 +146,26 @@ const agentInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxLiveEndp
   return yield* sealedScope(yield* LiveSealing, memberAgentInboxLiveStatements(userId, agent.id));
 });
 
+const macCommandsLiveEndpoint = /* @__PURE__ */ Effect.fn("web/macCommandsLiveEndpoint")(function* (
+  seams: LiveAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest
+> {
+  const request = yield* getRequest;
+  const account = yield* seams.resolveUserId(request);
+  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const sealing = yield* LiveSealing;
+  const statement = macCommandsLiveStatement(account.value);
+  if (Option.isNone(sealing) || Option.isNone(statement)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  const { seal, url } = sealing.value;
+  const commands = yield* Effect.mapError(seal(statement.value), () => HOSTED_REFUSAL.UNAVAILABLE);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries: { commands } });
+});
+
 /** The group: each live read's path, and the hosted vocabulary's own refusal for any other. */
 export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
@@ -158,6 +183,11 @@ export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
       ANY_METHOD,
       HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX,
       hostedRefusing(agentInboxLiveEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.LIVE_MAC_COMMANDS,
+      hostedRefusing(macCommandsLiveEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

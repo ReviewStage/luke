@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000
+          },
+          "timeoutSeconds": {
+            "type": "integer"
+          },
+          "queuedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "command",
+          "timeoutSeconds",
+          "queuedAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "commands"
+  ],
+  "additionalProperties": false
+}
