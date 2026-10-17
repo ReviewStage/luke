@@ -43,7 +43,9 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
@@ -66,7 +68,9 @@ import {
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
-  codingAgentOverviewAnswerViewSchema,
+  codingAgentOverviewChecksAnswerViewSchema,
+  codingAgentOverviewConversationAnswerViewSchema,
+  codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
   type DictationTranscribeAnswerView,
@@ -528,10 +532,18 @@ export interface HostOperator {
   codingAgentGitHubImage(
     params: CodingAgentGitHubImageParams,
   ): Effect.Effect<CodingAgentGitHubImageView>;
-  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them; or why there is none. */
-  codingAgentOverview(
+  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
+  codingAgentOverviewPullRequest(
     params: CodingAgentPullRequestParams,
-  ): Effect.Effect<CodingAgentOverviewAnswerView>;
+  ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+  /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
+  codingAgentOverviewChecks(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
+  /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them; or why there is none. */
+  codingAgentOverviewConversation(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
@@ -1518,10 +1530,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, params),
         codingAgentAnswer(codingAgentGitHubImageViewSchema),
       ),
-    codingAgentOverview: (params) =>
+    codingAgentOverviewPullRequest: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW, { agentId: params.agentId }),
-        codingAgentAnswer(codingAgentOverviewAnswerViewSchema),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, {
+          agentId: params.agentId,
+        }),
+        codingAgentAnswer(codingAgentOverviewPullRequestAnswerViewSchema),
+      ),
+    codingAgentOverviewChecks: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentOverviewChecksAnswerViewSchema),
+      ),
+    codingAgentOverviewConversation: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, {
+          agentId: params.agentId,
+        }),
+        codingAgentAnswer(codingAgentOverviewConversationAnswerViewSchema),
       ),
     providerKeysRead: () =>
       Effect.map(

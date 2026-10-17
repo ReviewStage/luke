@@ -1,13 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_STATE,
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
-  type CodingAgentOverview,
+  type CodingAgentOverviewChecks,
+  type CodingAgentOverviewConversation,
+  type CodingAgentOverviewPullRequest,
   type CodingAgentSummary,
   DIFF_SIDE,
   MERGE_STATE,
@@ -39,7 +46,10 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
  * description as markdown, and its comments and reviews in time order, a
  * long one sending the reader to GitHub for the rest; it opens the agent's
  * Changes from its bar, says so where there is no pull request yet, and
- * offers a retry where the read failed. Synthetic people throughout.
+ * offers a retry where a read failed. The overview is three reads, the pull
+ * request itself, its checks, and its conversation, each drawn as it lands,
+ * a skeleton until then, under the bar and title Luke already held.
+ * Synthetic people throughout.
  */
 
 const CHARLES: WorkspaceMember = {
@@ -87,7 +97,8 @@ const SCREENSHOT = "https://raw.githubusercontent.com/acme/relay/pr-assets/pr-42
 /** The image the service reads for it, a transparent pixel. */
 const PIXEL = { contentType: "image/png", base64: "iVBORw0KGgo=" } as const;
 
-const OVERVIEW: CodingAgentOverview = {
+/** The pull request itself, as its overview's first read answers it. */
+const PULL_REQUEST: CodingAgentOverviewPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: PAGE,
@@ -115,12 +126,21 @@ const OVERVIEW: CodingAgentOverview = {
   createdAt: 1_000,
   mergedAt: null,
   merge: MERGE_STATE.CONFLICTS,
+  author: { login: "luke-agent[bot]", bot: true },
+  requested: [],
+};
+
+/** Its checks, as the overview's second read answers them. */
+const CHECKS: CodingAgentOverviewChecks = {
   checks: [
     check("lint", CHECK_STATE.FAILED),
     check("build", CHECK_STATE.PENDING),
     check("test", CHECK_STATE.PASSED),
   ],
-  author: { login: "luke-agent[bot]", bot: true },
+};
+
+/** Its conversation, as the overview's third read answers it. */
+const CONVERSATION: CodingAgentOverviewConversation = {
   reviewers: [{ by: CHARLES_ON_GITHUB, state: REVIEW_STATE.CHANGES_REQUESTED }],
   conversation: [
     {
@@ -194,8 +214,8 @@ afterEach(() => {
 /** The pull request as what the agent published names it, which the tab's bar wears. */
 function published(state: PullRequestState) {
   return {
-    number: OVERVIEW.number,
-    title: OVERVIEW.title,
+    number: PULL_REQUEST.number,
+    title: PULL_REQUEST.title,
     url: PAGE,
     state,
     checks: CHECK_SUMMARY.FAILING,
@@ -205,9 +225,16 @@ function published(state: PullRequestState) {
   };
 }
 
-/** The plan's agents, the one whose pull request it is among them, its reads answering as given. */
+/** The overview's three reads, any of them answering otherwise than the fixtures above. */
+interface OverviewReads {
+  readonly pullRequest?: CodingAgentsControl["readOverviewPullRequest"];
+  readonly checks?: CodingAgentsControl["readOverviewChecks"];
+  readonly conversation?: CodingAgentsControl["readOverviewConversation"];
+}
+
+/** The plan's agents, the one whose pull request it is among them, its reads answering as given and the fixtures otherwise. */
 function controlAnswering(
-  read: CodingAgentsControl["readOverview"],
+  reads: OverviewReads = {},
   state: PullRequestState = PULL_REQUEST_STATE.OPEN,
   readChanges: CodingAgentsControl["readChanges"] = () =>
     Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } }),
@@ -217,9 +244,19 @@ function controlAnswering(
     agentIds: [AGENT.id],
     models: [],
     pullRequests: new Map([[AGENT.id, published(state)]]),
-    readOverview: read,
+    readOverviewPullRequest:
+      reads.pullRequest ?? (() => Promise.resolve({ pullRequest: PULL_REQUEST })),
+    readOverviewChecks: reads.checks ?? (() => Promise.resolve({ pullRequest: CHECKS })),
+    readOverviewConversation:
+      reads.conversation ?? (() => Promise.resolve({ pullRequest: CONVERSATION })),
     readChanges,
   });
+}
+
+/** A read held open until the test lets it answer. */
+function held<A>() {
+  const { promise, resolve } = Promise.withResolvers<A>();
+  return { read: () => promise, answer: resolve };
 }
 
 /** The tab, holding the view its switch chooses as the side panel does. */
@@ -278,7 +315,7 @@ function words(container: HTMLElement, selector: string): string[] {
 }
 
 test("the tab draws the pull request as a page: its standing and branches, whether it merges, its checks with failures first, its description, and its conversation in time order", async () => {
-  const tab = await draw(controlAnswering(() => Promise.resolve({ pullRequest: OVERVIEW })));
+  const tab = await draw(controlAnswering());
 
   assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
@@ -380,7 +417,9 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
 
 test("the earlier entries a read left on GitHub are counted first, in the heading too, and open the pull request", async () => {
   const tab = await draw(
-    controlAnswering(() => Promise.resolve({ pullRequest: { ...OVERVIEW, earlier: 3 } })),
+    controlAnswering({
+      conversation: () => Promise.resolve({ pullRequest: { ...CONVERSATION, earlier: 3 } }),
+    }),
   );
   const conversation =
     tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
@@ -461,9 +500,10 @@ test("a review that only left line comments draws each thread under it: its file
     ],
   } as const;
   const tab = await draw(
-    controlAnswering(() =>
-      Promise.resolve({ pullRequest: { ...OVERVIEW, conversation: [review] } }),
-    ),
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({ pullRequest: { ...CONVERSATION, conversation: [review] } }),
+    }),
   );
 
   const [open, folded] = [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")];
@@ -532,9 +572,11 @@ test("the switch shows the files, read only once shown, and back on the overview
   let files = 0;
   const tab = await draw(
     controlAnswering(
-      () => {
-        overviews += 1;
-        return Promise.resolve({ pullRequest: OVERVIEW });
+      {
+        pullRequest: () => {
+          overviews += 1;
+          return Promise.resolve({ pullRequest: PULL_REQUEST });
+        },
       },
       PULL_REQUEST_STATE.OPEN,
       () => {
@@ -563,17 +605,23 @@ test("the switch shows the files, read only once shown, and back on the overview
 });
 
 test("a merged pull request says so on the bar, as its overview read it, says nothing of merging, and one with no description, checks, or comments says so", async () => {
-  const merged: CodingAgentOverview = {
-    ...OVERVIEW,
+  const merged: CodingAgentOverviewPullRequest = {
+    ...PULL_REQUEST,
     state: PULL_REQUEST_STATE.MERGED,
     mergedAt: 9_000,
     html: "",
-    checks: [],
-    conversation: [],
   };
   const tab = await draw(
     // Note that what the agent published was last read open, so the bar says what the overview read.
-    controlAnswering(() => Promise.resolve({ pullRequest: merged }), PULL_REQUEST_STATE.OPEN),
+    controlAnswering(
+      {
+        pullRequest: () => Promise.resolve({ pullRequest: merged }),
+        checks: () => Promise.resolve({ pullRequest: { checks: [] } }),
+        conversation: () =>
+          Promise.resolve({ pullRequest: { reviewers: [], conversation: [], earlier: 0 } }),
+      },
+      PULL_REQUEST_STATE.OPEN,
+    ),
   );
   assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Merged");
   assert.equal(tab.querySelector(".pull-request-merge"), null);
@@ -586,7 +634,7 @@ test("a merged pull request says so on the bar, as its overview read it, says no
 
 test("where what the agent published is not read, the bar still says where the pull request stands and opens it on GitHub, as its overview read it", async () => {
   const control = {
-    ...controlAnswering(() => Promise.resolve({ pullRequest: OVERVIEW })),
+    ...controlAnswering(),
     pullRequests: new Map(),
   };
   const tab = await draw(control);
@@ -599,31 +647,180 @@ test("where what the agent published is not read, the bar still says where the p
   assert.deepEqual(opened, [PAGE]);
 });
 
-test("an agent with no pull request yet says so, and a read that failed offers a retry that reads again", async () => {
-  const none = await draw(controlAnswering(() => Promise.resolve({ pullRequest: null })));
-  assert.match(none.textContent ?? "", /No pull request yet\./u);
-  act(() => root?.unmount());
-  root = undefined;
-
-  let reads = 0;
-  const failing = await draw(
-    controlAnswering(() => {
-      reads += 1;
-      return Promise.resolve(
-        reads === 1
-          ? { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }
-          : { pullRequest: OVERVIEW },
-      );
+test("an agent with no pull request yet says so", async () => {
+  const none = await draw(
+    controlAnswering({
+      pullRequest: () => Promise.resolve({ pullRequest: null }),
+      checks: () => Promise.resolve({ pullRequest: null }),
+      conversation: () => Promise.resolve({ pullRequest: null }),
     }),
   );
-  assert.match(failing.textContent ?? "", /The pull request could not be read\./u);
+  assert.match(none.textContent ?? "", /No pull request yet\./u);
+  assert.equal(none.querySelector(".pull-request-page"), null);
+});
+
+test("the bar and the title stand from what Luke holds before any read lands; each section is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
+  const pullRequest = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
+  const checks = held<{ pullRequest: CodingAgentOverviewChecks }>();
+  const conversation = held<{ pullRequest: CodingAgentOverviewConversation }>();
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: pullRequest.read,
+      checks: checks.read,
+      conversation: conversation.read,
+    }),
+  );
+  const section = (title: string) =>
+    tab.querySelector<HTMLElement>(`[aria-label="${title}"]`) ??
+    assert.fail(`the ${title} section stands`);
+  const waiting = () => words(tab, '[aria-busy="true"] .visually-hidden');
+
+  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations #42",
+    "the title is what Luke held of the pull request",
+  );
+  assert.deepEqual(waiting(), [
+    "Reading pull request",
+    "Reading checks",
+    "Reading description",
+    "Reading conversation",
+  ]);
+
+  checks.answer({ pullRequest: CHECKS });
+  await settle();
+  assert.deepEqual(words(section("Checks"), ".pull-request-check-name"), ["lint", "build", "test"]);
+  assert.deepEqual(waiting(), [
+    "Reading pull request",
+    "Reading description",
+    "Reading conversation",
+  ]);
+
+  conversation.answer({ pullRequest: CONVERSATION });
+  await settle();
+  assert.equal(section("Conversation").querySelectorAll(".pull-request-entry").length, 2);
+  assert.deepEqual(waiting(), ["Reading pull request", "Reading description"]);
+
+  pullRequest.answer({ pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } });
+  await settle();
+  assert.deepEqual(waiting(), []);
+  assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations weekly #42",
+    "the read's title replaces what was held",
+  );
+  assert.equal(section("Description").querySelector("h2")?.textContent, "Summary");
+});
+
+/** A read answering each ask with the next of the answers given, the last again once they run out. */
+function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
+  let ask = 0;
+  return () => {
+    const answer = answers[Math.min(ask, answers.length - 1)] ?? assert.fail("an answer is given");
+    ask += 1;
+    return Promise.resolve(answer);
+  };
+}
+
+test("a section whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads all three again", async () => {
+  const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
+  const later = (name: string) => ({ checks: [check(name, CHECK_STATE.PASSED)] });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+        { pullRequest: PULL_REQUEST },
+        { pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } },
+      ),
+      checks: inTurn<CodingAgentOverviewChecksAnswerView>(
+        failure,
+        { pullRequest: later("retried") },
+        { pullRequest: later("refreshed") },
+      ),
+      conversation: inTurn<CodingAgentOverviewConversationAnswerView>(
+        { pullRequest: CONVERSATION },
+        { pullRequest: { ...CONVERSATION, conversation: CONVERSATION.conversation.slice(0, 1) } },
+      ),
+    }),
+  );
+  const checks =
+    tab.querySelector('[aria-label="Checks"]') ?? assert.fail("the checks section stands");
+  assert.match(checks.textContent ?? "", /The checks could not be read\./u);
+  assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
+  assert.equal(tab.querySelectorAll(".pull-request-entry").length, 2, "the conversation stands");
+
   const retry =
-    [...failing.querySelectorAll("button")].find((button) => button.textContent === "Retry") ??
-    assert.fail("the failure offers a retry");
-  await act(async () => {
-    retry.click();
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-  assert.equal(reads, 2);
-  assert.equal(failing.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
+    [...checks.querySelectorAll("button")].find((button) => button.textContent === "Retry") ??
+    assert.fail("the failed section offers a retry");
+  act(() => retry.click());
+  await settle();
+  assert.deepEqual(words(tab, ".pull-request-check-name"), ["retried"]);
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations #42",
+    "the pull request is not read again",
+  );
+  assert.equal(tab.querySelectorAll(".pull-request-entry").length, 2, "nor is the conversation");
+
+  const more =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+    assert.fail("the bar has a ⋯");
+  act(() => more.click());
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  assert.deepEqual(words(tab, ".pull-request-check-name"), ["refreshed"]);
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations weekly #42",
+  );
+  assert.equal(tab.querySelectorAll(".pull-request-entry").length, 1);
+});
+
+test("where nothing of the pull request is held and every read failed, one failure offers a retry that reads all three again", async () => {
+  const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
+  const control = {
+    ...controlAnswering({
+      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(failure, {
+        pullRequest: PULL_REQUEST,
+      }),
+      checks: inTurn<CodingAgentOverviewChecksAnswerView>(failure, { pullRequest: CHECKS }),
+      conversation: inTurn<CodingAgentOverviewConversationAnswerView>(failure, {
+        pullRequest: CONVERSATION,
+      }),
+    }),
+    pullRequests: new Map(),
+  };
+  const tab = await draw(control);
+  const retries = () =>
+    [...tab.querySelectorAll("button")].filter((button) => button.textContent === "Retry");
+  assert.match(tab.textContent ?? "", /The pull request could not be read\./u);
+  assert.equal(retries().length, 1, "one failure stands for the three");
+
+  await act(async () => retries()[0]?.click());
+  await settle();
+  assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
+  assert.deepEqual(words(tab, ".pull-request-check-name"), ["lint", "build", "test"]);
+  assert.equal(tab.querySelectorAll(".pull-request-entry").length, 2);
+});
+
+test("the bar wears what was published of the checks only for the pull request they were read on, never a newer one whose checks failed to read", async () => {
+  const control = {
+    ...controlAnswering({
+      pullRequest: () => Promise.resolve({ pullRequest: { ...PULL_REQUEST, number: 43 } }),
+      checks: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }),
+    }),
+  };
+  const tab = await draw(control);
+  const mark = tab.querySelector(".pull-request-state [aria-label]") ?? assert.fail("a mark");
+  assert.match(mark.getAttribute("aria-label") ?? "", /43/u);
+  assert.doesNotMatch(
+    mark.getAttribute("aria-label") ?? "",
+    /checks failing/u,
+    "#42's failing checks are not #43's",
+  );
 });
