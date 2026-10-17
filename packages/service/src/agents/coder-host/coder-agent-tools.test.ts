@@ -13,7 +13,7 @@ import {
 import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
-import { createTask } from "@luke/database/models/task-store";
+import { createTask, listTasks, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { task } from "@luke/database/schemas/task";
@@ -31,8 +31,10 @@ import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
 } from "@luke/features/coding-agent-wire";
-import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -53,17 +55,24 @@ import {
   type WireRecord,
 } from "../../core.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
-import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
+import {
+  ModelCatalog,
+  ModelCatalogUnavailable,
+  modelCatalogOf,
+  type OfferedModel,
+} from "../../providers/model-catalog.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
+import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
   ARCHIVE_AGENT_REFUSAL,
   CODING_AGENT_TOOL_REFUSAL,
+  LIST_MODELS_REFUSAL,
   READ_PAGE_REFUSAL,
   START_CODING_AGENT_REFUSAL,
 } from "../coding-agent-tools.js";
@@ -106,6 +115,8 @@ const AGENT_CHOICE = {
 const NOTE = "I renamed InviteToken to InvitationToken on main; rebase before you push.";
 const CALLER_TITLE = "Invite expiry";
 const OPUS = "anthropic/claude-opus-5.5";
+const OPUS_FAST = "anthropic/claude-opus-5.5-fast";
+const SOL = "openai/gpt-6.1-sol";
 /** The model the agents run on, as the catalog offers it. */
 const CATALOG: readonly OfferedModel[] = [
   {
@@ -115,6 +126,9 @@ const CATALOG: readonly OfferedModel[] = [
     efforts: ["low", "medium", "high", "max"],
   },
 ];
+/** The branch of the repository a stacked agent starts on, and the commit GitHub says it stands at. */
+const STACKED_BRANCH = "luke/invitation-expiry";
+const BRANCH_COMMIT = "89abcdef0123456789abcdef0123456789abcdef";
 /** The most characters of its own an agent's message may carry: a member's bound less its heading's room. */
 const LONGEST_PEER_WORDS = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - 1_000;
 
@@ -212,7 +226,11 @@ async function claimed(
  * installation reaching the repository is connected to the workspace:
  * every message to a session answered taken, and each written down.
  */
-async function fakeCoderEve(workspaceId: string) {
+async function fakeCoderEve(
+  workspaceId: string,
+  branches: readonly string[] = [],
+  beforeGitHub?: () => Promise<void>,
+) {
   installations += 1;
   const installation: InstallationFixture = {
     id: 70 + installations,
@@ -224,9 +242,17 @@ async function fakeCoderEve(workspaceId: string) {
     LINK_OUTCOME.LINKED,
   );
   const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
-  const github = githubReaching([installation], undefined, undefined, (request) => {
+  const github = githubReaching([installation], undefined, undefined, async (request) => {
     const { pathname } = new URL(request.url);
-    if (!pathname.startsWith("/eve/coder/v1/session")) return undefined;
+    // The repository holds the branches given, each at a commit; any other is GitHub's not found.
+    const ref = pathname.slice(`/repos/${RELAY_FULL_NAME}/git/ref/heads/`.length);
+    if (pathname.startsWith(`/repos/${RELAY_FULL_NAME}/git/ref/heads/`) && branches.includes(ref)) {
+      return Response.json({ object: { type: "commit", sha: BRANCH_COMMIT } });
+    }
+    if (!pathname.startsWith("/eve/coder/v1/session")) {
+      if (beforeGitHub !== undefined) await beforeGitHub();
+      return undefined;
+    }
     sent.push({ path: pathname, headers: request.headers, body: request.body });
     if (pathname === "/eve/coder/v1/session") {
       return Response.json({ sessionId: sessionId() }, { status: 202 });
@@ -239,11 +265,12 @@ async function fakeCoderEve(workspaceId: string) {
   return { services: github.layer, sent };
 }
 
-/** A caller of the agent tools from the agent's own session, under the host given. */
+/** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog unless another is given. */
 async function peerCaller(
   host: CoderHost,
   agent: StartedAgent,
   services: Awaited<ReturnType<typeof fakeCoderEve>>["services"],
+  catalog: Layer.Layer<ModelCatalog> = modelCatalogOf(CATALOG),
 ) {
   const admitted = await database.run(host.admit(seat(agent), agent.sessionId));
   if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
@@ -255,7 +282,7 @@ async function peerCaller(
     database.run(
       host
         .agentTools(admitted.success, { tool, input: unparsedWire(input), callId })
-        .pipe(Effect.provide(Layer.merge(services, modelCatalogOf(CATALOG)))),
+        .pipe(Effect.provide(Layer.merge(services, catalog))),
     );
 }
 
@@ -492,8 +519,8 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   assert.equal(eve.sent.length, 0, "a read sends nothing");
 });
 
-test("message_agent reaches a teammate's agent on another plan as the deployment acting for the caller's starter, opening with who sent it, kept under the sending agent's name, and sent once under the call's key", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
+test("message_agent reaches a teammate's agent on another plan as the deployment acting for the caller's starter, opening with who sent it, kept under the sending agent, its name, and its model, and sent once under the call's key", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
@@ -505,6 +532,7 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
     agent: {
       id: teammates.id,
       title: OPUS,
+      model: OPUS,
       status: CODING_AGENT_STATUS.RUNNING,
       onYourTask: false,
     },
@@ -528,9 +556,12 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
     ),
     true,
   );
+  // And by the model the sending agent runs on, which the window draws its harness by, and the agent itself on its task, which a reader opens.
   assert.deepEqual(await database.run(lineSenderUnder(teammates, "call-1")), {
     kind: MESSAGE_SENDER.AGENT,
     name: CALLER_TITLE,
+    model: OPUS,
+    agent: { id: caller.id, taskId: plans.invitations },
   });
 
   const again = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: teammates.id, text: NOTE });
@@ -682,6 +713,236 @@ test("start_agent hands over a prompt and a note each as long as a start allows,
   assert.ok(message.includes(`\n\n${note}`), "the note follows it whole");
 });
 
+test("start_agent with a title names the agent by it from the start, and a title generated later never covers it; an empty or over-long title starts nothing", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const title = "start_agent takes a title";
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt: "Add a title to start_agent.", title: `  ${title}  ` },
+    "call-titled",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  const startedId = started.agent.id;
+  assert.equal(
+    started.agent.mention,
+    `[@${title}](https://tryluke.dev/workspace-${workspaceId}/plan/${plans.invitations}/agent/${startedId})`,
+  );
+
+  // The title generated as the agent's words arrive is filled only where none stands.
+  assert.equal(
+    await database.run(fillCodingAgentTitle(caller.userId, startedId, "Generated name")),
+    false,
+  );
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
+  assert.equal(stored.title, title);
+
+  for (const [refused, key] of [
+    ["   ", "call-empty"],
+    ["a".repeat(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS + 1), "call-long"],
+  ] as const) {
+    assert.deepEqual(await call(CODER_TOOL.START_AGENT, { title: refused }, key), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+    });
+  }
+});
+
+test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const branches = [STACKED_BRANCH];
+  const eve = await fakeCoderEve(workspaceId, branches);
+  const host = hostOf(true);
+  const call = await peerCaller(host, caller, eve.services);
+  const prompt = "Send the reminder before the invitation expires.";
+
+  assert.deepEqual(
+    await call(CODER_TOOL.START_AGENT, { prompt, branch: "luke/never-pushed" }, "call-missing"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_BRANCH },
+  );
+  assert.equal(eve.sent.length, 0, "a branch GitHub does not hold starts nothing");
+  assert.deepEqual(
+    await call(CODER_TOOL.START_AGENT, { prompt, branch: "two words" }, "call-unreadable"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.UNREADABLE },
+  );
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt, branch: STACKED_BRANCH },
+    "call-stacked",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  assert.equal(eve.sent.length, 1);
+
+  // The started agent's own session checks its repository out at the branch named.
+  const stored = Option.getOrThrow(
+    await database.run(readCodingAgent(caller.userId, started.agent.id)),
+  );
+  const target = { userId: caller.userId, conversationId: stored.conversationId };
+  const session = sessionId();
+  assert.equal(await database.run(claimRuntimeSession(target, session, new Date(NOW))), true);
+  const admitted = await database.run(host.admit(seat(target), session));
+  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
+  const sandbox = sandboxDouble(() => undefined);
+  await database.run(host.checkOut(admitted.success, sandbox).pipe(Effect.provide(eve.services)));
+  assert.deepEqual(
+    sandbox.clones.map((clone) => clone.branch),
+    [STACKED_BRANCH],
+  );
+  const instructions = await database.run(
+    host.prompt(admitted.success, stored).pipe(Effect.provide(eve.services)),
+  );
+  assert.ok(
+    instructions.text.includes(`cut from \`${STACKED_BRANCH}\`, the branch you were started on`),
+    instructions.text,
+  );
+  assert.ok(
+    instructions.text.includes(`started on \`${STACKED_BRANCH}\`, so pass it as \`base\``),
+    instructions.text,
+  );
+
+  // A turn that ends on the branch it started on records no branch of its own, so the pull request
+  // already on that branch is never taken for this agent's; one it cut is recorded.
+  let standing = STACKED_BRANCH;
+  const shell = sandboxDouble((command) =>
+    command === "git branch --show-current"
+      ? { exitCode: 0, stdout: `${standing}\n`, stderr: "" }
+      : undefined,
+  );
+  shell.checkedOut = RELAY_FULL_NAME;
+  const branchOf = async () =>
+    Option.getOrThrow(await database.run(readCodingAgent(caller.userId, stored.id))).branch;
+  await database.run(host.recordBranch(admitted.success, shell));
+  assert.equal(await branchOf(), null);
+  standing = "luke/invitation-reminder";
+  await database.run(host.recordBranch(admitted.success, shell));
+  assert.equal(await branchOf(), standing);
+
+  // The same call run again once the branch is gone answers the agent its start made.
+  branches.length = 0;
+  const again = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt, branch: STACKED_BRANCH },
+    "call-stacked",
+  );
+  assert.ok(isRecord(again.agent), JSON.stringify(again));
+  assert.equal(again.agent.id, stored.id);
+  assert.equal(eve.sent.length, 1, "the call run again starts nothing");
+});
+
+test("list_models answers exactly the choices start_agent takes, as the caller's starter is offered them: every model and effort it lists starts an agent, a fast version the starter's key may not run is neither listed nor started on, and a start naming neither runs on the default it lists", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const offered: readonly OfferedModel[] = [
+    ...CATALOG,
+    {
+      id: OPUS_FAST,
+      name: "Claude Opus 5.5 Fast",
+      provider: MODEL_PROVIDER.ANTHROPIC,
+      efforts: ["high"],
+    },
+    { id: SOL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
+  ];
+  // Luke's own Anthropic key, which the starter's agents run on, was never granted fast mode.
+  const catalog = modelCatalogOf(offered, FAST_ACCESS.NOT_ENABLED);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services, catalog);
+
+  const listed = await call(CODER_TOOL.LIST_MODELS, {});
+  assert.deepEqual(listed, {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    models: [
+      { id: OPUS, name: "Opus 5.5", efforts: ["low", "medium", "high", "max"] },
+      { id: SOL, name: "GPT-6.1 Sol", efforts: ["low", "high"] },
+    ],
+    default: { model: OPUS, modelName: "Opus 5.5", effort: "high", offered: true },
+  });
+
+  let calls = 0;
+  for (const model of [OPUS, SOL]) {
+    for (const effort of model === OPUS ? ["low", "medium", "high", "max"] : ["low", "high"]) {
+      calls += 1;
+      const started = await call(CODER_TOOL.START_AGENT, { model, effort }, `call-${calls}`);
+      assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+      assert.ok(isRecord(started.agent));
+      assert.deepEqual([started.agent.model, started.agent.effort], [model, effort]);
+    }
+  }
+  const fast = await call(
+    CODER_TOOL.START_AGENT,
+    { model: OPUS_FAST, effort: "high" },
+    "call-fast",
+  );
+  assert.equal(fast.status, ACTION_RESULT_STATUS.REJECTED);
+  // The refusal lists the choices list_models does, and not the version it refused.
+  assert.ok(
+    String(fast.reason).endsWith(
+      "The choices are: anthropic/claude-opus-5.5 (low, medium, high, max); openai/gpt-6.1-sol (low, high).",
+    ),
+    String(fast.reason),
+  );
+  const unnamed = await call(CODER_TOOL.START_AGENT, {}, "call-default");
+  assert.ok(isRecord(unnamed.agent), JSON.stringify(unnamed));
+  assert.deepEqual(
+    [unnamed.agent.model, unnamed.agent.effort],
+    [CODING_AGENT_DEFAULT_CHOICE.model, CODING_AGENT_DEFAULT_CHOICE.effort],
+  );
+});
+
+test("list_models says the default is no longer offered where the catalog dropped it, as a start naming neither is then refused, and refuses to list from a catalog it cannot read", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const sol: OfferedModel = {
+    id: SOL,
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  };
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services, modelCatalogOf([sol]));
+
+  const listed = await call(CODER_TOOL.LIST_MODELS, {});
+  assert.deepEqual(listed.default, {
+    model: OPUS,
+    modelName: "Opus 5.5",
+    effort: "high",
+    offered: false,
+  });
+  const unnamed = await call(CODER_TOOL.START_AGENT, {}, "call-default");
+  assert.equal(unnamed.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(eve.sent.length, 0);
+
+  // A refusal lists the models the start was checked against, even where the catalog fails on any later read.
+  let reads = 0;
+  const flaky = Layer.succeed(ModelCatalog, {
+    read: Effect.suspend(() => {
+      reads += 1;
+      return reads === 1
+        ? Effect.succeed([sol])
+        : Effect.fail(new ModelCatalogUnavailable({ cause: "offline" }));
+    }),
+    lukeFastAccess: Effect.succeed(undefined),
+  });
+  const once = await peerCaller(hostOf(true), agents.caller, eve.services, flaky);
+  const refused = await once(CODER_TOOL.START_AGENT, { model: SOL, effort: "max" }, "call-max");
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.ok(String(refused.reason).endsWith("The choices are: openai/gpt-6.1-sol (low, high)."));
+
+  const unreadable = Layer.succeed(ModelCatalog, {
+    read: Effect.fail(new ModelCatalogUnavailable({ cause: "offline" })),
+    lukeFastAccess: Effect.succeed(undefined),
+  });
+  const blind = await peerCaller(hostOf(true), agents.caller, eve.services, unreadable);
+  assert.deepEqual(await blind(CODER_TOOL.LIST_MODELS, {}), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: LIST_MODELS_REFUSAL.UNAVAILABLE,
+  });
+});
+
 test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {
   const { workspaceId, elsewhere, plans, agents } = await openWorkspaces();
   const { caller } = agents;
@@ -799,6 +1060,133 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   assert.equal(eve.sent.length, 2);
 });
 
+/** The ids of the tasks of the workspace the account reads under the name, newest first. */
+async function tasksNamed(userId: string, workspaceId: string, name: string): Promise<string[]> {
+  const listed = await database.run(listTasks(userId));
+  return listed
+    .filter((each) => each.workspaceId === workspaceId && each.name === name)
+    .map((each) => each.id);
+}
+
+test("start_agent makes the new task it names in the caller's workspace, owned by the member the agent acts for and on the repository it works in, and starts on it; the same call run again makes no second task, a start that fails leaves none, and a newTask beside a taskId, a blank name, or one too long is refused", async () => {
+  const { workspaceId, elsewhere, plans, agents } = await openWorkspaces();
+  // Bob's agent on Alice's task: the task it makes is Bob's, not the owner's of the task it works on.
+  const bob = agents.teammates.userId;
+  const caller = await agentOn(bob, plans.invitations);
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const name = "Invite expiry migration";
+  const prompt = "Write the migration that adds the invitation's expiry.";
+
+  const started = await call(CODER_TOOL.START_AGENT, { newTask: ` ${name} `, prompt }, "call-new");
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  assert.ok(isRecord(started.newTask) && isWireString(started.newTask.id), JSON.stringify(started));
+  const taskId = started.newTask.id;
+  assert.deepEqual(started.newTask, {
+    id: taskId,
+    name,
+    mention: `[@${name}](https://tryluke.dev/workspace-${workspaceId}/plan/${taskId})`,
+  });
+  assert.equal(started.agent.onYourTask, false);
+  const made = Option.getOrThrow(await database.run(readTask(bob, taskId)));
+  assert.deepEqual(
+    [made.ownerId, made.task.workspaceId, made.task.repository, made.task.name, made.text],
+    [bob, workspaceId, RELAY_FULL_NAME, name, ""],
+  );
+  const agent = Option.getOrThrow(await database.run(readCodingAgent(bob, started.agent.id)));
+  assert.equal(agent.taskId, taskId);
+  assert.equal(eve.sent.length, 1);
+  assert.ok(JSON.parse(eve.sent[0]?.body ?? "").message.startsWith(prompt));
+  // It stands in the workspace's list as any task does, for a teammate too, and in no other workspace.
+  const alice = agents.caller.userId;
+  assert.deepEqual(await tasksNamed(alice, workspaceId, name), [taskId]);
+  assert.deepEqual(await tasksNamed(alice, elsewhere, name), []);
+
+  // The same call run again answers the agent and task it made, and makes neither again.
+  const again = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-new");
+  assert.ok(isRecord(again.agent) && isRecord(again.newTask), JSON.stringify(again));
+  assert.equal(again.agent.id, started.agent.id);
+  assert.deepEqual(again.newTask, started.newTask);
+  assert.equal(eve.sent.length, 1);
+  assert.deepEqual(await tasksNamed(bob, workspaceId, name), [taskId]);
+
+  // A start the catalog refuses takes away the task made for it.
+  const refused = await call(
+    CODER_TOOL.START_AGENT,
+    { newTask: "Refused", prompt, model: OPUS, effort: "none" },
+    "call-refused",
+  );
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
+  assert.deepEqual(await tasksNamed(bob, workspaceId, "Refused"), []);
+
+  for (const input of [
+    { newTask: "Both", taskId: plans.billing, prompt },
+    { newTask: "   ", prompt },
+    { newTask: "a".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 1), prompt },
+  ]) {
+    assert.deepEqual(await call(CODER_TOOL.START_AGENT, input, "call-bad"), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+    });
+  }
+  assert.deepEqual(await tasksNamed(bob, workspaceId, "Both"), []);
+  assert.equal(eve.sent.length, 1, "a refused start starts nothing");
+});
+
+test("start_agent run twice at once under one call's key keeps one new task: the run that finds the other's agent takes away the task it made and answers that agent with its own task", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const name = "Invite expiry migration";
+  const prompt = "Write the migration that adds the invitation's expiry.";
+  // The other run lands its agent, on a task of its own, while this run confirms its repository.
+  let racing = false;
+  let raced: { readonly agentId: string; readonly taskId: string } | undefined;
+  const eve = await fakeCoderEve(workspaceId, [], async () => {
+    if (!racing) return;
+    racing = false;
+    const theirs = await database.run(
+      createTask(caller.userId, {
+        organizationId: workspaceId,
+        name,
+        repository: RELAY_FULL_NAME,
+        planning: false,
+      }),
+    );
+    const agent = await claimed(caller.userId, {
+      ...AGENT_CHOICE,
+      idempotencyKey: "call-race",
+      taskId: theirs.id,
+      planSnapshot: null,
+      prompt,
+    });
+    raced = { agentId: agent.id, taskId: theirs.id };
+  });
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  racing = true;
+  const answered = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-race");
+  assert.ok(raced !== undefined, "the other run landed while this one ran");
+  assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(answered));
+  assert.ok(isRecord(answered.agent) && isRecord(answered.newTask), JSON.stringify(answered));
+  assert.equal(answered.agent.id, raced.agentId);
+  assert.equal(answered.newTask.id, raced.taskId);
+  assert.deepEqual(await tasksNamed(caller.userId, workspaceId, name), [raced.taskId]);
+  assert.equal(eve.sent.length, 0, "no second agent's session is opened");
+});
+
+test("an agent whose starter has left the workspace makes no task in it", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.teammates, eve.services);
+  await database.run(leaveWorkspace(workspaceId, agents.teammates.userId));
+
+  const refused = await call(CODER_TOOL.START_AGENT, { newTask: "Left behind", prompt: "Sweep." });
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
+  assert.deepEqual(await tasksNamed(agents.caller.userId, workspaceId, "Left behind"), []);
+  assert.equal(eve.sent.length, 0);
+});
+
 test("an agent whose starter has left the workspace reaches no other agent", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
@@ -833,6 +1221,7 @@ test("archive_agent archives a teammate's idle agent on another task for the cal
     agent: {
       id: agents.teammates.id,
       title: OPUS,
+      model: OPUS,
       task: { id: plans.billing, name: "Billing", archived: false },
       onYourTask: false,
     },
