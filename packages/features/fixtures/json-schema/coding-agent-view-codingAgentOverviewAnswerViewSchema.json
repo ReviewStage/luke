@@ -151,9 +151,6 @@
                     "bot": {
                       "type": "boolean"
                     },
-                    "luke": {
-                      "type": "boolean"
-                    },
                     "userId": {
                       "type": "string"
                     }
@@ -189,9 +186,6 @@
                             "type": "string"
                           },
                           "bot": {
-                            "type": "boolean"
-                          },
-                          "luke": {
                             "type": "boolean"
                           },
                           "userId": {
@@ -247,9 +241,6 @@
                           "bot": {
                             "type": "boolean"
                           },
-                          "luke": {
-                            "type": "boolean"
-                          },
                           "userId": {
                             "type": "string"
                           }
@@ -289,6 +280,170 @@
                       },
                       "url": {
                         "type": "string"
+                      },
+                      "threads": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string"
+                            },
+                            "line": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "startLine": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "originalLine": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "originalStartLine": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "side": {
+                              "type": "string",
+                              "enum": [
+                                "left",
+                                "right"
+                              ]
+                            },
+                            "startSide": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "left",
+                                    "right"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "diffHunk": {
+                              "type": "string"
+                            },
+                            "resolved": {
+                              "type": "boolean"
+                            },
+                            "outdated": {
+                              "type": "boolean"
+                            },
+                            "comments": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "by": {
+                                    "type": "object",
+                                    "properties": {
+                                      "login": {
+                                        "type": "string"
+                                      },
+                                      "avatarUrl": {
+                                        "type": "string"
+                                      },
+                                      "bot": {
+                                        "type": "boolean"
+                                      },
+                                      "userId": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "login",
+                                      "bot"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "html": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "body": {
+                                    "type": "string"
+                                  },
+                                  "at": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "by",
+                                  "html",
+                                  "body",
+                                  "at",
+                                  "url"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 50
+                            },
+                            "more": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "line",
+                            "startLine",
+                            "originalLine",
+                            "originalStartLine",
+                            "side",
+                            "startSide",
+                            "diffHunk",
+                            "resolved",
+                            "outdated",
+                            "comments",
+                            "more"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 100
                       }
                     },
                     "required": [

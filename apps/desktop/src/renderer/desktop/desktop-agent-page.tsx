@@ -29,6 +29,7 @@ import {
 import { SkillFiles } from "../tasks/skill-chip";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
+import { WordsWorkspace } from "../tasks/use-link-standing";
 import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
@@ -339,67 +340,70 @@ export function DesktopAgentPage({
   }
   return (
     <LinkWorkspaceProvider value={listed?.slug ?? workspaceId}>
-      <MemberDirectory workspace={workspace} readerId={tasks.me}>
-        <AutomationDirectory
-          workspace={listed}
-          on={automationsOn}
-          wanted={agent.automationId !== undefined}
-          onOpen={openAutomation}
-        >
-          <SkillFiles source={control.readSkills} onOpen={openSkill}>
-            <AgentMentions value={mentions}>
-              <div ref={onArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
-                {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
-                <section className="agent-page" aria-label="Agent" hidden={sidePanel.fullScreen}>
-                  {toolbar}
-                  <FindScope
-                    className="desktop-task-column"
-                    active={tasks.shown && !sideFocused}
-                    subject={tab}
-                  >
-                    <AgentPane
-                      label={agentTabLabel(agent, control.models)}
-                      tabbed={false}
-                      tab={tab}
+      {/* Note that the words are of the agent's workspace by its id, because one with no slug is named by its id in the slug's place, which no chip's provider read can find it by. */}
+      <WordsWorkspace value={workspaceId}>
+        <MemberDirectory workspace={workspace} readerId={tasks.me}>
+          <AutomationDirectory
+            workspace={listed}
+            on={automationsOn}
+            wanted={agent.automationId !== undefined}
+            onOpen={openAutomation}
+          >
+            <SkillFiles source={control.readSkills} onOpen={openSkill}>
+              <AgentMentions value={mentions}>
+                <div ref={onArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
+                  {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
+                  <section className="agent-page" aria-label="Agent" hidden={sidePanel.fullScreen}>
+                    {toolbar}
+                    <FindScope
+                      className="desktop-task-column"
+                      active={tasks.shown && !sideFocused}
+                      subject={tab}
+                    >
+                      <AgentPane
+                        label={agentTabLabel(agent, control.models)}
+                        tabbed={false}
+                        tab={tab}
+                        agents={control}
+                        shown={shown}
+                        views={views}
+                        onOpenDelegation={openDelegation}
+                        onOpenChanges={openChanges}
+                        onOpenPullRequest={openPullRequest}
+                        onOpenTarget={openTarget}
+                        cards={cards}
+                      />
+                    </FindScope>
+                  </section>
+                  {drawing.panel ? (
+                    <SidePanel
+                      {...drawing}
+                      panel={drawing.panel}
+                      unread={NO_UNREAD}
+                      holder={SIDE_PANEL_HOLDER.AGENT}
+                      planId={agentId}
+                      repository={agentRepository ?? null}
+                      board={undefined}
+                      shownCode={undefined}
+                      pages={undefined}
+                      transcript={NO_CALLS}
+                      work={work}
                       agents={control}
-                      shown={shown}
+                      openAgents={openAgents}
+                      shownAgent={shown ? agentId : undefined}
                       views={views}
-                      onOpenDelegation={openDelegation}
-                      onOpenChanges={openChanges}
-                      onOpenPullRequest={openPullRequest}
+                      shown={tasks.shown}
+                      focused={sideFocused}
                       onOpenTarget={openTarget}
                       cards={cards}
                     />
-                  </FindScope>
-                </section>
-                {drawing.panel ? (
-                  <SidePanel
-                    {...drawing}
-                    panel={drawing.panel}
-                    unread={NO_UNREAD}
-                    holder={SIDE_PANEL_HOLDER.AGENT}
-                    planId={agentId}
-                    repository={agentRepository ?? null}
-                    board={undefined}
-                    shownCode={undefined}
-                    pages={undefined}
-                    transcript={NO_CALLS}
-                    work={work}
-                    agents={control}
-                    openAgents={openAgents}
-                    shownAgent={shown ? agentId : undefined}
-                    views={views}
-                    shown={tasks.shown}
-                    focused={sideFocused}
-                    onOpenTarget={openTarget}
-                    cards={cards}
-                  />
-                ) : null}
-              </div>
-            </AgentMentions>
-          </SkillFiles>
-        </AutomationDirectory>
-      </MemberDirectory>
+                  ) : null}
+                </div>
+              </AgentMentions>
+            </SkillFiles>
+          </AutomationDirectory>
+        </MemberDirectory>
+      </WordsWorkspace>
     </LinkWorkspaceProvider>
   );
 }

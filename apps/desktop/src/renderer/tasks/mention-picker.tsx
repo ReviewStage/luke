@@ -48,6 +48,9 @@ import { AgentMark } from "./tab-look";
  * sections; typed, it finds each kind's best few by the words typed, scored
  * as ⌘K scores them (cmdk's own filter), files and folders first, each
  * group in a fixed place so a later read never moves the rows above it.
+ * Once the words run past a space and nothing matches them, the list
+ * stands aside, since they are the developer's own words rather than a
+ * mention, and the keys go to the editor as they would anywhere.
  * The repository's paths are read once per plan, the first time an `@` is
  * typed, through the same listing ⌘K finds files with
  * (`ACT_KIND.TASKS_TREE`, the whole tree at the default branch).
@@ -1192,6 +1195,8 @@ export function useMentionPicker({
           kinds,
         );
   const rows = groups.flatMap((group) => group.rows);
+  // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
+  const shown = open && (rows.length > 0 || !/\s/u.test(term.trim()));
   const held =
     highlight !== undefined &&
     trigger !== undefined &&
@@ -1235,7 +1240,7 @@ export function useMentionPicker({
   };
 
   const onKey = (event: KeyboardEvent): boolean => {
-    if (!open) return false;
+    if (!shown) return false;
     if (event.key === "Escape") {
       event.stopPropagation();
       setClosedAt(trigger.start);
@@ -1283,7 +1288,7 @@ export function useMentionPicker({
       : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
   };
   const menu =
-    !open || box === null || placed === undefined ? null : (
+    !shown || box === null || placed === undefined ? null : (
       <MentionMenu
         id={listId}
         crumb={

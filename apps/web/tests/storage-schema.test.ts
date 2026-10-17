@@ -48,6 +48,7 @@ const DECLARED_TABLES = [
   "asks",
   "automation",
   "automation_run",
+  "chat_attachment",
   "chat_channel",
   "chat_member",
   "chat_message",

@@ -51,6 +51,17 @@
   --code-line-number-pointed: rgba(230, 237, 243, 0.8);
   --code-pointed: rgba(56, 139, 253, 0.16);
   --code-pointed-edge: #388bfd;
+  /* A diff's lines on the code's ground, wherever one is drawn: a line
+     added tinted in the palette's green and one removed in its red, the
+     words a changed line changed in a deeper tint of the same, and the mark
+     at a changed line's edge in the colour itself. Each is mixed from the
+     palette's own, which flips with the appearance, so none is restated. */
+  --diff-added-mark: var(--state-complete);
+  --diff-removed-mark: var(--danger);
+  --diff-added-ground: color-mix(in srgb, var(--diff-added-mark) 14%, transparent);
+  --diff-removed-ground: color-mix(in srgb, var(--diff-removed-mark) 14%, transparent);
+  --diff-added-word: color-mix(in srgb, var(--diff-added-mark) 34%, transparent);
+  --diff-removed-word: color-mix(in srgb, var(--diff-removed-mark) 34%, transparent);
   /* A Terminal tab's screen (`terminal/`): the side panel's well for its
      ground, the code's ink for its words and cursor, its selection in the
      code's blue, and the sixteen ANSI colours a program prints in, from the

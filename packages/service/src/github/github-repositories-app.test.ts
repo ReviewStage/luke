@@ -76,9 +76,32 @@ function pullRecord(
   };
 }
 
-/** The pull requests `acme/relay` holds: one open, one merged. */
+/** What GitHub's read of one pull request carries past the fields every read names: when it was opened, its base, its labels, and its counts. */
+const WHOLE_PULL = {
+  created_at: "2026-10-01T09:30:00Z",
+  merged_at: null,
+  closed_at: null,
+  base: { ref: "main" },
+  labels: [{ name: "invites", color: "4fd18b", id: 9, description: null }],
+  comments: 3,
+  review_comments: 2,
+  commits: 4,
+  user: {
+    login: "octo-dev",
+    type: "User",
+    avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
+  },
+};
+
+/** The pull requests `acme/relay` holds: one open, read whole, and one merged, read as a listing names it. */
 const RELAY_PULLS = new Map([
-  [42, pullRecord(42, "Send invitations in batches", { merged: false, draft: false })],
+  [
+    42,
+    {
+      ...pullRecord(42, "Send invitations in batches", { merged: false, draft: false }),
+      ...WHOLE_PULL,
+    },
+  ],
   // Its author's account is gone, which GitHub answers as no user.
   [43, pullRecord(43, "Retry a bounced invitation", { merged: true, draft: false }, null)],
 ]);
@@ -468,7 +491,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, state, who opened it, and the lines it adds and removes and nothing more, a merged one as merged, and one whose author's account is gone naming no one",
+    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, state, who opened it with their avatar, its size, when it was opened, its branches, labels, and comment and commit counts and nothing more, a merged one as merged, and one whose author's account is gone naming no one",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(
@@ -506,8 +529,17 @@ it.layer(getTestDB())("the repositories route", (it) => {
               url: "https://github.com/acme/relay/pull/42",
               state: PULL_REQUEST_STATE.OPEN,
               author: "octo-dev",
+              authorAvatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+              authorBot: false,
               additions: 12,
               deletions: 3,
+              changedFiles: 2,
+              openedAt: Date.parse("2026-10-01T09:30:00Z"),
+              baseRef: "main",
+              headRef: "invites-42",
+              labels: [{ name: "invites", color: "4fd18b" }],
+              comments: 5,
+              commits: 4,
             },
           },
         });
@@ -519,6 +551,8 @@ it.layer(getTestDB())("the repositories route", (it) => {
             state: PULL_REQUEST_STATE.MERGED,
             additions: 12,
             deletions: 3,
+            changedFiles: 2,
+            headRef: "invites-43",
           },
         });
       }),
@@ -658,6 +692,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               url: page(7),
               state: ISSUE_STATE.OPEN,
               author: "octo-dev",
+              authorBot: false,
             },
           },
         });
