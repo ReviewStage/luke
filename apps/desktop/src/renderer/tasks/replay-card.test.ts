@@ -383,7 +383,7 @@ test("a first message whose markers do not add up is drawn whole as the plan's c
   assert.match(container.querySelector("[data-task-card]")?.textContent ?? "", /Use seven days\./u);
 });
 
-test("on an agent's own page, which lists no source, the card names the source as a read of it does and opens it as a link to it would", async () => {
+test("on an agent's own page, which lists no source, the card names the source as a read of it does, wearing its harness's mark, and opens it as a link to it would", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: CODING_AGENT_BRIEF.PLAN,
@@ -395,6 +395,9 @@ test("on an agent's own page, which lists no source, the card names the source a
     false,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
+  // The read named the source's model, so its chip wears its harness's mark rather than the empty box of none known.
+  const mark = container.querySelector("[data-replay-card] > summary .actor-mark svg");
+  assert.ok((mark?.childElementCount ?? 0) > 0);
   press(container.querySelector("[data-replay-card] > summary .actor-ref"));
   assert.deepEqual(opened, []);
   assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: PLAN_ID, agentId: SOURCE.id }]);
@@ -434,7 +437,7 @@ test("a replay holding Luke's summary of the oldest steps opens on one folded ro
   assert.match(row.textContent ?? "", /Read the invite code and its tests\./u);
 });
 
-test("a replayed line is named under its sender as a transcript names one: Luke, an automation, and GitHub by their own marks, the developer as the reader, and a line from before senders were marked by its name", async () => {
+test("a replayed line is named under its sender as a transcript names one: Luke, an automation, GitHub, and a teammate by their own marks, the reader's own by nobody, and a line from before senders were marked by its name", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: CODING_AGENT_BRIEF.PLAN,
@@ -450,7 +453,8 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
     line("Nightly: deploy: Go.", { kind: REPLAY_SENDER.AUTOMATION }),
     line("octocat: Go.", { kind: REPLAY_SENDER.GITHUB }),
     line("The developer: Go.", { kind: REPLAY_SENDER.DEVELOPER }),
-    // A member the window cannot tell from the reader, with no reader known, keeps their name.
+    // The reader's own line, sent as a member, names nobody either.
+    line("Dean Stratakos: Go.", { kind: REPLAY_SENDER.MEMBER, memberId: DEAN.userId }),
     line("Ana Ruiz: Go.", { kind: REPLAY_SENDER.MEMBER, memberId: "user-ana" }),
     line("Charles Pan: Go."),
   ];
@@ -460,21 +464,26 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
   );
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
-  const senders = [...container.querySelectorAll("[data-replay-step] .message-sender")].map(
-    (sender) => {
-      const ref = sender.querySelector<HTMLElement>(".actor-ref");
-      const name = ref?.querySelector(".actor-ref-name")?.textContent ?? sender.textContent;
-      return [ref?.dataset.kind ?? "", name ?? ""];
-    },
-  );
+  const senders = [...container.querySelectorAll("[data-replay-step]")].map((step) => {
+    const sender = step.querySelector(".message-sender");
+    if (sender === null) return null;
+    const ref = sender.querySelector<HTMLElement>(".actor-ref");
+    const name = ref?.querySelector(".actor-ref-name")?.textContent ?? sender.textContent;
+    return [ref?.dataset.kind ?? "", name ?? ""];
+  });
   assert.deepEqual(senders, [
     [ACTOR_KIND.LUKE, "Luke"],
     [ACTOR_KIND.AUTOMATION, "Nightly: deploy"],
     [ACTOR_KIND.GITHUB, "octocat"],
-    ["", "You"],
-    ["", "Ana Ruiz"],
+    null,
+    null,
+    [ACTOR_KIND.PERSON, "Ana Ruiz"],
     ["", "Charles Pan"],
   ]);
+  assert.doesNotMatch(
+    container.querySelector("[data-replay-card] .disclosure-body")?.textContent ?? "",
+    /\bYou\b/u,
+  );
 });
 
 test("the line under the card says when the reader's own agent was started, naming nobody, as the reader's own lines are", async () => {

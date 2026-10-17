@@ -15,7 +15,7 @@ import { Plan, PlanContent, PlanHeader } from "../ai-elements/task";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { useFindOpen } from "../find-in-tab";
 import { useMemberDirectory } from "../member-directory";
-import { lineSender } from "./coding-agent-model";
+import { lineSender, providerOf } from "./coding-agent-model";
 import { linkChip } from "./mention-chip";
 import { useMentionDoors } from "./plan-mentions";
 import {
@@ -55,9 +55,6 @@ import { useOpenPlace } from "./use-open-link";
  * it was forked at, or its tab for a continuation, whose log keeps to its
  * end. The model is `replay-card-model.ts`.
  */
-
-/** What a line the reader sent is named by. */
-const OWN_WORD = "You";
 
 /** What the foot's way to the source's whole transcript says. */
 const FULL_TRANSCRIPT_WORDS = "Open the full transcript";
@@ -135,13 +132,13 @@ interface Published {
   readonly pullRequest: CodingAgentPullRequest | null;
 }
 
-/** The source agent named on a card, as its chip wears it, when the place does not list it: by its title where a read found it. */
+/** The source agent named on a card, as its chip wears it, when the place does not list it: by its title and its harness's mark where a read found it, the mark of no known harness until then. */
 function unlistedActor(agentId: string, read: CodingAgentSummary | undefined): Actor {
   return {
     kind: ACTOR_KIND.AGENT,
     agentId,
     name: read?.title ?? TAB_WORDS.CODING_AGENT,
-    provider: undefined,
+    provider: read === undefined ? undefined : providerOf(read.model),
     state: ACTOR_STATE.REST,
   };
 }
@@ -192,30 +189,52 @@ function usePublished(agentId: string, read: ReplayPlace["readPublished"]): Publ
 /**
  * Who sent a replayed line, as a transcript names a line's sender: a
  * member by their face and name, Luke, an automation, GitHub's login, or
- * another agent by their own marks, and the reader's own as "You"; by its
- * name alone where its step's marker named no sender.
+ * another agent by their own marks; nobody for the reader's own, as a
+ * transcript names nobody over the reader's own lines; and by its name
+ * alone where its step's marker named no sender the window can place.
  */
 function LineSender({
   view,
+  readerId,
 }: {
   view: Extract<StepView, { kind: typeof STEP_VIEW.LINE }>;
-}): React.JSX.Element {
-  const { members, former, readerId } = useMemberDirectory();
+  readerId: string | undefined;
+}): React.JSX.Element | null {
+  const { members, former } = useMemberDirectory();
+  if (view.own) return null;
   const actor =
     view.sentBy === undefined ? undefined : lineSender(view.sentBy, readerId, members, former);
-  if (actor !== undefined) return <ActorRef actor={actor} />;
-  // A member's line the reader sent is theirs, as the developer's own is; one the window cannot place keeps its name.
-  const mine = readerId !== undefined && view.sentBy?.userId === readerId;
-  return <>{view.own || mine ? OWN_WORD : view.sender}</>;
+  if (actor !== undefined) {
+    return (
+      <div className="message-meta">
+        <span className="message-sender">
+          <ActorRef actor={actor} />
+        </span>
+      </div>
+    );
+  }
+  // A member's line the reader sent is theirs; one the window cannot place keeps its name.
+  if (readerId !== undefined && view.sentBy?.userId === readerId) return null;
+  return (
+    <div className="message-meta">
+      <span className="message-sender">{view.sender}</span>
+    </div>
+  );
 }
 
 /**
  * One step, drawn as a transcript draws the same: a line as a sent
- * message, its sender under it; the agent's words as its words; and a
- * call as a call's row, folded onto its input and its result, which run
- * long.
+ * message, its sender under it unless it is the reader's own; the agent's
+ * words as its words; and a call as a call's row, folded onto its input
+ * and its result, which run long.
  */
-function StepRow({ step }: { step: ReplayStep }): React.JSX.Element {
+function StepRow({
+  step,
+  readerId,
+}: {
+  step: ReplayStep;
+  readerId: string | undefined;
+}): React.JSX.Element {
   const view = stepView(step);
   switch (view.kind) {
     case STEP_VIEW.LINE:
@@ -224,11 +243,7 @@ function StepRow({ step }: { step: ReplayStep }): React.JSX.Element {
           <MessageContent>
             <TranscriptWords text={view.words} />
           </MessageContent>
-          <div className="message-meta">
-            <span className="message-sender">
-              <LineSender view={view} />
-            </span>
-          </div>
+          <LineSender view={view} readerId={readerId} />
         </Message>
       );
     case STEP_VIEW.SAID:
@@ -284,7 +299,13 @@ function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.E
  * find bar is open every step is drawn, so the find covers the whole
  * replay, as a fold's closed body is drawn for it (`fold.tsx`).
  */
-function ReplaySteps({ steps }: { steps: readonly ReplayStep[] }): React.JSX.Element {
+function ReplaySteps({
+  steps,
+  readerId,
+}: {
+  steps: readonly ReplayStep[];
+  readerId: string | undefined;
+}): React.JSX.Element {
   const finding = useFindOpen();
   const [shown, setShown] = useState(REPLAY_PAGE);
   const list = useRef<HTMLDivElement>(null);
@@ -308,7 +329,7 @@ function ReplaySteps({ steps }: { steps: readonly ReplayStep[] }): React.JSX.Ele
       )}
       {steps.slice(page.from).map((step, index) => (
         // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
-        <StepRow key={page.from + index} step={step} />
+        <StepRow key={page.from + index} step={step} readerId={readerId} />
       ))}
     </div>
   );
@@ -451,7 +472,7 @@ export function ReplayCard({
           {left === undefined ? null : (
             <p className="m-0 text-[12px] italic text-muted-foreground">{left}</p>
           )}
-          <ReplaySteps steps={replay.steps} />
+          <ReplaySteps steps={replay.steps} readerId={place.readerId} />
           <ReplayFoot agentId={agentId} place={place} onOpenTranscript={onOpenTranscript} />
         </PlanContent>
       </Plan>
