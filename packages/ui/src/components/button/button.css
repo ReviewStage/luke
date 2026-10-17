@@ -83,7 +83,12 @@
   }
 
   /* A quiet or outlined button lights under the pointer, while its menu is
-     open, and while a toggle stands on; a filled one brightens. */
+     open, and while a toggle stands on; a filled one brightens. Its
+     translucent fill, lit or pressed, is laid over `--luke-button-ground`,
+     which is nothing unless a container sets it: one whose buttons stand
+     still while something slides beneath them, as a window's title bar
+     does over its panes, names the opaque ground they rest on, so what
+     passes beneath never shows through the fill. */
   .luke-button:is([data-variant="quiet"], [data-variant="outline"]):where(
     :hover:not(:disabled, [aria-disabled="true"]),
     [aria-expanded="true"],
@@ -91,6 +96,8 @@
   ) {
     --luke-button-fill: var(--luke-color-fill-selected);
     --luke-button-ink: var(--luke-color-text);
+    background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
+      var(--luke-button-ground, transparent);
   }
 
   .luke-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
@@ -102,6 +109,8 @@
     [aria-disabled="true"]
   ) {
     --luke-button-fill: var(--luke-color-fill-pressed);
+    background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
+      var(--luke-button-ground, transparent);
   }
 
   .luke-button:is([data-variant="primary"], [data-variant="danger"]):hover:not(
