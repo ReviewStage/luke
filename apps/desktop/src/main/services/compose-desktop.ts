@@ -1,4 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { DesktopRelease, desktopRelease } from "@luke/features";
 import {
   AgentNoticeDoors,
   type AgentNotices,
@@ -16,7 +17,7 @@ import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
-import { Context, Effect, Layer, Stream } from "effect";
+import { Context, Deferred, Effect, Layer, Stream } from "effect";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
@@ -323,17 +324,35 @@ export function composeDesktop(
         ),
         (unsubscribe) => Effect.sync(unsubscribe),
       );
+      const showSettings = () => {
+        windows.panels.focusExpanded();
+        windows.showSettings();
+      };
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,
         engine: updateEngine,
         beforeRestart: quit.teardown,
         state,
-        showSettings: () => {
-          windows.panels.focusExpanded();
-          windows.showSettings();
-        },
+        showSettings,
       });
+      // The service refusing this build as too old is answered once: Settings
+      // comes forward on the Updates row and a check begins, which fetches the
+      // release the row then offers to install. Every hosted call already
+      // stops at the refusal (`account-call.ts`), so nothing polls meanwhile.
+      const release = yield* DesktopRelease;
+      if (release !== undefined) {
+        yield* Effect.forkScoped(
+          Effect.andThen(
+            Deferred.await(release.updateRequired),
+            Effect.sync(() => {
+              config.report("The service refused this build as too old; checking for an update");
+              showSettings();
+              void updates.checkRequired();
+            }),
+          ),
+        );
+      }
 
       // The one edge no service could take as a constructor argument, because
       // it is a cycle the concerns genuinely have: the windows draw what the
@@ -368,5 +387,8 @@ export function composeDesktop(
     // takes its cipher as a seam, so it is constructed before the assembly
     // and begins before it.
     Layer.provideMerge(effectServiceLayer(keychain, config.report)),
+    // The build every hosted call names, and the refusal it latches, stand
+    // beneath everything so every call this launch makes carries them.
+    Layer.provideMerge(Layer.effect(DesktopRelease, desktopRelease(config.appVersion))),
   );
 }

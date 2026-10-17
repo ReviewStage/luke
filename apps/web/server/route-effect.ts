@@ -1,6 +1,7 @@
+import { desktopVersionGateFromEnvironment } from "@luke/service/http/desktop-version-gate";
 import type { Route, WebRoutes } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { runWeb } from "./runtime.js";
 
@@ -19,6 +20,10 @@ type WebHandler = (request: Request) => Promise<Response>;
  * failure is the layer's — a missing `DATABASE_URL` today — and a held
  * rejection would answer every later invocation from it without trying again.
  *
+ * Every route sits behind the desktop version gate
+ * (`desktop-version-gate.ts`), so a desktop older than the deployment's
+ * minimum is refused the same way whichever function it reached.
+ *
  * The router's own request logger is disabled: a function's request line is
  * already the platform's to record, and a URL Luke wrote to its own output is
  * a place a token in a query could land.
@@ -28,7 +33,10 @@ export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
   return {
     async fetch(request: Request): Promise<Response> {
       building ??= runWeb(Effect.context<WebServices>()).then((context) => {
-        const { handler } = HttpRouter.toWebHandler(routes, { disableLogger: true });
+        const { handler } = HttpRouter.toWebHandler(
+          Layer.merge(routes, desktopVersionGateFromEnvironment),
+          { disableLogger: true },
+        );
         return (incoming: Request) => handler(incoming, context);
       });
       const attempt = building;

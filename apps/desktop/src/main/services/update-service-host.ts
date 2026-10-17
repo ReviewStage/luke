@@ -21,6 +21,8 @@ export interface UpdateServiceHost {
    */
   start: () => void;
   check: () => Promise<UpdateSnapshot>;
+  /** A check the service asked for by refusing this build as too old; no press of the developer's, so none is counted. */
+  checkRequired: () => Promise<UpdateSnapshot>;
   install: () => void;
   openLatestRelease: () => void;
   openChangelog: () => void;
@@ -143,6 +145,7 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
         });
         return service.check({ asked: true });
       },
+      checkRequired: () => service.check({ asked: true }),
       install: () => {
         recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
           update_action: PRODUCT_UPDATE_ACTION.INSTALL,

@@ -25,7 +25,8 @@
         "not-permitted",
         "already-invited",
         "sandbox-stopped",
-        "linear-unavailable"
+        "linear-unavailable",
+        "update-required"
       ]
     }
   },
