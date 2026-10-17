@@ -332,6 +332,23 @@ door beside the effect in `src/auth/`. `lukeAccount` takes the
 resolved account as a `BearerAccount` promise and reaches no userinfo
 endpoint of its own.
 
+`resolveHostedUserId` reads a request in a fixed order (`requestUserId`):
+where it carries an `Authorization` header at all, the bearer exactly as
+`hostedUserId` reads it, and only where it carries none, the browser's
+Better Auth session cookie (`resolveBrowserSessionUserId`, handed the cookie
+header alone). An `Authorization` that does not verify resolves nobody and
+never falls to the cookie beside it, because Better Auth's bearer plugin
+leaves the cookie standing under any header it did not sign. So a page on the
+deployment's own origin reaches every account route the desktop does, its
+state-changing requests held to that origin by `src/http/origin-guard.ts`
+first. What acts for one device rather than the account takes the bearer
+alone: the Mac's commands (`resolveHostedBearerUserId`), and eve's channels,
+which resolve with `hostedUserId`, as the voice and terminal relays resolve
+with `userIdForAuthorization`. Because a tab opened on a byte route now
+carries the cookie, every byte a member, an agent, or GitHub wrote is served
+under `HOSTED_BYTES_HEADERS` (`src/http/http-effect.ts`), whose sandboxed
+policy keeps an SVG's script from running as this origin.
+
 ## The dictation group
 
 `src/dictation/dictation-app.ts` answers `POST /api/dictation`: one clip the
