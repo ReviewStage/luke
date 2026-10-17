@@ -11,6 +11,7 @@ import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
+import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
@@ -49,6 +50,7 @@ export const EXAMPLES: readonly Example[] = [
   SWITCHES_EXAMPLE,
   LIST_ROW_EXAMPLE,
   SEGMENTED_EXAMPLE,
+  SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
