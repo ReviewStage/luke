@@ -85,6 +85,13 @@ function scriptedService() {
   };
 }
 
+/** What the hook is mounted over: the workspace, the channel shown, and the account where another than Dean's. */
+interface Shown {
+  readonly workspaceId: string;
+  readonly reading: string | undefined;
+  readonly account?: string;
+}
+
 /** The hook mounted over the service, its workspace and whether a channel is shown as given, the latest control kept. */
 function mount(
   service: ReturnType<typeof scriptedService>,
@@ -92,16 +99,15 @@ function mount(
   reading: string | undefined = undefined,
 ) {
   let control: WorkspaceChatControl | undefined;
-  let set: ((next: { workspaceId: string; reading: string | undefined }) => void) | undefined;
-  function Harness(props: { workspaceId: string; reading: string | undefined }) {
-    control = useWorkspaceChat({ ...props, active: true, ...service });
+  let set: ((next: Shown) => void) | undefined;
+  function Harness(props: Shown) {
+    control = useWorkspaceChat({ account: "dean@example.com", ...props, active: true, ...service });
     return null;
   }
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const render = (next: { workspaceId: string; reading: string | undefined }) =>
-    act(() => root?.render(createElement(Harness, next)));
+  const render = (next: Shown) => act(() => root?.render(createElement(Harness, next)));
   set = render;
   render({ workspaceId, reading });
   return {
@@ -109,7 +115,7 @@ function mount(
       assert.ok(control);
       return control;
     },
-    rerender: (next: { workspaceId: string; reading: string | undefined }) => set?.(next),
+    rerender: (next: Shown) => set?.(next),
   };
 }
 
@@ -265,6 +271,42 @@ test("another workspace's chat starts from nothing of the last one's", async () 
     after: CHAT_CURSOR_START,
   });
   // The first workspace's read answering late is kept for nobody.
+  service.reads[1]?.settle(answered([message(9)], "9"));
+  await settle();
+  assert.equal(tab.control().chat, undefined);
+});
+
+test("a channel's read the service did not take is told again once the channel is shown again", async () => {
+  const service = scriptedService();
+  const tab = mount(service, "acme", CHANNEL);
+  service.reads[0]?.settle(answered([message(1), message(2)], "2"));
+  await settle();
+  assert.equal(service.writes.length, 1);
+  service.writes[0]?.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await settle();
+  tab.rerender({ workspaceId: "acme", reading: undefined });
+  tab.rerender({ workspaceId: "acme", reading: CHANNEL });
+  await settle();
+  assert.deepEqual(
+    service.writes.map((write) => write.params.write),
+    [
+      { readTo: 2, channelId: CHANNEL },
+      { readTo: 2, channelId: CHANNEL },
+    ],
+  );
+});
+
+test("another account signed in to the same workspace starts from nothing of the last account's chat", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  service.reads[0]?.settle(answered([message(1)], "1"));
+  await settle();
+  assert.ok(tab.control().chat);
+  tab.rerender({ workspaceId: "acme", reading: undefined, account: "ada@example.com" });
+  await settle();
+  assert.equal(tab.control().chat, undefined);
+  assert.deepEqual(service.reads.at(-1)?.params, { workspaceId: "acme", after: CHAT_CURSOR_START });
+  // The last account's read answering late is kept for nobody.
   service.reads[1]?.settle(answered([message(9)], "9"));
   await settle();
   assert.equal(tab.control().chat, undefined);

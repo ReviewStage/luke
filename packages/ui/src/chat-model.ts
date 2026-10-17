@@ -151,9 +151,9 @@ function readSeqIn(chat: ChatAnswer, channelId: string): number {
   return Math.max(chat.readSeq, own);
 }
 
-/** Whether the reader has yet to read a message: posted past its cursor in the message's channel by someone else. */
+/** Whether the reader has yet to read a message: posted or changed past its cursor in the message's channel by someone else, as the service counts it. */
 function unreadBy(chat: ChatAnswer, message: ChatMessage): boolean {
-  return message.seq > readSeqIn(chat, message.channelId) && message.authorId !== chat.self;
+  return message.touchedSeq > readSeqIn(chat, message.channelId) && message.authorId !== chat.self;
 }
 
 /** The member of a direct message who is not the reader, by id; none for a channel. */

@@ -26,7 +26,7 @@ import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
-import { FOR_YOU } from "@luke/ui/chat-model";
+import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -2367,4 +2367,16 @@ test("a live run reads the listed workspace's chat only while the account has Ch
     await settle();
     assert.ok(on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat on reads its chat");
   });
+});
+
+test("a channel chosen in Chat is the listed workspace's, so another workspace listed puts Chat back on For you", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  act(() => tab.control().chatView.onOpen());
+  const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
+  act(() => tab.control().chatView.onChoose(channel));
+  assert.deepEqual(tab.control().chatView.place, channel);
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  assert.equal(tab.control().chatView.open, true, "Chat stays open");
+  assert.deepEqual(tab.control().chatView.place, FOR_YOU);
 });

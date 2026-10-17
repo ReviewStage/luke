@@ -68,13 +68,24 @@ export const CHAT_NOT_TAKEN =
   "The ask changed before your answer landed. Answer it as it stands now.";
 
 interface Held {
+  /** The account the chat was read for, so another account signing in starts from nothing of it. */
+  readonly account: string | undefined;
   readonly workspaceId: string | undefined;
   readonly chat: ChatAnswer | undefined;
   readonly failed: boolean;
 }
 
-function fresh(workspaceId: string | undefined): Held {
-  return { workspaceId, chat: undefined, failed: false };
+/** Whether what is held was read for the account and workspace given. */
+function heldFor(
+  held: Held,
+  account: string | undefined,
+  workspaceId: string | undefined,
+): boolean {
+  return held.account === account && held.workspaceId === workspaceId;
+}
+
+function fresh(account: string | undefined, workspaceId: string | undefined): Held {
+  return { account, workspaceId, chat: undefined, failed: false };
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -135,9 +146,12 @@ function settledWords(
   return "taken" in answer && !answer.taken ? CHAT_NOT_TAKEN : undefined;
 }
 
-/** The newest message held in a channel, by its place; none in an empty one. */
+/** The latest place anything held in a channel was posted or changed at; none in an empty one. */
 function newestSeqIn(chat: ChatAnswer | undefined, channelId: string): number {
-  return chat?.messages.findLast((message) => message.channelId === channelId)?.seq ?? 0;
+  const placed = (chat?.messages ?? []).flatMap((message) =>
+    message.channelId === channelId ? [message.touchedSeq] : [],
+  );
+  return Math.max(0, ...placed);
 }
 
 /** How far the reader has read a channel: its own cursor there where it read further, else its cursor everywhere. */
@@ -147,6 +161,8 @@ function readSeqIn(chat: ChatAnswer | undefined, channelId: string): number {
 }
 
 export function useWorkspaceChat(input: {
+  /** The account signed in, whose chat it is. */
+  account: string | undefined;
   workspaceId: string | undefined;
   /** Whether the chat is read at all: a live run, signed in. */
   active: boolean;
@@ -155,9 +171,9 @@ export function useWorkspaceChat(input: {
   readChat: ChatReader;
   writeChat: ChatWriter;
 }): WorkspaceChatControl {
-  const { workspaceId, active, reading } = input;
-  const [held, setHeld] = useState<Held>(() => fresh(workspaceId));
-  if (held.workspaceId !== workspaceId) setHeld(fresh(workspaceId));
+  const { account, workspaceId, active, reading } = input;
+  const [held, setHeld] = useState<Held>(() => fresh(account, workspaceId));
+  if (!heldFor(held, account, workspaceId)) setHeld(fresh(account, workspaceId));
   const [attempt, setAttempt] = useState(0);
   // A send's key and words, by what it sends, so the same send again goes under the same key.
   const keys = useRef(new Map<string, string>());
@@ -176,12 +192,12 @@ export function useWorkspaceChat(input: {
           .catch((): CodingAgentChatAnswerView => UNANSWERED);
         if (!live) return;
         if ("failure" in answer) {
-          setHeld((was) => (was.workspaceId === workspaceId ? { ...was, failed: true } : was));
+          setHeld((was) => (heldFor(was, account, workspaceId) ? { ...was, failed: true } : was));
           return;
         }
         after = answer.cursor;
         setHeld((was) =>
-          was.workspaceId === workspaceId ? { ...was, chat: withRead(was.chat, answer) } : was,
+          heldFor(was, account, workspaceId) ? { ...was, chat: withRead(was.chat, answer) } : was,
         );
       }
     };
@@ -189,7 +205,8 @@ export function useWorkspaceChat(input: {
     return () => {
       live = false;
     };
-  }, [looping, workspaceId, attempt]);
+    // Note that the account is a dependency, so another account's read starts over rather than landing in its chat.
+  }, [looping, account, workspaceId, attempt]);
 
   const onRetry = useCallback(() => {
     setHeld((was) => ({ ...was, failed: false }));
@@ -205,13 +222,13 @@ export function useWorkspaceChat(input: {
         .catch((): CodingAgentChatWriteAnswerView => UNANSWERED);
       if ("failure" in answer) return { refused: messageFailureWords(answer.failure) };
       setHeld((was) =>
-        was.workspaceId === workspaceId && was.chat !== undefined
+        heldFor(was, account, workspaceId) && was.chat !== undefined
           ? { ...was, chat: withWrite(was.chat, answer) }
           : was,
       );
       return { answer };
     },
-    [workspaceId],
+    [account, workspaceId],
   );
 
   const onPost = useCallback(
@@ -244,8 +261,12 @@ export function useWorkspaceChat(input: {
     const same = told.current.workspaceId === workspaceId && told.current.channelId === reading;
     const already = same ? told.current.seq : 0;
     if (newest <= readSeq || newest <= already) return;
-    told.current = { workspaceId, channelId: reading, seq: newest };
-    void write({ readTo: newest, channelId: reading });
+    const telling = { workspaceId, channelId: reading, seq: newest };
+    told.current = telling;
+    // A read that did not land is forgotten, so the channel shown again tells it again.
+    void write({ readTo: newest, channelId: reading }).then((landed) => {
+      if ("refused" in landed && told.current === telling) told.current = { ...telling, seq: 0 };
+    });
   }, [reading, newest, readSeq, workspaceId, write]);
 
   return { chat: held.chat, failed: held.failed, onRetry, onPost, onAnswer };
