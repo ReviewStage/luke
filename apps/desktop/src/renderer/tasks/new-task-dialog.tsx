@@ -4,7 +4,19 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import { ComposeIcon, ProviderMark } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ComposeIcon,
+  DIALOG_SIZE,
+  Dialog,
+  ErrorState,
+  ProviderMark,
+  Switch,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { searchTokens } from "@luke/ui/search-tokens";
 import {
   type LinearIssuesAsk,
@@ -17,13 +29,10 @@ import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useId, useRef, useState } from "react";
 import { WorkspaceTile } from "../desktop/workspace-tile";
-import { ModalShell } from "../modal-shell";
 import { rendererRuntime } from "../renderer-runtime";
 import { Highlighted } from "../search-field";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { Shortcut } from "../shortcut";
-import { BusyLabel } from "../spinner";
-import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { useNewTaskPlanning } from "./new-task-planning";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
@@ -373,155 +382,155 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   };
 
   return (
-    <ModalShell
-      className="new-task-dialog ph-no-capture"
+    <Dialog
+      size={DIALOG_SIZE.WIDE}
       labelledBy={titleId}
       busy={starting}
       initialFocus={field}
       onDismiss={close}
     >
-      <div className="new-plan-head">
-        <div className="new-task-title">
-          <h2 id={titleId} className="confirm-dialog-title">
-            {startsIn === undefined ? "New task" : "New task in"}
-          </h2>
-          <WorkspaceChip
-            workspaces={newTask.workspaces}
-            chosen={startsIn}
+      <div className="new-task ph-no-capture">
+        <div className="new-task-head">
+          <div className="new-task-title">
+            <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
+              {startsIn === undefined ? "New task" : "New task in"}
+            </Text>
+            <WorkspaceChip
+              workspaces={newTask.workspaces}
+              chosen={startsIn}
+              disabled={starting}
+              onChoose={(chosenId) => {
+                setWorkspaceId(chosenId);
+                setHighlight(0);
+                setDismissed(false);
+                searchLinear(name, chosenId);
+              }}
+            />
+          </div>
+          {/* Note that the word labels the switch, so a press on it turns the switch too. */}
+          <Tooltip label={planningNote}>
+            <span className="new-task-planning">
+              <label htmlFor={planningId}>Plan</label>
+              <Switch
+                id={planningId}
+                checked={planning}
+                label="Plan with Luke"
+                describedBy={planningNoteId}
+                disabled={starting}
+                onChange={setPlanning}
+              />
+              <span id={planningNoteId} hidden>
+                {planningNote}
+              </span>
+            </span>
+          </Tooltip>
+        </div>
+        {/* Note that the name is the shared text field's look on a native
+            input, because it is also the combobox over Linear's issues,
+            which the shared field does not draw yet. */}
+        <div className="new-task-name" data-matching={String(matching)}>
+          <input
+            ref={field}
+            type="text"
+            className="luke-text-field"
+            role="combobox"
+            aria-label="Task name"
+            aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+            aria-expanded={matching}
+            aria-controls={matching ? listId : undefined}
+            aria-autocomplete={searchesLinear ? "list" : undefined}
+            aria-activedescendant={matching ? `${optionId}-${at}` : undefined}
+            autoComplete="off"
+            placeholder={searchesLinear ? NAME_PLACEHOLDER.LINEAR : NAME_PLACEHOLDER.PLAIN}
+            maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
+            spellCheck
+            value={name}
             disabled={starting}
-            onChoose={(chosenId) => {
-              setWorkspaceId(chosenId);
+            onChange={(event) => {
+              const typed = event.currentTarget.value;
+              setName(typed);
               setHighlight(0);
               setDismissed(false);
-              searchLinear(name, chosenId);
+              searchLinear(typed, startsIn);
             }}
+            onKeyDown={fieldKey}
           />
-        </div>
-        {/* Note that the word labels the switch, so a press on it turns the switch too. */}
-        <Tooltip label={planningNote}>
-          <span className="new-plan-planning">
-            <label htmlFor={planningId}>Plan</label>
-            <Switch
-              id={planningId}
-              checked={planning}
-              label="Plan with Luke"
-              describedBy={planningNoteId}
-              disabled={starting}
-              onChange={setPlanning}
-            />
-            <span id={planningNoteId} hidden>
-              {planningNote}
-            </span>
-          </span>
-        </Tooltip>
-      </div>
-      <div className="new-task-name" data-matching={String(matching)}>
-        <input
-          ref={field}
-          type="text"
-          className="dialog-name-field"
-          role="combobox"
-          aria-label="Task name"
-          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-          aria-expanded={matching}
-          aria-controls={matching ? listId : undefined}
-          aria-autocomplete={searchesLinear ? "list" : undefined}
-          aria-activedescendant={matching ? `${optionId}-${at}` : undefined}
-          autoComplete="off"
-          placeholder={searchesLinear ? NAME_PLACEHOLDER.LINEAR : NAME_PLACEHOLDER.PLAIN}
-          maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
-          spellCheck
-          value={name}
-          disabled={starting}
-          onChange={(event) => {
-            const typed = event.currentTarget.value;
-            setName(typed);
-            setHighlight(0);
-            setDismissed(false);
-            searchLinear(typed, startsIn);
-          }}
-          onKeyDown={fieldKey}
-        />
-        {/* Note that a press on a row is kept from taking focus, because the
-            field is where the keys are read. */}
-        {matching ? (
-          <div
-            id={listId}
-            className="new-task-matches"
-            role="listbox"
-            aria-label="Linear issues"
-            onMouseDown={(event) => event.preventDefault()}
-          >
-            <div className="menu-heading" aria-hidden="true">
-              Linear issues
-            </div>
-            {matches.map((issue, index) => (
-              <IssueOption
-                key={issue.id}
-                id={`${optionId}-${index}`}
-                issue={issue}
-                tokens={tokens}
-                highlighted={index === at}
-                onHighlight={() => setHighlight(index)}
-                onPick={() => startIssue(issue)}
-              />
-            ))}
-            <button
-              id={`${optionId}-${matches.length}`}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              className="menu-item"
-              aria-selected={at === matches.length}
-              onMouseMove={() => setHighlight(matches.length)}
-              onClick={startTyped}
+          {/* Note that a press on a row is kept from taking focus, because the
+              field is where the keys are read. */}
+          {matching ? (
+            <div
+              id={listId}
+              className="new-task-matches"
+              role="listbox"
+              aria-label="Linear issues"
+              onMouseDown={(event) => event.preventDefault()}
             >
-              <span className="menu-item-glyph">
-                <ComposeIcon />
-              </span>
-              <span className="task-compose-menu-name">Create task “{name.trim()}”</span>
-              <Shortcut chord={TYPED_CHORD} className="menu-item-hint" />
-            </button>
+              <div className="menu-heading" aria-hidden="true">
+                Linear issues
+              </div>
+              {matches.map((issue, index) => (
+                <IssueOption
+                  key={issue.id}
+                  id={`${optionId}-${index}`}
+                  issue={issue}
+                  tokens={tokens}
+                  highlighted={index === at}
+                  onHighlight={() => setHighlight(index)}
+                  onPick={() => startIssue(issue)}
+                />
+              ))}
+              <button
+                id={`${optionId}-${matches.length}`}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                className="menu-item"
+                aria-selected={at === matches.length}
+                onMouseMove={() => setHighlight(matches.length)}
+                onClick={startTyped}
+              >
+                <span className="menu-item-glyph">
+                  <ComposeIcon />
+                </span>
+                <span className="task-compose-menu-name">Create task “{name.trim()}”</span>
+                <Shortcut chord={TYPED_CHORD} className="menu-item-hint" />
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {note === undefined ? null : <ErrorState>{note}</ErrorState>}
+        <div className="new-task-actions">
+          <RepositoryChip
+            key={repositories.scope}
+            place={CHIP_PLACE.FIELD}
+            align={PICKER_ALIGN.START}
+            value={repository}
+            chooser={repositories}
+            onChoose={setChosen}
+            onUnreached={() => setChosen(null)}
+          />
+          <div className="new-task-answers">
+            <Button disabled={starting} onClick={close}>
+              Cancel
+            </Button>
+            <Button
+              variant={BUTTON_VARIANT.PRIMARY}
+              aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+              busy={starting}
+              busyLabel={picked === undefined ? "Creating" : "Starting"}
+              onClick={start}
+            >
+              {picked === undefined ? "Create task" : `Start ${picked.identifier}`}
+              <Shortcut chord={CREATE_CHORD} />
+            </Button>
           </div>
-        ) : null}
+        </div>
       </div>
-      {note === undefined ? null : (
-        <p className="error-message" role="alert">
-          {note}
-        </p>
-      )}
-      <div className="confirm-dialog-actions">
-        <RepositoryChip
-          key={repositories.scope}
-          place={CHIP_PLACE.FIELD}
-          align={PICKER_ALIGN.START}
-          value={repository}
-          chooser={repositories}
-          onChoose={setChosen}
-          onUnreached={() => setChosen(null)}
-        />
-        <button type="button" className="toolbar-button" disabled={starting} onClick={close}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-          aria-busy={starting}
-          disabled={!canStart}
-          onClick={start}
-        >
-          <BusyLabel busy={starting} label={picked === undefined ? "Creating" : "Starting"}>
-            {picked === undefined ? "Create task" : `Start ${picked.identifier}`}
-          </BusyLabel>
-          <Shortcut chord={CREATE_CHORD} />
-        </button>
-      </div>
-    </ModalShell>
+    </Dialog>
   );
 }
 
-/** The card over the window while New task is asked, in the window's one modal frame (`../modal-shell.tsx`); nothing otherwise. */
+/** The card over the window while New task is asked, in `@luke/ui`'s shared `Dialog`; nothing otherwise. */
 export function NewTaskDialog({
   newTask,
 }: {

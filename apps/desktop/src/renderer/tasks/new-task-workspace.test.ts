@@ -132,7 +132,7 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
     document.querySelector('[role="dialog"][aria-label="Workspace"]') ??
     assert.fail("the chip opens its menu");
   assert.ok(
-    document.querySelector(".new-task-dialog")?.contains(menu),
+    document.querySelector('[role="dialog"][aria-modal="true"]')?.contains(menu),
     "the chip's menu stands inside the dialog, over the window it dims",
   );
   act(() => optionNamed(menu, "Acme").click());

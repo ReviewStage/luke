@@ -8320,7 +8320,7 @@ button.automation-run:hover {
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* Create plan's chord, muted against its own fill rather than the card's. */
+/* Create issue's chord, muted against its own fill rather than the card's. */
 .new-task-dialog .primary-button .shortcut {
   --shortcut-ink: var(--on-accent-muted);
 }
@@ -8545,21 +8545,53 @@ button.automation-run:hover {
   height: 34px;
 }
 
-/* New plan (`new-task-dialog.tsx`): the dialog's card, its one-line name in
-   the feedback note's well, and its foot led by the repository chip with
-   the answers at its end. New workspace's name is the same field. */
+/* New issue (`desktop/new-issue-dialog.tsx`): the dialog's card, its
+   one-line name in a well, and its answers at its foot. */
 .new-task-dialog {
   width: min(460px, 100%);
   gap: var(--space-12);
 }
 
-/* The title says where the plan starts, "New plan in", then the workspace's
+/* New task (`new-task-dialog.tsx`), inside the shared dialog's wide card:
+   its head, its name, and its foot led by the repository chip with the
+   answers at its end, in one column the screen recording leaves out
+   (`ph-no-capture`). */
+.new-task {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+}
+
+/* New task's head: the title and its workspace chip, then the Plan switch
+   at the row's end. */
+.new-task-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-12);
+}
+
+/* The title says where the task starts, "New task in", then the workspace's
    chip in the title's own line, as Linear's team chip stands in its title. */
 .new-task-title {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
+}
+
+/* New task's Plan switch stands at the title's end with its word, the word
+   part of its label so a press on either turns it, leaving the foot's room
+   to the repository chip. */
+.new-task-planning {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin-left: auto;
+  color: var(--luke-color-text-muted);
+  user-select: none;
 }
 
 /* A picker's menu here is as wide as its widest value, within a bound,
@@ -8574,16 +8606,17 @@ button.automation-run:hover {
   max-width: min(400px, var(--settings-picker-width-max, 400px));
 }
 
-/* New task's chips are Settings pickers (`settings/picker-row.tsx`) standing
-   alone at the head of their lines, not in a column, so each is as wide as
-   its value and gives way, ellipsized, to a long one. */
-.new-task-dialog .settings-picker {
+/* New task's and New issue's chips are Settings pickers
+   (`settings/picker-row.tsx`) standing alone at the head of their lines,
+   not in a column, so each is as wide as its value and gives way,
+   ellipsized, to a long one. */
+:is(.new-task-dialog, .new-task) .settings-picker {
   min-width: 0;
   flex-shrink: 1;
 }
 
-.new-task-dialog .settings-picker-chip,
-.new-task-dialog .settings-picker > .luke-chip {
+:is(.new-task-dialog, .new-task) .settings-picker-chip,
+:is(.new-task-dialog, .new-task) .settings-picker > .luke-chip {
   width: auto;
   max-width: 100%;
 }
@@ -8615,7 +8648,7 @@ button.automation-run:hover {
   flex-direction: column;
 }
 
-.new-task-name[data-matching="true"] .dialog-name-field {
+.new-task-name[data-matching="true"] .luke-text-field {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -8625,11 +8658,11 @@ button.automation-run:hover {
   max-height: 280px; /* off-scale: seven rows and the heading */
   flex-direction: column;
   overflow-y: auto;
-  padding: var(--space-4);
-  border: 1px solid var(--hairline);
+  padding: var(--luke-space-4);
+  border: 1px solid var(--luke-color-border-strong);
   border-top: 0;
-  border-radius: 0 0 var(--control-radius) var(--control-radius);
-  background: var(--desktop-well);
+  border-radius: 0 0 var(--luke-control-radius) var(--luke-control-radius);
+  background: var(--luke-color-input);
 }
 
 /* The list's keys stay in the field, so its one highlight is the row the
@@ -8639,39 +8672,48 @@ button.automation-run:hover {
 }
 
 .new-task-matches .menu-item[aria-selected="true"] {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 /* An issue's key and state stand at the row's end, and its title gives way. */
 .new-task-matches .task-compose-menu-detail {
   margin-left: auto;
-  padding-left: var(--space-12);
+  padding-left: var(--luke-space-12);
 }
 
-.confirm-dialog-actions > .repository-chip {
-  margin-right: auto;
+/* New task's foot: the repository chip at its start, the answers at its
+   end, a common width so a short verb is not a smaller target than Cancel. */
+.new-task-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-dialog-action-gap);
 }
 
-/* New task's head: the title and its workspace chip, then the Plan switch
-   at the row's end. */
+.new-task-answers {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--luke-dialog-action-gap);
+  margin-left: auto;
+}
+
+.new-task-answers > * {
+  min-width: var(--luke-dialog-action-width);
+}
+
+/* Create task's chord a glyph's gap after its word, muted against its own
+   fill rather than the card's. */
+.new-task-answers .shortcut {
+  --shortcut-ink: var(--luke-color-on-accent-muted);
+  margin-inline-start: var(--luke-icon-gap);
+}
+
+/* New issue's head: its title. */
 .new-plan-head {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--space-12);
-}
-
-/* New task's Plan switch stands at the title's end with its word, the word
-   part of its label so a press on either turns it, leaving the foot's room
-   to the repository chip. */
-.new-plan-planning {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--space-6);
-  margin-left: auto;
-  color: var(--text-secondary);
-  user-select: none;
 }
 
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
