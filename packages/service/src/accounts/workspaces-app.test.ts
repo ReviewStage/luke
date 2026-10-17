@@ -1019,6 +1019,7 @@ const readPhoto = (seams: WorkspaceSeams, userId: string | undefined, workspaceI
       contentType: response.headers.get("content-type"),
       nosniff: response.headers.get("x-content-type-options"),
       cacheControl: response.headers.get("cache-control"),
+      policy: response.headers.get("content-security-policy"),
       base64: Buffer.from(await response.arrayBuffer()).toString("base64"),
     }),
   );
@@ -1053,6 +1054,7 @@ it.effect(
           contentType: "image/png",
           nosniff: "nosniff",
           cacheControl: "private, no-store",
+          policy: "default-src 'none'; style-src 'unsafe-inline'; sandbox",
           base64: png,
         });
         assert.equal(outsider.status, HOSTED_HTTP_STATUS.NOT_FOUND);
