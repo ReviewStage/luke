@@ -1821,8 +1821,52 @@ ul.actor-stack {
   bottom: -2px;
 }
 
-/* The section dialog's icons: none, each glyph, and a few emoji, one row
-   that wraps, the one chosen ringed, and a field for any other emoji. */
+/* A section's glyph in a color of its palette (section-icon-picker.tsx),
+   spent from the file tree's palette, which already answers light and dark;
+   a glyph without one wears the text's own. A glyph still loading, or one
+   this Mac's Lucide does not know, holds its cell empty. */
+[data-icon-color="red"] {
+  color: var(--file-icon-red);
+}
+
+[data-icon-color="orange"] {
+  color: var(--file-icon-orange);
+}
+
+[data-icon-color="yellow"] {
+  color: var(--file-icon-yellow);
+}
+
+[data-icon-color="green"] {
+  color: var(--file-icon-green);
+}
+
+[data-icon-color="teal"] {
+  color: var(--file-icon-teal);
+}
+
+[data-icon-color="blue"] {
+  color: var(--file-icon-blue);
+}
+
+[data-icon-color="purple"] {
+  color: var(--file-icon-purple);
+}
+
+[data-icon-color="pink"] {
+  color: var(--file-icon-pink);
+}
+
+.section-glyph-blank {
+  display: block;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+}
+
+/* The section dialog's icon picker: the Icons and Emoji tabs beside No
+   icon, one search, the palette on the Icons tab, and a grid of ten
+   columns (`GRID_COLUMNS`) that scrolls, the one chosen ringed, with the
+   name of the one rested on under it. */
 .section-icon-picker {
   display: flex;
   min-width: 0;
@@ -1841,16 +1885,107 @@ ul.actor-stack {
   font-weight: 500;
 }
 
+.section-icon-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.section-icon-search {
+  font-size: 13px;
+}
+
+.section-icon-colors,
 .section-icon-choices {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.section-icon-colors {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+/* A swatch is filled with the color it names, which its `data-icon-color` sets. */
+.section-icon-color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.section-icon-color:not([data-icon-color]) {
+  background: none;
+  background-image: linear-gradient(
+    135deg,
+    transparent calc(50% - 0.75px),
+    var(--text-tertiary) calc(50% - 0.75px),
+    var(--text-tertiary) calc(50% + 0.75px),
+    transparent calc(50% + 0.75px)
+  );
+}
+
+.section-icon-color[aria-pressed="true"] {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.section-icon-scroll {
+  height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.section-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 28px);
   gap: var(--space-4);
+}
+
+.section-emoji-group + .section-emoji-group {
+  margin-top: var(--space-8);
+}
+
+/* An emoji is drawn in the text's own ink, nearly opaque, since Chromium
+   lays the ink's alpha over a color glyph too. */
+.section-emoji-group .section-icon-choice {
+  color: var(--text-primary);
+}
+
+.section-emoji-group-name {
+  margin: 0 0 var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.section-icon-note {
+  margin: var(--space-8) 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.section-icon-resting {
+  min-height: 16px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .section-icon-choice {
   display: grid;
   width: 28px;
   height: 28px;
+  flex: none;
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
@@ -5578,6 +5713,15 @@ button.automation-run:hover {
   font-weight: 600;
 }
 
+/* The plan's own Chat tab fills its column as an agent's tab does, the
+   channel's head standing in for the column's bar. */
+.desktop-plan-chat {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
 /* A member's mark: an agent's glyph as its tab wears it, Luke's initial in
    his blue, a person's initial on a quiet ground. */
 .chat-mark {
@@ -6331,7 +6475,20 @@ button.automation-run:hover {
    fade's. */
 .settings-page > .luke-settings-page {
   flex: 1 1 0;
-  scroll-padding-top: var(--page-inset);
+  scroll-padding-top: var(--luke-page-inset);
+}
+
+/* The page's inset narrows under 480px (`settings-page.css`), and a landed
+   result keeps the narrower inset above it. The page cannot query its own
+   width, so the pane around it is the container. */
+.settings-page {
+  container: settings-pane / inline-size;
+}
+
+@container settings-pane (max-width: 479px) {
+  .settings-page > .luke-settings-page {
+    scroll-padding-top: var(--luke-page-inset-narrow);
+  }
 }
 
 /* The page's sections are the width its rows answer (`@container settings`
@@ -8006,8 +8163,8 @@ button.automation-run:hover {
   color: var(--luke-color-text-subtle);
 }
 
-/* The filters under the field, one pill each, the chosen one filled as a
-   filter chip is everywhere in the window. */
+/* The filters under the field, one shared filter chip each, in a row that
+   wraps under the field. */
 .command-palette-filters {
   display: flex;
   flex: 0 0 auto;
@@ -8018,29 +8175,6 @@ button.automation-run:hover {
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 0;
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.command-palette-filter {
-  height: 24px;
-  padding: 0 var(--luke-space-8);
-  border: 1px solid transparent;
-  border-radius: var(--luke-radius-full);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.command-palette-filter:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.command-palette-filter[aria-pressed="true"] {
-  border-color: var(--luke-color-border-selected);
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
 }
 
 .command-palette-list {

@@ -4,11 +4,11 @@
 
 import fs from "node:fs";
 import type { RunMode } from "@luke/host";
+import { channels } from "@luke/host/bridge";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
-import { channels } from "#shared/bridge";
 import {
   type CallWindowArea,
   CallWindowPlace,
@@ -49,9 +49,9 @@ function workAreas(): readonly CallWindowArea[] {
 
 /**
  * The one floating window that draws the standing call while no Luke window
- * has the keyboard. It loads the same renderer bundle as the panels from a
- * document of its own (`call.html`, which may reach no host), under the same
- * hardening, and mounts the call card by the role main answers it. It is
+ * has the keyboard. It loads the renderer's call entry from a document of its
+ * own (`call.html`, which may reach no host), under the same hardening as
+ * the panels, and that entry mounts the call card alone. It is
  * transparent and frameless, so the card is the whole of what is seen; a non-activating
  * panel, so pressing a control leaves the developer's editor in front; and it
  * floats over every Space and full-screen app, out of Mission Control.

@@ -17,12 +17,14 @@ import {
 } from "@luke/features/repository-reach-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
 } from "#testing/composer";
@@ -71,8 +73,8 @@ const DRAFT: AgentDraft = {
 
 const roots: Root[] = [];
 
-// Set before any tab renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
@@ -81,44 +83,40 @@ beforeEach(() => {
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: {
-              integrations: {
-                ...UNAVAILABLE,
-                [INTEGRATION_PROVIDER.SLACK]: slack,
-                [INTEGRATION_PROVIDER.GITHUB]: github,
-              },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            integrations: {
+              ...UNAVAILABLE,
+              [INTEGRATION_PROVIDER.SLACK]: slack,
+              [INTEGRATION_PROVIDER.GITHUB]: github,
             },
-          });
+          },
+        });
+      }
+      // A Connect stands Slack pending at the service, and a Cancel disconnects it.
+      if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
+        if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
+          slack = INTEGRATION_STATUS.PENDING;
         }
-        // A Connect stands Slack pending at the service, and a Cancel disconnects it.
-        if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
-          if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
-            slack = INTEGRATION_STATUS.PENDING;
-          }
-          return Promise.resolve(
-            refuseConnect
-              ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
-              : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
-          );
-        }
-        if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
-          slack = INTEGRATION_STATUS.DISCONNECTED;
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { status: INTEGRATION_STATUS.DISCONNECTED },
-          });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      },
-      recordSurfaceEvent: () => undefined,
+        return Promise.resolve(
+          refuseConnect
+            ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
+            : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
+        );
+      }
+      if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
+        slack = INTEGRATION_STATUS.DISCONNECTED;
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { status: INTEGRATION_STATUS.DISCONNECTED },
+        });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
   });
 });
