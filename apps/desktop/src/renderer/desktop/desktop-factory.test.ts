@@ -21,6 +21,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -104,10 +105,7 @@ const QUESTION = "Which Mercury account should payouts draw from: Operating or P
 let root: Root | undefined;
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined });
 });
 
 afterEach(() => {
@@ -290,7 +288,7 @@ test("a plan list that could not be read says so, and Retry reads it again", () 
   });
   const alert = page.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
-  assert.equal(page.querySelector(".luke-empty-state"), null);
+  assert.doesNotMatch(page.textContent ?? "", /No agents at work/u);
   const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
     (each) => each.textContent === "Retry",
   );
@@ -488,20 +486,17 @@ test("a question a teammate's agent asks, which main does not count as the reade
     postedAt: NOW - HOUR,
     updatedAt: NOW - HOUR,
   };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        const value: CodingAgentInboxAnswerView = {
-          items: request.payload.taskId === BILLING.id ? [asked] : [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      const value: CodingAgentInboxAnswerView = {
+        items: request.payload.taskId === BILLING.id ? [asked] : [],
+        cursor: "1",
+      };
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
     },
   });
   const { page } = mount([SEARCH, BILLING], {
@@ -524,22 +519,19 @@ test("a question a teammate's agent asks, which main does not count as the reade
 /** The bridge answering a plan's Inbox read as `answer` says, counting the reads. */
 function answerInbox(answer: (planId: string) => readonly InboxItem[] | undefined) {
   const counted = { reads: 0 };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        counted.reads += 1;
-        const items = answer(request.payload.taskId);
-        if (items === undefined) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No service." });
-        }
-        const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      counted.reads += 1;
+      const items = answer(request.payload.taskId);
+      if (items === undefined) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No service." });
+      }
+      const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
     },
   });
   return counted;
@@ -711,14 +703,11 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
 
 test("a row's right-click offers Copy link, copying what a press on it opens: its task's link, its question's, its agent's, or its pull request's page", async () => {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
@@ -788,14 +777,11 @@ test("an agent with no task stands in Build by its automation, opens its own pag
   };
   const pages: string[] = [];
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
   const { page } = mount([SEARCH], {

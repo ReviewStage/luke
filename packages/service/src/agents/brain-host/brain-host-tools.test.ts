@@ -21,6 +21,7 @@ import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
+import { firstMessageParts, START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
   ASK_STATUS,
   CHAT_ASK,
@@ -631,16 +632,25 @@ test("Luke's one start carries what the developer said beyond the plan: the note
   assert.equal(stored.prompt, null);
   assert.equal(eve.sent.length, 1);
   const opening: string = JSON.parse(eve.sent[0]?.body ?? "").message;
-  assert.match(opening, /^# Teammate invitations/u);
-  assert.ok(opening.endsWith(`\n\n## Note from the developer\n\n${INSTRUCTION}`), opening);
+  const read = firstMessageParts(opening);
+  assert.match(read.brief, /^# Teammate invitations/u);
+  assert.deepEqual(read.note, {
+    heading: START_NOTE_HEADING.DEVELOPER,
+    text: INSTRUCTION,
+    files: { text: 0, other: 0 },
+  });
 
   const tasked = await call(START_AGENT_TOOL.name, { prompt: TASK, note: INSTRUCTION }, "call-2");
   assert.equal(tasked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(tasked));
   assert.equal(eve.sent.length, 2);
-  assert.equal(
-    JSON.parse(eve.sent[1]?.body ?? "").message,
-    `${TASK}\n\n## Note from the developer\n\n${INSTRUCTION}`,
-  );
+  assert.deepEqual(firstMessageParts(JSON.parse(eve.sent[1]?.body ?? "").message), {
+    brief: TASK,
+    note: {
+      heading: START_NOTE_HEADING.DEVELOPER,
+      text: INSTRUCTION,
+      files: { text: 0, other: 0 },
+    },
+  });
 
   // A note's mentions are handed as a message's are: an issue it links is named with its server.
   const issue = mentionMarkdown(
@@ -658,7 +668,7 @@ test("Luke's one start carries what the developer said beyond the plan: the note
   const parts: unknown = JSON.parse(eve.sent[2]?.body ?? "").message;
   assert.ok(Array.isArray(parts), JSON.stringify(parts));
   const texts = parts.map((part) => (isRecord(part) && isWireString(part.text) ? part.text : ""));
-  assert.match(texts[0] ?? "", /^# Teammate invitations[\s\S]*## Note from the developer\n\nFix /u);
+  assert.match(firstMessageParts(texts[0] ?? "").note?.text ?? "", /^Fix /u);
   assert.match(texts[1] ?? "", /pointed you at https:\/\/linear\.app\/acme\/issue\/LUKE-142/u);
 });
 

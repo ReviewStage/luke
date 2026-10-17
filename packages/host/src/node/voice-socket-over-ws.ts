@@ -41,7 +41,7 @@ function closeReason(reason: Buffer): string | undefined {
  * begin listening, which is why the hold is a hand and not a stream of its
  * own.
  */
-export const openSocketOverWs: OpenSocket = (url, headers) =>
+export const openVoiceSocketOverWs: OpenSocket = (url, headers) =>
   Effect.callback<SocketOpening>((resume) => {
     const socket = new WebSocket(url, { headers: { ...headers } });
     const hold = holdSocket({

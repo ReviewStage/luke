@@ -7,6 +7,7 @@ import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { installEditorBundle, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-message";
@@ -47,12 +48,9 @@ const roots: Root[] = [];
 beforeEach(() => {
   installEditorBundle();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
+    recordSurfaceEvent: () => undefined,
   });
 });
 

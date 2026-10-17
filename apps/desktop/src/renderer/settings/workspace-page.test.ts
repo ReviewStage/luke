@@ -34,6 +34,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -334,10 +335,7 @@ beforeEach(() => {
   automations = undefined;
   macRepositories = [];
   githubRepositories = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ act: answer, recordSurfaceEvent: () => undefined });
 });
 
 afterEach(() => {

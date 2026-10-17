@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 import { TranscriptWords } from "./transcript-blocks";
@@ -40,15 +41,12 @@ const told: Act[] = [];
 
 beforeEach(() => {
   told.length = 0;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        told.push(request);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      told.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
+    recordSurfaceEvent: () => undefined,
   });
 });
 
