@@ -1022,6 +1022,7 @@ export function AgentMessage({
             </SentToAgent>
           </MessageContent>
         )}
+        <UndeliveredMark messageId={message.id} />
         {words === "" && named === null && sentAt === undefined ? null : (
           <div className="message-meta">
             {words === "" ? null : (
@@ -1035,7 +1036,6 @@ export function AgentMessage({
             {sentAt === undefined ? null : <SentTime at={sentAt} named={named !== null} />}
           </div>
         )}
-        <UndeliveredMark messageId={message.id} />
       </Message>
     );
   }
