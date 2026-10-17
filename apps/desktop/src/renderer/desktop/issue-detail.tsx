@@ -1,10 +1,10 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ConfirmDialog, useConfirmDialog, useMenu } from "@luke/ui";
 import { ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ActorRef } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";

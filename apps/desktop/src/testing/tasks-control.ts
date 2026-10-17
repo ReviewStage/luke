@@ -259,6 +259,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     sectionReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
+    onShowChat: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,
@@ -274,6 +275,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     inbox: [],
     inboxShown: null,
+    chatShown: null,
     inboxTasks: [],
     inboxView: {
       open: false,
@@ -310,7 +312,10 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     callTaskId: undefined,
     chatView: {
       open: false,
+      available: false,
       chat: undefined,
+      failed: false,
+      onRetry: ignore,
       place: FOR_YOU,
       onOpen: ignore,
       onClose: ignore,
