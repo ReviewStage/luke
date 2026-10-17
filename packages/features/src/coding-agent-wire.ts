@@ -347,8 +347,10 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * with a prompt. The MCP servers its draft switched off go with it, and none
  * is off where the Start names none. A Start `from` another agent of the
  * plan is handed that agent's brief and its transcript replayed after it,
- * so it names no prompt or files of its own, and it runs on that agent's
- * choice and servers where it names none.
+ * so it names no prompt of its own, and it runs on that agent's choice and
+ * servers where it names none. A note, bounded as a message is, goes only
+ * beside such a source, written after the replay as the developer's, and
+ * files go with it there as they go with a prompt.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -359,22 +361,33 @@ export const codingAgentStartRequestFields = {
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
   from: EffectSchema.optionalKey(codingAgentStartFromSchema),
+  note: EffectSchema.optionalKey(messageWordsSchema),
 };
 
-/** A Start's words or files: none, or words, files, or both, since files go only with a prompt; none at all from another agent, whose brief it is handed. */
+/** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
+function carriesFiles(
+  words: string | undefined,
+  attachments: readonly CodingAgentAttachment[] | undefined,
+): boolean {
+  return words === undefined ? attachments === undefined : hasWordsOrFiles(words, attachments);
+}
+
+/** A Start's words or files: a prompt and its files afresh, never a note; from another agent, whose brief it is handed, no prompt, and a note and its files. */
 const startBrief = EffectSchema.makeFilter(
   ({
     prompt,
     attachments,
     from,
+    note,
   }: {
     readonly prompt?: string;
     readonly attachments?: readonly CodingAgentAttachment[];
     readonly from?: CodingAgentStartFrom;
+    readonly note?: string;
   }) =>
-    prompt === undefined
-      ? attachments === undefined
-      : from === undefined && hasWordsOrFiles(prompt, attachments),
+    from === undefined
+      ? note === undefined && carriesFiles(prompt, attachments)
+      : prompt === undefined && carriesFiles(note, attachments),
 );
 
 /** The Start request as a caller holds it, before it is put on the wire. */

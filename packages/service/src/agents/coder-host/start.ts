@@ -85,10 +85,13 @@ import { type StartFrom, startFromOf } from "./replay.js";
  * workspace's installation as a task's is.
  * A Start from another agent of the task, to continue it or to fork it at
  * one of its messages, hands the new agent that agent's brief with its
- * transcript replayed after it (`replay.ts`), the note after both, and runs
- * it on that agent's choice and servers unless the ask names its own; the
- * source's choice never becomes the account's default, and an agent started
- * from an automation's run is no run of that automation.
+ * transcript replayed after it (`replay.ts`), the note after both with the
+ * files the note carries, and runs it on that agent's choice and servers
+ * unless the ask names its own; the source's choice never becomes the
+ * account's default, and an agent started from an automation's run is no
+ * run of that automation. Its mentions and servers are read from the
+ * source's brief and the note, as a fresh start's would be, and never from
+ * the replay.
  * The MCP servers the words mention are handed to the agent's first turn
  * whatever its switches say, but an automation's run is handed only those
  * its automation's own prompt mentions, never those of the webhook body or
@@ -190,7 +193,7 @@ export type StartAsk = StartPlace & {
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
   readonly title?: string | undefined;
-  /** The words the first turn's MCP servers are read from where they are not all the agent is handed: an automation's own prompt, never a webhook body or a GitHub event's words beside it; the prompt and the note otherwise. */
+  /** The words the first turn's MCP servers are read from where they are not all the agent is handed: an automation's own prompt, never a webhook body or a GitHub event's words beside it; the prompt and the note otherwise, a source's brief standing for the prompt and its replay never read. */
   readonly serverWords?: string | undefined;
 };
 
@@ -311,7 +314,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const from =
     ask.taskId === null || ask.from === undefined
       ? undefined
-      : yield* startFromOf(userId, ask.taskId, ask.from);
+      : yield* startFromOf(userId, ask.taskId, ask.from, ask.attachments ?? []);
   // An agent started from another runs on that agent's choice unless the Start names one.
   const choice = yield* acceptedAgentChoice(userId, ask.choice ?? from?.choice);
   const landing = yield* landingOf(userId, ask, from);
@@ -324,9 +327,17 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       ? (brief.prompt ?? (ask.taskId === null ? undefined : ask.note))
       : wordsOf(from.prompt, ask.taskId === null ? undefined : ask.note);
   // Note that an automation's run names its own prompt, because the words an outsider wrote beside it
-  // switch on nothing, and so does an agent started from one.
-  const serverWords = ask.serverWords ?? from?.serverWords ?? words;
-  const attachments = from?.attachments ?? ask.attachments ?? [];
+  // switch on nothing, and so does an agent started from one, with the developer's note after it.
+  const serverWords =
+    ask.serverWords ??
+    (from === undefined
+      ? words
+      : wordsOf(from.serverWords ?? from.prompt, ask.taskId === null ? undefined : ask.note));
+  // The files of the source's brief that fit, then those the note carries, which a fresh plan start has none of.
+  const attachments =
+    from === undefined
+      ? (ask.attachments ?? [])
+      : [...from.attachments, ...(ask.attachments ?? [])];
   // What the words mention of the plan's pages and agents is read before the agent is made, so a
   // read that fails leaves no agent its retry would find and never open a session for.
   const reads =
@@ -370,7 +381,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         brief.prompt === null
           ? eveContent(
               brief.planSnapshot,
-              [],
+              from === undefined ? [] : attachments,
               words === undefined ? undefined : mentionedContext(words, landing.task, reads),
             )
           : eveContent(

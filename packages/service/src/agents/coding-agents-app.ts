@@ -449,6 +449,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     attachments,
     disabledServers,
     from,
+    note,
   } = asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
   // and a window without them is a window of no model.
@@ -471,6 +472,8 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       attachments,
       disabledServers,
       from,
+      // Note that the wire takes a note only beside a source, and an empty one is no note: its files carry it alone.
+      note: note === "" ? undefined : note,
     }),
   );
   if (!created) {

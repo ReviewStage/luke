@@ -63,6 +63,7 @@ import {
   firstMessageParts,
   newestStepsWithin,
   REPLAY_STEP_KIND,
+  START_NOTE_HEADING,
 } from "@luke/features/agent-replay";
 import {
   AUTOMATION_ACTION,
@@ -89,6 +90,7 @@ import {
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
@@ -112,7 +114,7 @@ import {
   type InboxPost,
   inboxAnswerSchema,
 } from "@luke/features/inbox-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
@@ -4354,6 +4356,180 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
+        assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  /** A server mention as the desktop writes one. */
+  const serverMention = (provider: IntegrationProvider, name: string) =>
+    mentionMarkdown({ kind: MENTION_KIND.SERVER, provider }, name, {
+      workspace: "acme",
+      repository: null,
+    });
+
+  /** The words and files the session opened on, its first part's words read back as a first message. */
+  const openedWithFiles = (eve: ReturnType<typeof fakeEve>) => {
+    const message = eve.opened.at(-1)?.message.message;
+    assert.ok(Array.isArray(message), "the session opened on parts");
+    const [first] = message;
+    assert.ok(first?.type === "text", "the first part is the words");
+    return {
+      parts: firstMessageParts(first.text),
+      files: message.flatMap((part) => (part.type === "file" ? [part.filename] : [])),
+    };
+  };
+
+  it.effect(
+    "a note beside a source is written after the replay as the developer's with its files, and the first turn's servers are read from the note, never the replay",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        yield* transcriptRow(stored, 6, MESSAGE_ROLE.USER, [
+          text(`Look in ${serverMention(INTEGRATION_PROVIDER.NOTION, "Notion")} too.`),
+        ]);
+        const note = `Now check ${serverMention(INTEGRATION_PROVIDER.LINEAR, "Linear")} first.`;
+        const png = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(PNG).toString("base64"),
+        };
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: source.id },
+              note: `  ${note}\n`,
+              attachments: [png],
+            }),
+          ),
+        ).agent;
+        const { parts, files } = openedWithFiles(eve);
+
+        assert.deepEqual(parts.note, { heading: START_NOTE_HEADING.DEVELOPER, text: note });
+        assert.equal(parts.replay?.steps.length, 6);
+        assert.deepEqual(files, ["flow.png"]);
+        const kept = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        assert.deepEqual(yield* takeCodingAgentMentionedServers(owner, kept.conversationId), [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+      }),
+  );
+
+  it.effect(
+    "the source's files are attached again only as far as they fit beside the note's within one message's bounds, and the rest are named as not passed on",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const data = Buffer.from(PNG).toString("base64");
+        const source = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: task.id,
+            planSnapshot: null,
+            prompt: "Match these screens.",
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: RELAY_FULL_NAME,
+          }),
+        ).agent;
+        const shots = Array.from(
+          { length: CODING_AGENT_BOUNDS.MAX_ATTACHMENTS },
+          (_, at) => `screen-${at}.png`,
+        );
+        yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, [
+          text("Match these screens."),
+          ...shots.map((filename) => ({
+            type: "file",
+            mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+            filename,
+            url: `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`,
+          })),
+        ]);
+
+        yield* ask(
+          startAs(owner, task.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: source.id },
+            note: "And this one.",
+            attachments: [{ name: "new.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data }],
+          }),
+        );
+        const { parts, files } = openedWithFiles(eve);
+
+        assert.deepEqual(files, [...shots.slice(0, -1), "new.png"]);
+        assert.match(parts.replay?.preamble ?? "", /could not be passed on: screen-9\.png\./u);
+      }),
+  );
+
+  it.effect(
+    "an automation run's source hands on the servers its own prompt names and the note's, never those of the webhook body it carried",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const prompt = `Triage ${serverMention(INTEGRATION_PROVIDER.LINEAR, "Linear")} daily.`;
+        const run = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: task.id,
+            planSnapshot: null,
+            prompt: `${prompt}\n\nThe webhook said: see ${serverMention(INTEGRATION_PROVIDER.NOTION, "Notion")}.`,
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: RELAY_FULL_NAME,
+            automationOrigin: {
+              name: "Daily triage",
+              firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 40 },
+              prompt,
+            },
+          }),
+        ).agent;
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: run.id },
+              note: `Post it in ${serverMention(INTEGRATION_PROVIDER.SLACK, "Slack")}.`,
+            }),
+          ),
+        ).agent;
+
+        const kept = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        assert.deepEqual(
+          (yield* takeCodingAgentMentionedServers(owner, kept.conversationId)).toSorted(),
+          [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SLACK],
+        );
+      }),
+  );
+
+  it.effect(
+    "a note without a source, files beside a source with no note, and a prompt beside a source and a note are refused as invalid",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source } = yield* sourceAgent;
+        const png = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(PNG).toString("base64"),
+        };
+        const opened = eve.opened.length;
+        for (const body of [
+          { note: "Carry on." },
+          { from: { agentId: source.id }, attachments: [png] },
+          { from: { agentId: source.id }, note: "Carry on.", task: "Do it again." },
+          { from: { agentId: source.id }, note: " " },
+        ]) {
+          assert.deepEqual(
+            yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), ...body })),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+            JSON.stringify(Object.keys(body)),
+          );
+        }
         assert.equal(eve.opened.length, opened);
       }),
   );

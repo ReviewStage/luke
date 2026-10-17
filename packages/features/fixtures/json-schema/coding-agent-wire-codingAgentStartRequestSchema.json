@@ -87,6 +87,10 @@
         "agentId"
       ],
       "additionalProperties": false
+    },
+    "note": {
+      "type": "string",
+      "maxLength": 16000
     }
   },
   "required": [

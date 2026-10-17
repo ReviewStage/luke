@@ -22,7 +22,9 @@ import {
   type StartNoteHeading,
 } from "@luke/features/agent-replay";
 import {
+  base64Bytes,
   CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_BOUNDS,
   type CodingAgentAttachment,
   type CodingAgentAttachmentType,
   type CodingAgentPullRequest,
@@ -310,16 +312,40 @@ interface SourceFiles {
   readonly unkept: readonly string[];
 }
 
-/** The files the source's first message carried: those whose bytes stand, attached again, and the names of the rest. */
-function filesOf(first: StoredMessageRecord | undefined): SourceFiles {
+/** The bytes a message's files hold together, as the wire bounds them. */
+function filesBytes(files: readonly CodingAgentAttachment[]): number {
+  return files.reduce((sum, file) => sum + base64Bytes(file.data), 0);
+}
+
+/**
+ * The files the source's first message carried: those whose bytes stand
+ * and that fit beside the note's own files within one message's bounds,
+ * attached again, and the names of the rest. Note that the note's files
+ * are kept first, because they are what the developer attached now.
+ */
+function filesOf(
+  first: StoredMessageRecord | undefined,
+  noteFiles: readonly CodingAgentAttachment[],
+): SourceFiles {
   const files = (first?.message.parts ?? []).filter(isFileUIPart);
   const attachments: CodingAgentAttachment[] = [];
   const unkept: string[] = [];
+  let count = noteFiles.length;
+  let bytes = filesBytes(noteFiles);
   for (const file of files) {
     const name = file.filename ?? file.mediaType;
     const attached = attachmentOf(file.url, file.mediaType, name);
-    if (attached === undefined) unkept.push(name);
-    else attachments.push(attached);
+    const size = attached === undefined ? 0 : base64Bytes(attached.data);
+    const fits =
+      count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
+      bytes + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
+    if (attached === undefined || !fits) {
+      unkept.push(name);
+    } else {
+      attachments.push(attached);
+      count += 1;
+      bytes += size;
+    }
   }
   return { attachments, unkept };
 }
@@ -378,7 +404,7 @@ function preambleOf(
   );
 }
 
-/** What a Start from another agent is handed and runs on: the source's brief, the replay, the files, the choice and servers it runs on unless the Start names its own, the words its servers are read from, and what the new agent keeps of where it came from. */
+/** What a Start from another agent is handed and runs on: the source's brief, the replay, the source's files that fit beside the note's, the choice and servers it runs on unless the Start names its own, the words its servers are read from, and what the new agent keeps of where it came from. */
 export interface StartFrom {
   readonly source: CodingAgent;
   /** The source's prompt as the new agent's prompt; none where the source was handed the plan, which the new agent is handed as it stands now. */
@@ -412,7 +438,10 @@ function transcriptSteps(
 
 /**
  * The source agent of the plan read as the account, its transcript cut and
- * replayed as above, and what the new agent is handed and runs on; refused
+ * replayed as above, and what the new agent is handed and runs on, the
+ * source's files held to what fits beside `noteFiles`, the ones the Start's
+ * note carries, within one message's bounds and named in the preamble
+ * past them; refused
  * as naming nothing where the account reaches no such agent on this plan,
  * and as invalid where the message named is none of its journals.
  */
@@ -420,6 +449,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
   from: CodingAgentStartFrom,
+  noteFiles: readonly CodingAgentAttachment[],
 ): Effect.fn.Return<StartFrom, HostedRefusal, DatabaseServices> {
   const [found] = yield* hostedStoreOrUnavailable(
     listPublishedCodingAgentsById(userId, [from.agentId]),
@@ -443,7 +473,8 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
   const steps = newestStepsWithin([...carried, ...mine], REPLAY_BOUNDS.MAX_CHARS);
-  const files = source.prompt === null ? { attachments: [], unkept: [] } : filesOf(records[0]);
+  // A source handed the plan carries files only where its own note did, so its first message is read either way.
+  const files = filesOf(records[0], noteFiles);
   const preamble = preambleOf(
     source,
     published,
