@@ -8,6 +8,7 @@ import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
+import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
@@ -51,6 +52,7 @@ export const EXAMPLES: readonly Example[] = [
   CHIPS_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
+  DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   FORM_FIELD_EXAMPLE,

@@ -387,6 +387,13 @@ body {
   height: 480px;
 }
 
+/* A screen as tall as a window's content, so a detail page's columns
+   scroll in it. */
+.catalog-screen-detail {
+  display: flex;
+  height: 480px;
+}
+
 /* Luke's face at the size the OAuth cards open with. */
 .catalog-auth-mark {
   display: block;

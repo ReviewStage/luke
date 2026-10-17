@@ -8,6 +8,7 @@ export * from "./components/checkbox/checkbox.js";
 export * from "./components/chip/chip.js";
 export * from "./components/collection-page/collection-page.js";
 export * from "./components/confirm-dialog/confirm-dialog.js";
+export * from "./components/detail-page/detail-page.js";
 export * from "./components/dialog/dialog.js";
 export * from "./components/empty-state/empty-state.js";
 export * from "./components/form-field/form-field.js";

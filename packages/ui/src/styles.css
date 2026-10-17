@@ -18,6 +18,7 @@
 @import "./components/chip/chip.css";
 @import "./components/collection-page/collection-page.css";
 @import "./components/confirm-dialog/confirm-dialog.css";
+@import "./components/detail-page/detail-page.css";
 @import "./components/dialog/dialog.css";
 @import "./components/empty-state/empty-state.css";
 @import "./components/form-field/form-field.css";
