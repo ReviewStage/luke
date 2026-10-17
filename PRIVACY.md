@@ -655,7 +655,13 @@ place of a member's own, so what they change in Linear shows as made by the
 person who connected it. Starting a plan from an issue copies the issue's
 key, title, address, and description onto the plan, where it stays with the
 plan, is shown to the planning model on every turn of its call, and is
-deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
+deleted with the plan. When you open New task, our service asks Linear,
+through this connection, for the open issues assigned to the Linear user whose
+email is your Luke account's, so it can list yours first; that request carries
+your email to Linear. Once you pause typing in New task's name field, what you
+typed is sent to Linear through this connection as a search, or, where it is
+an issue's key or a link to one, as a read of that one issue. Neither what was
+sent nor what Linear answered is kept. Where a plan, a reply, or an Inbox item shows a link
 to a Linear issue, the app asks our service for that issue's key, title,
 state, and assignee's name, which it reads through this connection as you
 look and keeps nowhere; the app shows them on the link, and they go no
