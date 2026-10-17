@@ -14,7 +14,8 @@ import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_TYPE, TextArea, TextField } from "
  * composing, stays out of spell check and autofill where asked, holds its
  * form back while empty where required, hands a paste to a
  * caller that takes pasted files itself, inside a field is named, described, and marked invalid by
- * the field's words, and standing alone in a settings row is described by the row's words.
+ * the field's words, and standing alone in a settings row is described by the row's words
+ * and marked invalid while the row says its error.
  */
 
 declare global {
@@ -297,6 +298,47 @@ test("a text entry standing alone in a settings row is described by the row's de
   const field = page.querySelector("input") ?? assert.fail("no field");
   const describedBy = field.getAttribute("aria-describedby") ?? assert.fail("not described");
   assert.equal(document.getElementById(describedBy)?.textContent, "Read from the base branch.");
+});
+
+test("a text entry standing alone in a settings row reports itself invalid while the row shows an error, and not otherwise", () => {
+  const row = (error: string | undefined) =>
+    createElement(SettingsRow, {
+      label: "Schedule",
+      error,
+      children: (control) => [
+        createElement(TextField, {
+          key: "cron",
+          label: "Cron",
+          describedBy: control["aria-describedby"],
+          invalid: control["aria-invalid"],
+          value: "every night",
+          onChange: () => undefined,
+        }),
+        createElement(TextArea, {
+          key: "note",
+          label: "Note",
+          describedBy: control["aria-describedby"],
+          invalid: control["aria-invalid"],
+          value: "",
+          onChange: () => undefined,
+        }),
+      ],
+    });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(row(undefined)));
+  const entries = [
+    container.querySelector("input") ?? assert.fail("no field"),
+    container.querySelector("textarea") ?? assert.fail("no text area"),
+  ];
+  for (const entry of entries) assert.equal(entry.getAttribute("aria-invalid"), null);
+
+  act(() => root.render(row("That isn't a schedule Luke can read.")));
+  for (const entry of entries) assert.equal(entry.getAttribute("aria-invalid"), "true");
+
+  act(() => root.render(row(undefined)));
+  for (const entry of entries) assert.equal(entry.getAttribute("aria-invalid"), null);
 });
 
 test("a text entry is named by its field or by a label of its own, and never by neither", () => {

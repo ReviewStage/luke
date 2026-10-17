@@ -514,6 +514,7 @@ function ScheduleRows({
                 ref={cron}
                 label="Cron"
                 describedBy={control["aria-describedby"]}
+                invalid={control["aria-invalid"]}
                 font={TEXT_FIELD_FONT.MONO}
                 spellCheck={false}
                 value={schedule.cron}
@@ -559,6 +560,7 @@ function ScheduleRows({
                     type={TEXT_FIELD_TYPE.TIME}
                     label="Time"
                     describedBy={control["aria-describedby"]}
+                    invalid={control["aria-invalid"]}
                     value={clockValue(schedule.hour, schedule.minute)}
                     onEscape={() => time.current?.blur()}
                     onChange={(text) => {

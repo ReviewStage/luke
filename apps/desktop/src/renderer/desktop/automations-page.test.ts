@@ -1898,6 +1898,16 @@ test("a schedule Luke cannot read is not created, and the refusal is announced u
     ),
     "the refusal describes the Cron field it is about",
   );
+  assert.equal(cron?.getAttribute("aria-invalid"), "true", "the Cron field says it is wrong");
+
+  type(page.querySelector("input[aria-label='Cron']"), "0 2 * * *");
+  await settle();
+  assert.ok(!announced("That isn't a schedule Luke can read."), "the refusal is gone");
+  assert.equal(
+    page.querySelector("input[aria-label='Cron']")?.getAttribute("aria-invalid"),
+    null,
+    "the Cron field no longer says it is wrong",
+  );
 });
 
 test("a webhook made in the window shows its secret once, read-only with Copy, left out of the screen recording and the app state, and gone once Done is pressed", async () => {
