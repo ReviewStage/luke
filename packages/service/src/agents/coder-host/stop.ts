@@ -124,11 +124,13 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentSummary["status"], HostedRefusal, DatabaseServices> {
-  const { turn, lineAwaits } = (yield* standingsOf([agent.conversationId]))(agent.conversationId);
+  const { turn, awaitingLineAt } = (yield* standingsOf([agent.conversationId]))(
+    agent.conversationId,
+  );
   return codingAgentStatusOf(turn, {
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
-    lineAwaits,
+    awaitingLineAt,
   });
 });
 
