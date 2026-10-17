@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
 import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
@@ -74,7 +74,7 @@ const openAgent = Effect.gen(function* () {
     agentId: started.value.agent.id,
     repository: "acme/relay",
   } satisfies PostingAgent;
-  return agent;
+  return { ...agent, workspaceId: task.workspaceId };
 });
 
 const QUEUE = {
@@ -350,6 +350,26 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         }
         const [after] = yield* taskInboxItems(agent.userId, agent.taskId);
         assert.equal(after?.messages?.length, 1, "a refused reply writes nothing");
+      }),
+  );
+  it.effect(
+    "an agent whose starter left the item's workspace replies on none of its items there",
+    () =>
+      Effect.gen(function* () {
+        const { workspaceId, ...agent } = yield* openAgent;
+        yield* post(agent, input(SETTINGS));
+        yield* leaveWorkspace(workspaceId, agent.userId);
+
+        const refused = yield* replyInInbox(
+          agent,
+          input({ key: SETTINGS.key, text: "Still here." }),
+          noSandbox,
+        );
+
+        assert.deepEqual(refused, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: INBOX_REFUSAL.NO_REPLY_ITEM,
+        });
       }),
   );
 });

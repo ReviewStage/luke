@@ -1489,7 +1489,7 @@ export function postInboxMessage(
   );
 }
 
-/** The agent's own item under the key, as its tools name one. */
+/** The agent's own item under the key, as its tools name one, where the member who started the agent is still a member of the item's workspace. */
 const findAgentItem = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -1499,7 +1499,12 @@ const findAgentItem = SqlSchema.findOneOption({
         .select({ id: inboxItem.id })
         .from(inboxItem)
         .where(
-          and(eq(inboxItem.userId, userId), eq(inboxItem.agentId, agentId), eq(inboxItem.key, key)),
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.agentId, agentId),
+            eq(inboxItem.key, key),
+            itemReachableBy(userId),
+          ),
         ),
     ),
 });
@@ -1508,7 +1513,8 @@ const findAgentItem = SqlSchema.findOneOption({
  * The agent's message on the thread of its own item under the key, open or
  * settled, as `writeInboxMessage` writes one, with the pictures it read from
  * its sandbox, each named by its file's own name; nothing where it has no
- * item under the key.
+ * item under the key, or its starter has left the item's workspace, which
+ * writes there as one outside it no longer.
  */
 export function replyInboxItem(
   agent: Pick<InboxAgent, "userId" | "agentId">,
