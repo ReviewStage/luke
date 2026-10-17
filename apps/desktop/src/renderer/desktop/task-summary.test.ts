@@ -347,6 +347,16 @@ test("Escape takes the card the toolbar's button hung back down and hands the fo
   assert.equal(document.activeElement, toggle, "the toolbar's button has the focus back");
 });
 
+test("where the summary pins beside the document, the toolbar's button says whether it stands pinned", () => {
+  const column = columnAt(1200);
+  const toggle =
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle pinned summary"]') ??
+    assert.fail("the toolbar's button stands");
+  const pinned = toggle.getAttribute("aria-pressed");
+  assert.ok(pinned === "true" || pinned === "false", "the button is a toggle");
+  assert.equal(pinned, String(column.rail()?.getAttribute("data-mode") === "column"));
+});
+
 test("a column with room for the rail draws it, and one widened to that room draws it again", () => {
   assert.equal(columnAt(600).rail()?.getAttribute("data-mode"), "rail");
   act(() => root?.unmount());
