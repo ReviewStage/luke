@@ -780,6 +780,10 @@ test("start_agent with a branch starts an agent whose checkout is cloned at that
     instructions.text.includes(`cut from \`${STACKED_BRANCH}\`, the branch you were started on`),
     instructions.text,
   );
+  assert.ok(
+    instructions.text.includes(`started on \`${STACKED_BRANCH}\`, so pass it as \`base\``),
+    instructions.text,
+  );
 
   // A turn that ends on the branch it started on records no branch of its own, so the pull request
   // already on that branch is never taken for this agent's; one it cut is recorded.
