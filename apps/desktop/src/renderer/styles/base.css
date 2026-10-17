@@ -637,12 +637,12 @@ body,
   position: absolute;
   z-index: 6;
   left: 50%;
-  padding: 8px 14px 10px;
-  border: 1px solid var(--hairline);
+  padding: var(--luke-space-8) 14px 10px;
+  border: 1px solid var(--luke-color-border);
   border-radius: 12px;
   /* Opaque, because the document scrolls on beneath it. */
   background: var(--surface-caption);
-  box-shadow: 0 8px 24px var(--shadow-soft);
+  box-shadow: 0 var(--luke-space-8) var(--luke-space-24) var(--luke-color-shadow-soft);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 6px);
@@ -661,11 +661,10 @@ body,
 
 /* Who is speaking, in the colour their meter wears in the sidebar. */
 .voice-caption-speaker {
-  margin: 0 0 2px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  line-height: 16px;
+  margin: 0 0 var(--luke-space-2);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .voice-caption[data-tone="luke"] .voice-caption-speaker {
@@ -701,22 +700,22 @@ body,
 /* Mirrors the 44px above: two of these lines. */
 .voice-caption-text {
   display: block;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   line-height: 22px;
 }
 
 /* A voice failure borrows the strip in the `.error-message` red, because it
    is a fault being reported rather than words being spoken. */
 .voice-caption[data-tone="error"] .voice-caption-text {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 /* A state notice borrows it more quietly, in the attention orange: temporary
    unavailability must not wear a fault's red. */
 .voice-caption[data-tone="notice"] .voice-caption-text {
-  color: var(--state-attention);
+  color: var(--luke-color-attention);
 }
 
 /* A quote in a failure or a notice keeps the tone's colour and is set off by
@@ -735,10 +734,10 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 9px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--hairline);
+  gap: var(--luke-control-gap);
+  margin-top: var(--luke-space-8);
+  padding-top: var(--luke-space-8);
+  border-top: 1px solid var(--luke-color-border);
   pointer-events: auto;
 }
 
@@ -746,31 +745,12 @@ body,
    do something; the caption above it keeps its own colour. */
 .volume-hint-text {
   overflow: hidden;
-  color: var(--state-attention);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
+  color: var(--luke-color-attention);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+  line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.volume-hint-dismiss {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  height: 20px;
-  padding: 0 9px;
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 600;
-  transition: background-color var(--duration-hover) ease;
-  white-space: nowrap;
-}
-
-.volume-hint-dismiss:hover {
-  background: var(--raised-strong);
 }
 
 /* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,

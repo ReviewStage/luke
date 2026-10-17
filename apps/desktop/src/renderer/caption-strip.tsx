@@ -1,3 +1,4 @@
+import { BUTTON_SHAPE, BUTTON_VARIANT, Button } from "@luke/ui";
 import { MarkdownMessage } from "./markdown-message";
 import {
   CAPTION_TONE,
@@ -85,9 +86,13 @@ export function CaptionStrip({
       {volumeHint.wanted && tone === CAPTION_TONE.LUKE ? (
         <div className="volume-hint" role="status">
           <span className="volume-hint-text">{volumeHint.text}</span>
-          <button type="button" className="volume-hint-dismiss" onClick={volumeHint.onDismiss}>
+          <Button
+            variant={BUTTON_VARIANT.OUTLINE}
+            shape={BUTTON_SHAPE.ROUND}
+            onClick={volumeHint.onDismiss}
+          >
             Got it
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>
