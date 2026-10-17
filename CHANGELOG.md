@@ -235,6 +235,8 @@ iMessage, or X unfurls as Luke's card.
 [#3074](https://github.com/ReviewStage/luke/pull/3074),
 [#3098](https://github.com/ReviewStage/luke/pull/3098))
 
+![An Inbox item whose words carry chips: relay#217 Open, the Linear issue REL-142 In Progress, the Teammate invitations task, relay#209 Merged, relay#214 and #216 with their states, Dana Moreno, and the Morning Sentry triage automation, around the lines of code it changes.](apps/web/public/changelog/0.16.0/links.png)
+
 ### Agents that start, mention, and archive agents
 
 A coding agent starts another coding agent on its own task or on any task of
@@ -254,6 +256,8 @@ coding agent is drawn under that agent's mark.
 [#3078](https://github.com/ReviewStage/luke/pull/3078),
 [#3088](https://github.com/ReviewStage/luke/pull/3088),
 [#3093](https://github.com/ReviewStage/luke/pull/3093))
+
+![A coding agent's transcript: asked to hand the invite email on, it starts a coding agent; Invite emails reports back under its own name; the agent mentions it as a chip and archives the Postmark spike.](apps/web/public/changelog/0.16.0/agents-that-start-agents.png)
 
 ### Start a task without planning
 
@@ -283,6 +287,8 @@ stay on screen in a short window.
 [#3043](https://github.com/ReviewStage/luke/pull/3043),
 [#3051](https://github.com/ReviewStage/luke/pull/3051),
 [#3059](https://github.com/ReviewStage/luke/pull/3059))
+
+![A side panel 340 points wide: its tab strip folded to glyphs beside the chosen invite.ts, and the file tree floating over the code.](apps/web/public/changelog/0.16.0/luke-at-any-width.png)
 
 ### Improvements
 

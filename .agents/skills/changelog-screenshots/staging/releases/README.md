@@ -39,10 +39,15 @@ adjusting, and capture with the same profile, zoom, and crop.
 | 0.14.0 | `2ec91a61` | `at-mentions.png` | `shot-mentions` | 2 | `522,330,820,710` |
 | 0.15.0 | `v0.15.0` | `pictures-in-plans.png`, `pictures-from-coding-agents.png`, `a-persons-page.png`, `the-factory.png` | `shot-plan-pictures`, `shot-agent-pictures`, `shot-person`, `shot-factory` | 1 | whole window |
 | 0.15.0 | `v0.15.0` | `start-a-task-from-linear.png` | `shot-linear` | 1 | `-70,-70,780,1140` |
+| 0.16.0 | `v0.16.0` | `links.png` | `shot-links` | 2 | `580,40,760,507` |
+| 0.16.0 | `v0.16.0` | `agents-that-start-agents.png` | `shot-agents-start` | 2 | `395,350,750,500` |
+| 0.16.0 | `v0.16.0` | `luke-at-any-width.png` | `shot-width` | 1 | `1060,-60,600,1120` |
 
 0.14.0 was shot from `2ec91a61`, the head of its version pull request (#2871) before its pictures landed; `v0.14.0.patch` carries 0.13.0's module onto it, with 0.14.0's five shots beside the earlier ones.
 
 0.15.0 was shot from its tag; `v0.15.0.patch` carries 0.14.0's module onto it, with `team-world.ts` (who created each task and started each agent), `inbox-world.ts` (0.13.0's Inbox items), and `relay-pictures.ts` (Relay mockups rendered with headless Chromium) shared by its five shots.
+
+0.16.0 renamed plans to tasks in the wire, the host's state, and the view; `v0.16.0.patch` carries the module with those names, and hooks `use-link-standing.ts` and `use-known-names.ts` so link chips read the shot's own workspaces.
 
 0.12.0 was shot from `6d47d20f`, the head of its version pull request (#2421), before the tag existed; `v0.12.0` itself is `0dec8cda`.
 
