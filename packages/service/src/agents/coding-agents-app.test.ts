@@ -182,7 +182,12 @@ const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
-const AGENT_OVERVIEW = "/api/agents/overview";
+/** The overview's three reads, each its own route. */
+const AGENT_OVERVIEW = [
+  "/api/agents/overview-pull-request",
+  "/api/agents/overview-checks",
+  "/api/agents/overview-conversation",
+] as const;
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const TASK = "/api/plans/plan";
 /** The account's plans, served by the plans group, each naming its agents in brief. */
@@ -534,6 +539,8 @@ const publishedPullRequest: RepositoryScript = (sent) => {
   const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
   const pull = `${repository}/pulls/${PUBLISHED.number}`;
   const commit = `${repository}/commits/${PUBLISHED.headSha}`;
+  // The overview's checks name the head by the ref GitHub keeps on the pull request.
+  const head = `${repository}/commits/refs%2Fpull%2F${PUBLISHED.number}%2Fhead`;
   switch (new URL(sent.url).pathname) {
     case `${repository}/pulls`:
       return Response.json([{ number: PUBLISHED.number }]);
@@ -559,8 +566,10 @@ const publishedPullRequest: RepositoryScript = (sent) => {
         requested_reviewers: [],
       });
     case `${commit}/check-runs`:
+    case `${head}/check-runs`:
       return Response.json({ check_runs: [] });
     case `${commit}/status`:
+    case `${head}/status`:
       return Response.json({ statuses: [] });
     case `${repository}/issues/${PUBLISHED.number}/comments`:
     case `${pull}/reviews`:
@@ -1100,7 +1109,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "an agent's pull request overview read twice reaches the repository through its installation once and mints one token for it, and a read past the token's hour mints afresh",
+    "an agent's pull request overview, its three reads asked at once and then again, reaches the repository through its installation once and mints one token for it, and a read past the token's hour mints afresh",
     () =>
       Effect.gen(function* () {
         const { owner, task, installation, github, ask } = yield* openTask({
@@ -1111,12 +1120,18 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         // Note that the Start reached the repository itself, so the reads begin past every kept answer.
         yield* TestClock.adjust(Duration.hours(2));
         const asked = github.sent.length;
-        const overview = () => ask(request(AGENT_OVERVIEW, owner, { id: agent.id }));
+        const overview = () =>
+          Effect.all(
+            AGENT_OVERVIEW.map((path) => ask(request(path, owner, { id: agent.id }))),
+            { concurrency: "unbounded" },
+          );
 
         const cold = yield* overview();
         const warm = yield* overview();
 
-        assert.equal(cold.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(cold.body));
+        for (const read of cold) {
+          assert.equal(read.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(read.body));
+        }
         assert.deepEqual(warm, cold);
         assert.deepEqual(reachRequests(github.sent.slice(asked), installation.id), {
           installationReads: 1,
