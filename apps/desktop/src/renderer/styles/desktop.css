@@ -3420,15 +3420,6 @@ ul.actor-stack {
   justify-content: center;
 }
 
-/* A call control is round rather than a toolbar's square, as a call's own
-   controls are drawn everywhere, so the three read as one cluster apart
-   from the window's toolbar. The start is a pill on the primary button's
-   fill: talking the plan through is what the page is for. */
-.call-start {
-  border-radius: calc(var(--control-height) / 2);
-  padding: 0 var(--space-16);
-}
-
 .call-status {
   display: flex;
   min-width: 0;
@@ -3443,23 +3434,23 @@ ul.actor-stack {
 .call-status-word {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-section-size);
+  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
 }
 
 .call-status-word[data-muted="true"] {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 .call-backend {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
-  color: var(--text-secondary);
-  font-size: 12px;
+  gap: var(--luke-space-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
 .call-backend-part {
@@ -3478,58 +3469,21 @@ ul.actor-stack {
   font-family: var(--font-mono);
 }
 
-.call-controls {
+.call-controls,
+.call-mutes {
   display: flex;
   flex: none;
   align-items: center;
+}
+
+/* End call stands apart from the two mutes, so muting never hangs up. */
+.call-controls {
   margin-left: auto;
-  gap: var(--space-4);
+  gap: var(--luke-space-8);
 }
 
-.call-toggle,
-.call-end {
-  border-radius: 50%;
-}
-
-/* A mute that is on is unmistakable at a glance: struck through, and on
-   the warning tint, so a muted call is never read as one hearing you. */
-.call-toggle[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
-  color: var(--danger-text);
-}
-
-.call-toggle[aria-pressed="true"]:hover {
-  background: color-mix(in srgb, var(--danger) 24%, transparent);
-  color: var(--danger-text);
-}
-
-/* End call: a solid disc in the text's own colour with the ground's ✕ in
-   it, white in the dark and near black in the light, standing apart from
-   the two quiet mutes. */
-.call-end {
-  display: grid;
-  width: var(--control-height);
-  height: var(--control-height);
-  margin-left: var(--space-4);
-  place-items: center;
-  background: var(--text-primary);
-  color: var(--desktop-well);
-  transition: opacity var(--duration-hover) ease;
-  -webkit-app-region: no-drag;
-}
-
-.call-end svg {
-  width: 13px;
-  height: 13px;
-  stroke-width: 2.4;
-}
-
-.call-end:hover {
-  opacity: 0.85;
-}
-
-.call-end:active {
-  opacity: 0.7;
+.call-mutes {
+  gap: var(--luke-space-4);
 }
 
 /* Too narrow for both of the backend's parts: the notetaker's goes while
@@ -3548,12 +3502,9 @@ ul.actor-stack {
     display: none;
   }
 
-  .call-controls {
+  .call-controls,
+  .call-mutes {
     gap: 0;
-  }
-
-  .call-end {
-    margin-left: 0;
   }
 }
 

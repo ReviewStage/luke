@@ -115,7 +115,6 @@ test("the tile has no hang-up of its own, which the call bar already is", () => 
       each.getAttribute("aria-label"),
     );
     assert.equal(labels.includes("End call"), false, status);
-    assert.equal(container.querySelector(".call-end"), null, status);
   }
 });
 

@@ -3,7 +3,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { BUTTON_VARIANT, Button, ButtonLink, IconButton } from "./button.js";
+import { BUTTON_SHAPE, BUTTON_VARIANT, Button, ButtonLink, IconButton } from "./button.js";
 
 /**
  * button.test.ts -- a ButtonLink is a link a reader finds by its words,
@@ -129,4 +129,43 @@ test("a button that keeps focus, pressed with the pointer, leaves the focus on t
   press(connect);
   expect(document.activeElement).toBe(connect);
   expect(pressed).toEqual(["Back", "Connect"]);
+});
+
+test("a toggle is announced pressed while it is on, in any look, and a plain button as no toggle at all", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Mute microphone",
+        variant: BUTTON_VARIANT.DANGER,
+        shape: BUTTON_SHAPE.ROUND,
+        pressed: false,
+      }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Unmute speaker",
+        variant: BUTTON_VARIANT.DANGER,
+        shape: BUTTON_SHAPE.ROUND,
+        pressed: true,
+      }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "End call",
+        variant: BUTTON_VARIANT.INK,
+        shape: BUTTON_SHAPE.ROUND,
+      }),
+    ),
+  );
+
+  expect(
+    container.querySelector('button[aria-label="Mute microphone"]')?.getAttribute("aria-pressed"),
+  ).toBe("false");
+  expect(
+    container.querySelector('button[aria-label="Unmute speaker"]')?.getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(
+    container.querySelector('button[aria-label="End call"]')?.hasAttribute("aria-pressed"),
+  ).toBe(false);
 });

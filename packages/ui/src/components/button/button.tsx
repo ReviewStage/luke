@@ -6,10 +6,18 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
  * A look says what a press does, not where the button stands: `quiet` for
  * an ordinary act among others (a toolbar's), `outline` for the act a row or
  * a card offers at rest, `primary` for the act a place exists for, `danger`
- * for one that destroys, and `danger-outline` for a destructive act that is
- * not the place's own. Each is one control's height, corner, and glyph in
- * the profile it is drawn at, and owns its insides: it takes no class or
- * style, and its outer spacing is its container's.
+ * for one that destroys, `danger-outline` for a destructive act that is
+ * not the place's own, and `ink` for one that ends what the place holds, a
+ * solid fill in the text's own colour apart from the quiet ones beside it,
+ * as a call's End call is. Each is one control's height, corner, and glyph
+ * in the profile it is drawn at, and owns its insides: it takes no class or
+ * style, and its outer spacing is its container's. Its shape is square on
+ * the control's corner, or `round`: a disc for a glyph alone, a pill for
+ * words, as a call's own controls are drawn everywhere.
+ *
+ * A toggle in the `danger` look is quiet while it is off and on the danger
+ * tint while it is on, since what it turns on is the thing to warn of, so a
+ * microphone muted is never read as one hearing you.
  *
  * A button that is not `tabbable` is out of the tab order but takes the
  * focus when it is handed it, for a roving stop: one of a group the
@@ -47,9 +55,18 @@ export const BUTTON_VARIANT = {
   PRIMARY: "primary",
   DANGER: "danger",
   DANGER_OUTLINE: "danger-outline",
+  INK: "ink",
 } as const;
 
 export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];
+
+/** A button's outline: the control's corner, or round at its ends. */
+export const BUTTON_SHAPE = {
+  SQUARE: "square",
+  ROUND: "round",
+} as const;
+
+export type ButtonShape = (typeof BUTTON_SHAPE)[keyof typeof BUTTON_SHAPE];
 
 /** What a press of a button in a form does: act on its own, or submit the form. */
 export const BUTTON_TYPE = {
@@ -83,6 +100,7 @@ type HintProps = Pick<
 type ButtonBase = BusyProps &
   HintProps & {
     variant?: ButtonVariant;
+    shape?: ButtonShape;
     type?: ButtonType;
     onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
     disabled?: boolean | undefined;
@@ -140,6 +158,8 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     onFocus: props.onFocus,
     onBlur: props.onBlur,
     "data-variant": props.variant ?? BUTTON_VARIANT.QUIET,
+    // Note that a square button, the default, carries no shape, so it is drawn as every button was.
+    "data-shape": props.shape === BUTTON_SHAPE.ROUND ? BUTTON_SHAPE.ROUND : undefined,
     onClick: (event: MouseEvent<HTMLButtonElement>) => {
       if (refusing) {
         event.preventDefault();

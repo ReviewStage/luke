@@ -31,7 +31,8 @@
     transition:
       background-color var(--duration-hover) ease,
       color var(--duration-hover) ease,
-      filter var(--duration-hover) ease;
+      filter var(--duration-hover) ease,
+      opacity var(--duration-hover) ease;
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -83,6 +84,32 @@
     --luke-button-ink: var(--luke-color-danger-text);
   }
 
+  .luke-button[data-variant="ink"] {
+    --luke-button-fill: var(--luke-color-text);
+    --luke-button-ink: var(--luke-color-ground);
+  }
+
+  /* Round, a glyph alone is a disc and words a pill, held off its round
+     ends by half its height. */
+  .luke-button[data-shape="round"] {
+    border-radius: var(--luke-radius-full);
+  }
+
+  .luke-button[data-shape="round"]:not([data-icon-only="true"]) {
+    padding-inline: calc(var(--luke-control-height) / 2);
+  }
+
+  /* A danger toggle is quiet while off, and on the danger tint while on. */
+  .luke-button[data-variant="danger"][aria-pressed="false"] {
+    --luke-button-fill: transparent;
+    --luke-button-ink: var(--luke-color-text-muted);
+  }
+
+  .luke-button[data-variant="danger"][aria-pressed="true"] {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
+    --luke-button-ink: var(--luke-color-danger-text);
+  }
+
   /* A quiet or outlined button lights under the pointer, while its menu is
      open, and while a toggle stands on; a filled one brightens. Its
      translucent fill, lit or pressed, is laid over `--luke-button-ground`,
@@ -108,6 +135,28 @@
     --luke-button-ink: var(--luke-color-text);
   }
 
+  .luke-button[data-variant="danger"][aria-pressed="false"]:hover:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: var(--luke-color-fill-selected);
+    --luke-button-ink: var(--luke-color-text);
+  }
+
+  .luke-button[data-variant="danger"][aria-pressed="false"]:active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: var(--luke-color-fill-pressed);
+  }
+
+  .luke-button[data-variant="danger"][aria-pressed="true"]:hover:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 24%, transparent);
+  }
+
   .luke-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
     --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 12%, transparent);
   }
@@ -121,18 +170,28 @@
       var(--luke-button-ground, transparent);
   }
 
-  .luke-button:is([data-variant="primary"], [data-variant="danger"]):hover:not(
+  .luke-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):hover:not(
     :disabled,
     [aria-disabled="true"]
   ) {
     filter: brightness(1.1);
   }
 
-  .luke-button:is([data-variant="primary"], [data-variant="danger"]):active:not(
+  .luke-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):active:not(
     :disabled,
     [aria-disabled="true"]
   ) {
     filter: brightness(0.92);
+  }
+
+  /* An ink fill is black or white, which a brightness does not move, so it
+     fades a little under the pointer and more under the press. */
+  .luke-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
+    opacity: 0.85;
+  }
+
+  .luke-button[data-variant="ink"]:active:not(:disabled, [aria-disabled="true"]) {
+    opacity: 0.7;
   }
 
   /* Unavailable, a button fades to 45%: a disabled one whole, one that
