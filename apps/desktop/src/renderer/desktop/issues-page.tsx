@@ -6,7 +6,15 @@ import {
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  useMenu,
+} from "@luke/ui";
 import { Schema } from "effect";
 import {
   ListIcon,
@@ -179,16 +187,15 @@ function ListPage({
         <div className="desktop-toolbar-actions">
           <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
           <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
+          <Button
+            variant={BUTTON_VARIANT.OUTLINE}
+            icon={<PlusIcon />}
             aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_ISSUE)}
             disabled={onCompose === undefined}
             onClick={onCompose}
           >
-            <PlusIcon />
             New issue
-          </button>
+          </Button>
         </div>
       </header>
       {/* The board scrolls sideways in its own scroller, each column scrolling its cards; a failure is said in the list's. */}
@@ -263,9 +270,7 @@ function ViewOptions({
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
-        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu

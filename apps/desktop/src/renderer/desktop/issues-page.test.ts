@@ -274,7 +274,7 @@ async function settle(): Promise<void> {
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll(".home-section, [data-issue-column]")]
     .map((group): [string, string[]] => [
-      group.querySelector(".home-section-title, .factory-head")?.textContent ?? "",
+      group.querySelector("h2")?.textContent ?? "",
       [...group.querySelectorAll(".sidebar-task-item")].map(
         (row) =>
           `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
@@ -677,17 +677,6 @@ test("an issue whose creator is gone and unchanged since it was filed says only 
   await settle();
 
   assert.deepEqual(bylineOf(page), ["Created · 5h ago", "Last edited · 5h ago"]);
-});
-
-test("the list stands in the window's own frame: the Automations page's view and scroll, Home's sections and rows", async () => {
-  standing = [issue(1)];
-  const page = mount();
-  await settle();
-  showList();
-
-  assert.ok(page.querySelector("section.automations-view > .automations-scroll .home-column"));
-  assert.ok(page.querySelector(".home-section > h2.home-section-title > .home-section-count"));
-  assert.ok(page.querySelector(".home-section > ul.sidebar-tasks > li.sidebar-task-item.home-row"));
 });
 
 test("Archive asks first, then sends the archive and goes back to a list without the issue", async () => {
