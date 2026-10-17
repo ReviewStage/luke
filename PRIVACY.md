@@ -28,8 +28,8 @@ the Inbox; and the words of a message you typed to a coding agent and have
 not sent, mentions and skills among them, kept per agent until you send it
 or empty its box, and an inbox answer you have not sent, kept per item until
 you send it or the agent changes the item, each shown only while the account
-that wrote it is signed in. The files attached to such a message stay in
-memory only.
+that wrote it is signed in. The files attached to such a message or answer
+stay in memory only.
 None of it is sent anywhere.
 
 **Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
@@ -227,7 +227,8 @@ follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
 **Sidebar sections.** When you make a section in the sidebar, our service
-stores its title, its icon, its place among your sections, and the workspace
+stores its title, its icon (an emoji, or an icon's name and the color you
+chose for it), its place among your sections, and the workspace
 it is in under your account, and, for each task you put in it, which task and
 when, so your sections follow you to every Mac you sign in on. They are yours
 alone: no teammate sees them. Deleting a section deletes those records and none
@@ -250,7 +251,12 @@ picture goes when the item stops naming it. Your answer, and any note, is
 stored with the item under the account of whichever member gave it, which
 every member of the task's workspace sees by name beside the answer, and,
 where the agent asked to hear back, handed to it as one of your messages,
-kept in its transcript. While you are signed in, Luke
+kept in its transcript. You can attach files to an answer as you can to a
+message, on the same terms and bounds (see "Files you attach to a coding
+agent"): an answer carrying one is always handed to the agent, and our
+service also keeps each file, with its name, in our database beside the item,
+where every member of the task's workspace can open it, until the answer is
+taken back or the agent posts the item again. While you are signed in, Luke
 on your Mac keeps a read open to our service for every item waiting in your
 workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on
@@ -280,12 +286,16 @@ operators, like an agent's transcript. Every person in the workspace can
 read every channel and every direct message, one between two other people
 included; a coding agent and Luke read the channels and only their own
 direct messages, and only a direct message's two members post in it.
+Luke's planning model posts as its plan's Luke where you ask it to, and at
+the start of each of its turns reads what was said in the chat since it last
+read, up to 20 messages, sent to the model provider with the rest of the
+turn.
 Deleting a plan deletes its channel with its messages, deleting your account
 deletes your messages (others' replies to them stay), and deleting the
 workspace deletes its chat.
 
 **Files you attach to a coding agent.** You can attach files to a coding
-agent's message, or to the prompt you start one with, by picking them with +,
+agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,
 dropping, or pasting: images, PDFs up to 3 MB, and text files up to 100 KB, up
 to ten files and 3 MB a message. A PNG, JPEG, or WebP up to 1.5 MB is sent as
 it is; any other image, or a larger one, is first made into a smaller WebP on

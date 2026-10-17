@@ -10,12 +10,29 @@ import {
   type CodingAgentPlace,
   createCodingAgent,
   discardCodingAgent,
+  readCodingAgentByKey,
+  readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
-import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
+import type {
+  StoredAutomationOrigin,
+  StoredStartedFrom,
+} from "@luke/database/schemas/coding-agent";
+import {
+  firstMessageText,
+  type NoteFiles,
+  type Replay,
+  START_NOTE_HEADING,
+  type StartNoteHeading,
+} from "@luke/features/agent-replay";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  CONTEXT_WINDOW,
+  type CodingAgentAttachment,
+  type CodingAgentStartFrom,
+} from "@luke/features/coding-agent-wire";
 import type { TaskLinearIssue } from "@luke/features/linear-wire";
 import { decodeMention, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
@@ -35,7 +52,7 @@ import {
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
   acceptedModelChoice,
-  type ModelCatalog,
+  ModelCatalog,
   type ModelChoiceRefused,
 } from "../../providers/model-catalog.js";
 import { eveContent } from "../attached-files.js";
@@ -50,6 +67,16 @@ import { mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER } from "./bounds.js";
+import { contextWindowOf } from "./context.js";
+import { type FittedReplay, replayOf, type StartFrom, startFromOf } from "./replay.js";
+import {
+  filesBytes,
+  fitReplay,
+  REPLAY_FIT,
+  replayBudgetBytes,
+  type SummaryModelOf,
+  summarizeSteps,
+} from "./replay-summary.js";
 
 /**
  * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from Luke's voice, or from an automation's run.
@@ -76,6 +103,16 @@ import { CODER } from "./bounds.js";
  * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a task's is.
+ * A Start from another agent of the task, to continue it or to fork it at
+ * one of its messages, hands the new agent that agent's brief with its
+ * transcript replayed after it (`replay.ts`) and its work, what it had not
+ * pushed included, copied to a branch of its own (`snapshot.ts`), the note
+ * after both with the files the note carries, and runs it on that agent's
+ * choice and servers unless the ask names its own; the source's choice
+ * never becomes the account's default, and an agent started from an
+ * automation's run is no run of that automation. Its mentions and servers
+ * are read from the source's brief and the note, as a fresh start's would
+ * be, and never from the replay.
  * The MCP servers the words mention are handed to the agent's first turn
  * whatever its switches say, but an automation's run is handed only those
  * its automation's own prompt mentions, never those of the webhook body or
@@ -92,14 +129,6 @@ import { CODER } from "./bounds.js";
  * account, which the coder channel's table admits for exactly this opening
  * (`coder-host/channel.ts`).
  */
-
-/** The heading a start's note stands under, after the plan or the prompt it rides with: the developer's, or the coding agent's that started the agent (`../coding-agent-tools.ts`). */
-export const START_NOTE_HEADING = {
-  DEVELOPER: "## Note from the developer",
-  AGENT: "## Note from the coding agent that started you",
-} as const;
-
-type StartNoteHeading = (typeof START_NOTE_HEADING)[keyof typeof START_NOTE_HEADING];
 
 /** The heading the Linear issue a plan was started from stands under, after the plan and before any note. */
 export const LINEAR_ISSUE_HEADING = "## The Linear issue this task was started from";
@@ -161,6 +190,8 @@ export type StartPlace =
       readonly note?: string | undefined;
       /** Whose note it is; the developer's unless a coding agent started this one. */
       readonly noteHeading?: StartNoteHeading | undefined;
+      /** Another agent of the plan to take over from, handed its brief and its transcript replayed in place of the plan or a prompt; none for an agent started afresh. */
+      readonly from?: CodingAgentStartFrom | undefined;
     }
   | {
       readonly taskId: null;
@@ -183,7 +214,9 @@ export type StartAsk = StartPlace & {
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
   readonly title?: string | undefined;
-  /** The words the first turn's MCP servers are read from where they are not all the agent is handed: an automation's own prompt, never a webhook body or a GitHub event's words beside it; the prompt and the note otherwise. */
+  /** How the summary of the steps a replay cannot keep is written, for a Start from another agent; none leaves those steps out unsummarized. */
+  readonly summaryModel?: SummaryModelOf | undefined;
+  /** The words the first turn's MCP servers are read from where they are not all the agent is handed: an automation's own prompt, never a webhook body or a GitHub event's words beside it; the prompt and the note otherwise, a source's brief standing for the prompt and its replay never read. */
   readonly serverWords?: string | undefined;
 };
 
@@ -233,21 +266,22 @@ interface StartLanding {
   readonly task: Task | undefined;
   readonly mover: string | undefined;
   readonly place: CodingAgentPlace;
+  /** What the new agent keeps of the agent it was started from; none for one started afresh. */
+  readonly startedFrom: StoredStartedFrom | undefined;
 }
 
-/** The brief with the note after it under its heading; the brief alone where there is no note. */
-function withNote(
-  brief: string,
-  note: string | undefined,
-  heading: StartNoteHeading = START_NOTE_HEADING.DEVELOPER,
-): string {
-  return note === undefined ? brief : `${brief}\n\n${heading}\n\n${note}`;
+/** The agent a Start takes over from as its landing reads it: the source's prompt, the new agent's brief in the plan's place where it was handed one, and how its replay is fitted to the words of the first message beside it. */
+interface ReplayFitter {
+  readonly prompt: string | undefined;
+  readonly fit: (firstMessageWords: string) => Effect.Effect<FittedReplay, never, DatabaseServices>;
 }
 
-/** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt; in a workspace, the prompt. */
+/** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one; in a workspace, the prompt. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
+  fitter: ReplayFitter | undefined,
+  noteFiles: NoteFiles | undefined,
 ): Effect.fn.Return<StartLanding, HostedRefusal, DatabaseServices> {
   if (place.taskId === null) {
     const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
@@ -263,31 +297,108 @@ const landingOf = Effect.fnUntraced(function* (
         planSnapshot: null,
         prompt: place.prompt,
       },
+      startedFrom: undefined,
     };
   }
   const read = yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { task, ownerId, linearIssue } = read.value;
   if (task.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  const brief = fitter === undefined ? place.prompt : fitter.prompt;
+  const words = brief ?? planBrief(task, linearIssue);
+  // The replay is fitted to what the new agent's first message holds beside it.
+  const fitted =
+    fitter === undefined ? undefined : yield* fitter.fit(`${words}${place.note ?? ""}`);
+  const prompt = brief;
+  const replay: Replay | undefined = fitted?.replay;
+  const heading = place.noteHeading ?? START_NOTE_HEADING.DEVELOPER;
   return {
+    startedFrom: fitted?.startedFrom,
     workspaceId: task.workspaceId,
     repository: task.repository,
     task,
     mover: ownerId === userId ? userId : undefined,
     place:
-      place.prompt === undefined
+      prompt === undefined
         ? {
             taskId: place.taskId,
-            planSnapshot: withNote(planBrief(task, linearIssue), place.note, place.noteHeading),
+            planSnapshot: firstMessageText(words, replay, place.note, heading, noteFiles),
             prompt: null,
           }
         : {
             taskId: place.taskId,
             planSnapshot: null,
-            prompt: withNote(place.prompt, place.note, place.noteHeading),
+            prompt: firstMessageText(prompt, replay, place.note, heading, noteFiles),
           },
   };
 });
+
+/** How many of the note's files are text files, which eve is handed inlined, and how many images and PDFs. */
+function noteFilesOf(files: readonly CodingAgentAttachment[]): NoteFiles {
+  const text = files.filter((file) => file.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT).length;
+  return { text, other: files.length - text };
+}
+
+/**
+ * How the replay of the agent a Start takes over from is fitted: against
+ * the window of the model the new agent runs on, as the catalog lists it,
+ * less the instructions the source's last step was told, or a fallback
+ * where it ran none, with the steps that do not fit summarized on the
+ * model `summaryModel` finds at the model's lowest effort, where it finds
+ * one (`replay-summary.ts`).
+ */
+const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  from: StartFrom,
+  choice: ModelChoice,
+  summaryModel: SummaryModelOf | undefined,
+  files: readonly CodingAgentAttachment[],
+): Effect.fn.Return<ReplayFitter, never, DatabaseServices | ModelCatalog> {
+  const catalog = yield* ModelCatalog;
+  const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
+  const windowTokens = contextWindowOf(
+    offered,
+    choice.model,
+    choice.contextWindow ?? CONTEXT_WINDOW.LONG,
+  );
+  const lowest = offered.find((model) => model.id === choice.model)?.efforts[0] ?? choice.effort;
+  const context = yield* readCodingAgentContext(userId, from.source.id).pipe(
+    Effect.orElseSucceed(() => Option.none()),
+  );
+  const step = Option.isSome(context) ? context.value.lastStep : null;
+  const instructions =
+    step === null
+      ? REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS
+      : step.systemPromptTokens + step.toolDefinitionTokens;
+  const model =
+    summaryModel === undefined ? undefined : yield* summaryModel(userId, choice, lowest);
+  return {
+    prompt: from.prompt,
+    fit: (firstMessageWords) =>
+      Effect.map(
+        fitReplay(
+          from.steps,
+          from.carriedSummary,
+          replayBudgetBytes(
+            windowTokens,
+            instructions,
+            new TextEncoder().encode(firstMessageWords).byteLength + filesBytes(files),
+          ),
+          (dropped, earlier) =>
+            model === undefined
+              ? Effect.succeed(Option.none())
+              : summarizeSteps(model, dropped, windowTokens, earlier),
+        ),
+        ({ kept, summary }) => replayOf(from, kept, summary),
+      ),
+  };
+});
+
+/** A prompt with the note after it, the words a Start from another agent reads mentions from; none where there is neither. */
+function wordsOf(prompt: string | undefined, note: string | undefined): string | undefined {
+  const words = [prompt, note].filter((each) => each !== undefined);
+  return words.length === 0 ? undefined : words.join("\n\n");
+}
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
@@ -295,14 +406,51 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
-  const choice = yield* acceptedAgentChoice(userId, ask.choice);
-  const landing = yield* landingOf(userId, ask);
+  // Note that a retry from another agent is answered before its source is read, because the source
+  // may be gone since the first Start made the agent its key names.
+  if (ask.taskId !== null && ask.from !== undefined) {
+    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    if (Option.isSome(made) && made.value.taskId === ask.taskId) {
+      const reached = yield* hostedStoreOrUnavailable(readTask(userId, ask.taskId));
+      if (Option.isSome(reached)) return { agent: made.value, created: false };
+    }
+  }
+  const from =
+    ask.taskId === null || ask.from === undefined
+      ? undefined
+      : yield* startFromOf(userId, ask.taskId, ask.from, ask.attachments ?? [], ask.idempotencyKey);
+  // An agent started from another runs on that agent's choice unless the Start names one.
+  const choice = yield* acceptedAgentChoice(userId, ask.choice ?? from?.choice);
+  // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
+  const noteFiles = from === undefined ? undefined : noteFilesOf(ask.attachments ?? []);
+  const fitter =
+    from === undefined
+      ? undefined
+      : yield* replayFitterOf(userId, from, choice, ask.summaryModel, [
+          ...from.attachments,
+          ...(ask.attachments ?? []),
+        ]);
+  const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
   const brief = landing.place;
-  // The words a mention is read from: the prompt with any note after it, or a plan start's note alone.
-  const words = brief.prompt ?? (ask.taskId === null ? undefined : ask.note);
-  // Note that an automation's run names its own prompt, because the words an outsider wrote beside it switch on nothing.
-  const serverWords = ask.serverWords ?? words;
+  // The words a mention is read from: the prompt with any note after it, or a plan start's note
+  // alone; never the replay of another agent, whose words name what it read, not what to hand on.
+  const words =
+    from === undefined
+      ? (brief.prompt ?? (ask.taskId === null ? undefined : ask.note))
+      : wordsOf(from.prompt, ask.taskId === null ? undefined : ask.note);
+  // Note that an automation's run names its own prompt, because the words an outsider wrote beside it
+  // switch on nothing, and so does an agent started from one, with the developer's note after it.
+  const serverWords =
+    ask.serverWords ??
+    (from === undefined
+      ? words
+      : wordsOf(from.serverWords ?? from.prompt, ask.taskId === null ? undefined : ask.note));
+  // The files of the source's brief that fit, then those the note carries, which a fresh plan start has none of.
+  const attachments =
+    from === undefined
+      ? (ask.attachments ?? [])
+      : [...from.attachments, ...(ask.attachments ?? [])];
   // What the words mention of the plan's pages and agents is read before the agent is made, so a
   // read that fails leaves no agent its retry would find and never open a session for.
   const reads =
@@ -319,13 +467,14 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       ...brief,
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
+      startedFrom: landing.startedFrom,
       title: ask.title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
-      disabledServers: ask.disabledServers,
+      disabledServers: ask.disabledServers ?? from?.disabledServers,
       // The servers those words mention are its first turn's, whatever the switches say.
       mentionedServers:
         serverWords === undefined ? [] : mentionedServers(serverWords, landing.repository),
@@ -345,13 +494,13 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         brief.prompt === null
           ? eveContent(
               brief.planSnapshot,
-              [],
+              from === undefined ? [] : attachments,
               words === undefined ? undefined : mentionedContext(words, landing.task, reads),
             )
           : eveContent(
               brief.prompt,
-              ask.attachments ?? [],
-              mentionedContext(brief.prompt, landing.task, reads),
+              attachments,
+              words === undefined ? undefined : mentionedContext(words, landing.task, reads),
             ),
     })
     .pipe(

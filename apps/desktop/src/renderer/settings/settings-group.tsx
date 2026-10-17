@@ -1,6 +1,6 @@
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
+import { ErrorState } from "@luke/ui";
 import { useId } from "react";
-import { ReadFailure } from "../read-failure";
 
 /**
  * settings-group.tsx -- one group of a Settings page: its name above a card of rows.
@@ -48,7 +48,7 @@ export function ReadFailed({
 }): React.JSX.Element {
   return (
     <div className="settings-card-line">
-      <ReadFailure line={line} onRetry={onRetry} />
+      <ErrorState onRetry={onRetry}>{line}</ErrorState>
     </div>
   );
 }

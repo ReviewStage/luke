@@ -12,13 +12,15 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -88,8 +90,8 @@ const BILLING = task(
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
@@ -411,10 +413,7 @@ function answerMotion(): void {
  */
 async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   answerMotion();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({});
   const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
   const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -736,9 +735,11 @@ test("an agent with no plan lets go of its own outdated answers as its inbox is 
   const mine = planlessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
   const theirs = planlessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
   const first = await planlessInbox(INVITES.agent.id, [mine]);
-  act(() => first.onDraft(mine, { choices: [], values: [], note: "Only teammates" }));
+  act(() =>
+    first.onDraft(mine, { choices: [], values: [], note: "Only teammates", attachments: [] }),
+  );
   const other = await planlessInbox(BILLING.agent.id, [theirs]);
-  act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly" }));
+  act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly", attachments: [] }));
 
   await planlessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
   const reread = await planlessInbox(INVITES.agent.id, [mine]);

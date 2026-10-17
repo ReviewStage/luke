@@ -3,10 +3,10 @@ import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalSummary } from "@luke/features/terminal-wire";
-import { CloseIcon, ConfirmDialog, PlusIcon, useConfirmDialog } from "@luke/ui";
+import { CloseIcon, ConfirmDialog, PlusIcon, useConfirmDialog, useMenu } from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
-import { ActionMenu, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu } from "../desktop/action-menu";
 import type { FloatingBox } from "../desktop/hover-pane";
 import { TaskNameField } from "../desktop/task-name-field";
 import { Tooltip } from "../tooltip";
@@ -67,7 +67,7 @@ function ShellRow({
   session: Pick<TerminalSession, "onChoose" | "onCreate" | "onRename" | "onKill">;
 }): React.JSX.Element {
   const row = useRef<HTMLButtonElement>(null);
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const [renaming, setRenaming] = useState(false);
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.

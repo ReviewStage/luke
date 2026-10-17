@@ -19,6 +19,8 @@ import { AgentTabCard } from "../tasks/agent-tab-card";
 import type { ChatNoticeDoors } from "../tasks/chat-notice";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { DraftAgentTab } from "../tasks/draft-agent-tab";
+import { agentForkDoors, ForkProvider } from "../tasks/fork-action";
+import type { AgentFork } from "../tasks/fork-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
 import type { ToolTarget } from "../tasks/tool-call-model";
@@ -618,6 +620,7 @@ export function MainTabContent({
   onOpenTarget,
   cards,
   chat,
+  onFork,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -640,12 +643,14 @@ export function MainTabContent({
   cards: TaskCards;
   /** The chat a chat notice's card reads and opens; none where the window holds none. */
   chat?: ChatNoticeDoors | undefined;
+  /** Opens the task's draft as a fork of one of an agent's messages; none where no draft opens, as on an agent no task holds. */
+  onFork?: ((fork: AgentFork) => void) | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the task no longer holds only until the
     // column moves back to the task, a render away.
     return agents.draft?.id === tab.draft ? (
-      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} />
+      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} cards={cards.call} />
     ) : (
       <SpinnerRegion label="Loading agent" />
     );
@@ -656,22 +661,32 @@ export function MainTabContent({
   return agent === undefined ? (
     <SpinnerRegion label="Loading agent" />
   ) : (
-    <AgentTab
+    <ForkProvider
       key={agent.id}
-      agent={agent}
-      control={agents}
-      shown={shown}
-      onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
-      onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
-      onOpenPullRequest={
-        onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agent.id)
-      }
-      onOpenTarget={onOpenTarget}
-      cards={cards.agent(agent.id)}
-      chat={chat}
-      onHeld={views.onAgentHeld}
-      run={agents.origin}
-    />
+      value={agentForkDoors({
+        agent,
+        control: agents,
+        onFork,
+        cards: cards.agent(agent.id),
+        onOpenTarget,
+      })}
+    >
+      <AgentTab
+        agent={agent}
+        control={agents}
+        shown={shown}
+        onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
+        onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
+        onOpenPullRequest={
+          onOpenPullRequest === undefined ? undefined : () => onOpenPullRequest(agent.id)
+        }
+        onOpenTarget={onOpenTarget}
+        cards={cards.agent(agent.id)}
+        chat={chat}
+        onHeld={views.onAgentHeld}
+        run={agents.origin}
+      />
+    </ForkProvider>
   );
 }
 

@@ -15,6 +15,7 @@ import {
   UnarchiveIcon,
   UnpinIcon,
   useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
@@ -44,7 +45,7 @@ import { useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useAppState, useExperiment } from "../use-app-state";
-import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
@@ -332,7 +333,7 @@ function useTaskMenu(
   );
   const moving = useMoveTaskDialog(tasks, plan);
   const copy = useCopyToast();
-  const { open, drawn, close, trigger, contextMenu } = useActionMenu(tasks.shown && doors.drawn);
+  const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);

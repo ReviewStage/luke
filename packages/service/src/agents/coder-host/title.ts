@@ -4,10 +4,12 @@ import { type CodingAgent, fillCodingAgentTitle } from "@luke/database/models/co
 import {
   listMessagesPast,
   listRecentMessages,
+  listTurnOpeners,
   turnsBefore,
 } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
+import { firstMessageParts } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { failureKind } from "@luke/runtime/effect";
@@ -33,6 +35,9 @@ import { CURSOR_START } from "./transcript.js";
  * named from its opening rather than from the plan it was started under:
  * an agent started from the plan said the plan first, so the plan is what
  * names it, and one started on a prompt of its own is named for that prompt.
+ * An agent started from another is named from the brief and the note it
+ * was handed, never from the other agent's transcript replayed between
+ * them (`@luke/features/agent-replay`), whose words are that agent's.
  * An automation's run is named from the automation's prompt alone in its
  * opening's place, without the lines Luke adds of the firing, which would
  * name every run of it alike, and the GitHub event's subject where one
@@ -88,11 +93,17 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
   return title.length === 0 ? Option.none() : Option.some(title);
 }
 
-/** A message's words as the call reads them: its text alone, cut to the excerpt; a file it carries is no word of it. */
+/** A part's words without the replay of another agent or the note's marker: the brief and the note where either stands, the part whole otherwise. */
+function withoutReplay(text: string): string {
+  const read = firstMessageParts(text);
+  return read.note === undefined ? read.brief : `${read.brief}\n${read.note.text}`;
+}
+
+/** A message's words as the call reads them: its text alone, any replay of another agent left out, cut to the excerpt; a file it carries is no word of it. */
 function excerptOf(message: StoredUIMessage | undefined): string {
   const words = (message?.parts ?? [])
     .filter((part) => isTextUIPart(part))
-    .map((part) => part.text.trim())
+    .map((part) => withoutReplay(part.text).trim())
     .filter((text) => text.length > 0)
     .join("\n");
   return words.slice(0, AGENT_TITLE.EXCERPT_CHARS);
@@ -117,6 +128,69 @@ function originWords(origin: StoredAutomationOrigin): string {
 function saidByDeveloper(message: StoredUIMessage | undefined): boolean {
   if (message?.role !== MESSAGE_ROLE.USER) return false;
   return !("channel" in message.metadata && message.metadata.channel === MESSAGE_CHANNEL.CHAT);
+}
+
+/** What the line before an answer is known to be, in the window a title reads. */
+const HEARD = {
+  /** No answer yet in the window: the line an answer answers may lie before it. */
+  UNKNOWN: "unknown",
+  /** A line of the developer's since the answer before. */
+  DEVELOPER: "developer",
+  /** No line of the developer's since the answer before. */
+  OTHER: "other",
+} as const;
+
+type Heard = (typeof HEARD)[keyof typeof HEARD];
+
+/**
+ * The agent's latest answer to the developer: one that follows a line of
+ * the developer's since the answer before it, or, before any answer in the
+ * window, one whose turn a chat notice did not open, since the line it
+ * answers may lie before the window. Note that an answer a chat notice
+ * alone prompted is left out, because it speaks to another member of the
+ * chat, while one to a developer's line a notice was steered in after
+ * still answers the developer.
+ */
+function answerToDeveloper<
+  Row extends { readonly message: StoredUIMessage; readonly turnId?: string },
+>(records: readonly Row[], noticed: ReadonlySet<string>): Row | undefined {
+  let heard: Heard = HEARD.UNKNOWN;
+  let answer: Row | undefined;
+  for (const record of records) {
+    if (saidByDeveloper(record.message)) heard = HEARD.DEVELOPER;
+    if (record.message.role !== MESSAGE_ROLE.ASSISTANT) continue;
+    const prompted = record.turnId !== undefined && noticed.has(record.turnId);
+    if (heard === HEARD.DEVELOPER || (heard === HEARD.UNKNOWN && !prompted)) answer = record;
+    heard = HEARD.OTHER;
+  }
+  return answer;
+}
+
+/**
+ * The turns among the answers a chat notice opened. Note that the line
+ * that opened a turn is read by the turn's id rather than from the window,
+ * because notices a turn took in mid-run can push it out of the window, and
+ * a line taken in mid-run names no turn. Nothing where the read is refused,
+ * so every answer stands.
+ */
+function turnsNoticed(
+  target: ConversationTarget,
+  records: readonly { readonly message: StoredUIMessage; readonly turnId?: string }[],
+): Effect.Effect<ReadonlySet<string>, QueryError | Schema.SchemaError, DatabaseServices> {
+  const turnIds = records.flatMap((record) =>
+    record.message.role === MESSAGE_ROLE.ASSISTANT && record.turnId !== undefined
+      ? [record.turnId]
+      : [],
+  );
+  return Effect.map(
+    listTurnOpeners(target.userId, target.conversationId, CODER_TOOL_SET, [...new Set(turnIds)]),
+    (openers) =>
+      new Set(
+        (openers.ok ? openers.value : []).flatMap((opener) =>
+          opener.turnId === undefined || saidByDeveloper(opener.message) ? [] : [opener.turnId],
+        ),
+      ),
+  );
 }
 
 /**
@@ -148,7 +222,7 @@ function agentExchange(
     const first = opening.read.ok ? opening.read.value[0] : undefined;
     const newest = recent.ok ? recent.value : [];
     const said = newest.findLast((record) => saidByDeveloper(record.message));
-    const answered = newest.findLast((record) => record.message.role === MESSAGE_ROLE.ASSISTANT);
+    const answered = answerToDeveloper(newest, yield* turnsNoticed(target, newest));
     const opened = saidByDeveloper(first?.message) ? first : undefined;
     return [
       {

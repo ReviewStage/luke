@@ -91,24 +91,19 @@ export function inPinOrder<Row>(rows: readonly Row[], placeOf: (row: Row) => Pin
 }
 
 /**
- * The positions to write once the pin at `from` in `order`, as `inPinOrder`
- * drew it, is dropped at `to`: the dropped pin's, between its new
- * neighbours', and any other pin's that holds none or no longer sorts after
- * the one before it, so afterwards every pin holds a position and the
- * positions run in the order drawn. A pin whose position stands is not in
- * the answer, so a drop between two positioned pins writes one. Where a key
- * would grow past the bound, every pin is given a fresh one instead.
+ * The positions that stand `after`, the pins in the order a drop leaves
+ * them, as drawn: `moved`'s, between its neighbours', and any other pin's
+ * that holds none or no longer sorts after the one before it, so every pin
+ * holds a position and the positions run in the order drawn. A pin whose
+ * position stands is not in the answer, so a drop between two positioned
+ * pins writes one. Where a key would grow past the bound, every pin is
+ * given a fresh one instead.
  */
-export function pinPositionsForMove<Row>(
-  order: readonly Row[],
-  from: number,
-  to: number,
+function positionsAfterDrop<Row>(
+  after: readonly Row[],
+  moved: Row,
   placeOf: (row: Row) => PinPlace,
 ): ReadonlyMap<Row, string> {
-  const moved = order[from];
-  if (moved === undefined || from === to || to < 0 || to >= order.length) return new Map();
-  const after = order.filter((_, index) => index !== from);
-  after.splice(to, 0, moved);
   // The position a pin of the new order keeps unless it must move: none for the dropped pin, or past the end.
   const standing = (at: number) => {
     const row = after[at];
@@ -149,4 +144,40 @@ export function pinPositionsForMove<Row>(
       return key === undefined || key === positionOf(placeOf(row)) ? [] : [[row, key] as const];
     }),
   );
+}
+
+/**
+ * The positions to write once the pin at `from` in `order`, as `inPinOrder`
+ * drew it, is dropped at `to`, as `positionsAfterDrop` gives them; none
+ * for a drop where the pin already stood.
+ */
+export function pinPositionsForMove<Row>(
+  order: readonly Row[],
+  from: number,
+  to: number,
+  placeOf: (row: Row) => PinPlace,
+): ReadonlyMap<Row, string> {
+  const moved = order[from];
+  if (moved === undefined || from === to || to < 0 || to >= order.length) return new Map();
+  const after = order.filter((_, index) => index !== from);
+  after.splice(to, 0, moved);
+  return positionsAfterDrop(after, moved, placeOf);
+}
+
+/**
+ * The positions to write once `row`, a pin new to `order`, as `inPinOrder`
+ * drew it, is dropped at `to`, held within the order's ends. Note that the
+ * new pin is always given a position, even on top, because a pin with
+ * none is placed by when it was pinned, which the service stamps by its
+ * own clock, so only a position holds it where it was let go.
+ */
+export function pinPositionsForInsert<Row>(
+  order: readonly Row[],
+  row: Row,
+  to: number,
+  placeOf: (row: Row) => PinPlace,
+): ReadonlyMap<Row, string> {
+  const after = [...order];
+  after.splice(Math.max(0, Math.min(to, order.length)), 0, row);
+  return positionsAfterDrop(after, row, placeOf);
 }

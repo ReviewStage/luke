@@ -1,0 +1,55 @@
+/* error-state.css -- a failure among the rows: the fault's glyph in red,
+   the sentence in the muted ink of the words around it, and Retry beside it
+   or under its first word. Alone in a region it is `EmptyState`, and draws
+   nothing here. */
+
+@layer components {
+  .luke-error-state {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--luke-icon-gap);
+    margin: 0;
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* The glyph stands on the sentence's first line, which is a control tall,
+     at Retry's own glyph's size. */
+  .luke-error-state-glyph {
+    display: flex;
+    height: var(--luke-control-height);
+    flex: none;
+    align-items: center;
+    color: var(--luke-color-danger-text);
+  }
+
+  .luke-error-state-glyph svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  /* Retry keeps the words' line and goes onto the next, whole, where the
+     line has no room for it. */
+  .luke-error-state-body {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--luke-space-8);
+  }
+
+  /* The sentence's own line is a control tall, whether Retry stands on it
+     or under it, so the glyph is centred on the words either way. */
+  .luke-error-state-words {
+    display: flex;
+    min-height: var(--luke-control-height);
+    align-items: center;
+  }
+
+  /* Retry is drawn back by its own inset, so its glyph stands a gap after
+     the words, or under their first letter where it wraps. */
+  .luke-error-state-body > .luke-button {
+    margin-inline-start: calc(-1 * var(--luke-control-inset));
+  }
+}

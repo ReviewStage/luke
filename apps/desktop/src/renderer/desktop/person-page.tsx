@@ -4,6 +4,7 @@ import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { ErrorState, useMenu } from "@luke/ui";
 import {
   ACTOR_KIND,
   type Actor,
@@ -29,7 +30,6 @@ import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { useOpenSettings } from "../open-settings";
-import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { lineSubject } from "../tasks/agent-ref";
 import { InboxItemRow } from "../tasks/inbox-list";
@@ -40,7 +40,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { RecentRow } from "./desktop-home";
 import { useArchivedView, useTaskListView } from "./task-list-view";
 import { useAutomations } from "./use-automations";
@@ -163,7 +163,7 @@ function PersonActions({
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const copy = useCopyToast();
-  const menu = useActionMenu(plans.shown);
+  const menu = useMenu(plans.shown);
   const member = person.kind === ACTOR_KIND.PERSON ? person : undefined;
   const you = member?.you === true;
   const { workspace } = plans;
@@ -462,17 +462,17 @@ function PersonColumn({
             </PersonSection>
           )}
           {read.failed ? (
-            <div className="sidebar-note person-empty flex items-center gap-2" role="alert">
-              <span>Some Inbox items could not be read.</span>
-              <RetryButton onRetry={read.onRetry} />
+            <div className="sidebar-note person-empty">
+              <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
             </div>
           ) : waiting.length === 0 && read.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
           ) : null}
           {theirAutomations.failed ? (
-            <div className="sidebar-note person-empty flex items-center gap-2" role="alert">
-              <span>{you ? "Your" : "Their"} automations could not be read.</span>
-              <RetryButton onRetry={theirAutomations.onRetry} />
+            <div className="sidebar-note person-empty">
+              <ErrorState onRetry={theirAutomations.onRetry}>
+                {`${you ? "Your" : "Their"} automations could not be read.`}
+              </ErrorState>
             </div>
           ) : theirAutomations.reading ? (
             <Spinner label="Loading automations" size={SPINNER_SIZE.INLINE} />

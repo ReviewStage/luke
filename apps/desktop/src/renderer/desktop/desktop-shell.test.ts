@@ -19,11 +19,13 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { handState, stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { tasksControl } from "#testing/tasks-control";
 import { useAct } from "../act";
+import { appBridge } from "../app-bridge";
 import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -98,13 +100,8 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
 });
 
@@ -186,6 +183,8 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        pages: undefined,
+        onRereadPages: () => undefined,
       },
       onNewTask: () => setAsked(true),
       newTask: { ...control.newTask, open: asked, onClose: () => setAsked(false) },
@@ -222,6 +221,19 @@ test("with the sidebar folded, New plan stands beside its toggle over the home p
   act(() => root?.unmount());
   root = undefined;
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New task"]);
+});
+
+test("the title bar's buttons, each wrapped in its hint, tell a reader the chord that reaches them on the button itself", () => {
+  const controls = mount(false).querySelector(".title-bar-controls:not([data-edge])");
+  assert.ok(controls, "the title bar's buttons stand");
+  const chords = [...controls.querySelectorAll("button")].map((button) => [
+    button.getAttribute("aria-label"),
+    button.getAttribute("aria-keyshortcuts"),
+  ]);
+  assert.deepEqual(chords, [
+    ["Show sidebar", "Meta+B"],
+    ["New task", "Meta+N"],
+  ]);
 });
 
 test("the home page welcomes an account with no plan, and its New plan raises the dialog over the window, which Cancel puts away", () => {
@@ -729,15 +741,12 @@ async function handBridge(): Promise<void> {
   await import("./desktop-settings");
   handState(experimentsOn(EXPERIMENT.FACTORY, EXPERIMENT.AUTOMATIONS));
   sentActs = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: { kind: string }) => {
-        sentActs.push(request.kind);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: { kind: string }) => {
+      sentActs.push(request.kind);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
   });
 }
@@ -778,7 +787,9 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
       root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
     );
     await settle();
-    toggled[place] = container.querySelector("button.side-panel-toggle") !== null;
+    toggled[place] = [...container.querySelectorAll("button")].some((button) =>
+      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
+    );
   }
   assert.deepEqual(toggled, {
     [PLACE.HOME]: false,
@@ -916,7 +927,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
   });
 
   const card = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.equal(card?.querySelector(".card-name")?.textContent, DOCUMENT_NAME);
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, DOCUMENT_NAME);
 });
 
 /** The sidebar's Chat row, where one stands. */

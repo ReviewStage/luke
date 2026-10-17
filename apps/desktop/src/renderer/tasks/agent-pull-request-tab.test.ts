@@ -7,6 +7,7 @@ import {
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
+  type CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_STATE,
@@ -41,14 +42,20 @@ import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { DiffViewProps } from "../diff-view/contract";
+import type { SideBundles } from "../bundle-loader";
+import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect";
 import { MemberDirectory } from "../member-directory";
 import { rendererRuntime } from "../renderer-runtime";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
+import { TAB_KIND, tabLook } from "./tab-look";
+import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
@@ -183,6 +190,22 @@ let opened: string[] = [];
 let images: string[] = [];
 /** What each review thread's preview handed the diff bundle, in the order drawn. */
 let previews: DiffViewProps[] = [];
+
+/** The diff bundle, a chunk of its own the panel imports, stood in for at its importer. */
+const DIFF_STAND_IN: DiffViewModule = {
+  mount: (_host, props) => {
+    previews.push(props);
+    return { update: () => undefined, unmount: () => undefined };
+  },
+};
+
+let bundles: SideBundles;
+
+beforeAll(async () => {
+  bundles = await Effect.runPromise(
+    landedBundles({ diffView: () => Promise.resolve(DIFF_STAND_IN) }),
+  );
+});
 /** Every change to the pull request the tab asked for, by agent, in order. */
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
@@ -200,38 +223,28 @@ beforeEach(() => {
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
   changeHeld = undefined;
-  // The diff bundle, a script of its own the panel loads, stood in for at its global.
-  window.lukeDiffView = {
-    mount: (_host, props) => {
-      previews.push(props);
-      return { update: () => undefined, unmount: () => undefined };
-    },
-  };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
-        if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
-        if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-          changes.push([request.payload.agentId, request.payload.request]);
-          const answer = changeAnswer;
-          return (changeHeld ?? Promise.resolve()).then(() => ({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: answer,
-          }));
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
-          images.push(request.payload.src);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
-        }
-        return Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-        );
-      },
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
+      if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
+      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+        changes.push([request.payload.agentId, request.payload.request]);
+        const answer = changeAnswer;
+        return (changeHeld ?? Promise.resolve()).then(() => ({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: answer,
+        }));
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
+        images.push(request.payload.src);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
+      }
+      return Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
+          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+      );
     },
   });
 });
@@ -240,7 +253,6 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  delete window.lukeDiffView;
 });
 
 /** The pull request as what the agent published names it, which the tab's bar wears. */
@@ -312,6 +324,29 @@ function Switching({
   });
 }
 
+/**
+ * The tab beside the name the side panel's strip gives it (`tabLook`), both
+ * drawn from what the task's real reads of the agent's published pull
+ * request keep (`useTaskPullRequests`), as the window draws them.
+ */
+function Named({ control, reader }: { control: CodingAgentsControl; reader: PullRequestReader }) {
+  const kept = useTaskPullRequests(AGENT.planId ?? undefined, control.agents, reader);
+  const pullRequest = kept.pullRequests.get(AGENT.id);
+  return createElement(
+    "div",
+    null,
+    createElement(
+      "span",
+      { "data-tab-name": "" },
+      tabLook({ kind: TAB_KIND.CHANGES, pullRequest }).label,
+    ),
+    createElement(Switching, {
+      control: { ...control, pullRequests: kept.pullRequests, readPullRequest: kept.read },
+      first: PULL_REQUEST_VIEW.CONVERSATION,
+    }),
+  );
+}
+
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -340,20 +375,32 @@ async function draw(
   registry = AtomRegistry.make(),
   github: GitHubConnectControl = NO_GITHUB,
 ) {
+  return drawn(createElement(Switching, { control, first }), registry, github);
+}
+
+/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed. */
+async function drawn(
+  tab: React.ReactElement,
+  registry = AtomRegistry.make(),
+  github: GitHubConnectControl = NO_GITHUB,
+) {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
     root?.render(
       onRegistry(
         registry,
-        createElement(GitHubConnectProvider, {
-          value: github,
-          children: createElement(MemberDirectory, {
-            workspace: { id: "workspace-acme", memberCount: 2 },
-            readerId: "user-dana",
-            children: createElement(Switching, { control, first }),
+        onSideBundles(
+          bundles,
+          createElement(GitHubConnectProvider, {
+            value: github,
+            children: createElement(MemberDirectory, {
+              workspace: { id: "workspace-acme", memberCount: 2 },
+              readerId: "user-dana",
+              children: tab,
+            }),
           }),
-        }),
+        ),
       ),
     ),
   );
@@ -1273,6 +1320,47 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
     "Expire invitations weekly #42",
   );
   assert.equal(tab.querySelectorAll(".pull-request-entry").length, 1);
+});
+
+test("a pull request renamed on GitHub renames its tab once Refresh is pressed, as it does its header", async () => {
+  const renamed = { ...PULL_REQUEST, title: "Expire invitations weekly" };
+  const answer = (title: string) => ({
+    repository: "acme/relay",
+    branch: PULL_REQUEST.head,
+    pullRequest: { ...published(PULL_REQUEST_STATE.OPEN), title },
+  });
+  const tab = await drawn(
+    createElement(Named, {
+      control: controlAnswering({
+        pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+          { pullRequest: PULL_REQUEST },
+          { pullRequest: renamed },
+        ),
+      }),
+      reader: inTurn<CodingAgentPullRequestAnswerView>(
+        answer(PULL_REQUEST.title),
+        answer(renamed.title),
+      ),
+    }),
+  );
+  const name = () => tab.querySelector("[data-tab-name]")?.textContent;
+  assert.equal(name(), "#42 Expire invitations");
+
+  const more =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+    assert.fail("the bar has a ⋯");
+  act(() => more.click());
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations weekly #42",
+  );
+  assert.equal(name(), "#42 Expire invitations weekly");
 });
 
 test("where nothing of the pull request is held and its reads fail, each part says so with its own Retry, and Files changed still reads on its own", async () => {

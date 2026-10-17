@@ -29,6 +29,7 @@ import {
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
   CODING_AGENT_WORKSPACE_QUERY,
+  type CodingAgentAttachment,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
   codingAgentArchiveRequestSchema,
@@ -117,6 +118,7 @@ import {
   PublishedKey,
   withPublishedCache,
 } from "./coder-host/published.js";
+import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
 import { acceptedAgentChoice, startCodingAgent } from "./coder-host/start.js";
 import {
   codingAgentPage,
@@ -315,13 +317,14 @@ const MAXIMUM_ATTACHMENTS_BODY_BYTES =
 const MAXIMUM_START_BODY_BYTES =
   6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
 
-/** An answer is a note and a few short fields: the note's bound at JSON's widest escape, and room for the rest. */
+/** An answer is a note, a few short fields, and the files a message may carry: the note's bound at JSON's widest escape, the files, and room for the rest. */
 const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
   6 *
     (INBOX_BOUNDS.MAX_NOTE_CHARS +
       INBOX_BOUNDS.MAX_FIELDS *
         (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
   2_048;
 
 /**
@@ -341,6 +344,8 @@ const MAXIMUM_MESSAGE_BODY_BYTES =
 
 export interface CodingAgentsAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
+  /** The model a Start from another agent summarizes the steps it cannot keep on; the deployment's own (`coder-host/replay-summary.ts`) where none is named. */
+  summaryModel?: SummaryModelOf;
 }
 
 /** What the routes may require of the function that stands them. */
@@ -440,8 +445,17 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { idempotencyKey, model, effort, contextWindow, prompt, attachments, disabledServers } =
-    asked.success;
+  const {
+    idempotencyKey,
+    model,
+    effort,
+    contextWindow,
+    prompt,
+    attachments,
+    disabledServers,
+    from,
+    note,
+  } = asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
   // and a window without them is a window of no model.
   if (
@@ -454,6 +468,13 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     model !== undefined && effort !== undefined
       ? { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) }
       : undefined;
+  const environment = yield* HostedEnvironment;
+  const summaryModel: SummaryModelOf =
+    seams.summaryModel ??
+    ((owner, chosen, effort) =>
+      productionSummaryModel(owner, chosen, effort).pipe(
+        Effect.provideService(HostedEnvironment, environment),
+      ));
   const { agent, created } = yield* choiceOrInvalid(
     startCodingAgent(eveFor(seams, request), userId, {
       taskId,
@@ -462,6 +483,10 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       prompt,
       attachments,
       disabledServers,
+      from,
+      // Note that the wire takes a note only beside a source, and an empty one is no note: its files carry it alone.
+      note: note === "" ? undefined : note,
+      summaryModel,
     }),
   );
   if (!created) {
@@ -1156,10 +1181,11 @@ const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint
 });
 
 /**
- * GET serves one attachment of an inbox item, an image block's picture, as
- * its bytes under the media type the service sniffed them to be as they
- * were kept, to the item's account alone: an attachment of another
- * account's, or of another item's, is not found, as an item is.
+ * GET serves one attachment of an inbox item, an image block's picture or a
+ * file the developer's answer carried, as its bytes under the media type
+ * the service sniffed a picture to be or a file travelled as, to the
+ * members of the item's workspace alone: an attachment of another
+ * workspace's, or of another item's, is not found, as an item is.
  */
 const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -1227,10 +1253,11 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
  * member started its agent. An answer naming a
  * revision the agent has since moved on from, or an item no longer open,
  * is answered with the item as it stands and not taken. Otherwise the
- * answer is taken first, at the revision it names, and only then, where
- * the item asks to be heard back or the developer typed a note, handed to
- * the agent as one of the
- * developer's messages under the answer's own key through the one steer
+ * answer is taken first, at the revision it names, with the files it
+ * carries kept as the item's, and only then, where the item asks to be
+ * heard back or the developer typed a note or attached a file, handed to
+ * the agent as one of the developer's messages, its files with it, under
+ * the answer's own key through the one steer
  * path (`coder-host/steer.ts`), so an answer the item no longer takes
  * never reaches the agent. A hand-off that fails, is interrupted, or dies
  * takes the answer back, so an item never reads answered while the agent
@@ -1257,15 +1284,20 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_ANSWER_BODY_BYTES);
   const asked = readEither(inboxAnswerRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { revision, clientKey, ...reply } = asked.success;
-  const taken = yield* takenAnswer(userId, stored.value, { revision, clientKey, reply });
+  const { revision, clientKey, attachments = [], ...reply } = asked.success;
+  const taken = yield* takenAnswer(userId, stored.value, {
+    revision,
+    clientKey,
+    reply,
+    attachments,
+  });
   if (taken === undefined) {
     // Not taken: the item moved on, or another answer settled it; it is answered as it now stands.
     const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
   }
-  if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer)) {
+  if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer, taken.answerFiles)) {
     return inboxAnswered(taken, true);
   }
   const answer = taken.answer;
@@ -1275,6 +1307,7 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     const eve = yield* eveFor(seams, request);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxAnswerMessage(taken, answer),
+      attachments,
       clientKey,
       sender: { kind: MESSAGE_SENDER.MEMBER, userId },
     });
@@ -1300,16 +1333,28 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
 const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   stored: StoredInboxItem,
-  asked: { readonly revision: number; readonly clientKey: string; readonly reply: InboxReply },
+  asked: {
+    readonly revision: number;
+    readonly clientKey: string;
+    readonly reply: InboxReply;
+    readonly attachments: readonly CodingAgentAttachment[];
+  },
 ): Effect.fn.Return<InboxItem | undefined, HostedRefusal, DatabaseServices> {
   const { item, answerKey } = stored;
   if (answerKey === asked.clientKey) return item;
   if (item.status !== INBOX_STATUS.OPEN || item.revision !== asked.revision) return undefined;
-  if (inboxReplyRefusal(item, asked.reply) !== undefined) {
+  if (inboxReplyRefusal(item, asked.reply, asked.attachments) !== undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const answered = yield* hostedStoreOrUnavailable(
-    answerInboxItem(userId, item.id, asked.revision, asked.reply, asked.clientKey),
+    answerInboxItem(
+      userId,
+      item.id,
+      asked.revision,
+      asked.reply,
+      asked.clientKey,
+      asked.attachments,
+    ),
   );
   return Option.getOrUndefined(answered);
 });

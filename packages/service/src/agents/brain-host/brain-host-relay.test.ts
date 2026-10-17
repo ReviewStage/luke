@@ -23,6 +23,7 @@ import {
   TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
+  UNKNOWN_ACTION_STATUS,
 } from "../../core.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
@@ -428,6 +429,69 @@ it.effect(
         answer.parts.map((part) => part.type),
         [STEP_START, "reasoning", `tool-${RUN_IN_REPOSITORY_TOOL.name}`, STEP_START, "text"],
       );
+    }),
+);
+
+it.effect(
+  "a step eve runs again after an interruption settles the calls its abandoned attempt asked for while the turn still runs, and the answer keeps the attempt that finished",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const events = typedTurn("turn_0", 0);
+      const stepped = events.findIndex((event) => event.type === "step.started");
+      const completed = events.findIndex((event) => event.type === "turn.completed");
+      await play(events.slice(0, stepped), standing);
+      // The relay's state as the step began, which is what eve hands its retry.
+      const stepInput = standing.state.get();
+      await play(
+        [
+          stamped({
+            type: "step.started",
+            data: { turnId: "turn_0", sequence: 0, stepIndex: 0, modelId: "m" },
+          }),
+          stamped({
+            type: "actions.requested",
+            data: {
+              turnId: "turn_0",
+              sequence: 0,
+              stepIndex: 0,
+              actions: [
+                {
+                  kind: "tool-call",
+                  callId: "call-abandoned",
+                  toolName: RUN_IN_REPOSITORY_TOOL.name,
+                  input: { command: "pwd" },
+                },
+              ],
+            },
+          }),
+        ],
+        standing,
+      );
+      const retry = { ...standing, state: memoryRelayState(stepInput) };
+      await play(events.slice(stepped, completed), retry);
+
+      const journal = (await rows(target)).messageRows.find(
+        (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+      );
+      assert.equal(journal?.finishedAt, null);
+      const abandoned = journal?.parts.find(
+        (part) => isToolUIPart(part) && part.toolCallId === "call-abandoned",
+      );
+      assert.ok(abandoned && isToolUIPart(abandoned));
+      assert.equal(abandoned.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+      assert.partialDeepStrictEqual(abandoned.output, { status: UNKNOWN_ACTION_STATUS });
+
+      await play(events.slice(completed), retry);
+      const { turnRows, messageRows } = await rows(target);
+      assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
+      const answer = messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
+      assert.deepEqual(
+        answer?.parts.flatMap((part) => (isToolUIPart(part) ? [part.toolCallId] : [])),
+        ["call-1"],
+      );
+      assert.deepEqual(refusals, []);
     }),
 );
 

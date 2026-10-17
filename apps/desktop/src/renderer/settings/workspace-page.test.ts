@@ -34,6 +34,8 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -304,7 +306,6 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done(undefined));
     }
     case ACT_KIND.WORKSPACE_LEAVE:
-    case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
@@ -334,10 +335,7 @@ beforeEach(() => {
   automations = undefined;
   macRepositories = [];
   githubRepositories = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ act: answer });
 });
 
 afterEach(() => {
@@ -431,12 +429,10 @@ const buttons = (within: Element, words: string) =>
 const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
-/** The page's row naming `name` past its first row, the workspace's own, the reader's own beside its You. */
+/** The page's row naming `name`, the reader's own beside its You. */
 const rowNamed = (page: HTMLElement, name: string) =>
   [...page.querySelectorAll<HTMLElement>(".settings-row")].find(
-    (row) =>
-      row.closest(".settings-group") !== page.querySelector(".settings-group") &&
-      row.querySelector("strong")?.firstChild?.textContent === name,
+    (row) => row.querySelector("strong")?.firstChild?.textContent === name,
   ) ?? assert.fail(`no ${name} row`);
 
 /** The rows of the invitations still pending, by the line each wears. */
@@ -484,11 +480,13 @@ async function confirm(verb: string): Promise<void> {
 
 /** The page's first row: the workspace's tile, name, and line, its Rename, and its ⋯. */
 const identity = (page: HTMLElement) =>
-  page.querySelector<HTMLElement>(".settings-group .settings-row") ??
-  assert.fail("no identity row");
+  page.querySelector<HTMLElement>(".menu-row") ?? assert.fail("no identity row");
+
+/** The workspace's name, as the identity row's label says it. */
+const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
 
 /** Who shares the workspace and the account's role in it, as the identity row's line says it. */
-const roleLine = (page: HTMLElement) => identity(page).querySelector("small")?.textContent;
+const roleLine = (page: HTMLElement) => identity(page).querySelector("p")?.textContent;
 
 /** The renames the page asked for, by their payloads. */
 const renames = () =>
@@ -510,7 +508,7 @@ async function renameTo(page: HTMLElement, typed: string, key: string): Promise<
 test("an owner renames the workspace in place with its ends trimmed, and Escape or the same name sends nothing", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  assert.equal(identity(page).querySelector("strong")?.textContent, ACME.name);
+  assert.equal(nameShown(page), ACME.name);
   await renameTo(page, "  Acme Labs  ", "Escape");
   await renameTo(page, ACME.name, "Enter");
   await renameTo(page, "  Acme Labs  ", "Enter");
@@ -554,7 +552,7 @@ test("a personal workspace shows its owner's name with no Rename to its owner an
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...FIRST, role });
 
-    assert.equal(identity(page).querySelector("strong")?.textContent, FIRST.name);
+    assert.equal(nameShown(page), FIRST.name);
     assert.equal(buttons(page, "Rename").length, 0);
     assert.deepEqual(rowActions(identity(page)), ["Upload photo"]);
   }
@@ -793,8 +791,8 @@ test("while the members are being read the page holds itself back, and a read th
 
   assert.equal(heldBack, true);
   assert.equal(
-    container.querySelector('[role="alert"] .failure-note-words')?.textContent,
-    "The members could not be read.",
+    container.querySelector('[role="alert"]')?.textContent,
+    "The members could not be read.Retry",
   );
   refuseMembersRead = false;
   act(() => button(container, "Retry").click());
@@ -1433,6 +1431,8 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
 }
 
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
@@ -1470,15 +1470,12 @@ test("the owner invites an address as a role, sees it pending with its link to c
       ],
       [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
       [
-        ACT_KIND.WINDOW_COPY_TEXT,
-        { words: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com" },
-      ],
-      [
         ACT_KIND.WORKSPACE_INVITATION_CANCEL,
         { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },
       ],
     ],
   );
+  assert.deepEqual(copied, ["https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com"]);
 });
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
@@ -1654,8 +1651,8 @@ test("a workspaces read that failed says so with Retry, which asks for them agai
   act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
 
   assert.equal(
-    container.querySelector('[role="alert"] .failure-note-words')?.textContent,
-    "Your workspaces could not be read.",
+    container.querySelector('[role="alert"]')?.textContent,
+    "Your workspaces could not be read.Retry",
   );
   assert.equal(container.querySelector(".settings-reading"), null);
   act(() => button(container, "Retry").click());
@@ -1676,8 +1673,8 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
   assert.equal(
-    [...page.querySelectorAll('[role="alert"] .failure-note-words')].some(
-      (each) => each.textContent === "The invitations could not be read.",
+    [...page.querySelectorAll('[role="alert"]')].some(
+      (each) => each.textContent === "The invitations could not be read.Retry",
     ),
     true,
   );

@@ -1,7 +1,7 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { DocumentIcon, EmptyState } from "@luke/ui";
+import { DocumentIcon, EmptyState, useMenu } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -21,7 +21,7 @@ import { useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
@@ -240,7 +240,7 @@ export function InboxItemRow({
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
   const waitsOnTeammate = starter !== undefined && item.status === INBOX_STATUS.OPEN;
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
@@ -406,7 +406,7 @@ function ViewOptions({
   grouping: InboxGrouping;
   onGrouping: (grouping: InboxGrouping) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const choices: MenuAction[] = [
     {
       label: "Group by task",

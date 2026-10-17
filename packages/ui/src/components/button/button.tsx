@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode, Ref } from "react";
+import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
 
 /**
  * button.tsx -- the one button every app presses: a labelled Button and a glyph-alone IconButton, in one of five looks.
@@ -25,6 +25,10 @@ import type { MouseEvent, ReactNode, Ref } from "react";
  * follows its address, so it opens in a new tab, copies, and hands off as
  * any link does; it is never unavailable or busy, since a link that cannot
  * be followed is not drawn.
+ *
+ * An app's hint wraps a button and hands it the pointer and focus handlers
+ * it shows and goes on, and the chord it names (`HintProps`), which land on
+ * the button itself, so a reader is told the shortcut by the control.
  */
 
 /** What a press does, which is what a button looks like. */
@@ -60,23 +64,34 @@ type BusyProps =
       busyLabel: string;
     };
 
+/** What an app's hint hands the button it wraps: when to show and go, and the chord it names. */
+type HintProps = Pick<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "onPointerEnter" | "onPointerLeave" | "onPointerDown" | "onFocus" | "onBlur" | "aria-keyshortcuts"
+>;
+
 /** What every button takes, labelled or not. */
-type ButtonBase = BusyProps & {
-  variant?: ButtonVariant;
-  type?: ButtonType;
-  onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
-  disabled?: boolean | undefined;
-  /** Whether an unavailable button stays in the tab order, so a hint can say why it is unavailable. */
-  focusableWhenDisabled?: boolean | undefined;
-  id?: string | undefined;
-  ref?: Ref<HTMLButtonElement> | undefined;
-  /** The id of the words that say more of what it does. */
-  "aria-describedby"?: string | undefined;
-  /** The menu or popover it opens, and whether that stands open. */
-  "aria-haspopup"?: "menu" | "listbox" | "dialog" | undefined;
-  "aria-expanded"?: boolean | undefined;
-  "aria-controls"?: string | undefined;
-};
+type ButtonBase = BusyProps &
+  HintProps & {
+    variant?: ButtonVariant;
+    type?: ButtonType;
+    onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+    disabled?: boolean | undefined;
+    /** Whether an unavailable button stays in the tab order, so a hint can say why it is unavailable. */
+    focusableWhenDisabled?: boolean | undefined;
+    id?: string | undefined;
+    ref?: Ref<HTMLButtonElement> | undefined;
+    /** The id of the words that say more of what it does. */
+    "aria-describedby"?: string | undefined;
+    /** What more it says of its state, where no words on screen say it ("Filtered"). */
+    "aria-description"?: string | undefined;
+    /** The menu or popover it opens, and whether that stands open. */
+    "aria-haspopup"?: "menu" | "listbox" | "dialog" | undefined;
+    "aria-expanded"?: boolean | undefined;
+    "aria-controls"?: string | undefined;
+    /** Whether it goes to the page on show, which it is drawn and announced as. */
+    "aria-current"?: "page" | undefined;
+  };
 
 /** The attributes and handler a button carries for its state, shared by both kinds. */
 function stateProps(props: ButtonBase, name: string | undefined) {
@@ -92,9 +107,17 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     "aria-busy": props.busy === true ? true : undefined,
     "aria-label": busyName ?? name,
     "aria-describedby": props["aria-describedby"],
+    "aria-description": props["aria-description"],
     "aria-haspopup": props["aria-haspopup"],
     "aria-expanded": props["aria-expanded"],
     "aria-controls": props["aria-controls"],
+    "aria-current": props["aria-current"],
+    "aria-keyshortcuts": props["aria-keyshortcuts"],
+    onPointerEnter: props.onPointerEnter,
+    onPointerLeave: props.onPointerLeave,
+    onPointerDown: props.onPointerDown,
+    onFocus: props.onFocus,
+    onBlur: props.onBlur,
     "data-variant": props.variant ?? BUTTON_VARIANT.QUIET,
     onClick: (event: MouseEvent<HTMLButtonElement>) => {
       if (refusing) {

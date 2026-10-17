@@ -22,6 +22,8 @@
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
+  /* A settings row's pop-up stands in one column whatever value it names. */
+  --luke-select-field-width: 200px;
   --luke-field-gap: var(--luke-space-16);
   --luke-section-gap: var(--luke-space-16);
   --luke-page-inset: var(--luke-space-40);
@@ -42,8 +44,20 @@
 
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
+  /* Every row stands as tall as a label and its description need, with or
+     without the description, so a card of rows reads even rather than cramped. */
+  --luke-settings-row-min-height: 52px;
+  /* A compact row stands bare in a popover's own inset, a menu row's height. */
+  --luke-settings-row-compact-block: var(--luke-space-0);
+  --luke-settings-row-compact-inline: var(--luke-space-0);
+  --luke-settings-row-compact-min-height: 32px;
+  /* The window's settings groups stand further apart than its fields. */
+  --luke-settings-section-gap: var(--luke-space-32);
+
+  --luke-text-area-grow-max: 320px;
 
   --luke-dialog-confirm-width: 400px;
+  --luke-dialog-wide-width: 520px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
@@ -69,6 +83,7 @@
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
+  --luke-select-field-width: auto;
   --luke-field-gap: var(--luke-space-16);
   --luke-section-gap: var(--luke-space-16);
   --luke-page-inset: var(--luke-space-24);
@@ -89,8 +104,16 @@
 
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
+  --luke-settings-row-min-height: auto;
+  --luke-settings-row-compact-block: var(--luke-space-0);
+  --luke-settings-row-compact-inline: var(--luke-space-0);
+  --luke-settings-row-compact-min-height: auto;
+  --luke-settings-section-gap: var(--luke-section-gap);
+
+  --luke-text-area-grow-max: 320px;
 
   --luke-dialog-confirm-width: 400px;
+  --luke-dialog-wide-width: 520px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
