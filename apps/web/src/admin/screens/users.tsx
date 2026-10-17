@@ -4,6 +4,15 @@ import {
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   type AdminMetricsWindow,
 } from "@luke/service/admin/http";
+import {
+  COLLECTION_STATE,
+  TEXT_ELEMENT,
+  TEXT_FIELD_TYPE,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextField,
+} from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useEffect, useState } from "react";
@@ -11,8 +20,7 @@ import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accou
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, RefreshFailureNotice, WindowSwitcher } from "../chrome/controls";
 import { RosterNote } from "../chrome/notes";
-import { PageHeader, type ViewerAccount } from "../chrome/page-header";
-import { PageSkeleton } from "../chrome/page-skeleton";
+import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header";
 import {
   FAVORITE_PATH,
   SEARCH_DEBOUNCE_MS,
@@ -22,7 +30,6 @@ import {
   USERS_PATH,
   windowedReadPath,
 } from "../routing";
-import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import {
   type AdminReader,
   type AdminWriter,
@@ -32,6 +39,9 @@ import {
 } from "../use-admin-read";
 
 const USERS_ERROR = "The users endpoint did not answer.";
+
+/** What the roster says when no account answers the search. */
+const USERS_EMPTY = "No account matches.";
 
 // SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
 const readUserList: AdminReader<AdminUserList> = async (response) =>
@@ -49,13 +59,6 @@ const writeFavorite: AdminWriter = async (id, favorite, signal) => {
   );
   return response.ok;
 };
-
-/** The roster's own sections. */
-const USERS_SHAPES: readonly SkeletonShape[] = [
-  { kind: SKELETON_SHAPE.SEARCH },
-  { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 5, starGutter: true },
-  { kind: SKELETON_SHAPE.STATIC, node: <RosterNote /> },
-];
 
 /**
  * The roster's own columns beside the shared ones: when the account joined
@@ -76,6 +79,25 @@ const ROSTER_DETAIL_COLUMNS: readonly AccountsDetailColumn<AdminUserListRow>[] =
     sortValue: (row) => row.lastSeenAt,
   },
 ];
+
+/** What a refresh in flight dims, said busy to a reader until the answer lands. */
+function Refreshing({
+  refreshing,
+  children,
+}: {
+  refreshing: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      className="transition-opacity duration-150 data-[busy=true]:opacity-50"
+      data-busy={refreshing}
+      aria-busy={refreshing}
+    >
+      {children}
+    </div>
+  );
+}
 
 export function UsersScreen({
   hideAdmins,
@@ -131,22 +153,43 @@ export function UsersScreen({
     })),
   );
 
+  // The title, its controls, and the search stand the same on the loading
+  // page and the loaded one, so the box takes typing before the first answer.
+  const page = (
+    content: Pick<
+      React.ComponentProps<typeof AdminCollectionPage>,
+      "filters" | "state" | "empty" | "children"
+    >,
+  ) =>
+    frame(
+      <AdminCollectionPage
+        title="Users"
+        controls={
+          <>
+            <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+            <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+          </>
+        }
+        account={account}
+        onSignOut={signOut}
+        loadingLabel="Loading…"
+        {...content}
+      />,
+    );
+  const search = (
+    <TextField
+      type={TEXT_FIELD_TYPE.SEARCH}
+      label="Search accounts by name or email"
+      placeholder="Search by name or email…"
+      maxLength={ADMIN_USERS_SEARCH_MAX_LENGTH}
+      value={query}
+      onChange={changeQuery}
+    />
+  );
+
   switch (state.status) {
     case "loading":
-      return frame(
-        <PageSkeleton
-          title="Users"
-          account={account}
-          onSignOut={signOut}
-          controls={
-            <>
-              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-            </>
-          }
-          shapes={USERS_SHAPES}
-        />,
-      );
+      return page({ filters: search, state: COLLECTION_STATE.LOADING });
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
@@ -169,52 +212,43 @@ export function UsersScreen({
       const rows = needle
         ? list.rows.filter((row) => `${row.name} ${row.email}`.toLowerCase().includes(needle))
         : list.rows;
+      const failure = state.refreshFailure;
+      // Note that a miss may lie past a truncated roster's rows, so its note stays.
+      const truncatedTo = list.total > list.rows.length ? list.rows.length : undefined;
+      const notice = (
+        <RefreshFailureNotice failure={failure} refreshing={refreshing} onRetry={reload} />
+      );
 
-      return frame(
-        <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
-          <PageHeader
-            title="Users"
-            account={account}
-            onSignOut={signOut}
-            controls={
-              <>
-                <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-                <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-              </>
-            }
-          />
-
-          <RefreshFailureNotice
-            failure={state.refreshFailure}
-            refreshing={refreshing}
-            onRetry={reload}
-          />
-
-          <div
-            className="transition-opacity duration-150 data-[busy=true]:opacity-50"
-            data-busy={refreshing}
-            aria-busy={refreshing}
-          >
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-              <input
-                type="search"
-                value={query}
-                maxLength={ADMIN_USERS_SEARCH_MAX_LENGTH}
-                placeholder="Search by name or email…"
-                aria-label="Search accounts by name or email"
-                className="min-h-11 w-full max-w-[320px] rounded-md border border-border bg-card px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2"
-                onChange={(event) => changeQuery(event.target.value)}
-              />
-              <span className="text-xs text-muted-foreground tabular-nums">
+      return page({
+        filters: (
+          <>
+            {search}
+            <span className="ms-auto tabular-nums">
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                 {formatNumber(rows.length)} of {formatNumber(list.total)} accounts
                 {list.search === undefined ? "" : " matching"}
-              </span>
-            </div>
-            <div className="mt-4">
+              </Text>
+            </span>
+          </>
+        ),
+        state: rows.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY,
+        empty: (
+          <Refreshing refreshing={refreshing}>
+            {notice}
+            <Text tone={TEXT_TONE.MUTED}>{USERS_EMPTY}</Text>
+            {truncatedTo === undefined ? null : (
+              <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+            )}
+          </Refreshing>
+        ),
+        children: (
+          <Refreshing refreshing={refreshing}>
+            {notice}
+            <div className={failure === undefined ? undefined : "mt-4"}>
               <AccountsTable
                 rows={rows}
                 windowDays={list.windowDays}
-                emptyText="No account matches."
+                emptyText={USERS_EMPTY}
                 minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
                 onOpen={onOpenAccount}
                 detailColumns={ROSTER_DETAIL_COLUMNS}
@@ -222,13 +256,10 @@ export function UsersScreen({
                 favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
               />
             </div>
-            <RosterNote
-              truncatedTo={list.total > list.rows.length ? list.rows.length : undefined}
-              searched={list.search !== undefined}
-            />
-          </div>
-        </main>,
-      );
+            <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+          </Refreshing>
+        ),
+      });
     }
   }
 }

@@ -53,6 +53,7 @@ export const CALL_KIND = {
   INBOX_POST: "inbox-post",
   INBOX_CLOSE: "inbox-close",
   INBOX_READ: "inbox-read",
+  INBOX_REPLY: "inbox-reply",
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
@@ -62,6 +63,9 @@ export const CALL_KIND = {
   START_AGENT: "start-agent",
   ARCHIVE_AGENT: "archive-agent",
   UNARCHIVE_AGENT: "unarchive-agent",
+  /** A list of the models a coding agent may be started on (`list_models`). */
+  LIST_MODELS: "list-models",
+  STOP_AGENT: "stop-agent",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
   READ_PAGE: "read-page",
@@ -96,6 +100,7 @@ export const CALL_WORDS = {
   [CALL_KIND.INBOX_POST]: { verb: "Posted to your inbox:", code: false },
   [CALL_KIND.INBOX_CLOSE]: { verb: "Closed in your inbox:", code: false },
   [CALL_KIND.INBOX_READ]: { verb: "Read your inbox", code: false },
+  [CALL_KIND.INBOX_REPLY]: { verb: "Replied in your inbox:", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },
@@ -105,6 +110,8 @@ export const CALL_WORDS = {
   [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
   [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived the coding agent", code: false },
   [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
+  [CALL_KIND.LIST_MODELS]: { verb: "Listed the models", code: false },
+  [CALL_KIND.STOP_AGENT]: { verb: "Stopped the coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
   [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },
@@ -120,7 +127,7 @@ const ON_YOUR_MAC = "On your Mac";
  * How a call about one coding agent says what it did where its row names
  * the agent by its chip: the verb alone, the chip standing in the place of
  * "the coding agent", and whether the row still says its subject after the
- * chip. Note that a read, an archive, and an unarchive say none, because
+ * chip. Note that a read, an archive, an unarchive, and a stop say none, because
  * their subject is the agent itself, which the chip already names, while a
  * message and a start keep the words they sent as the line's preview.
  */
@@ -130,6 +137,7 @@ const AGENT_CALL_WORDS = {
   [CALL_KIND.START_AGENT]: { verb: "Started", subject: true },
   [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived", subject: false },
   [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived", subject: false },
+  [CALL_KIND.STOP_AGENT]: { verb: "Stopped", subject: false },
 } as const satisfies Partial<Record<CallKind, { verb: string; subject: boolean }>>;
 
 type AgentCallKind = keyof typeof AGENT_CALL_WORDS;

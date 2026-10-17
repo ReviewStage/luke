@@ -1,18 +1,17 @@
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
+import type { Effect } from "effect";
 import { act } from "react";
-import { mountComposer } from "../renderer/plan-editor/composer-editor";
-import { mountPlanEditor } from "../renderer/plan-editor/plan-editor";
+import { SIDE_BUNDLES } from "../renderer/bundle-loader";
+import { bundleLanded } from "./side-bundles";
 
 /**
  * composer.ts -- an agent's message box under jsdom: the editor bundle there as the panel finds it, and words typed into the box's editor.
  *
- * `installEditorBundle` sets the editor bundle on `window` as its script
- * would (`../renderer/plan-editor/index.ts`), so a box drawn after it mounts
- * its editor at once rather than waiting on a script jsdom never runs; a
- * test of the box before the bundle lands calls it as the script would
- * have run. jsdom lays nothing out and gives a range no rectangles, which the
- * editor asks for as it keeps the caret in view, so `installEditorLayout`
+ * `editorBundleLanded` imports the editor bundle
+ * (`../renderer/plan-editor/index.ts`) as the panel does after its first
+ * paint, so a box drawn after it has landed mounts its editor at once.
+ * jsdom lays nothing out and gives a range no rectangles, which the editor asks for as it keeps the caret in view, so `installEditorLayout`
  * answers an empty one, as a page with no layout would. And jsdom has no
  * `beforeinput`, so typing by keyboard events writes nothing into an
  * editor; `typeInComposer` types as the editor's own input does, a
@@ -36,10 +35,10 @@ export const QUIET_COMPOSER = {
   followsUp: true,
 } as const;
 
-/** The editor bundle on `window`, as its script sets it once it has run. */
-export function installEditorBundle(): void {
-  window.lukePlanEditor = { mount: mountPlanEditor, mountComposer };
-}
+/** Imports the editor bundle and settles once it has landed, as the panel lands it after its first paint. */
+export const editorBundleLanded: Effect.Effect<unknown, Error> = bundleLanded(
+  SIDE_BUNDLES.planEditor,
+);
 
 /** Gives a range the empty rectangles a page with no layout would, which jsdom leaves out. */
 export function installEditorLayout(): void {

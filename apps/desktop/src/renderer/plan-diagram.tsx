@@ -1,16 +1,14 @@
 import { useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type ReactNode, useEffect, useReducer, useState, useSyncExternalStore } from "react";
-import { bundleAtom } from "./bundle-loader";
 import {
   DIAGRAM_APPEARANCE,
-  DIAGRAM_ASSET,
   DIAGRAM_DRAWING,
   type DiagramAppearance,
   type DiagramDrawing,
   type DiagramModule,
-  diagramModuleNow,
-} from "./diagram/contract";
+} from "@luke/ui/diagram-contract";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { type ReactNode, useEffect, useReducer, useState, useSyncExternalStore } from "react";
+import { DIAGRAM_REFUSED_LINE, useSideBundles } from "./bundle-loader";
 
 /**
  * plan-diagram.tsx -- a plan's ```` ```mermaid ```` fence drawn as its diagram: the diagram bundle loaded the first time one is shown, each picture kept by its code and appearance, and the figure the read view and the editor's preview draw it in.
@@ -25,21 +23,11 @@ import {
  * of words is the one thing the recording's masking cannot reach.
  */
 
-/** What a fence whose code Mermaid refused says over its code. */
-const DIAGRAM_REFUSED_LINE = "This diagram could not be drawn.";
-
 /** The query the window's appearance is read off, as the whiteboard's is. */
 const DARK_APPEARANCE = "(prefers-color-scheme: dark)";
 
 /** How many pictures the window keeps in each appearance, the oldest let go first; enough for every diagram in a plan, and the drafts the editor's preview drew. */
 const HELD_PICTURES = 64;
-
-/** The diagram bundle, loaded once per window (`./bundle-loader.ts`). */
-const diagramBundleAtom = bundleAtom(
-  { script: DIAGRAM_ASSET.SCRIPT, module: true },
-  diagramModuleNow,
-  DIAGRAM_REFUSED_LINE,
-);
 
 /** Each drawing the window holds, by appearance and then by code, oldest first. */
 const drawn = new Map<DiagramAppearance, Map<string, DiagramDrawing>>();
@@ -109,7 +97,7 @@ function useAppearance(): DiagramAppearance {
  * could not load refuses every code, so each fence stands as its code.
  */
 function useDrawing(code: string, appearance: DiagramAppearance): DiagramDrawing | undefined {
-  const bundle = useAtomValue(diagramBundleAtom);
+  const bundle = useAtomValue(useSideBundles().diagram);
   const held = heldDrawing(appearance, code);
   const [, landed] = useReducer((count: number) => count + 1, 0);
   useEffect(() => {

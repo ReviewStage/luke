@@ -1,5 +1,5 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
 
 /**
  * combobox.tsx -- a text field whose words narrow a list of options under it, which the keys move through while the caret stays in the field.
@@ -155,6 +155,7 @@ export function Combobox({
   ref?: Ref<HTMLInputElement> | undefined;
 }): React.JSX.Element {
   const listId = useId();
+  const list = useRef<HTMLDivElement>(null);
   const options = groups.flatMap((group) => group.options);
   const shown = open && options.length > 0;
   const at = Math.min(Math.max(active, 0), options.length - 1);
@@ -165,8 +166,11 @@ export function Combobox({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (shown && event.key === "Escape") event.stopPropagation();
-    if (composing(event)) return;
+    // Note that an Escape an input method is composing with is kept from the
+    // surface behind even with the list shut, because it cancels candidates.
+    const ime = composing(event);
+    if (event.key === "Escape" && (shown || ime)) event.stopPropagation();
+    if (ime) return;
     const moved = shown ? movedTo(event.key, at, options.length) : undefined;
     if (moved !== undefined) {
       event.preventDefault();
@@ -183,6 +187,18 @@ export function Combobox({
     if (shown && !event.metaKey && !event.ctrlKey) choose(at);
     else onEnter?.();
   };
+
+  // Note that the active option is scrolled into the list's own view by
+  // hand, because the caret stays in the field, which no browser scrolls
+  // the list for, and `scrollIntoView` would scroll every box around it.
+  useLayoutEffect(() => {
+    const box = list.current;
+    const row = shown ? document.getElementById(optionId(at)) : null;
+    if (box === null || row === null) return;
+    if (row.offsetTop < box.scrollTop) box.scrollTop = row.offsetTop;
+    const bottom = row.offsetTop + row.offsetHeight - box.clientHeight;
+    if (bottom > box.scrollTop) box.scrollTop = bottom;
+  });
 
   let offset = 0;
   const runs = groups.map((group) => {
@@ -215,6 +231,7 @@ export function Combobox({
       />
       {shown ? (
         <div
+          ref={list}
           id={listId}
           className="luke-combobox-list"
           role="listbox"

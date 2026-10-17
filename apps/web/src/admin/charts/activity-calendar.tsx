@@ -1,8 +1,10 @@
 import type { AdminDailyUsage } from "@luke/service/admin/admin-metrics";
+import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@luke/ui/activity-calendar";
 import { formatNumber, formatTooltipDay } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { ChartFrame } from "./chart-frame";
 import { USAGE_CHART } from "./usage-chart";
 
 /**
@@ -114,7 +116,8 @@ interface CalendarTooltipAnchor {
  * grid's dashed border, because a fade here would pose as a quiet day. A
  * hovered or focused cell answers at once with the charts' own tooltip —
  * one element the whole grid shares, anchored to the card and clamped to
- * its edges.
+ * its edges. The weekday and month labels are captions, as the other
+ * charts' axis ticks are.
  */
 export function ActivityCalendar({
   daily,
@@ -183,10 +186,33 @@ export function ActivityCalendar({
     tooltip.style.top = `${top}px`;
   }, [anchor]);
   return (
-    <div ref={cardRef} className="relative rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 text-xs text-muted-foreground">
-        This account's {spanLabel}, week by week
-      </div>
+    <ChartFrame
+      ref={cardRef}
+      title={`This account's ${spanLabel}, week by week`}
+      overlay={
+        anchor !== undefined ? (
+          <div
+            ref={tooltipRef}
+            className="pointer-events-none absolute z-10 grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl"
+          >
+            <div className="font-medium">{formatTooltipDay(anchor.day.day, partialDay)}</div>
+            <div className="flex w-full items-center gap-2">
+              <div
+                className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                style={{ backgroundColor: USAGE_CHART.calls.color }}
+              />
+              <div className="flex flex-1 items-center justify-between gap-4 leading-none">
+                <span className="text-muted-foreground">{USAGE_CHART.calls.label}</span>
+                <span className="font-mono font-medium text-foreground tabular-nums">
+                  {formatNumber(anchor.day.calls)}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : null
+      }
+      legend="Each cell is one UTC day across the weeks shown, whatever window is chosen above — a deeper fill is more hosted calls against the busiest day shown, and the dashed cell is today, still filling."
+    >
       <div ref={gridAreaRef}>
         {weeks.length === 0 ? null : (
           <div
@@ -200,17 +226,18 @@ export function ActivityCalendar({
           >
             <div aria-hidden="true" />
             {CALENDAR_WEEKDAY_LABELS.map((label) => (
-              <div
-                key={label}
-                className="self-center font-mono text-[10px] leading-none text-muted-foreground uppercase"
-              >
-                {label}
+              <div key={label} className="self-center">
+                <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                  {label}
+                </Text>
               </div>
             ))}
             {weeks.map((week, weekIndex) => (
               <Fragment key={week.weekStart}>
-                <div className="font-mono text-[10px] leading-4 whitespace-nowrap text-muted-foreground uppercase">
-                  {months[weekIndex]}
+                <div className="whitespace-nowrap">
+                  <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                    {months[weekIndex]}
+                  </Text>
                 </div>
                 {week.days.map((day, slot) =>
                   day === undefined ? (
@@ -231,31 +258,6 @@ export function ActivityCalendar({
           </div>
         )}
       </div>
-      <p className="mt-4 mb-0 text-xs text-muted-foreground">
-        Each cell is one UTC day across the weeks shown, whatever window is chosen above — a deeper
-        fill is more hosted calls against the busiest day shown, and the dashed cell is today, still
-        filling.
-      </p>
-      {anchor !== undefined ? (
-        <div
-          ref={tooltipRef}
-          className="pointer-events-none absolute z-10 grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl"
-        >
-          <div className="font-medium">{formatTooltipDay(anchor.day.day, partialDay)}</div>
-          <div className="flex w-full items-center gap-2">
-            <div
-              className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-              style={{ backgroundColor: USAGE_CHART.calls.color }}
-            />
-            <div className="flex flex-1 items-center justify-between gap-4 leading-none">
-              <span className="text-muted-foreground">{USAGE_CHART.calls.label}</span>
-              <span className="font-mono font-medium text-foreground tabular-nums">
-                {formatNumber(anchor.day.calls)}
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+    </ChartFrame>
   );
 }
