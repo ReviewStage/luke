@@ -1256,3 +1256,23 @@ test("a card moved by a status picked from its menu keeps the keyboard in its ne
   assert.equal(holding?.dataset.issueId, issue(1).id);
   assert.equal(holding?.closest<HTMLElement>("[data-issue-column]")?.dataset.issueColumn, "done");
 });
+
+test("a card moved once the developer has gone on to New issue takes no keyboard from its card", async () => {
+  standing = [issue(1), issue(2)];
+  heldChanges = [];
+  const held = heldChanges;
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  pickFrom("Status", "Done");
+  act(() => button("New issue").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  act(() => field.focus());
+  act(() => held[0]?.());
+  await settle();
+
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+  assert.equal(document.activeElement, composerField());
+});

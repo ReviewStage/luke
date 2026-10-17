@@ -108,6 +108,21 @@ function useChangeSaid(): (asked: IssueChange, sent: Promise<IssueView>) => Prom
     });
 }
 
+/**
+ * Whether the keyboard is still where a change from an issue's menu left it:
+ * on that issue's card or row, or on nothing once the answer moved the card
+ * away. A card a change moved keeps the keyboard only then, so one answered
+ * after the developer went on to another control takes nothing from it.
+ */
+function keyboardLeftWith(issueId: string): boolean {
+  const at = document.activeElement;
+  if (at === null || at === document.body) return true;
+  return (
+    at instanceof HTMLElement &&
+    at.closest<HTMLElement>("[data-issue-id]")?.dataset.issueId === issueId
+  );
+}
+
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
   plans,
@@ -125,8 +140,8 @@ function ListPage({
   focused: string | undefined;
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
-  /** Hands the keyboard to an issue's card or row wherever it is drawn next. */
-  onFocus: (issueId: string) => void;
+  /** Hands the keyboard to an issue's card or row wherever it is drawn next, or to none. */
+  onFocus: (issueId: string | undefined) => void;
   /** Opens the new issue's card; none while no workspace is listed to file one in. */
   onCompose: (() => void) | undefined;
   /** Opens the card with a board column's status chosen; none while no workspace is listed. */
@@ -143,12 +158,15 @@ function ListPage({
   useBoardKeys(root, plans.shown && onBoard);
   const open = (issue: Issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
   const said = useChangeSaid();
-  // Note that the card a change was picked from keeps the keyboard where the
-  // answer moves it, because its new column or group draws it anew, and the
-  // menu handed it the keyboard as it closed.
   const change = (issue: Issue, asked: IssueChange) => {
-    if (asked.archived === undefined) onFocus(issue.id);
-    return said(asked, issues.change({ issueId: issue.id, change: asked }));
+    const sent = said(asked, issues.change({ issueId: issue.id, change: asked }));
+    if (asked.archived !== undefined) return sent;
+    // Note that no card takes the keyboard while the change is out, so a card redrawn meanwhile takes it from nothing.
+    onFocus(undefined);
+    return sent.then((kept) => {
+      if (kept && keyboardLeftWith(issue.id)) onFocus(issue.id);
+      return kept;
+    });
   };
   const workspaceName = workspace?.name ?? "";
   return (

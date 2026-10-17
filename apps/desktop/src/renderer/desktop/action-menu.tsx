@@ -570,9 +570,7 @@ export function ActionMenu({
     onClose(true);
     action.onSelect();
   };
-  // Note that a submenu standing open draws its entry as this render's groups
-  // hold it, because its owner may draw them again while it stands, as a
-  // list read again moves what is checked.
+  // Note that an open submenu draws its entry from this render's groups, because its owner may redraw them while it stands.
   const submenuNow =
     submenu === undefined
       ? undefined
