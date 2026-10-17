@@ -13,14 +13,19 @@ import {
 import {
   AnchoredPopover,
   ArrowLeftIcon,
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   ChevronRightIcon,
   Chip,
   GearIcon,
+  IconButton,
   McpIcon,
   POPOVER_ALIGN,
   ProviderMark,
   SearchIcon,
+  Spinner,
+  Switch,
 } from "@luke/ui";
 import {
   namedServers,
@@ -43,8 +48,6 @@ import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
 import { Highlighted } from "../search-field";
-import { SPINNER_SIZE, SpinnerRing } from "../spinner";
-import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -87,7 +90,9 @@ import { Tooltip } from "../tooltip";
  * message starts it. Escape goes back one level, from a tool's page or a
  * server's, and otherwise closes the popover, and stops there so the panel behind stays open; a
  * second press of the button, and focus leaving it for another part of the
- * window, close it too.
+ * window, close it too. The button, the back, a row's switch and its
+ * Connect, Reopen, Cancel, Try again or Retry are `@luke/ui`'s, each pressed
+ * without taking the focus from the field.
  */
 
 /** The servers an agent is handed, as the button changes them. */
@@ -168,14 +173,8 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
       ) : null}
       {row.kind === SERVER_ROW.SIGNING_IN ? (
-        <span
-          className="luke-spinner agent-servers-waiting"
-          data-size={SPINNER_SIZE.INLINE}
-          role="status"
-          title={row.note}
-        >
-          <SpinnerRing />
-          <span className="visually-hidden">{row.note}</span>
+        <span className="agent-servers-waiting" title={row.note}>
+          <Spinner label={row.note ?? ""} />
         </span>
       ) : null}
       {row.problem !== undefined ? (
@@ -455,10 +454,9 @@ function ServersPopover({
       case SERVER_ROW.CONNECT:
       case SERVER_ROW.RECONNECT:
         return (
-          <button
-            type="button"
-            className="agent-servers-connect"
-            onMouseDown={keepFieldFocus}
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            keepFocus
             disabled={connecting === row.connection}
             onClick={(event) => {
               event.stopPropagation();
@@ -466,15 +464,14 @@ function ServersPopover({
             }}
           >
             {row.kind === SERVER_ROW.CONNECT ? SERVER_ACTION.CONNECT : SERVER_ACTION.RECONNECT}
-          </button>
+          </Button>
         );
       case SERVER_ROW.SIGNING_IN:
         return (
           <>
-            <button
-              type="button"
-              className="agent-servers-connect"
-              onMouseDown={keepFieldFocus}
+            <Button
+              variant={BUTTON_VARIANT.QUIET}
+              keepFocus
               disabled={connecting === row.connection}
               onClick={(event) => {
                 event.stopPropagation();
@@ -482,12 +479,10 @@ function ServersPopover({
               }}
             >
               {SIGN_IN_ACTION.REOPEN}
-            </button>
-            <button
-              type="button"
-              className="agent-servers-connect"
-              onMouseDown={keepFieldFocus}
-              data-tone="quiet"
+            </Button>
+            <Button
+              variant={BUTTON_VARIANT.QUIET}
+              keepFocus
               disabled={connecting === row.connection}
               onClick={(event) => {
                 event.stopPropagation();
@@ -495,15 +490,14 @@ function ServersPopover({
               }}
             >
               {SIGN_IN_ACTION.CANCEL}
-            </button>
+            </Button>
           </>
         );
       case SERVER_ROW.TRY_AGAIN:
         return (
-          <button
-            type="button"
-            className="agent-servers-connect"
-            onMouseDown={keepFieldFocus}
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            keepFocus
             disabled={connecting === row.connection}
             onClick={(event) => {
               event.stopPropagation();
@@ -511,21 +505,20 @@ function ServersPopover({
             }}
           >
             {SIGN_IN_ACTION.TRY_AGAIN}
-          </button>
+          </Button>
         );
       case SERVER_ROW.RETRY:
         return (
-          <button
-            type="button"
-            className="agent-servers-connect"
-            onMouseDown={keepFieldFocus}
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            keepFocus
             onClick={(event) => {
               event.stopPropagation();
               void statuses.read();
             }}
           >
             {SERVER_ACTION.RETRY}
-          </button>
+          </Button>
         );
       case SERVER_ROW.QUIET:
         return null;
@@ -624,15 +617,7 @@ function ServersPopover({
       <>
         <div className="agent-servers-page-head">
           <Tooltip label={PAGE.BACK}>
-            <button
-              type="button"
-              className="icon-button agent-servers-back"
-              aria-label={PAGE.BACK}
-              onMouseDown={keepFieldFocus}
-              onClick={back}
-            >
-              <ArrowLeftIcon />
-            </button>
+            <IconButton icon={<ArrowLeftIcon />} label={PAGE.BACK} keepFocus onClick={back} />
           </Tooltip>
           <ProviderMark provider={row.provider} />
           <span className="agent-servers-page-title">{row.name}</span>
@@ -676,7 +661,7 @@ function ServersPopover({
         tokens={pageTokens}
         backLabel={`Back to ${row.name} tools`}
         onBack={closeTool}
-        onPressStart={keepFieldFocus}
+        keepFocus
         bodyRef={toolBody}
         onBodyKeyDown={onToolKey}
       />
@@ -760,7 +745,6 @@ export function AgentServersButton({
   };
   const press = {
     ref: trigger,
-    "aria-label": SERVERS_LABEL,
     "aria-haspopup": "dialog",
     "aria-expanded": open,
     "aria-controls": open ? popoverId : undefined,
@@ -770,13 +754,14 @@ export function AgentServersButton({
   return (
     <div className="agent-servers" ref={root}>
       {face === undefined ? (
-        <Tooltip label={SERVERS_LABEL}>
-          <button type="button" className="icon-button agent-servers-button" {...press}>
-            <McpIcon />
-          </button>
-        </Tooltip>
+        // Note that the box, not the button, wears the class the composer's ⋯ finds the press by (`agent-composer.tsx`).
+        <span className="agent-servers-button">
+          <Tooltip label={SERVERS_LABEL}>
+            <IconButton icon={<McpIcon />} label={SERVERS_LABEL} {...press} />
+          </Tooltip>
+        </span>
       ) : (
-        <Chip look={CHIP_LOOK.FIELD} chevron {...press}>
+        <Chip look={CHIP_LOOK.FIELD} chevron aria-label={SERVERS_LABEL} {...press}>
           {face}
         </Chip>
       )}

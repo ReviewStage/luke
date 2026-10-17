@@ -15,6 +15,11 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
  * focus when it is handed it, for a roving stop: one of a group the
  * keyboard enters at one place and moves through by its own keys.
  *
+ * A button that keeps focus (`keepFocus`) leaves the focus where it is
+ * when a pointer presses it, so a field beside it that holds the keys, as a
+ * popover's search does, goes on hearing them; Tab still reaches it and
+ * hands it the focus as any button's.
+ *
  * A button unavailable is out of the tab order, unless it is
  * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
  * why, and refuses its press instead. A busy button keeps its width, its
@@ -85,6 +90,8 @@ type ButtonBase = BusyProps &
     focusableWhenDisabled?: boolean | undefined;
     /** Whether Tab stops on it; one that is not still takes the focus a roving group hands it. */
     tabbable?: boolean | undefined;
+    /** Whether a pointer's press leaves the focus where it is, as on a field beside it that holds the keys. */
+    keepFocus?: boolean | undefined;
     id?: string | undefined;
     ref?: Ref<HTMLButtonElement> | undefined;
     /** The id of the words that say more of what it does. */
@@ -98,6 +105,11 @@ type ButtonBase = BusyProps &
     /** Whether it goes to the page on show, which it is drawn and announced as. */
     "aria-current"?: "page" | undefined;
   };
+
+/** A pointer's press that leaves the focus where it is. */
+function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
+  event.preventDefault();
+}
 
 /** The attributes and handler a button carries for its state, shared by both kinds. */
 function stateProps(props: ButtonBase, name: string | undefined) {
@@ -123,6 +135,8 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     onPointerEnter: props.onPointerEnter,
     onPointerLeave: props.onPointerLeave,
     onPointerDown: props.onPointerDown,
+    // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
+    onMouseDown: props.keepFocus === true ? preventFocusMove : undefined,
     onFocus: props.onFocus,
     onBlur: props.onBlur,
     "data-variant": props.variant ?? BUTTON_VARIANT.QUIET,

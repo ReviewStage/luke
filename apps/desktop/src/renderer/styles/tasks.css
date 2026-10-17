@@ -4125,10 +4125,11 @@ button.skill-chip:hover,
   flex: none;
 }
 
-/* The + and the ⋯ each stand in a box of their own, which the queries
-   below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯ stands only
-   once the card is too narrow for every press. */
-.agent-composer-attach {
+/* The +, the MCP button and the ⋯ each stand in a box of their own, which
+   the queries below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯
+   stands only once the card is too narrow for every press. */
+.agent-composer-attach,
+.agent-servers-button {
   display: flex;
 }
 
@@ -5168,8 +5169,8 @@ button.agent-ref:hover .agent-ref-name {
    first, then one row per server under Connected and Not connected, and
    Manage in Settings pinned at its foot. A row is its mark, its name, how
    many tools it offers in the muted detail type, and at its end its switch,
-   or Connect in the accent's words rather than a bordered button, so the
-   rows to connect never outweigh the switches. A row that opens onto its
+   or Connect as Settings › Integrations draws it (`@luke/ui`'s Button), a
+   control's height inside the menu's row. A row that opens onto its
    tools shows its chevron while it holds the highlight; a row with nothing
    to press is dimmed as the menu's other disabled rows are. The list is
    taller than the searchable menu's, as tall as a server's page, so going
@@ -5200,7 +5201,7 @@ button.agent-ref:hover .agent-ref-name {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   margin-left: auto;
 }
 
@@ -5217,25 +5218,6 @@ button.agent-ref:hover .agent-ref-name {
 
 .agent-servers-row[data-highlighted="true"] .agent-servers-chevron {
   visibility: visible;
-}
-
-.agent-servers-connect {
-  height: 22px;
-  padding: 0 var(--space-6);
-  border-radius: var(--menu-row-radius);
-  background: none;
-  color: var(--message-sent);
-  font-size: 12.5px;
-  font-weight: 560;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.agent-servers-connect:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--message-sent) 12%, transparent);
-}
-
-.agent-servers-connect:disabled {
-  opacity: 0.5;
 }
 
 /* Why a connected server lists no tools, after its name in the attention
@@ -5256,24 +5238,15 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 /* A sign-in's line in the same place is no problem: never finished, in the
-   muted detail colour. One still waiting on the browser is its small ring
+   muted detail colour. One still waiting on the browser is the shared ring
    alone after the name, its words in its title, with Reopen and Cancel at
-   the row's end, Cancel in the muted colour beside the accent's Reopen. */
+   the row's end, as Settings › Integrations draws them. */
 .agent-servers-problem[data-tone="quiet"] {
   color: var(--text-secondary);
 }
 
-.agent-servers-row .agent-servers-waiting {
-  width: 12px;
-  height: 12px;
-}
-
-.agent-servers-connect[data-tone="quiet"] {
-  color: var(--text-secondary);
-}
-
-.agent-servers-connect[data-tone="quiet"]:hover:not(:disabled) {
-  background: var(--raised-strong);
+.agent-servers-waiting {
+  display: flex;
 }
 
 /* A tool a search found: its name in the code face at the row's size, and
@@ -5284,9 +5257,9 @@ button.agent-ref:hover .agent-ref-name {
   font-size: 12px;
 }
 
-/* A server's page, in the popover's place: back, its mark and name, its
-   count, and its switch at the end, over a hairline, at the search field's
-   height. */
+/* A server's page, in the popover's place: back (`@luke/ui`'s IconButton),
+   its mark and name, its count, and its switch at the end, over a hairline,
+   at the search field's height. */
 .agent-servers-page-head {
   display: flex;
   flex: 0 0 auto;
@@ -5301,15 +5274,6 @@ button.agent-ref:hover .agent-ref-name {
   width: var(--menu-glyph);
   height: var(--menu-glyph);
   flex: none;
-}
-
-.agent-servers-page-head .agent-servers-back {
-  --control-height: 24px;
-}
-
-.agent-servers-page-head .agent-servers-back svg {
-  width: 14px;
-  height: 14px;
 }
 
 .agent-servers-page-title {

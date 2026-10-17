@@ -131,7 +131,9 @@ async function opened(standing: IntegrationStatuses = statuses) {
       }),
     ),
   );
-  act(() => container.querySelector<HTMLButtonElement>(".agent-servers-button")?.click());
+  act(() =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]')?.click(),
+  );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

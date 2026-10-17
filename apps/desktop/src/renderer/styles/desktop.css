@@ -4042,17 +4042,8 @@ button.integration-tool-head:hover,
   border-bottom: 1px solid var(--hairline);
 }
 
-.integration-tool-detail-head:has(.integration-tool-back) {
+.integration-tool-detail-head:has(> .luke-button) {
   padding-left: var(--space-6);
-}
-
-.integration-tool-back {
-  --control-height: 24px;
-}
-
-.integration-tool-back svg {
-  width: 14px;
-  height: 14px;
 }
 
 .integration-tool-detail-title {
