@@ -344,7 +344,7 @@ async function choose(tab: HTMLElement, name: string): Promise<void> {
 function waiting(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll('[aria-busy="true"]')]
     .filter((each) => each.closest("[hidden]") === null)
-    .map((each) => each.querySelector(".visually-hidden")?.textContent ?? "");
+    .map((each) => each.textContent ?? "");
 }
 
 /** The words of every element the selector names, in order. */
