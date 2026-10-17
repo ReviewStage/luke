@@ -4,8 +4,10 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -15,7 +17,9 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
@@ -102,8 +106,12 @@ const ACCOUNT: SettingsPanelProps["account"] = {
   provider: "github",
 };
 
-/** A signed-in account's Settings over voice that can run, every press but a page's ignored. */
-function settingsProps(view: SettingsView, onViewChange: (view: SettingsView) => void) {
+/** A signed-in account's Settings over voice that can run, on the desktop unless the platform is named, every press but a page's ignored. */
+function settingsProps(
+  view: SettingsView,
+  onViewChange: (view: SettingsView) => void,
+  capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
+) {
   return {
     account: ACCOUNT,
     onSignOut: () => Promise.resolve(),
@@ -122,6 +130,7 @@ function settingsProps(view: SettingsView, onViewChange: (view: SettingsView) =>
       onOpenSettings: ignore,
       onTest: ignore,
     },
+    capabilities,
     updates: {
       update: {
         status: UPDATE_STATUS.IDLE,
@@ -156,11 +165,13 @@ function SettingsHarness({
   opensOn = SETTINGS_VIEW.ACCOUNT,
   call,
   onExit = ignore,
+  capabilities,
 }: {
   workspace?: WorkspaceSettingsControl;
   opensOn?: SettingsView;
   call?: CallCardInput;
   onExit?: () => void;
+  capabilities?: readonly HostCapability[];
 }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(opensOn);
   return createElement(DesktopSettings, {
@@ -180,7 +191,10 @@ function SettingsHarness({
       onBack: ignore,
       onForward: ignore,
     },
-    settings: { ...settingsProps(view, setView), ...(workspace ? { workspace } : undefined) },
+    settings: {
+      ...settingsProps(view, setView, capabilities),
+      ...(workspace ? { workspace } : undefined),
+    },
     call,
     onExit,
   });
@@ -198,14 +212,10 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
+  fakeAppPlatform(QUIET_PANEL);
 });
 
 afterEach(() => {
@@ -313,26 +323,103 @@ test("every moved option is drawn on its one page and on no other", () => {
   }
 });
 
-test("the Settings search finds each moved option under its new page", () => {
-  const page = mount(createElement(SettingsHarness));
+/** Types `words` into the sidebar's search, answering the pages whose result groups hold them. */
+function foundUnder(page: HTMLElement, words: string): (string | null)[] {
   const field = page.querySelector<HTMLInputElement>("input.settings-search-input");
   assert.ok(field, "the search field is drawn");
+  act(() => {
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return [...page.querySelectorAll("nav section[aria-label]")]
+    .filter((group) => group.textContent?.includes(words))
+    .map((group) => group.getAttribute("aria-label"));
+}
+
+test("the Settings search finds each moved option under its new page", () => {
+  const page = mount(createElement(SettingsHarness));
   for (const { words: option, page: home, ...named } of HOMES) {
     const words = "found" in named ? named.found : option;
-    act(() => {
-      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setValue?.call(field, words);
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    const groups = [...page.querySelectorAll("nav section[aria-label]")].filter((group) =>
-      group.textContent?.includes(words),
-    );
-    assert.deepEqual(
-      groups.map((group) => group.getAttribute("aria-label")),
-      [home],
-      `${words} is found under ${home}`,
-    );
+    assert.deepEqual(foundUnder(page, words), [home], `${words} is found under ${home}`);
   }
+});
+
+test("a platform without voice, notifications, Mac commands, or updates lists none of their pages, draws About without its Updates row, and its search finds none of them", () => {
+  const missing: readonly HostCapability[] = [
+    HOST_CAPABILITY.VOICE,
+    HOST_CAPABILITY.NOTIFICATIONS,
+    HOST_CAPABILITY.MAC_COMMANDS,
+    HOST_CAPABILITY.UPDATES,
+  ];
+  const capabilities = DESKTOP_CAPABILITIES.filter((each) => !missing.includes(each));
+  const page = mount(createElement(SettingsHarness, { capabilities }));
+
+  assert.deepEqual(pageGroups(page)[2], {
+    heading: "This Mac",
+    rows: ["Appearance", "About", "Keyboard shortcuts"],
+  });
+  const about = openPage(page, "About").textContent ?? "";
+  assert.equal(about.includes("Changelog"), true);
+  assert.equal(about.includes("Check for updates"), false);
+  for (const words of [
+    "Talk to Luke",
+    "Notify me when a coding agent finishes or needs me",
+    "Let agents run commands on this Mac",
+    "Updates",
+  ]) {
+    assert.deepEqual(foundUnder(page, words), [], `${words} is found nowhere`);
+  }
+});
+
+test("a platform with voice but without its own microphone route draws Voice without the Microphone permission row or Prefer the Mac's microphone, and its search finds neither", () => {
+  const voicePage = (capabilities: readonly HostCapability[]) => {
+    const page = mount(createElement(SettingsHarness, { capabilities }));
+    const words = openPage(page, "Voice").textContent ?? "";
+    const found = foundUnder(page, "Microphone");
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return { words, found };
+  };
+
+  const desktop = voicePage(DESKTOP_CAPABILITIES);
+  const without = voicePage(
+    DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MICROPHONE),
+  );
+
+  assert.ok(desktop.words.includes("Prefer the Mac's microphone"));
+  assert.ok(desktop.words.includes("Microphone"));
+  assert.ok(desktop.found.includes("Voice"));
+  assert.equal(without.words.includes("Prefer the Mac's microphone"), false);
+  assert.equal(without.words.includes("Microphone"), false);
+  assert.equal(without.found.includes("Voice"), false);
+});
+
+test("Keyboard shortcuts lists Show terminal and the Call group's chords only on a platform offering terminals and voice, and its search finds them only there", () => {
+  const listed = (capabilities: readonly HostCapability[]) => {
+    const page = mount(createElement(SettingsHarness, { capabilities }));
+    const words = openPage(page, "Keyboard shortcuts").textContent ?? "";
+    const found = foundUnder(page, "Show terminal");
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return {
+      terminal: words.includes("Show terminal"),
+      call: words.includes("Toggle microphone"),
+      found,
+    };
+  };
+  const without = DESKTOP_CAPABILITIES.filter(
+    (each) => each !== HOST_CAPABILITY.TERMINALS && each !== HOST_CAPABILITY.VOICE,
+  );
+
+  assert.deepEqual(listed(DESKTOP_CAPABILITIES), {
+    terminal: true,
+    call: true,
+    found: ["Keyboard shortcuts"],
+  });
+  assert.deepEqual(listed(without), { terminal: false, call: false, found: [] });
 });
 
 test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
@@ -418,13 +505,10 @@ function pressEscape(composing = false): void {
 /** Counts the searches the window reports opened. */
 function countSearchOpens() {
   let opens = 0;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      recordSurfaceEvent: (event: string) => {
-        if (event === PRODUCT_SURFACE_EVENT.SEARCH_OPEN) opens += 1;
-      },
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    recordSurfaceEvent: (event: string) => {
+      if (event === PRODUCT_SURFACE_EVENT.SEARCH_OPEN) opens += 1;
     },
   });
   return () => opens;
@@ -523,18 +607,15 @@ test("the Integrations page's search is cleared when another page is turned to",
 
 test("the plan template's version history keeps a call's card at the foot of its versions, as Settings' page list held it, and its way back asks for the call's plan", async () => {
   const sent: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: { kind: string }) => {
-        sent.push(request.kind);
-        return Promise.resolve(
-          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        );
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: { kind: string }) => {
+      sent.push(request.kind);
+      return Promise.resolve(
+        request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      );
     },
   });
   // The card's presses sent as `App` sends them, over the bridge.
@@ -577,17 +658,7 @@ test("the plan template's version history keeps a call's card at the foot of its
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   const row = pageButtons(page).find((each) => each.textContent === "Workspace");
   assert.ok(row, "the Workspace page is listed");

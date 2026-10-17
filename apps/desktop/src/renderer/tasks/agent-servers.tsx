@@ -455,7 +455,7 @@ function ServersPopover({
       case SERVER_ROW.RECONNECT:
         return (
           <Button
-            variant={BUTTON_VARIANT.OUTLINE}
+            variant={BUTTON_VARIANT.QUIET}
             keepFocus
             disabled={connecting === row.connection}
             onClick={(event) => {
@@ -481,7 +481,7 @@ function ServersPopover({
               {SIGN_IN_ACTION.REOPEN}
             </Button>
             <Button
-              variant={BUTTON_VARIANT.OUTLINE}
+              variant={BUTTON_VARIANT.QUIET}
               keepFocus
               disabled={connecting === row.connection}
               onClick={(event) => {
@@ -496,7 +496,7 @@ function ServersPopover({
       case SERVER_ROW.TRY_AGAIN:
         return (
           <Button
-            variant={BUTTON_VARIANT.OUTLINE}
+            variant={BUTTON_VARIANT.QUIET}
             keepFocus
             disabled={connecting === row.connection}
             onClick={(event) => {
@@ -510,7 +510,7 @@ function ServersPopover({
       case SERVER_ROW.RETRY:
         return (
           <Button
-            variant={BUTTON_VARIANT.OUTLINE}
+            variant={BUTTON_VARIANT.QUIET}
             keepFocus
             onClick={(event) => {
               event.stopPropagation();

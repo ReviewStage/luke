@@ -61,6 +61,8 @@ export const HOSTED_API_ERROR = {
   GITHUB_UNANSWERED: "github-unanswered",
   /** The task names no repository yet, so there is nothing for a coding agent to check out; the developer picks one first. */
   NO_REPOSITORY: "no-repository",
+  /** The branch a coding agent was asked to start on is none of the repository's on GitHub; nothing was started. */
+  BRANCH_NOT_FOUND: "branch-not-found",
   /** The message spells more characters than one message to a coding agent may; shortened, it is taken. */
   MESSAGE_TOO_LONG: "message-too-long",
   /** The agent's session is still coming up and could not take the message yet; the same message a moment later is taken. */

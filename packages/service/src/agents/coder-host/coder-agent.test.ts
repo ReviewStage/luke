@@ -13,8 +13,10 @@ import { toolsOf } from "../agent-runtime/tools.js";
 import { DEPLOYMENT_PRESENCE, lukeAccount } from "../brain-host/auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_AUTHENTICATOR,
   BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
   BRAIN_HOST_HEADER,
+  BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "../brain-host/bounds.js";
@@ -67,8 +69,9 @@ function deploymentOpening(turn: string): Request {
   });
 }
 
-test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, and its typed opening of the account's own conversation, are minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; a spoken turn, a stream, and another account's session are refused", async () => {
-  const channel = coderChannelInput(
+/** The coder channel over a store in which the account reaches its own session and conversation alone. */
+function coderChannel() {
+  return coderChannelInput(
     async () => undefined,
     {
       reachesSession: async (userId, sessionId) => userId === ACCOUNT && sessionId === OWN_SESSION,
@@ -81,14 +84,23 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
       presents: DEPLOYMENT_PRESENCE.ACCOUNT,
     },
   );
-  assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
-  const door = async (request: Request): Promise<DoorAnswer> => {
+}
+
+/** The channel's door as a request meets it: the principal admitted, or the word refused with. */
+function doorOf(channel: ReturnType<typeof coderChannelInput>) {
+  return async (request: Request): Promise<DoorAnswer> => {
     const answer = await routeAuth(request, channel.auth);
     if (!(answer instanceof Response)) return { admitted: answer };
     // SAFETY: eve's own refusal body, whose `error` field is the word the door threw.
     const refusal = (await answer.json()) as { error: string };
     return { refused: refusal.error };
   };
+}
+
+test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, and its typed opening of the account's own conversation, are minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; a spoken turn, a stream, and another account's session are refused", async () => {
+  const channel = coderChannel();
+  assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
+  const door = doorOf(channel);
 
   // The developer's own follow-up on the same session, as the agent's turn runs under it.
   const developer = await lukeAccount(async () => ACCOUNT)(
@@ -134,6 +146,24 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
   assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, BRAIN_HOST_TURN.TYPED)), {
     refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });
+});
+
+test("the deployment's cancel of a turn, which a continue started through start_agent stops its source with, is admitted on the named account's own session as the developer's own principal, with no row of the table, and refused on a session the account does not reach", async () => {
+  const door = doorOf(coderChannel());
+  const cancel = (sessionId: string) =>
+    new Request(`https://luke.test/eve/v1/session/${sessionId}/cancel`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${SECRET}`, [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT },
+    });
+
+  const { admitted } = await door(cancel(OWN_SESSION));
+  assert.ok(admitted);
+  assert.deepEqual(
+    [admitted.authenticator, admitted.principalType, admitted.principalId],
+    [BRAIN_HOST_AUTHENTICATOR.ACCOUNT, BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT, ACCOUNT],
+  );
+  assert.equal(admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER], BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: BRAIN_HOST_REFUSAL.NOT_OWNER });
 });
 
 test("an agent on a task is told of the task's links and pages, and one an automation started with no task of neither", () => {
