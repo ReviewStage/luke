@@ -78,6 +78,7 @@ import { readEither } from "@luke/wire/effect";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
+import { noNetworkHttpClient } from "./testing/no-network.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -856,7 +857,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           yield* standing.closing ?? Effect.void;
           standing.about = undefined;
         }),
-    });
+    }).pipe(Effect.provide(noNetworkHttpClient));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = tasks.methods[method];
       assert.ok(handler, `no handler for ${method}`);

@@ -24,6 +24,7 @@ import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
@@ -103,6 +104,7 @@ export const hostAssemblyLayer: Layer.Layer<
   | FileSystem.FileSystem
   | Path.Path
   | ChildProcessSpawner.ChildProcessSpawner
+  | HttpClient.HttpClient
 > = Layer.effect(
   HostAssemblyTag,
   Effect.gen(function* () {

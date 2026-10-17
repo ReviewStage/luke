@@ -5,6 +5,7 @@ import { ConfigProvider, Effect, Layer, Ref } from "effect";
 import { TestClock } from "effect/testing";
 import { composeMacCommands, type MacCommandClient } from "./compose-mac-commands.js";
 import { Environment, reporterLayer } from "./effect/seams.js";
+import { noNetworkHttpClient } from "./testing/no-network.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 /**
@@ -44,6 +45,7 @@ const machine = (spawner: ReturnType<typeof scriptedSpawner>) =>
     ),
     reporterLayer(() => undefined),
     spawner.layer,
+    noNetworkHttpClient,
   );
 
 it.effect("with the setting off, or no account signed in, the service is never read", () =>

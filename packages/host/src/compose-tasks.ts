@@ -109,6 +109,7 @@ import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
   Clock,
+  Context,
   Data,
   Duration,
   Effect,
@@ -122,8 +123,7 @@ import {
   type Scope,
   Semaphore,
 } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -420,8 +420,10 @@ export interface TasksComposer extends Composer {
  */
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
   dependencies: TasksDependencies,
-): Effect.fn.Return<TasksComposer, never, Scope.Scope> {
+): Effect.fn.Return<TasksComposer, never, Scope.Scope | HttpClient.HttpClient> {
   const { kernel, account, client, conversations, endTaskCall } = dependencies;
+  /** The host's own HTTP client, which every ask of the service below is provided. */
+  const httpClient = Context.make(HttpClient.HttpClient, yield* HttpClient.HttpClient);
   const idleView = (): TasksView => IDLE_TASKS_VIEW;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -518,7 +520,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   const readList = Effect.gen(function* () {
-    const listed = yield* Effect.provide(client.list(), FetchHttpClient.layer);
+    const listed = yield* Effect.provide(client.list(), httpClient);
     // A failed read keeps the list it last read: the panel says the read
     // failed beside the tasks it already drew rather than emptying them.
     write(
@@ -573,7 +575,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
     yield* Effect.provide(
       Effect.all([workspaces, github], { concurrency: "unbounded", discard: true }),
-      FetchHttpClient.layer,
+      httpClient,
     );
   });
 
@@ -588,13 +590,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   // A failed read keeps the pins it last read, as a failed list read keeps the tasks.
   const readRepositoryPins = Effect.gen(function* () {
-    const pins = yield* Effect.provide(client.repositoryPins(), FetchHttpClient.layer);
+    const pins = yield* Effect.provide(client.repositoryPins(), httpClient);
     if (pins !== undefined) write({ repositoryPins: pins });
   });
 
   // A failed read keeps the sections it last read, as the pins' does.
   const readTaskSections = Effect.gen(function* () {
-    const sections = yield* Effect.provide(client.taskSections(), FetchHttpClient.layer);
+    const sections = yield* Effect.provide(client.taskSections(), httpClient);
     if (sections !== undefined) write({ taskSections: sections });
   });
 
@@ -608,7 +610,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.gen(function* () {
       const held = heldTaskOf(taskId);
       if (held === undefined) write({ document: { status: TASKS_READ.READING } });
-      const opened = yield* Effect.provide(client.open(taskId), FetchHttpClient.layer);
+      const opened = yield* Effect.provide(client.open(taskId), httpClient);
       // Another task opened while this read was out: its answer is not the panel's any more.
       if (view.activeTaskId !== taskId) return;
       if (opened.ok) {
@@ -631,7 +633,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** Reads the active task's board; a failed read keeps the board drawn. */
   function readBoard(taskId: string) {
     return Effect.gen(function* () {
-      const board = yield* Effect.provide(client.readBoard(taskId), FetchHttpClient.layer);
+      const board = yield* Effect.provide(client.readBoard(taskId), httpClient);
       if (board === undefined || view.activeTaskId !== taskId) return;
       write({ board });
     });
@@ -647,10 +649,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.gen(function* () {
       const held = view.transcript?.transcript;
       if (held === undefined) write({ transcript: { status: TASKS_READ.READING } });
-      const transcript = yield* Effect.provide(
-        client.readTranscript(taskId),
-        FetchHttpClient.layer,
-      );
+      const transcript = yield* Effect.provide(client.readTranscript(taskId), httpClient);
       if (view.activeTaskId !== taskId) return;
       if (transcript !== undefined) {
         write({ transcript: { status: TASKS_READ.READY, transcript } });
@@ -761,7 +760,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function readPages(taskId: string) {
     return Effect.gen(function* () {
-      const pages = yield* Effect.provide(client.readPages(taskId), FetchHttpClient.layer);
+      const pages = yield* Effect.provide(client.readPages(taskId), httpClient);
       if (pages === undefined || view.activeTaskId !== taskId) return;
       const { pages: _held, ...rest } = view;
       view = pages.length === 0 ? rest : { ...rest, pages };
@@ -778,7 +777,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function readWork(taskId: string) {
     return Effect.gen(function* () {
-      const stored = yield* Effect.provide(client.readWork(taskId), FetchHttpClient.layer);
+      const stored = yield* Effect.provide(client.readWork(taskId), httpClient);
       if (stored === undefined || view.activeTaskId !== taskId) return;
       const work = withPage(stored.turns);
       const oldest = work[0]?.turnId;
@@ -799,7 +798,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.gen(function* () {
       const before = view.workEarlier;
       if (before === undefined) return;
-      const stored = yield* Effect.provide(client.readWork(taskId, before), FetchHttpClient.layer);
+      const stored = yield* Effect.provide(client.readWork(taskId, before), httpClient);
       if (stored === undefined || view.activeTaskId !== taskId) return;
       writeWork({
         work: withPage(stored.turns),
@@ -811,7 +810,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** One page of a task's conversation, or why the service did not answer it. */
   function askConversation(taskId: string, page: { after?: string; before?: string }) {
     return Effect.flatMap(
-      Effect.provide(conversations.taskMessages(taskId, page), FetchHttpClient.layer),
+      Effect.provide(conversations.taskMessages(taskId, page), httpClient),
       (answer) =>
         "failure" in answer
           ? Effect.fail(new ConversationUnanswered({ failure: answer.failure }))
@@ -895,7 +894,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       if (before === undefined) return;
       const answer = yield* Effect.provide(
         conversations.taskMessages(taskId, { before }),
-        FetchHttpClient.layer,
+        httpClient,
       );
       const held = view.conversation;
       // The task was left, or opened again, while this read was out.
@@ -1026,7 +1025,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function markTask(taskId: string, marks: TaskMarks) {
     return serial(
       Effect.gen(function* () {
-        const marked = yield* Effect.provide(client.mark(taskId, marks), FetchHttpClient.layer);
+        const marked = yield* Effect.provide(client.mark(taskId, marks), httpClient);
         if (marked === undefined) return { changed: false };
         takeMarks(marked);
         return { changed: true };
@@ -1045,7 +1044,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
     moves: { readonly tasks: boolean },
   ): Effect.Effect<WorkspaceCallResult<Answer>> {
-    return Effect.tap(Effect.provide(call, FetchHttpClient.layer), () =>
+    return Effect.tap(Effect.provide(call, httpClient), () =>
       moves.tasks
         ? Effect.all([readWorkspaces, serial(readList)], { concurrency: "unbounded" })
         : readWorkspaces,
@@ -1062,7 +1061,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
   ): Effect.Effect<TasksWorkspaceAnswer> {
     return Effect.gen(function* () {
-      const written = yield* Effect.provide(call, FetchHttpClient.layer);
+      const written = yield* Effect.provide(call, httpClient);
       if (written.ok) {
         const answered = written.answer;
         write({
@@ -1167,7 +1166,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, callId, ...page } = read.success;
         const answer = yield* Effect.provide(
           conversations.taskMessages(taskId, page, callId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<CodingAgentMessagesAnswerView>(answer);
       }),
@@ -1181,10 +1180,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { taskId, ...window } = read.success;
-        const answer = yield* Effect.provide(
-          client.readFile(taskId, window),
-          FetchHttpClient.layer,
-        );
+        const answer = yield* Effect.provide(client.readFile(taskId, window), httpClient);
         if (answer === undefined) {
           return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
@@ -1212,7 +1208,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           "planId" in asked
             ? client.readTree(asked.planId, folder)
             : client.readRepositoryTree(asked, folder),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksTreeAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
@@ -1232,7 +1228,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const asked = read.success;
         const answer = yield* Effect.provide(
           "planId" in asked ? client.readSkills(asked.planId) : client.readRepositorySkills(asked),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksSkillsAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
@@ -1252,7 +1248,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { number, ...place } = read.success;
         const answer = yield* Effect.provide(
           client.readRepositoryPullRequest(place, number),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksPullRequestAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
@@ -1269,10 +1265,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksIssueAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         const { number, ...place } = read.success;
-        const answer = yield* Effect.provide(
-          client.readRepositoryIssue(place, number),
-          FetchHttpClient.layer,
-        );
+        const answer = yield* Effect.provide(client.readRepositoryIssue(place, number), httpClient);
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A page of the history, and a revision beside the one before it, are
@@ -1290,10 +1283,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksRevisionsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         const { taskId, before } = read.success;
-        const page = yield* Effect.provide(
-          client.readRevisions(taskId, before),
-          FetchHttpClient.layer,
-        );
+        const page = yield* Effect.provide(client.readRevisions(taskId, before), httpClient);
         return carried<TasksRevisionsAnswer>(page ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     [GATEWAY_METHOD.TASKS_REVISION]: (params) =>
@@ -1306,7 +1296,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         const revision = yield* Effect.provide(
           client.readRevision(read.success.taskId, read.success.seq),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksRevisionAnswer>(
           revision === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { revision },
@@ -1324,7 +1314,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, pageId, version } = read.success;
         const page = yield* Effect.provide(
           client.readPageVersion(taskId, pageId, version),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksPageAnswer>(
           page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
@@ -1337,10 +1327,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) return yield* invalid("reading a plan's pages names the plan");
         if (!gate()) return carried<TasksPagesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const pages = yield* Effect.provide(
-          client.readPages(read.success.taskId),
-          FetchHttpClient.layer,
-        );
+        const pages = yield* Effect.provide(client.readPages(read.success.taskId), httpClient);
         return carried<TasksPagesAnswer>(
           pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
         );
@@ -1357,7 +1344,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         const picture = yield* Effect.provide(
           client.readPicture(read.success.planId, read.success.attachmentId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksPictureAnswer>(picture);
       }),
@@ -1373,7 +1360,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         const kept = yield* Effect.provide(
           client.keepPicture(read.success.planId, read.success.picture),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksPictureKeepAnswer>(kept);
       }),
@@ -1388,10 +1375,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, seq } = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const restored = yield* Effect.provide(
-              client.restore(taskId, seq),
-              FetchHttpClient.layer,
-            );
+            const restored = yield* Effect.provide(client.restore(taskId, seq), httpClient);
             if (restored === undefined) return { restored: false };
             restoredFence = { taskId, at: restored.updatedAt };
             takeAnswered(restored);
@@ -1423,7 +1407,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const request = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const started = yield* Effect.provide(client.create(request), FetchHttpClient.layer);
+            const started = yield* Effect.provide(client.create(request), httpClient);
             if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
             const task = started.answer;
             // A task just started has had no call. A call about another task
@@ -1452,7 +1436,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* endTaskCall(taskId);
         return yield* serial(
           Effect.gen(function* () {
-            const deleted = yield* Effect.provide(client.delete(taskId), FetchHttpClient.layer);
+            const deleted = yield* Effect.provide(client.delete(taskId), httpClient);
             if (!deleted) return { deleted: false };
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
@@ -1476,10 +1460,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, name } = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const renamed = yield* Effect.provide(
-              client.rename(taskId, { name }),
-              FetchHttpClient.layer,
-            );
+            const renamed = yield* Effect.provide(client.rename(taskId, { name }), httpClient);
             if (renamed === undefined) return { renamed: false };
             const tasks = view.tasks.map((task) =>
               task.id === taskId ? { ...task, name: renamed.name } : task,
@@ -1527,7 +1508,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const pins = yield* Effect.provide(
               client.pinRepository(repository, pinned),
-              FetchHttpClient.layer,
+              httpClient,
             );
             if (pins === undefined) return { changed: false };
             write({ repositoryPins: pins });
@@ -1546,10 +1527,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const asked = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const sections = yield* Effect.provide(
-              client.writeTaskSection(asked),
-              FetchHttpClient.layer,
-            );
+            const sections = yield* Effect.provide(client.writeTaskSection(asked), httpClient);
             if (sections === undefined) return { changed: false };
             write({ taskSections: sections });
             return { changed: true };
@@ -1581,7 +1559,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         const listed = yield* Effect.provide(
           client.repositories(read.success.workspaceId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksRepositoriesAnswer>(
           listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
@@ -1603,7 +1581,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const changed = yield* Effect.provide(
               client.setRepository(taskId, repository),
-              FetchHttpClient.layer,
+              httpClient,
             );
             if (!changed.ok) return carried<TasksSetRepositoryAnswer>({ failure: changed.failure });
             takeAnswered(changed.answer);
@@ -1625,10 +1603,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, workspaceId } = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const moved = yield* Effect.provide(
-              client.move(taskId, workspaceId),
-              FetchHttpClient.layer,
-            );
+            const moved = yield* Effect.provide(client.move(taskId, workspaceId), httpClient);
             if (!moved.ok) return carried<TasksMoveAnswer>({ failure: moved.failure });
             takeAnswered(moved.answer);
             return carried<TasksMoveAnswer>({ workspaceId: moved.answer.workspaceId });
@@ -1647,7 +1622,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, edit } = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const edited = yield* Effect.provide(client.edit(taskId, edit), FetchHttpClient.layer);
+            const edited = yield* Effect.provide(client.edit(taskId, edit), httpClient);
             if (!edited.ok) return carried<TasksEditAnswer>({ failure: edited.failure });
             const answer = edited.answer;
             if ("conflict" in answer)
@@ -1665,7 +1640,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.GITHUB_CONNECT]: () =>
       Effect.gen(function* () {
         if (!gate()) return carried<TasksGitHubPageAnswer>(GITHUB_PAGE_UNANSWERED);
-        const page = yield* Effect.provide(client.github.connect(), FetchHttpClient.layer);
+        const page = yield* Effect.provide(client.github.connect(), httpClient);
         workspacesAskedAt = undefined;
         return carried<TasksGitHubPageAnswer>(
           page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED,
@@ -1676,10 +1651,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.GITHUB_DISCONNECT]: () =>
       Effect.gen(function* () {
         if (!gate()) return carried<TasksGitHubDisconnectAnswer>(GITHUB_PAGE_UNANSWERED);
-        const disconnected = yield* Effect.provide(
-          client.github.disconnect(),
-          FetchHttpClient.layer,
-        );
+        const disconnected = yield* Effect.provide(client.github.disconnect(), httpClient);
         workspacesAskedAt = undefined;
         if (!disconnected.ok) {
           return carried<TasksGitHubDisconnectAnswer>({ failure: disconnected.failure });
@@ -1741,7 +1713,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
         const begun = yield* Effect.provide(
           client.workspaces.githubConnect(read.success.workspaceId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksWorkspaceGitHubConnectAnswer>(
           begun.ok ? { url: begun.answer } : { failure: begun.failure },
@@ -1770,7 +1742,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
         const begun = yield* Effect.provide(
           client.workspaces.linearConnect(read.success.workspaceId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         // The sign-in finishes in the browser, so the panel coming forward again reads the workspaces whatever the bound says.
         workspacesAskedAt = undefined;
@@ -1801,7 +1773,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksLinearIssuesAnswer>(WORKSPACE_UNANSWERED);
         const listed = yield* Effect.provide(
           client.workspaces.linearIssues(read.success),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksLinearIssuesAnswer>(
           listed.ok ? { issues: listed.answer } : { failure: listed.failure },
@@ -1817,7 +1789,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
         const people = yield* Effect.provide(
           client.workspaces.people(read.success.workspaceId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksWorkspaceMembersAnswer>(
           !people.ok
@@ -1837,7 +1809,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspacePhotoAnswer>(WORKSPACE_UNANSWERED);
         const photo = yield* Effect.provide(
           client.workspaces.photo(read.success.workspaceId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksWorkspacePhotoAnswer>(
           photo.ok ? photo.answer : { failure: photo.failure },
@@ -1950,7 +1922,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED);
         const pending = yield* Effect.provide(
           client.workspaces.invitations(read.success.workspaceId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksWorkspaceInvitationsAnswer>(
           pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
@@ -1966,7 +1938,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { workspaceId, email, role } = read.success;
         const made = yield* Effect.provide(
           client.workspaces.invite(workspaceId, email, role),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksWorkspaceInvitationAnswer>(
           made.ok ? { invitation: made.answer } : { failure: made.failure },
@@ -1982,7 +1954,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { workspaceId, invitationId } = read.success;
         const pending = yield* Effect.provide(
           client.workspaces.cancelInvitation(workspaceId, invitationId),
-          FetchHttpClient.layer,
+          httpClient,
         );
         return carried<TasksWorkspaceInvitationsAnswer>(
           pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
@@ -2000,7 +1972,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const board = yield* Effect.provide(
               client.saveBoard(taskId, elements, appliedDrawing, image),
-              FetchHttpClient.layer,
+              httpClient,
             );
             if (board === undefined) return { saved: false };
             if (view.activeTaskId === taskId) write({ board });

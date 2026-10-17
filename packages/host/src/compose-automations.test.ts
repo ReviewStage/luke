@@ -12,6 +12,7 @@ import { unparsedWire, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
+import { noNetworkHttpClient } from "./testing/no-network.js";
 
 /**
  * The automations concern: behind a closed gate nothing is asked of the
@@ -91,7 +92,7 @@ function subject(
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-    });
+    }).pipe(Effect.provide(noNetworkHttpClient));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);

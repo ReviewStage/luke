@@ -32,6 +32,7 @@ import {
   type TerminalSocketFrame,
   type TerminalSocketOpening,
 } from "./compose-terminals.js";
+import { noNetworkHttpClient } from "./testing/no-network.js";
 
 /**
  * A coding agent's terminals as the host answers the desktop for them, over
@@ -139,7 +140,7 @@ function subject(options: { signedIn?: boolean; bearers?: string[] } = {}) {
           Effect.sync(() => void opened.push({ url, authorization: headers.authorization })),
           Queue.take(openings),
         ),
-    });
+    }).pipe(Effect.provide(noNetworkHttpClient));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);

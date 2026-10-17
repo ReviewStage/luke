@@ -16,6 +16,7 @@ import {
   StateRoot,
 } from "@luke/host/effect";
 import { ConfigProvider, Layer } from "effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type { DesktopConfig } from "./desktop-config";
 
 interface HostSeamDependencies {
@@ -67,6 +68,7 @@ export function hostAssemblyLayerFor(
         NodeChildProcessSpawner.layer,
         Layer.mergeAll(NodeFileSystem.layer, NodePath.layer),
       ),
+      FetchHttpClient.layer,
     ),
   );
 }

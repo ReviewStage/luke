@@ -1,8 +1,7 @@
 import type { HostedMacCommandClient } from "@luke/features";
 import type { MacCommand, MacCommandResult } from "@luke/features/mac-command-wire";
 import { Config, Duration, Effect, FiberSet, Option } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -82,16 +81,17 @@ export function composeMacCommands(
 ): Effect.Effect<
   MacCommandsComposer,
   never,
-  Environment | Reporter | ChildProcessSpawner.ChildProcessSpawner
+  Environment | Reporter | ChildProcessSpawner.ChildProcessSpawner | HttpClient.HttpClient
 > {
   return Effect.gen(function* () {
     const { report } = yield* Reporter;
     const shell = yield* macShell;
     const services = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
+    const http = yield* HttpClient.HttpClient;
     const { kernel, account, enabled, client } = dependencies;
 
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
-      Effect.provide(call, FetchHttpClient.layer);
+      Effect.provideService(call, HttpClient.HttpClient, http);
 
     /** One command run and its result posted back; a result the service did not take is let go, its call already given up. */
     const run = (command: MacCommand) =>
