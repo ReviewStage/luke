@@ -49,7 +49,7 @@ export type ForkStart = Omit<ActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "t
 /**
  * A message's opening words as the fork's chip quotes them: its first line
  * read as plain words, at most a few of them, ending on an ellipsis where
- * there was more.
+ * the line was cut.
  */
 export function messageOpening(words: string): string {
   const whole = cardTitle(words)
@@ -58,9 +58,7 @@ export function messageOpening(words: string): string {
     .join(" ");
   let quote = whole.split(" ").slice(0, OPENING.WORDS).join(" ");
   if (quote.length > OPENING.CHARS) quote = quote.slice(0, OPENING.CHARS).trimEnd();
-  // Note that a message of more than one line is cut too, since only its first is quoted.
-  const lines = words.split("\n").filter((line) => line.trim() !== "").length;
-  return quote.length < whole.length || lines > 1 ? `${quote}${ELLIPSIS}` : quote;
+  return quote.length < whole.length ? `${quote}${ELLIPSIS}` : quote;
 }
 
 /** The choice a fork of `source` starts on until the developer picks another: the source's own model and effort, and its window. */

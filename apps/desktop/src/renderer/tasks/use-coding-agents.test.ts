@@ -438,3 +438,106 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
   await act(() => tab.control().readChanges(AGENT));
   assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
 });
+
+test("a fork joins the task's draft, its words kept and its chips on the source's servers, holds while another task is open, and starts from the source at the message with the box's words and files as a note; an empty box forks alone", async () => {
+  const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
+  const FORKED = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const source: CodingAgentSummary = {
+    ...STARTED,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+  };
+  const forked: CodingAgentSummary = {
+    ...STARTED,
+    id: FORKED,
+    from: { agentId: AGENT, messageId: MESSAGE, steps: 3, totalSteps: 5 },
+  };
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [source] }, { agents: [source] });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { agent: forked },
+  );
+  await tab.mount();
+
+  // A draft already written in takes the fork, and keeps its words.
+  let draft = "";
+  act(() => {
+    draft = tab.control().onNewDraft();
+  });
+  const words = "Try the queue instead.";
+  act(() => tab.control().onDraftChange({ prompt: words }));
+  act(() =>
+    tab.control().onDraftChange({ choice: { model: "openai/gpt-6.1-sol", effort: "low" } }),
+  );
+  const fork = { agentId: AGENT, messageId: MESSAGE, opening: "Use a cron job…" };
+  let joined = "";
+  act(() => {
+    joined = tab.control().onForkDraft(fork);
+  });
+  assert.equal(joined, draft, "the fork joins the draft the task holds");
+  const forkDraft = {
+    id: draft,
+    prompt: words,
+    attachments: [],
+    choice: undefined,
+    disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+    fork,
+  };
+  assert.deepEqual(tab.control().draft, forkDraft, "its chips start on the source's");
+
+  // The fork stays with the draft while another task is open, and through a change of its chips.
+  await tab.stand({ taskId: OTHER_TASK });
+  assert.equal(tab.control().draft, undefined);
+  await tab.stand({ taskId: TASK });
+  act(() => tab.control().onDraftChange({ disabledServers: [] }));
+  assert.deepEqual(tab.control().draft, { ...forkDraft, disabledServers: [] });
+
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  let failed: Failure | undefined;
+  await act(async () => {
+    failed = await tab.control().startFork(draft, fork, ` ${words} `, undefined, [notes]);
+  });
+  assert.equal(failed?.text, "The agent could not be started. Try again.");
+  assert.equal(tab.control().draft?.fork, fork, "a send that did not start keeps the fork");
+  await act(async () => {
+    failed = await tab.control().startFork(draft, fork, "", undefined, []);
+  });
+  assert.equal(failed, undefined);
+  assert.deepEqual(startPayloads(tab.asked), [
+    {
+      taskId: TASK,
+      idempotencyKey: draft,
+      from: { agentId: AGENT, messageId: MESSAGE },
+      note: words,
+      attachments: [notes],
+    },
+    { taskId: TASK, idempotencyKey: draft, from: { agentId: AGENT, messageId: MESSAGE } },
+  ]);
+  assert.deepEqual(tab.started, [FORKED]);
+  assert.equal(tab.control().draft, undefined, "the started fork's draft is let go");
+});
+
+test("a fork's × lets the fork go and leaves an ordinary draft with its words and chips; a fork with no draft opens one", async () => {
+  const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  await tab.mount();
+  const fork = { agentId: AGENT, messageId: MESSAGE, opening: "Done." };
+  let draft = "";
+  act(() => {
+    draft = tab.control().onForkDraft(fork);
+  });
+  assert.equal(tab.control().draft?.id, draft);
+  act(() => tab.control().onDraftChange({ prompt: "Keep going" }));
+  act(() => tab.control().onDropFork());
+  assert.deepEqual(tab.control().draft, {
+    id: draft,
+    prompt: "Keep going",
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  });
+});

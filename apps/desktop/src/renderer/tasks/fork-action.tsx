@@ -8,6 +8,7 @@ import { ActorRef } from "../actor-ref";
 import { MessageAction } from "../ai-elements/message";
 import { Tooltip } from "../tooltip";
 import type { TranscriptCards } from "./agent-tab";
+import { agentActor, agentTabLabel } from "./coding-agent-model";
 import { type AgentFork, FORK_WORDS, forksOf, messageOpening } from "./fork-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -38,20 +39,27 @@ const ForkContext = createContext<ForkDoors | undefined>(undefined);
 /** Hands an agent's messages what forking takes. */
 export const ForkProvider = ForkContext.Provider;
 
-/** One of the task's agents as a chip, hanging its card: opening its tab where it stands, and only named where it is archived, since no tab of the task draws it. */
-function agentChip(
-  agentId: string,
-  cards: TranscriptCards | undefined,
-  open: ((agentId: string) => void) | undefined,
-): ReactNode {
-  const target: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: agentId };
-  const actor: Actor = cards?.agent?.(agentId) ?? {
+/** An agent as its chip wears it where the place hands no cards: by its tab's name where the task lists it, and else as a coding agent. */
+function bareActor(agentId: string, known: CodingAgentSummary | undefined): Actor {
+  if (known !== undefined) return agentActor(known, agentTabLabel(known, undefined));
+  return {
     kind: ACTOR_KIND.AGENT,
     agentId,
     name: TAB_WORDS.CODING_AGENT,
     provider: undefined,
     state: ACTOR_STATE.REST,
   };
+}
+
+/** One of the task's agents as a chip, hanging its card, its press `open`, none where it opens nothing. */
+function agentChip(
+  agentId: string,
+  known: CodingAgentSummary | undefined,
+  cards: TranscriptCards | undefined,
+  open: ((agentId: string) => void) | undefined,
+): ReactNode {
+  const target: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: agentId };
+  const actor = cards?.agent?.(agentId) ?? bareActor(agentId, known);
   return (
     <ActorRef
       actor={actor}
@@ -75,7 +83,8 @@ export function agentForkDoors(input: {
 }): ForkDoors {
   const { agent, control, onFork, cards, onOpenTarget } = input;
   const standing = new Set(control.agents?.map((each) => each.id));
-  const forks = forksOf([...(control.agents ?? []), ...(control.archived ?? [])], agent.id);
+  const listed = [...(control.agents ?? []), ...(control.archived ?? [])];
+  const forks = forksOf(listed, agent.id);
   const forkable =
     onFork !== undefined && agent.planId !== null && control.onUnarchive === undefined;
   const open =
@@ -90,7 +99,13 @@ export function agentForkDoors(input: {
     forkedTo: (messageId) =>
       (forks.get(messageId) ?? []).map((agentId) => (
         <Fragment key={agentId}>
-          {agentChip(agentId, cards, standing.has(agentId) ? open : undefined)}
+          {agentChip(
+            agentId,
+            listed.find((each) => each.id === agentId),
+            cards,
+            // An archived agent is named alone, since no tab of the task draws it.
+            standing.has(agentId) ? open : undefined,
+          )}
         </Fragment>
       )),
   };
@@ -128,7 +143,6 @@ export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
       <SplitIcon className="size-3.5 shrink-0" aria-hidden="true" />
       <span>{FORK_WORDS.TO}</span>
       {chips.map((chip, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: each chip keys itself by its agent; the separator stands at its place.
         <Fragment key={index}>
           {index === 0 ? null : <span aria-hidden="true">,</span>}
           {chip}
@@ -172,7 +186,7 @@ export function ForkChip({
     <div className="draft-fork-chip" data-fork-chip="">
       <SplitIcon className="size-3.5 shrink-0" aria-hidden="true" />
       <span>{FORK_WORDS.OF}</span>
-      {agentChip(fork.agentId, cards, open === undefined ? undefined : () => open())}
+      {agentChip(fork.agentId, source, cards, open === undefined ? undefined : () => open())}
       <span>{FORK_WORDS.AT}</span>
       {open === undefined ? (
         <span className="draft-fork-quote">{quote}</span>
