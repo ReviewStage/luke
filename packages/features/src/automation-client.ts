@@ -16,6 +16,13 @@ import {
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
+  type AutomationRunsLiveAnswer,
+  type AutomationsLiveAnswer,
+  automationRunsLiveAnswerSchema,
+  automationsLiveAnswerSchema,
+  withWebhookUrl,
+} from "./automation-live.js";
+import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
   type AutomationChangeParams,
@@ -33,8 +40,6 @@ import {
 } from "./automation-view.js";
 import {
   AUTOMATION_LIST_QUERY,
-  AUTOMATION_TRIGGER,
-  type AutomationSummary,
   automationAnswerSchema,
   automationListAnswerSchema,
   automationRunAnswerSchema,
@@ -45,7 +50,6 @@ import {
   automationPath,
   automationRunPath,
   automationRunsPath,
-  automationWebhookPath,
   HOSTED_SERVICE_PATH,
 } from "./service-paths.js";
 import {
@@ -140,12 +144,6 @@ function summaryOnly(
   return read.webhookSecret === undefined
     ? { automation }
     : { automation, webhookSecret: read.webhookSecret };
-}
-
-/** A webhook automation with the address its caller posts to, on the service this client reaches; any other as it came. */
-function withWebhookUrl(serviceBaseUrl: string, automation: AutomationSummary): AutomationSummary {
-  if (automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) return automation;
-  return { ...automation, webhookUrl: `${serviceBaseUrl}${automationWebhookPath(automation.id)}` };
 }
 
 /** The list's query: one plan's or one workspace's, or none for every automation the account reads. */
@@ -292,6 +290,36 @@ export class HostedAutomationClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: automationRunsPath(params.automationId) }),
       (answer) => readAnswer(answer, automationRunsAnswerSchema),
+    );
+  }
+
+  /**
+   * A workspace's automations sealed for following over Neon Realtime,
+   * answered at once; unanswered where the deployment has no Realtime and
+   * for anything else, which the caller answers by reading as before.
+   */
+  listLive(
+    workspaceId: string,
+  ): Effect.Effect<AutomationsLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_AUTOMATIONS}?${new URLSearchParams({ workspaceId })}`,
+      }),
+      (answer) => readAnswer(answer, automationsLiveAnswerSchema),
+    );
+  }
+
+  /** One automation's runs sealed for following over Neon Realtime, on the terms the list is: not found where the account does not read it. */
+  runsLive(
+    automationId: string,
+  ): Effect.Effect<AutomationRunsLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_AUTOMATION_RUNS}?${new URLSearchParams({ id: automationId })}`,
+      }),
+      (answer) => readAnswer(answer, automationRunsLiveAnswerSchema),
     );
   }
 }

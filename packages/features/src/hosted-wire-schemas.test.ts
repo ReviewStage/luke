@@ -8,6 +8,7 @@ import {
 } from "@luke/wire/testing";
 import { test } from "vitest";
 import * as accountInboxWire from "./account-inbox-wire.js";
+import * as automationLive from "./automation-live.js";
 import * as boardWire from "./board-wire.js";
 import * as chatWire from "./chat-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
@@ -65,6 +66,12 @@ const EFFECT_MODULE_SCHEMAS = {
     scopeInboxLiveAnswerSchema: liveWire.scopeInboxLiveAnswerSchema,
     scopeInboxLiveRowsSchema: liveWire.scopeInboxLiveRowsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
+  "automation-live": {
+    automationsLiveAnswerSchema: automationLive.automationsLiveAnswerSchema,
+    automationRunsLiveAnswerSchema: automationLive.automationRunsLiveAnswerSchema,
+    automationsLiveRowsSchema: automationLive.automationsLiveRowsSchema,
+    automationRunsLiveRowsSchema: automationLive.automationRunsLiveRowsSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof automationLive>,
   "task-list-live": {
     taskListLiveAnswerSchema: taskListLive.taskListLiveAnswerSchema,
     taskListLiveRowsSchema: taskListLive.taskListLiveRowsSchema,

@@ -1,0 +1,286 @@
+{
+  "type": "object",
+  "properties": {
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "firing": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "schedule"
+                    ]
+                  },
+                  "dueAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "dueAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "github"
+                    ]
+                  },
+                  "event": {
+                    "type": "string",
+                    "enum": [
+                      "pull-request-opened",
+                      "pull-request-labeled",
+                      "pull-request-updated",
+                      "issue-opened",
+                      "issue-labeled",
+                      "check-failed",
+                      "push"
+                    ]
+                  },
+                  "repository": {
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "event",
+                  "repository"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "webhook"
+                    ]
+                  },
+                  "bytes": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "bytes"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "manual"
+                    ]
+                  },
+                  "userId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "started",
+              "skipped",
+              "failed"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "concurrency",
+                  "daily-cap",
+                  "plan-unreachable",
+                  "creator-left",
+                  "no-repository",
+                  "repository-unreachable",
+                  "github-sign-in",
+                  "model",
+                  "unavailable",
+                  "repository-changed",
+                  "paused",
+                  "missed",
+                  "agent-gone"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "firedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "settledAt": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agentTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agentCreatedAt": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ownKey": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "turnId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "turnStatus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancelRequested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lineAwaits": {
+            "type": "boolean"
+          },
+          "failureWord": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "model",
+                  "sandbox",
+                  "github",
+                  "abandoned",
+                  "provider_key",
+                  "not_started",
+                  "fast_own_key",
+                  "fast_not_enabled",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "firing",
+          "status",
+          "reason",
+          "firedAt",
+          "settledAt",
+          "agentId",
+          "agentTitle",
+          "agentCreatedAt",
+          "ownKey",
+          "turnId",
+          "turnStatus",
+          "cancelRequested",
+          "lineAwaits",
+          "failureWord"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "runs"
+  ],
+  "additionalProperties": false
+}

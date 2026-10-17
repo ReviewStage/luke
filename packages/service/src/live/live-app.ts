@@ -1,10 +1,15 @@
+import type { LiveStatement } from "@luke/database/core/live-statement";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { ownFailedRunsLiveStatement, readAutomation } from "@luke/database/models/automation-store";
 import { readTask } from "@luke/database/models/task-store";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { reachedAgent, resolvedUserId, uuidOf } from "../agents/agent-reach.js";
+import {
+  automationRunsLiveStatements,
+  automationsLiveStatements,
+} from "../automations/automation-live.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -45,13 +50,17 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * `GET /api/live/plans` answers the plan list the same way: the plans the
  * account reaches and every agent of them and with no plan, as two sealed
  * statements built with the account's id (`task-list-live.ts`).
+ * `GET /api/live/automations?workspaceId=` and
+ * `GET /api/live/automation-runs?id=` answer a workspace's automations, and
+ * one automation's runs once it is read as the account, on the same terms
+ * (`automation-live.ts`).
  * Nothing else here reads a row: the store is read by Realtime.
  */
 
 const HTTP_METHOD = { GET: "GET" } as const;
 
 /** The query a scope's endpoint names its plan or agent under. */
-const LIVE_QUERY = { ID: "id" } as const;
+const LIVE_QUERY = { ID: "id", WORKSPACE_ID: "workspaceId" } as const;
 
 export interface LiveAppSeams {
   resolveUserId: UserIdResolver;
@@ -141,6 +150,63 @@ const taskListLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskListLiveEndpoint
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
 });
 
+/** One statement sealed, under its part's name, with the address to subscribe at; unavailable where it could not be. */
+const sealedOne = <Part extends string>(
+  sealing: Option.Option<LiveSealer>,
+  part: Part,
+  statement: Option.Option<LiveStatement>,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal> =>
+  Effect.gen(function* () {
+    if (Option.isNone(sealing) || Option.isNone(statement)) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    const { seal, url } = sealing.value;
+    const sealed = yield* Effect.mapError(seal(statement.value), () => HOSTED_REFUSAL.UNAVAILABLE);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries: { [part]: sealed } });
+  });
+
+const automationsLiveEndpoint = /* @__PURE__ */ Effect.fn("web/automationsLiveEndpoint")(function* (
+  seams: LiveAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest
+> {
+  const request = yield* getRequest;
+  const account = yield* seams.resolveUserId(request);
+  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const workspaceId = new URL(request.url).searchParams.get(LIVE_QUERY.WORKSPACE_ID) ?? "";
+  if (workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const statements = automationsLiveStatements(account.value, workspaceId);
+  return yield* sealedOne(
+    yield* LiveSealing,
+    "automations",
+    Option.map(statements, ({ automations }) => automations),
+  );
+});
+
+const automationRunsLiveEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunsLiveEndpoint")(
+  function* (
+    seams: LiveAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | DatabaseServices
+  > {
+    const request = yield* getRequest;
+    const automationId = yield* uuidOf(request, LIVE_QUERY.ID);
+    const userId = yield* resolvedUserId(seams, request);
+    const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, automationId));
+    if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const statements = automationRunsLiveStatements(userId, automationId);
+    return yield* sealedOne(
+      yield* LiveSealing,
+      "runs",
+      Option.map(statements, ({ runs }) => runs),
+    );
+  },
+);
+
 const taskInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskInboxLiveEndpoint")(function* (
   seams: LiveAppSeams,
 ): Effect.fn.Return<
@@ -190,6 +256,16 @@ export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
       ANY_METHOD,
       HOSTED_SERVICE_PATH.LIVE_TASKS,
       hostedRefusing(taskListLiveEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.LIVE_AUTOMATIONS,
+      hostedRefusing(automationsLiveEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.LIVE_AUTOMATION_RUNS,
+      hostedRefusing(automationRunsLiveEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

@@ -68,6 +68,10 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AGENT_INBOX: "/api/live/agent-inbox",
   /** The plan list sealed for following over Neon Realtime (GET): its plans and every agent of them and with no plan, or `unavailable`. `task-list-live.ts` declares the answer. */
   LIVE_TASKS: "/api/live/plans",
+  /** A workspace's automations under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. `automation-live.ts` declares the answer. */
+  LIVE_AUTOMATIONS: "/api/live/automations",
+  /** One automation's runs under `?id=`, sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_AUTOMATION_RUNS: "/api/live/automation-runs",
   /**
    * A workspace's agents, on a plan or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

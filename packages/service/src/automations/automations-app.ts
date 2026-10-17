@@ -65,6 +65,7 @@ import {
 } from "../http/http-effect.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { AUTOMATION_RUNS_READ } from "./automation-live.js";
 import { executeAutomationRun } from "./automation-runs.js";
 
 /**
@@ -111,9 +112,6 @@ const QUERY = { ID: "id" } as const;
  * the frame with room, so every prompt the schema takes fits.
  */
 const MAXIMUM_BODY_BYTES = AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 6 + 16_384;
-
-/** How many runs a history read answers. */
-const RUNS_READ = 50;
 
 /** The bytes of randomness in a webhook trigger's secret. */
 const WEBHOOK_SECRET_BYTES = 32;
@@ -663,7 +661,9 @@ const runsEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunsEndpoint")(fun
   const id = yield* idOf(request);
   const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
   if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const runs = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, id, RUNS_READ));
+  const runs = yield* hostedStoreOrUnavailable(
+    listAutomationRuns(userId, id, AUTOMATION_RUNS_READ),
+  );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { runs: yield* runSummaries(userId, runs) });
 });
 

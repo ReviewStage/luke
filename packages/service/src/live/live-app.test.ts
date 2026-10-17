@@ -3,9 +3,20 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
+import { createAutomation } from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
+import {
+  automationRunsLiveAnswerSchema,
+  automationsLiveAnswerSchema,
+} from "@luke/features/automation-live";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+} from "@luke/features/automation-wire";
 import { accountInboxLiveAnswerSchema, scopeInboxLiveAnswerSchema } from "@luke/features/live-wire";
 import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
 import type { WireBoundaryInput } from "@luke/wire";
@@ -230,6 +241,67 @@ it.layer(getTestDB())("the live reads", (it) => {
             body: { error: HOSTED_API_ERROR.UNAVAILABLE },
           },
         );
+      }),
+  );
+
+  it.effect(
+    "a workspace's automations are sealed for the bearer, an automation's runs only for an account that reads it, and a workspace must be named",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Flaky tests" });
+        const made = yield* createAutomation(owner, {
+          taskId: task.id,
+          name: "Flaky-test sweep",
+          scope: AUTOMATION_SCOPE.PERSONAL,
+          trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+          action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the flakiest test." },
+          guards: AUTOMATION_DEFAULT_GUARDS,
+          nextRunAt: new Date("2026-10-15T09:00:00Z"),
+          webhookSecretHash: null,
+        });
+        const automationId = Option.getOrThrow(made).id;
+        const listPath = `/api/live/automations?workspaceId=${task.workspaceId}`;
+        const runsPath = `/api/live/automation-runs?id=${automationId}`;
+
+        const listed = yield* ask({
+          bearer: owner,
+          path: listPath,
+          sealing: Option.some(SCRIPTED),
+        });
+        assert.equal(listed.status, HOSTED_HTTP_STATUS.OK);
+        const list = Schema.decodeUnknownSync(automationsLiveAnswerSchema)(listed.body);
+        assert.ok(
+          list.queries.automations.capability.includes(`"${owner}"`),
+          "read for the bearer",
+        );
+        const ran = yield* ask({ bearer: owner, path: runsPath, sealing: Option.some(SCRIPTED) });
+        assert.equal(ran.status, HOSTED_HTTP_STATUS.OK);
+        const runs = Schema.decodeUnknownSync(automationRunsLiveAnswerSchema)(ran.body);
+        assert.ok(runs.queries.runs.capability.includes(`"${owner}"`), "read for the bearer");
+
+        assert.deepEqual(
+          yield* ask({ bearer: stranger, path: runsPath, sealing: Option.some(SCRIPTED) }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+        assert.deepEqual(
+          yield* ask({
+            bearer: owner,
+            path: "/api/live/automations",
+            sealing: Option.some(SCRIPTED),
+          }),
+          {
+            status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+            body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
+          },
+        );
+        for (const path of [listPath, runsPath]) {
+          assert.deepEqual(yield* ask({ bearer: owner, path, sealing: Option.none() }), {
+            status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+            body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+          });
+        }
       }),
   );
 });

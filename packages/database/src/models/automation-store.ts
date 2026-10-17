@@ -102,14 +102,14 @@ const AutomationRowSchema = Schema.Struct({
 export type Automation = typeof AutomationRowSchema.Type;
 
 /** An automation row's workspace: its own, or its plan's on a row an older build wrote, its workspace still null. */
-const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${automation.taskId}))`;
+export const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${automation.taskId}))`;
 
 /** An automation row's repositories: its own, or its plan's on a row an older build wrote, its list still empty. */
 const AUTOMATION_REPOSITORIES = sql<
   readonly string[]
 >`case when ${automation.repositories} = '[]'::jsonb and ${task.repository} is not null then jsonb_build_array(${task.repository}) else ${automation.repositories} end`;
 
-const AUTOMATION_COLUMNS = {
+export const AUTOMATION_COLUMNS = {
   id: automation.id,
   userId: automation.userId,
   taskId: automation.taskId,

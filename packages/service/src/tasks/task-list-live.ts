@@ -4,7 +4,6 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
-import { noReceiptOfLine } from "@luke/database/models/message-reads";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
@@ -14,12 +13,10 @@ import { agentPin, taskPin } from "@luke/database/schemas";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { task } from "@luke/database/schemas/plan";
-import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { MESSAGE_ROLE } from "@luke/wire";
-import { and, desc, eq, exists, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
+import { latestTurnOf, lineAwaitsIn } from "../live/agent-standing.js";
 
 /**
  * task-list-live.ts -- the plan list written for Neon Realtime: the plans the account reaches, and every agent of them and with no plan, with what the list reads each agent's status from.
@@ -74,43 +71,13 @@ function plansStatement(userId: string) {
     .where(taskReachableBy(userId));
 }
 
-/** Whether a line of the developer's stands in the agent's conversation with no turn yet, as `countAwaitingLines` counts one. */
-const LINE_AWAITS = sql<boolean>`${exists(
-  queryBuilder
-    .select({ id: messages.id })
-    .from(messages)
-    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-    .where(
-      and(
-        eq(messages.conversationId, codingAgent.conversationId),
-        eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
-        eq(messages.role, MESSAGE_ROLE.USER),
-        isNull(messages.turnId),
-        noReceiptOfLine(),
-      ),
-    ),
-)}`;
-
 /**
  * Every agent of a plan the account reaches, and every agent with no plan
  * in its workspaces, archived ones among them, each with its newest turn by
  * the order turns were queued, as `findLatestTurns` reads it.
  */
 function agentsStatement(userId: string) {
-  const latest = queryBuilder
-    .select({
-      id: turns.id,
-      status: turns.status,
-      cancelRequestedAt: turns.cancelRequestedAt,
-      queuedAt: turns.queuedAt,
-      startedAt: turns.startedAt,
-      settledAt: turns.settledAt,
-    })
-    .from(turns)
-    .where(eq(turns.conversationId, codingAgent.conversationId))
-    .orderBy(desc(turns.queuedAt), desc(turns.id))
-    .limit(1)
-    .as("latest_turn");
+  const latest = latestTurnOf(codingAgent.conversationId, "latest_turn");
   return queryBuilder
     .select(
       liveSelection(
@@ -136,7 +103,7 @@ function agentsStatement(userId: string) {
           turnId: latest.id,
           turnStatus: latest.status,
           cancelRequested: isNotNull(latest.cancelRequestedAt),
-          lineAwaits: LINE_AWAITS,
+          lineAwaits: lineAwaitsIn(codingAgent.conversationId),
         },
         {
           archivedAt: codingAgent.archivedAt,

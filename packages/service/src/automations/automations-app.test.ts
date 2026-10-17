@@ -22,6 +22,12 @@ import {
   HOSTED_API_ERROR,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
+import {
+  automationRunsLiveRowsSchema,
+  automationRunsOfLiveRows,
+  automationsLiveRowsSchema,
+  automationsOfLiveRows,
+} from "@luke/features/automation-live";
 import { SCHEDULE_PRESET } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
@@ -45,7 +51,7 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Result, type Schema, Stream } from "effect";
+import { Clock, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import {
@@ -54,6 +60,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
+import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
 import { BRAIN_REQUEST_FAILURE } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
@@ -63,6 +70,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../testing/github-app-fake.js";
+import { automationRunsLiveStatements, automationsLiveStatements } from "./automation-live.js";
 import { automationsApp } from "./automations-app.js";
 
 /**
@@ -602,6 +610,90 @@ it.layer(getTestDB())("the automation routes", (it) => {
           }),
         ).automation;
         assert.deepEqual(cleared.action.disabledServers ?? [], []);
+      }),
+  );
+
+  it.effect(
+    "the live statements of a workspace's automations and of one's runs deliver what the held list and history answer, each run's agent and why it failed alike, and nothing to another account",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task: plan, ask } = yield* openAccounts;
+        const made = (name: string) =>
+          Effect.map(
+            ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+              method: "POST",
+              body: { ...weekdays(plan.id), name },
+            }),
+            (answer) =>
+              readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
+          );
+        const ran = yield* made("Morning triage");
+        yield* made("Never ran");
+        const runOnce = () =>
+          Effect.map(
+            ask(automationRunPath(ran.id), owner, {
+              method: "POST",
+              body: { idempotencyKey: randomUUID() },
+            }),
+            (answer) =>
+              readAnswer(automationRunAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).run,
+          );
+        const refused = yield* runOnce();
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, refused.agent?.id ?? ""));
+        // Its turn failed on the model call, GitHub's refusal in its detail.
+        yield* Database.use((db) =>
+          db.insert(turns).values({
+            userId: owner,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.FAILED,
+            failure: BRAIN_REQUEST_FAILURE.MODEL,
+            failureDetail: `checkout: ${CODER_REFUSAL.NOT_REACHABLE}`,
+          }),
+        );
+        yield* runOnce();
+
+        const now = yield* Clock.currentTimeMillis;
+        const sql = yield* SqlClient.SqlClient;
+        const run = (statement: { readonly sql: string; readonly params: readonly unknown[] }) =>
+          sql.unsafe(statement.sql, [...statement.params]);
+        for (const reader of [owner, other]) {
+          const statements = Option.getOrThrow(automationsLiveStatements(reader, plan.workspaceId));
+          const rows = yield* Schema.decodeUnknownEffect(automationsLiveRowsSchema)({
+            automations: yield* run(statements.automations),
+          });
+          const held = readAnswer(
+            automationListAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(
+              `${HOSTED_SERVICE_PATH.AUTOMATIONS}?workspaceId=${plan.workspaceId}`,
+              reader,
+            ),
+          );
+          assert.deepEqual(automationsOfLiveRows(rows, now, ORIGIN), held.automations);
+        }
+        const statements = Option.getOrThrow(automationRunsLiveStatements(owner, ran.id));
+        const runs = automationRunsOfLiveRows(
+          yield* Schema.decodeUnknownEffect(automationRunsLiveRowsSchema)({
+            runs: yield* run(statements.runs),
+          }),
+          now,
+        );
+        const history = readAnswer(
+          automationRunsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationRunsPath(ran.id), owner),
+        );
+        assert.deepEqual(runs, history.runs);
+        assert.deepEqual(
+          runs.map((each) => `${each.agent?.status}:${each.agent?.failureReason ?? ""}`).toSorted(),
+          [
+            `${CODING_AGENT_STATUS.FAILED}:${CODING_AGENT_FAILURE.GITHUB}`,
+            `${CODING_AGENT_STATUS.STARTING}:`,
+          ],
+        );
+        const outsiders = Option.getOrThrow(automationRunsLiveStatements(other, ran.id));
+        assert.deepEqual(yield* run(outsiders.runs), []);
       }),
   );
 
