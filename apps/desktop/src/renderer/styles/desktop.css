@@ -6237,13 +6237,13 @@ button.automation-run:hover {
 }
 
 .page-find > .find-bar {
-  top: calc(var(--desktop-bar-height) + var(--space-8));
+  top: calc(var(--desktop-bar-height) + var(--luke-space-8));
 }
 
 /* Home has no toolbar, so its bar stands at the page's top, clear of the
    greeting and its New task. */
 .page-find:has(> .home) > .find-bar {
-  top: var(--space-8);
+  top: var(--luke-space-8);
 }
 
 /* The bar floats as a menu does, on the menu's ground, edge, and entrance,
@@ -6251,15 +6251,15 @@ button.automation-run:hover {
 .find-bar {
   position: absolute;
   z-index: 3;
-  top: var(--space-8);
+  top: var(--luke-space-8);
   right: var(--column-inset);
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--menu-inset);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
+  gap: var(--luke-space-2);
+  padding: var(--luke-menu-inset);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-menu-radius);
+  background: var(--luke-color-overlay);
   box-shadow: var(--menu-shadow);
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
@@ -6271,21 +6271,19 @@ button.automation-run:hover {
    (`tasks.css`), whose controls it would otherwise cover: that bar's
    buttons, its padding, and its hairline. */
 .find-scope:has(> .file-view) > .find-bar {
-  top: calc(var(--control-height) + 2 * var(--space-4) + 1px + var(--space-8));
+  top: calc(var(--control-height) + 2 * var(--space-4) + 1px + var(--luke-space-8));
 }
 
 /* The field keeps one width whatever is typed or tallied, so the buttons
    beside it never move. */
 .find-bar-well {
   width: 240px;
-  margin-right: var(--space-2);
+  margin-right: var(--luke-space-2);
 }
 
 .find-bar-tally {
   flex: none;
-  padding-right: var(--space-6);
-  color: var(--text-tertiary);
-  font-size: 12px;
+  padding-right: var(--luke-space-6);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
