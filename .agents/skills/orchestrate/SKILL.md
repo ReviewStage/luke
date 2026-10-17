@@ -21,7 +21,7 @@ the host you are in:
 | Valid model ids | `conductor model` | `start_agent` refuses an unknown model or effort and lists the choices |
 | Your id, for reports | `echo "$CONDUCTOR_SESSION_ID"` | Nothing to record: a started agent is told your id |
 | Start a worker | `conductor workspace create` (below) | `start_agent` with the brief as `prompt`, plus `model` and `effort` |
-| Worker's base branch | `--branch <base-branch>` | Every agent starts on `main`; the brief says to cut its branch from `origin/<base-branch>` |
+| Worker's base branch | `--branch <base-branch>` | Every agent starts on a clone of `main` alone; the brief says to fetch the base branch and cut its branch from it (see "Branching" below) |
 | Open a PR | `gh pr create --base <base-branch>` | `open_pull_request`, which always targets `main`, then `gh pr edit <number> --base <base-branch>` when the base is not `main` |
 | Message a worker | `conductor message create --session <sessionId>` | `message_agent` with its agent id |
 | Worker reports back | `conductor message create --session <ORCHESTRATOR_SESSION_ID>` | `message_agent` with the orchestrator's agent id |
@@ -79,17 +79,26 @@ BRIEF
 In Luke, call `start_agent` on this task (leave `taskId` out) with the brief
 as `prompt`, so the worker works from the brief and not the whole plan, and
 with the chosen `model` and `effort`. The call carries everything the worker
-is told; do not follow it with a message.
+is told; do not follow it with a message. `prompt` and `note` each hold at
+most 16,000 characters: put the PR's own scope and acceptance criteria in
+`prompt` and the rest of the brief in `note`, and where the plan is longer
+than that, quote only the parts this PR needs and name the plan's file in the
+repository, if it has one, for the worker to read.
 
 Every brief must contain:
 
 1. **The task**: the PR's scope, acceptance criteria, and the plan or issue
-   text it comes from, plus a line on each PR below and above it in its
+   text this PR comes from (its own part, not the whole plan, where the
+   plan is long), plus a line on each PR below and above it in its
    stack. Say plainly what is out of scope.
 2. **Branching**: the base branch, the PR's branch, and how to open it
    against that base (the table's "Open a PR" row for the host). In Luke,
-   also tell a worker whose base is not `main` to cut its branch from
-   `origin/<base-branch>` after a `git fetch`. The worker never restacks.
+   also tell a worker whose base is not `main` that its checkout is a
+   single-branch clone of `main`, and possibly a shallow one, where a plain
+   `git fetch` brings no other branch. So it first runs `git remote
+   set-branches origin '*'`, then `git fetch origin` (with `--unshallow` when
+   `git rev-parse --is-shallow-repository` says `true`), and only then cuts
+   its branch from `origin/<base-branch>`. The worker never restacks.
    When the orchestrator says a restack is pending, it pushes or discards any
    work in flight, stops pushing, and replies "holding". When told the
    restack is done, it runs `git fetch` and `git reset --hard
@@ -146,7 +155,9 @@ Run one restack at a time per stack. Tell every worker in the stack, and in
 each branch-off stack based on it, that a restack is pending, and wait for
 each to reply "holding". Then start a short-lived worker on the stack's top
 branch (the Step 1 start, named "Restack <stack title>"; in Luke it starts on
-`main` and checks the branches out itself, as below) whose brief names the
+a single-branch clone of `main`, so it first fetches every branch the way a
+stacked worker does under "Branching", then checks the branches out itself, as
+below) whose brief names the
 trunk (`main`, or the parent PR's branch for a branch-off stack whose parent
 has not merged), every unmerged branch bottom to top, and, after a merge, the
 PR to retarget with `gh pr edit <number> --base main`. It first points a
