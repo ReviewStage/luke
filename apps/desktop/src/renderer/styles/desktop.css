@@ -2320,7 +2320,7 @@ ul.actor-stack {
   font-size: 12px;
 }
 
-.failure-note-remedy :is(svg, .spinner-ring) {
+.failure-note-remedy :is(svg, .luke-spinner-ring) {
   width: 13px;
   height: 13px;
 }

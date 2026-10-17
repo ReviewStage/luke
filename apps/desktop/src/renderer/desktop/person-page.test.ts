@@ -584,7 +584,7 @@ test("automations that could not be read leave the Inbox still being read saying
 
   assert.match(page.textContent ?? "", /Their automations could not be read\./u);
   // The Inbox still being read stands as its own wait beside the automations' failure.
-  assert.equal(page.querySelectorAll('.person-column .spinner[role="status"]').length, 1);
+  assert.equal(page.querySelectorAll('.person-column .luke-spinner[role="status"]').length, 1);
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
 

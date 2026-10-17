@@ -1305,7 +1305,7 @@ test("a Run now still out on a toolbar too narrow for its words draws its ring i
     assert.deepEqual(
       {
         pressable: !run.disabled,
-        ring: run.querySelector('.spinner[role="status"]') !== null,
+        ring: run.querySelector('.luke-spinner[role="status"]') !== null,
         glyph: run.querySelector("svg.lucide-play") !== null,
       },
       { pressable: false, ring: true, glyph: false },

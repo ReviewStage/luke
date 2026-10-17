@@ -250,3 +250,17 @@ body {
   color: var(--luke-color-text);
   font: inherit;
 }
+
+/* A decorative ring at a mark's size. */
+.catalog-ring {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--luke-color-accent-text);
+}
+
+/* A region of a pane, tall enough to centre what it holds. */
+.catalog-region {
+  display: flex;
+  height: 120px;
+}
