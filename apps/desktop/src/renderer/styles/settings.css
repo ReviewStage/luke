@@ -249,9 +249,10 @@
 /* The chip is the field chip (`@luke/ui`'s `Chip`), a row button's face at
    a form's type, so a picker and the buttons beside it read as one set of
    controls; only its width, the column a settings row's pop-ups share, is
-   the picker's own. The class is the repository chip's, which still draws a
-   picker's face of its own. */
-.settings-picker-chip,
+   the picker's own, and the repository chip's in a form row too
+   (`repository-chip.tsx`), held at a single class's weight so a form's own
+   width for it wins. */
+:where(.repository-chip[data-place="field"]) > .luke-chip,
 .settings-picker > .luke-chip {
   width: var(--luke-select-field-width);
 }

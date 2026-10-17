@@ -1321,11 +1321,13 @@ function RunsGroup({
         }
         error={problems[DRAFT_FIELD.REPOSITORY]}
       >
-        {() =>
+        {(control) =>
           taskBacked ? null : (
             <RepositoryChip
               key={repositories.scope}
               place={CHIP_PLACE.FIELD}
+              describedBy={control["aria-describedby"]}
+              invalid={control["aria-invalid"]}
               value={draft.repository}
               chooser={repositories}
               onChoose={(repository) => onDraft(withRepository(draft, repository))}
