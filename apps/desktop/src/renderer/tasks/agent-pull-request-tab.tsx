@@ -25,6 +25,7 @@ import {
 import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { INLINE_DIFF } from "@luke/settings/diff-view";
 import { CopyIcon, ProviderMark } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
@@ -44,7 +45,6 @@ import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import { INLINE_DIFF } from "../diff-view/contract";
 import { EmptyState } from "../empty-state";
 import { ReadFailure } from "../read-failure";
 import { Skeleton, SkeletonRegion } from "../skeleton";

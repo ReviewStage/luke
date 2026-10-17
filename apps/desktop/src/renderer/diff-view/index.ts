@@ -1,14 +1,7 @@
+import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
 import { type FileDiffOptions, getSingularPatch, FileDiff as PierreFileDiff } from "@pierre/diffs";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches";
-import {
-  DIFF_FONT,
-  DIFF_LAYOUT,
-  DIFF_LINE_HEIGHT,
-  type DiffLook,
-  type DiffViewHandle,
-  type DiffViewModule,
-  type DiffViewProps,
-} from "./contract";
+import type { DiffLook, DiffViewHandle, DiffViewModule, DiffViewProps } from "./contract";
 import { adoptShadowStyles } from "./inline-styles";
 
 /**

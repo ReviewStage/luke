@@ -1,16 +1,21 @@
+import {
+  DIFF_FONT,
+  DIFF_FONT_LABEL,
+  DIFF_FONT_SIZES,
+  DIFF_INDICATORS,
+  DIFF_INDICATORS_LABEL,
+  DIFF_LAYOUT,
+  DIFF_LAYOUT_LABEL,
+  DIFF_LINE_HEIGHT,
+  DIFF_LINE_HEIGHT_LABEL,
+  DIFF_THEMES,
+  INLINE_DIFF,
+  INLINE_DIFF_LABEL,
+} from "@luke/settings/diff-view";
 import { CloseIcon } from "@luke/ui";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
-import {
-  DIFF_FONT,
-  DIFF_FONT_SIZES,
-  DIFF_INDICATORS,
-  DIFF_LAYOUT,
-  DIFF_LINE_HEIGHT,
-  DIFF_THEMES,
-  INLINE_DIFF,
-} from "../diff-view/contract";
 import { Segmented } from "../segmented";
 import { ChangedMark } from "../settings/marks";
 import { PickerRow } from "../settings/picker-row";
@@ -38,45 +43,22 @@ import { DEFAULT_SETTINGS, type FileViewSettings, useFileViewSettings } from "./
 /** What the button and its popover are called. */
 const DIFF_SETTINGS_LABEL = "Diff settings";
 
-/** Each indicator's words. */
-const INDICATOR_OPTIONS = [
-  { value: DIFF_INDICATORS.CLASSIC, label: "Classic (+/-)" },
-  { value: DIFF_INDICATORS.BARS, label: "Bars" },
-  { value: DIFF_INDICATORS.NONE, label: "None" },
-] as const;
+/** A vocabulary's values as a control's options, each by the name the settings give it. */
+function optionsOf<Value extends string>(
+  values: readonly Value[],
+  labels: Readonly<Record<Value, string>>,
+): readonly { readonly value: Value; readonly label: string }[] {
+  return values.map((value) => ({ value, label: labels[value] }));
+}
 
-/** Each inline diff's words. */
-const INLINE_DIFF_OPTIONS = [
-  { value: INLINE_DIFF.WORD_ALT, label: "Word-alt" },
-  { value: INLINE_DIFF.WORD, label: "Word" },
-  { value: INLINE_DIFF.CHAR, label: "Character" },
-  { value: INLINE_DIFF.NONE, label: "None" },
-] as const;
-
-/** Each font's name. */
-const FONT_OPTIONS = [
-  { value: DIFF_FONT.SF_MONO, label: "SF Mono" },
-  { value: DIFF_FONT.MENLO, label: "Menlo" },
-  { value: DIFF_FONT.MONACO, label: "Monaco" },
-  { value: DIFF_FONT.COURIER_NEW, label: "Courier New" },
-  { value: DIFF_FONT.ANDALE_MONO, label: "Andale Mono" },
-] as const;
+const LAYOUT_OPTIONS = optionsOf(Object.values(DIFF_LAYOUT), DIFF_LAYOUT_LABEL);
+const INDICATOR_OPTIONS = optionsOf(Object.values(DIFF_INDICATORS), DIFF_INDICATORS_LABEL);
+const INLINE_DIFF_OPTIONS = optionsOf(Object.values(INLINE_DIFF), INLINE_DIFF_LABEL);
+const FONT_OPTIONS = optionsOf(Object.values(DIFF_FONT), DIFF_FONT_LABEL);
+const LINE_HEIGHT_OPTIONS = optionsOf(Object.values(DIFF_LINE_HEIGHT), DIFF_LINE_HEIGHT_LABEL);
 
 /** Each size, in pixels. */
 const FONT_SIZE_OPTIONS = DIFF_FONT_SIZES.map((size) => ({ value: size, label: `${size}px` }));
-
-/** Each line height's words, tightest first. */
-const LINE_HEIGHT_OPTIONS = [
-  { value: DIFF_LINE_HEIGHT.COMPACT, label: "Compact" },
-  { value: DIFF_LINE_HEIGHT.NORMAL, label: "Normal" },
-  { value: DIFF_LINE_HEIGHT.SPACIOUS, label: "Spacious" },
-] as const;
-
-/** The layouts' words. */
-const LAYOUT_OPTIONS = [
-  { value: DIFF_LAYOUT.UNIFIED, label: "Unified" },
-  { value: DIFF_LAYOUT.SPLIT, label: "Split" },
-] as const;
 
 /** What a picker of themes says where its search matches none. */
 const NO_THEME = "No theme matches.";
@@ -169,14 +151,14 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           value={settings.diffLayout}
           options={LAYOUT_OPTIONS}
           changed={changed("diffLayout")}
-          onChange={(diffLayout) => change({ diffLayout })}
+          onChange={(diffLayout) => change("diffLayout", diffLayout)}
         />
         <SegmentedRow
           label="Indicators"
           value={settings.diffIndicators}
           options={INDICATOR_OPTIONS}
           changed={changed("diffIndicators")}
-          onChange={(diffIndicators) => change({ diffIndicators })}
+          onChange={(diffIndicators) => change("diffIndicators", diffIndicators)}
         />
         <SelectRow
           label="Inline diffs"
@@ -184,7 +166,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           options={INLINE_DIFF_OPTIONS}
           parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
           changed={changed("inlineDiff")}
-          onChange={(inlineDiff) => change({ inlineDiff })}
+          onChange={(inlineDiff) => change("inlineDiff", inlineDiff)}
         />
       </div>
       <div className="diff-settings-group">
@@ -192,35 +174,35 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           label="Backgrounds"
           checked={settings.diffBackgrounds}
           changed={changed("diffBackgrounds")}
-          onChange={(diffBackgrounds) => change({ diffBackgrounds })}
+          onChange={(diffBackgrounds) => change("diffBackgrounds", diffBackgrounds)}
         />
         <SwitchRow
           label="Wrapping"
           checked={settings.wordWrap}
           changed={changed("wordWrap")}
-          onChange={(wordWrap) => change({ wordWrap })}
+          onChange={(wordWrap) => change("wordWrap", wordWrap)}
         />
         <SwitchRow
           label="Line numbers"
           checked={settings.lineNumbers}
           changed={changed("lineNumbers")}
-          onChange={(lineNumbers) => change({ lineNumbers })}
+          onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
         />
       </div>
       <div className="diff-settings-group">
         <ThemeRow
           label="Dark theme"
           themes={DIFF_THEMES.DARK}
-          value={settings.darkTheme}
-          changed={changed("darkTheme")}
-          onChange={(darkTheme) => change({ darkTheme })}
+          value={settings.diffDarkTheme}
+          changed={changed("diffDarkTheme")}
+          onChange={(diffDarkTheme) => change("diffDarkTheme", diffDarkTheme)}
         />
         <ThemeRow
           label="Light theme"
           themes={DIFF_THEMES.LIGHT}
-          value={settings.lightTheme}
-          changed={changed("lightTheme")}
-          onChange={(lightTheme) => change({ lightTheme })}
+          value={settings.diffLightTheme}
+          changed={changed("diffLightTheme")}
+          onChange={(diffLightTheme) => change("diffLightTheme", diffLightTheme)}
         />
       </div>
       <div className="diff-settings-group">
@@ -230,7 +212,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           options={FONT_OPTIONS}
           parse={(raw) => optionOf(FONT_OPTIONS, raw)}
           changed={changed("diffFont")}
-          onChange={(diffFont) => change({ diffFont })}
+          onChange={(diffFont) => change("diffFont", diffFont)}
         />
         <SelectRow
           label="Font size"
@@ -238,7 +220,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           options={FONT_SIZE_OPTIONS}
           parse={(raw) => optionOf(FONT_SIZE_OPTIONS, raw)}
           changed={changed("diffFontSize")}
-          onChange={(diffFontSize) => change({ diffFontSize })}
+          onChange={(diffFontSize) => change("diffFontSize", diffFontSize)}
         />
         <SelectRow
           label="Line height"
@@ -246,21 +228,21 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           options={LINE_HEIGHT_OPTIONS}
           parse={(raw) => optionOf(LINE_HEIGHT_OPTIONS, raw)}
           changed={changed("diffLineHeight")}
-          onChange={(diffLineHeight) => change({ diffLineHeight })}
+          onChange={(diffLineHeight) => change("diffLineHeight", diffLineHeight)}
         />
         <SwitchRow
           label="Ligatures"
           checked={settings.diffLigatures}
           changed={changed("diffLigatures")}
-          onChange={(diffLigatures) => change({ diffLigatures })}
+          onChange={(diffLigatures) => change("diffLigatures", diffLigatures)}
         />
       </div>
       <div className="diff-settings-group">
         <SwitchRow
           label="Minimize inline comments"
-          checked={settings.minimizeComments}
-          changed={changed("minimizeComments")}
-          onChange={(minimizeComments) => change({ minimizeComments })}
+          checked={settings.diffMinimizeComments}
+          changed={changed("diffMinimizeComments")}
+          onChange={(diffMinimizeComments) => change("diffMinimizeComments", diffMinimizeComments)}
         />
       </div>
     </>

@@ -6,11 +6,12 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { handSettings } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -23,8 +24,9 @@ import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
  * otherwise, split once Split view is chosen in its ⋯, tinted whole once
  * Highlight changed words is turned off, each choice kept for the next
  * view; a diff too narrow to split is drawn unified, Split view dimmed, the
- * choice kept for a wider one. A kept setting that no longer reads costs
- * none of the others. The bundle, a script of its own the panel loads, is
+ * choice kept for a wider one. The settings are the app's own, read off the
+ * document main hands the window and written back through it
+ * (`#testing/app-state`'s `handSettings`). The bundle, a script of its own the panel loads, is
  * stood in for at its global, which records what it was handed. Synthetic
  * files only.
  */
@@ -89,9 +91,6 @@ const standIn: DiffViewModule = {
 };
 
 beforeEach(() => {
-  // Note that the settings are held by their module for the window's life, so each test loads it afresh.
-  vi.resetModules();
-  window.localStorage.clear();
   drawn = [];
   boxWidth = 900;
   window.lukeDiffView = standIn;
@@ -103,12 +102,9 @@ beforeEach(() => {
   });
   Object.defineProperty(window, "luke", {
     configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: () =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
-    },
+    value: { recordSurfaceEvent: () => undefined },
   });
+  handSettings();
 });
 
 afterEach(() => {
@@ -160,10 +156,18 @@ function menuItem(label: string): HTMLButtonElement {
   return item ?? assert.fail(`the ⋯ offers ${label}`);
 }
 
-/** Chooses a setting in the view's ⋯. */
-function choose(label: string): void {
+/** Lets the document a settings write sends back land and be drawn. */
+async function flush(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+}
+
+/** Chooses a setting in the view's ⋯, and lets it be drawn. */
+async function choose(label: string): Promise<void> {
   const item = menuItem(label);
   act(() => item.click());
+  await flush();
 }
 
 /** How a diff is drawn until told otherwise: today's File tab look, and stage-cli's for what is new. */
@@ -217,6 +221,7 @@ test("the diff settings set the layout, the indicators, and a switch for every d
   act(() => settingControl(popover, '[role="radio"]', "Classic (+/-)").click());
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
   act(() => settingControl(popover, '[role="switch"]', "Backgrounds").click());
+  await flush();
 
   const expected = {
     ...DEFAULT_LOOK,
@@ -232,7 +237,7 @@ test("the diff settings set the layout, the indicators, and a switch for every d
 test("Split view draws the diff side by side, which the next view keeps", async () => {
   await drawTab();
 
-  choose("Split view");
+  await choose("Split view");
   assert.equal(lastDrawn().look.layout, "split");
 
   assert.equal((await drawTab()).look.layout, "split");
@@ -241,14 +246,14 @@ test("Split view draws the diff side by side, which the next view keeps", async 
 test("with Highlight changed words turned off a changed line is tinted whole, for this view and the next", async () => {
   await drawTab();
 
-  choose("Highlight changed words");
+  await choose("Highlight changed words");
   assert.equal(lastDrawn().look.inlineDiff, "none");
 
   assert.equal((await drawTab()).look.inlineDiff, "none");
 });
 
 test("a diff too narrow to split is drawn unified with Split view dimmed and its settings saying so, and split again once there is room", async () => {
-  window.localStorage.setItem("luke.file-view", JSON.stringify({ diffLayout: "split" }));
+  handSettings({ diffLayout: DIFF_LAYOUT.SPLIT });
   await drawTab();
   assert.equal(lastDrawn().look.layout, "split");
 
@@ -264,27 +269,4 @@ test("a diff too narrow to split is drawn unified with Split view dimmed and its
   boxWidth = 900;
   act(() => relayout());
   assert.equal(lastDrawn().look.layout, "split");
-});
-
-test("a kept setting that no longer reads takes its default and leaves the others as they were kept", async () => {
-  window.localStorage.setItem(
-    "luke.file-view",
-    JSON.stringify({
-      lineNumbers: false,
-      wordWrap: false,
-      diffLayout: "sideways",
-      darkTheme: "dracula",
-      lightTheme: "dracula",
-      diffFontSize: "11.5",
-    }),
-  );
-
-  const { look } = await drawTab();
-
-  assert.deepEqual(look, {
-    ...DEFAULT_LOOK,
-    lineNumbers: false,
-    wrap: false,
-    themes: { dark: "dracula", light: "github-light-default" },
-  });
 });

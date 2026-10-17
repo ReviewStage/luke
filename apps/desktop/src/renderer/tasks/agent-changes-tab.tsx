@@ -10,6 +10,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import { CopyIcon, DownloadIcon } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -22,7 +23,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
-import { DIFF_LAYOUT, INLINE_DIFF } from "../diff-view/contract";
 import { EmptyState } from "../empty-state";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
@@ -216,17 +216,17 @@ function ChangesMenu({
           detail: roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT,
           checked: split && roomy,
           disabled: !roomy,
-          onSelect: () => change({ diffLayout: split ? DIFF_LAYOUT.UNIFIED : DIFF_LAYOUT.SPLIT }),
+          onSelect: () => change("diffLayout", split ? DIFF_LAYOUT.UNIFIED : DIFF_LAYOUT.SPLIT),
         },
         {
           label: "Highlight changed words",
           icon: <HighlighterIcon aria-hidden="true" />,
           checked: settings.inlineDiff !== INLINE_DIFF.NONE,
           onSelect: () =>
-            change({
-              inlineDiff:
-                settings.inlineDiff === INLINE_DIFF.NONE ? INLINE_DIFF.WORD_ALT : INLINE_DIFF.NONE,
-            }),
+            change(
+              "inlineDiff",
+              settings.inlineDiff === INLINE_DIFF.NONE ? INLINE_DIFF.WORD_ALT : INLINE_DIFF.NONE,
+            ),
         },
       ]}
     />

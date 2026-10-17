@@ -1,12 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
+import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  DIFF_LAYOUT,
-  type DiffLook,
-  type DiffSelection,
-  type DiffViewHandle,
-} from "../diff-view/contract";
+import type { DiffLook, DiffSelection, DiffViewHandle } from "../diff-view/contract";
 import { DIFF_LOAD_FAILED, diffViewModuleAtom } from "./diff-view-bundle";
 import { useFileViewSettings } from "./file-view-settings";
 
@@ -48,7 +44,7 @@ export function useDiffLook(roomy: boolean): DiffLook {
     backgrounds: settings.diffBackgrounds,
     lineNumbers: settings.lineNumbers,
     wrap: settings.wordWrap,
-    themes: { dark: settings.darkTheme, light: settings.lightTheme },
+    themes: { dark: settings.diffDarkTheme, light: settings.diffLightTheme },
     font: settings.diffFont,
     fontSize: settings.diffFontSize,
     lineHeight: settings.diffLineHeight,

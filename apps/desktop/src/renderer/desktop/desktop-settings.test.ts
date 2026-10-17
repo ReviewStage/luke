@@ -91,6 +91,8 @@ const HOMES = [
   { words: "Let agents run commands on this Mac", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
   { words: "Changelog", page: "About" },
+  { words: "Minimize inline comments", page: "Appearance" },
+  { words: "Dark theme", page: "Appearance" },
 ];
 
 const ACCOUNT: SettingsPanelProps["account"] = {
@@ -319,6 +321,36 @@ test("the Settings search finds each moved option under its new page", () => {
       `${words} is found under ${home}`,
     );
   }
+});
+
+test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
+  const group =
+    [...page.querySelectorAll("section[aria-labelledby]")].find(
+      (each) =>
+        document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent ===
+        "Diffs",
+    ) ?? assert.fail("a Diffs group stands");
+  assert.deepEqual(
+    [...group.querySelectorAll(".settings-copy strong")].map(
+      (name) => name.firstChild?.textContent,
+    ),
+    [
+      "Line numbers",
+      "Word wrap",
+      "Layout",
+      "Indicators",
+      "Inline diffs",
+      "Backgrounds",
+      "Dark theme",
+      "Light theme",
+      "Font",
+      "Font size",
+      "Line height",
+      "Ligatures",
+      "Minimize inline comments",
+    ],
+  );
 });
 
 test("a page turned to opens at its top, not where the last page was scrolled", () => {

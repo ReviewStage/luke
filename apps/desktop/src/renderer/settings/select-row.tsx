@@ -19,6 +19,7 @@ export function SelectRow<Value extends string | number>({
   value,
   options,
   parse,
+  placeholder,
   anchor,
   changed,
   busy: restBusy,
@@ -30,6 +31,8 @@ export function SelectRow<Value extends string | number>({
   /** Each option's token and words, and the address of its picture where the set has faces. */
   options: readonly { value: Value; label: string; picture?: string | undefined }[];
   parse: (raw: string) => Value | undefined;
+  /** The empty search field's words, for a set long enough that its menu searches; none reads it whole. */
+  placeholder?: string | undefined;
   /** The id a pressed search result lands on: marked on the chip itself, which then takes the keyboard. */
   anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
@@ -89,6 +92,7 @@ export function SelectRow<Value extends string | number>({
               }
             : undefined),
         }))}
+        placeholder={placeholder}
         noMatch={NO_MATCH}
         anchor={anchor}
         disabled={busy || Boolean(restBusy)}

@@ -11,7 +11,8 @@
     "./settings-views": "./src/settings-views.js",
     "./settings-anchors": "./src/settings-anchors.js",
     "./update": "./src/update.js",
-    "./update-row": "./src/update-row.js"
+    "./update-row": "./src/update-row.js",
+    "./diff-view": "./src/diff-view.js"
   },
   "types": "./src/index.ts",
   "scripts": {
