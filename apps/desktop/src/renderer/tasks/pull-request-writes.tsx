@@ -16,7 +16,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ChevronDownIcon, GitPullRequestDraftIcon, GitPullRequestIcon, XIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useAct } from "../act";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { useGitHubConnection } from "../github-connect";
@@ -118,7 +118,8 @@ function noteOf(answer: CodingAgentPullRequestWriteAnswerView): WriteNote | unde
 }
 
 /**
- * The agent's pull request's changes, each sent once at a time; once GitHub
+ * The agent's pull request's changes, one at a time, a press while one is
+ * out doing nothing; once GitHub
  * answers, whether it took the change or refused it, `onWritten` asks the
  * tab's reads again.
  */
@@ -126,8 +127,12 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   const { act } = useAct();
   const [pending, setPending] = useState<PullRequestAction | undefined>(undefined);
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
+  // Note that the one out is held in a ref as well, because two presses in one frame both read the state from before either.
+  const out = useRef(false);
   const write = useCallback(
     (request: PullRequestActionRequest, onDone?: () => void) => {
+      if (out.current) return;
+      out.current = true;
       setPending(request.action);
       setNote(undefined);
       void act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request })
@@ -137,6 +142,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
           }),
         )
         .then((answer) => {
+          out.current = false;
           setPending(undefined);
           setNote(noteOf(answer));
           if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {

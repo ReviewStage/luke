@@ -187,6 +187,8 @@ let previews: DiffViewProps[] = [];
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+/** What the service waits on before it answers a change, where a test holds it; none answers at once. */
+let changeHeld: Promise<void> | undefined;
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -197,6 +199,7 @@ beforeEach(() => {
   previews = [];
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+  changeHeld = undefined;
   // The diff bundle, a script of its own the panel loads, stood in for at its global.
   window.lukeDiffView = {
     mount: (_host, props) => {
@@ -213,7 +216,11 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
         if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
           changes.push([request.payload.agentId, request.payload.request]);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: changeAnswer });
+          const answer = changeAnswer;
+          return (changeHeld ?? Promise.resolve()).then(() => ({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: answer,
+          }));
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
           images.push(request.payload.src);
@@ -1634,33 +1641,55 @@ function writeReply(thread: HTMLElement, words: string): void {
   });
 }
 
-test("a thread is replied on, resolved, and opened again from under its comments, each asked of the service for the agent by the thread's id, the conversation read again after each", async () => {
-  let reads = 0;
+/** The thread as GitHub holds it once the changes asked so far were made: their replies after its comment, and resolved by the last resolve or unresolve. */
+function threadAfterChanges(): ReviewThread {
+  const base = thread({ id: "PRRT_flag" });
   let resolved = false;
+  const replies: ReviewThread["comments"][number][] = [];
+  for (const [, request] of changes) {
+    if (request.action === PULL_REQUEST_ACTION.REPLY_TO_THREAD) {
+      replies.push({
+        by: CHARLES_ON_GITHUB,
+        html: null,
+        body: request.body,
+        at: 3_000,
+        url: `${PAGE}#discussion_r${10 + replies.length}`,
+      });
+    }
+    if (request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD) resolved = true;
+    if (request.action === PULL_REQUEST_ACTION.UNRESOLVE_THREAD) resolved = false;
+  }
+  return { ...base, resolved, comments: [...base.comments, ...replies] };
+}
+
+test("a thread is replied on, resolved, and opened again from under its comments, each asked of the service for the agent by the thread's id, the thread then drawn as GitHub holds it", async () => {
   const tab = await draw(
     controlAnswering({
-      conversation: () => {
-        reads += 1;
-        return Promise.resolve({
-          pullRequest: reviewWith([thread({ id: "PRRT_flag", resolved })]),
-        });
-      },
+      conversation: () => Promise.resolve({ pullRequest: reviewWith([threadAfterChanges()]) }),
     }),
   );
   const card = (): HTMLElement =>
     tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+  const labels = () => words(card(), ".pull-request-thread-label");
 
   writeReply(card(), "Renamed in the next push.");
   act(() => threadPress(card(), "Reply").click());
   await settle();
   assert.equal(card().querySelector("textarea"), null, "the field closes once GitHub took it");
+  assert.match(
+    card().querySelector(".pull-request-thread-comments")?.textContent ?? "",
+    /Renamed in the next push\./u,
+    "the reply is drawn under the thread once read again",
+  );
 
-  resolved = true;
   act(() => threadPress(card(), "Resolve conversation").click());
   await settle();
-  resolved = false;
+  assert.deepEqual(labels(), ["Resolved"]);
+
   act(() => threadPress(card(), "Unresolve conversation").click());
   await settle();
+  assert.deepEqual(labels(), []);
+  assert.ok(threadPress(card(), "Resolve conversation"), "the thread stands open again");
 
   assert.deepEqual(changes, [
     [
@@ -1674,8 +1703,37 @@ test("a thread is replied on, resolved, and opened again from under its comments
     [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
     [AGENT.id, { action: PULL_REQUEST_ACTION.UNRESOLVE_THREAD, threadId: "PRRT_flag" }],
   ]);
-  assert.equal(reads, 4, "the conversation is read again after each");
-  assert.ok(threadPress(card(), "Resolve conversation"), "the thread stands open again");
+});
+
+test("while a thread's resolve is out, its reply stands still, neither sent nor let go, so nothing is posted twice", async () => {
+  const held = Promise.withResolvers<void>();
+  changeHeld = held.promise;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => Promise.resolve({ pullRequest: reviewWith([threadAfterChanges()]) }),
+    }),
+  );
+  const card = (): HTMLElement =>
+    tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+
+  writeReply(card(), "Done.");
+  act(() => threadPress(card(), "Resolve conversation").click());
+  const field = card().querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail();
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  assert.equal(threadPress(card(), "Reply").disabled, true);
+  assert.equal(card().querySelector("textarea")?.value, "Done.", "Escape lets nothing go");
+  held.resolve();
+  await settle();
+  assert.deepEqual(
+    changes.map(([, request]) => request.action),
+    [PULL_REQUEST_ACTION.RESOLVE_THREAD],
+  );
 });
 
 test("a reply GitHub refuses says so under its thread in GitHub's own words, its words kept, and a thread read with no id offers nothing to press", async () => {

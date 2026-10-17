@@ -55,12 +55,21 @@ export const ThreadWritesProvider = ThreadWritesContext.Provider;
 /** What a thread drawn outside a tab reads again once changed: nothing, since it offers no change. */
 function noop(): void {}
 
-/** The reply being written: a field, Cancel, and Reply; ⌘↩ sends it and Escape lets it go. */
+/**
+ * The reply being written: a field, Cancel, and Reply; ⌘↩ sends it and
+ * Escape lets it go. While any change to its thread is out, the reply
+ * stands still, neither sent nor let go, so nothing is posted twice and
+ * nothing written is lost to a refusal.
+ */
 function ReplyForm({
+  busy,
   sending,
   onSend,
   onCancel,
 }: {
+  /** Whether a change to the thread is out, this reply or another. */
+  busy: boolean;
+  /** Whether the change out is this reply. */
   sending: boolean;
   onSend: (body: string) => void;
   onCancel: () => void;
@@ -69,7 +78,7 @@ function ReplyForm({
   const field = useRef<HTMLTextAreaElement>(null);
   const blank = body.trim() === "";
   const send = () => {
-    if (!blank && !sending) onSend(body);
+    if (!blank && !busy) onSend(body);
   };
 
   useEffect(() => {
@@ -85,14 +94,14 @@ function ReplyForm({
         placeholder={THREAD_WORDS.REPLY_PLACEHOLDER}
         value={body}
         maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-        readOnly={sending}
+        readOnly={busy}
         onChange={(event) => setBody(event.target.value)}
         onKeyDown={(event) => {
           // Note that Escape goes no further than the field, because the window's own Escape would leave the tab as well.
           if (event.key === "Escape") {
             event.preventDefault();
             event.stopPropagation();
-            onCancel();
+            if (!busy) onCancel();
           }
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
             event.preventDefault();
@@ -101,13 +110,13 @@ function ReplyForm({
         }}
       />
       <div className="pull-request-thread-reply-foot">
-        <button type="button" className="toolbar-button" disabled={sending} onClick={onCancel}>
+        <button type="button" className="toolbar-button" disabled={busy} onClick={onCancel}>
           {THREAD_WORDS.CANCEL}
         </button>
         <button
           type="button"
           className="primary-button"
-          disabled={blank || sending}
+          disabled={blank || busy}
           aria-busy={sending}
           onClick={send}
         >
@@ -144,6 +153,7 @@ export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.E
     <div className="pull-request-thread-actions">
       {replying ? (
         <ReplyForm
+          busy={out !== undefined}
           sending={out === PULL_REQUEST_ACTION.REPLY_TO_THREAD}
           onSend={(body) =>
             writes.write({ action: PULL_REQUEST_ACTION.REPLY_TO_THREAD, threadId: id, body }, () =>
