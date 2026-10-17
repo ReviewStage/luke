@@ -162,22 +162,26 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
-test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its agent's new name", () => {
+test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its pull request's name, never its agent's", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Pull request: Invite flow"));
+  act(() => first.control().onPin({ changes: AGENT }, "Pull request"));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(
     second.control().pins.map(({ task, tab, label }) => ({ task, tab, label })),
-    [{ task: TASK, tab: { changes: AGENT }, label: "Pull request: Invite flow" }],
+    [{ task: TASK, tab: { changes: AGENT }, label: "Pull request" }],
   );
   // The panel's other choices read too, rather than the whole record being dropped.
   assert.deepEqual(second.control().tab, { changes: AGENT });
 
-  act(() => second.control().onRenamePins(TASK, new Map([[AGENT, "Expiring invites"]])));
-  assert.equal(second.control().pins[0]?.label, "Pull request: Expiring invites");
+  const agents = new Map([[AGENT, "Expiring invites"]]);
+  act(() => second.control().onRenamePins(TASK, { agents, pullRequests: new Map() }));
+  assert.equal(second.control().pins[0]?.label, "Pull request", "its pull request unread");
+  const pullRequests = new Map([[AGENT, "#42 Expire invitations"]]);
+  act(() => second.control().onRenamePins(TASK, { agents, pullRequests }));
+  assert.equal(second.control().pins[0]?.label, "#42 Expire invitations");
 
   // Shown from its pin on another task, it opens there, at the end of that task's strip.
   second.render({ task: OTHER_TASK, taskAgents: [OTHER_AGENT] });

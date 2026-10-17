@@ -243,18 +243,18 @@ test("the plan's own tab closes beside the agents', and the column's + offers th
   assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name));
 });
 
-test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear", () => {
+test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear, the Pull request named by its number and title rather than its agent's name", () => {
   const panel = mount().querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
   const tabs = tabLooks(panel);
   const rows = rowLooks(panel);
-  for (const name of [READER.title, `Pull request: ${DONE.title}`]) {
+  for (const name of [READER.title, "#42 Expire invitations"]) {
     assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
     assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
   }
   assert.match(tabs.get(READER.title ?? "")?.glyph ?? "", /data-state="working"/u);
   assert.match(
-    tabs.get(`Pull request: ${DONE.title}`)?.glyph ?? "",
+    tabs.get("#42 Expire invitations")?.glyph ?? "",
     /data-pull-request-state="open"/u,
     "the Pull request tab wears its pull request's mark for where it stands",
   );

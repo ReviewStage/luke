@@ -607,7 +607,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   assert.deepEqual(listed, []);
 });
 
-test("an agent's Pull request row is named as its tab is, with its pull request's number beside it, and is found by that number and the pull request's title", () => {
+test("an agent's Pull request row is named as its tab is, by its pull request's number and title, with the agent beside it, and is found by that number, that title, and the agent's name", () => {
   const agent = {
     id: "agent-7",
     planId: "plan-1",
@@ -652,11 +652,13 @@ test("an agent's Pull request row is named as its tab is, with its pull request'
       }),
     }),
   );
-  const changes = "Pull request: Invoice export · #42 · Billing usage alerts";
+  const changes = "#42 Export invoices as CSV · Invoice export · Billing usage alerts";
   type("#42");
   assert.ok(rows().includes(changes), "found by its pull request's number");
   type("CSV");
   assert.ok(rows().includes(changes), "found by its pull request's title");
+  type("Invoice export");
+  assert.ok(rows().includes(changes), "found by its agent's name");
 });
 
 test("while an agent's page holds the side panel, ⌘K offers none of the open plan's panel tabs, workers, Changes, or files, which would open beside the agent", () => {
