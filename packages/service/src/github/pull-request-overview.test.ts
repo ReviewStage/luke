@@ -111,15 +111,18 @@ function checkRun(name: string, status: string, conclusion: string | null) {
   };
 }
 
-/** GitHub's GraphQL answer to the deployments read, the head's deployments newest first, as given; none where none are given. */
+/** GitHub's GraphQL answer to the deployments read, the head's deployments newest first, as given, as many as the query asks for; none where none are given. */
 function deploymentsAnswer(
   deployments: readonly object[] | Response | undefined,
+  query: string,
 ): object | Response | undefined {
   if (deployments === undefined || deployments instanceof Response) return deployments;
+  const first = Number(/deployments\(first: (\d+)/u.exec(query)?.[1] ?? "0");
+  const nodes = deployments.slice(0, first);
   return {
     data: {
       repository: {
-        pullRequest: { commits: { nodes: [{ commit: { deployments: { nodes: deployments } } }] } },
+        pullRequest: { commits: { nodes: [{ commit: { deployments: { nodes } } }] } },
       },
     },
   };
@@ -152,7 +155,7 @@ function repository(answers: {
       // Note that the threads and the deployments are each asked of this one pull request by name and number.
       assert.deepEqual(asked.variables, { owner: "acme", name: "relay", number: NUMBER });
       const answer = asked.query.startsWith("query Deployments")
-        ? deploymentsAnswer(answers.deployments)
+        ? deploymentsAnswer(answers.deployments, asked.query)
         : answers.graphql;
       if (answer !== undefined) {
         return answer instanceof Response ? answer : Response.json(answer);
@@ -466,6 +469,27 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           },
         ]);
         assert.equal(asked, 1, "one request reads every deployment and its newest status");
+      }),
+  );
+
+  it.effect(
+    "an environment deployed again and again on the head leaves room for an older one in the same one request",
+    () =>
+      Effect.gen(function* () {
+        const redeployed = Array.from({ length: 30 }, () =>
+          deployment("Preview", "INACTIVE", "https://preview.vercel.app"),
+        );
+        const deployments = yield* pullRequestDeployments(TOKEN, REPOSITORY, NUMBER).pipe(
+          answering(
+            repository({
+              deployments: [...redeployed, deployment("staging", "SUCCESS", null)],
+            }),
+          ),
+        );
+        assert.deepEqual(
+          deployments.map(({ environment }) => environment),
+          ["Preview", "staging"],
+        );
       }),
   );
 

@@ -1506,10 +1506,14 @@ export const pullRequestConversation = /* @__PURE__ */ Effect.fn("web/pullReques
 
 /**
  * How many deployments of the head one read asks GitHub for, the newest
- * first: twice the most it lists, so an environment deployed again and
- * again leaves room for the others once each keeps its newest.
+ * first: a whole page, GitHub's most, so an environment deployed again and
+ * again on the same commit leaves room for the others once each keeps its
+ * newest. Note that it is one page and never more, because paging until
+ * ten environments stood would make the checks read's requests grow with
+ * how often one environment redeployed; a head with more than a hundred
+ * deployments lists the environments of its newest hundred.
  */
-const DEPLOYMENTS_ASKED = OVERVIEW_BOUNDS.MAX_DEPLOYMENTS * 2;
+const DEPLOYMENTS_ASKED = 100;
 
 /**
  * The deployments of a pull request's head, in one GraphQL read whatever
