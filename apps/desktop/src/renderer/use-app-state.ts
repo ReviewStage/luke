@@ -114,8 +114,8 @@ const appStateAtom: Atom.Atom<AsyncResult.AsyncResult<AppStateSnapshot, AppState
 /**
  * The document as main holds it, read before anything is drawn over it: the
  * first reading the atom answers with, which is the read the subscription was
- * installed for. Every later reading arrives on that subscription. Run at a
- * renderer root and nowhere else.
+ * installed for. Every later reading arrives on that subscription. Run at
+ * the window root (`window-root.tsx`) and nowhere else.
  */
 export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnavailable> =
   AtomRegistry.getResult(rendererRegistry, appStateAtom);
