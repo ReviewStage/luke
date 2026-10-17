@@ -280,7 +280,7 @@ async function settle(): Promise<void> {
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll(".home-section, [data-issue-column]")]
     .map((group): [string, string[]] => [
-      group.querySelector(".issue-group-head, .factory-head")?.textContent ?? "",
+      group.querySelector("h2")?.textContent ?? "",
       [...group.querySelectorAll(".sidebar-task-item")].map(
         (row) =>
           `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
