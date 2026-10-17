@@ -303,7 +303,10 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
     page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
     assert.fail("no Anthropic field");
   act(() => {
-    field.value = "sk-ant-api03-synthetic-0000000000000000new1";
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      field,
+      "sk-ant-api03-synthetic-0000000000000000new1",
+    );
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
   act(() => field.form?.requestSubmit());

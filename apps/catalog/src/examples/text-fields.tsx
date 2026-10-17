@@ -1,4 +1,12 @@
-import { FormField, GAP, Stack, TEXT_FIELD_TYPE, TextArea, TextField } from "@luke/ui";
+import {
+  FormField,
+  GAP,
+  Stack,
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_TYPE,
+  TextArea,
+  TextField,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -55,6 +63,7 @@ function TextFields(): React.JSX.Element {
                     <TextField
                       field={field}
                       type={TEXT_FIELD_TYPE.PASSWORD}
+                      autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
                       value={value}
                       onChange={onChange}
                     />

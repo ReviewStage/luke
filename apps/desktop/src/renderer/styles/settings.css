@@ -51,7 +51,7 @@
   padding: 0 var(--space-16) var(--space-12);
 }
 
-.settings-card > :is(.settings-row, .api-key-form) + .error-message {
+.settings-card > .settings-row + .error-message {
   margin-top: calc(-1 * var(--space-4));
   border-top: 0;
 }
@@ -388,23 +388,31 @@
 }
 
 /* Settings › Coding agents › API keys: a key being added or edited grows its
-   row a field, Cancel, and Save, under the row's words and inside its rule.
+   row a field, Cancel, and Save, under the row's words and inside its rule,
+   and a refused save says why under them. The field takes the line's room.
    The hint is the key's own characters, so it reads in the code face. */
-.settings-card > .api-key-form {
+.api-key {
   display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  margin-top: calc(-1 * var(--space-4));
-  padding: 0 var(--space-16) var(--space-12) calc(var(--space-16) + 20px + var(--space-12));
-  border-top: 0;
+  flex-direction: column;
 }
 
-.api-key-form .settings-input {
+.api-key-form {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  margin-top: calc(-1 * var(--luke-space-4));
+  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block)
+    calc(var(--luke-settings-row-inline) + 20px + var(--luke-space-12));
+}
+
+.api-key-form > :first-child {
   min-width: 0;
-  height: var(--control-height);
   flex: 1;
-  padding: 0 var(--space-8);
-  border-radius: var(--control-radius);
+}
+
+.api-key > .error-message {
+  margin-top: calc(-1 * var(--luke-space-4));
+  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
 }
 
 .api-key-hint {
@@ -615,7 +623,7 @@
   content: "";
 }
 
-.settings-copy .settings-state[data-state="attention"] {
+.settings-state[data-state="attention"] {
   color: var(--state-attention);
 }
 
@@ -741,7 +749,8 @@
    first line whole, its chip and its press under it. */
 @container settings (max-width: 379px) {
   .settings-row:has(> .settings-copy),
-  .settings-card > :is(.workspace-invite, .api-key-form) {
+  .settings-card > .workspace-invite,
+  .api-key-form {
     flex-wrap: wrap;
     justify-content: flex-end;
     row-gap: var(--space-8);
@@ -751,7 +760,8 @@
     min-width: 60%;
   }
 
-  :is(.workspace-invite, .api-key-form) .settings-input {
+  .workspace-invite .settings-input,
+  .api-key-form > :first-child {
     flex-basis: 100%;
   }
 }
