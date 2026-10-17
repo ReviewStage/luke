@@ -25,7 +25,7 @@ import {
   PencilIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useAct } from "../act";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { useGitHubConnection } from "../github-connect";
@@ -321,12 +321,8 @@ export function PullRequestTitle({
   writes: PullRequestWrites;
 }): React.JSX.Element {
   const [editing, setEditing] = useState<string | undefined>(undefined);
-  const field = useRef<HTMLInputElement | null>(null);
   const busy = writes.pending !== undefined;
-  const begin = () => {
-    setEditing(title);
-    requestAnimationFrame(() => field.current?.select());
-  };
+  const begin = () => setEditing(title);
   const keep = () => {
     const words = (editing ?? "").trim();
     if (words === "" || words === title) {
@@ -358,16 +354,25 @@ export function PullRequestTitle({
   return (
     <div className="pull-request-title pull-request-title-field">
       <input
-        ref={field}
         className="pull-request-title-input"
+        // biome-ignore lint/a11y/noAutofocus: the field opens on a press of its pencil, which is where the keyboard is going.
+        autoFocus
+        onFocus={(event) => event.currentTarget.select()}
         aria-label={TITLE_WORDS.FIELD}
         value={editing}
         maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS}
         disabled={busy}
         onChange={(event) => setEditing(event.target.value)}
         onKeyDown={(event) => {
+          // Note that a key an input method takes to finish a word is the word's, not the field's.
+          if (event.nativeEvent.isComposing) return;
           if (event.key === "Enter") keep();
-          if (event.key === "Escape") setEditing(undefined);
+          if (event.key === "Escape") {
+            // The field's Escape gives the edit up and nothing more, so the window's own Escape never closes the page.
+            event.preventDefault();
+            event.stopPropagation();
+            setEditing(undefined);
+          }
         }}
       />
       <Tooltip label={TITLE_WORDS.SAVE}>

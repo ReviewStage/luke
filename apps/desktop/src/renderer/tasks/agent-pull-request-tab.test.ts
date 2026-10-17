@@ -1686,21 +1686,31 @@ function type(field: HTMLInputElement, words: string): void {
   });
 }
 
-/** A key pressed in a field. */
-async function key(field: HTMLInputElement, name: string): Promise<void> {
+/** A key pressed in a field, while an input method composes a word where `composing` says. */
+async function key(field: HTMLInputElement, name: string, composing = false): Promise<void> {
   act(() => {
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true }));
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, bubbles: true, isComposing: composing }),
+    );
   });
   await settle();
 }
 
 test("the title is edited in place: Enter keeps new words trimmed, and Escape, or words unchanged, sends nothing", async () => {
   const tab = await draw(controlAnswering());
-
   const escaped = editTitle(tab);
+  assert.equal(document.activeElement, escaped, "the field takes the keys as it opens");
   type(escaped, "Something else");
+  await key(escaped, "Enter", true);
+  await key(escaped, "Escape", true);
+  assert.equal(escaped.isConnected, true, "keys an input method takes leave the field as it is");
+  const heard: string[] = [];
+  const hear = (event: KeyboardEvent) => heard.push(event.key);
+  window.addEventListener("keydown", hear);
   await key(escaped, "Escape");
+  window.removeEventListener("keydown", hear);
   assert.equal(tab.querySelector('[aria-label="Pull request title"]'), null);
+  assert.deepEqual(heard, [], "the field's own Escape never reaches the window");
 
   const unchanged = editTitle(tab);
   assert.equal(unchanged.value, PULL_REQUEST.title);
