@@ -10,6 +10,7 @@ import {
   automationDraft,
   changeOf,
   createRequestOf,
+  cronOf,
   DRAFT_FIELD,
   type DraftDefaults,
   type DraftProblems,
@@ -27,6 +28,7 @@ import {
   withRepository,
 } from "@luke/features/automation-draft-model";
 import { automationTriggerText } from "@luke/features/automation-list-model";
+import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
@@ -66,6 +68,8 @@ import {
   AnchoredPopover,
   BUTTON_VARIANT,
   Button,
+  CHIP_LOOK,
+  Chip,
   ChipName,
   ConfirmDialog,
   EllipsisIcon,
@@ -90,11 +94,11 @@ import {
 import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { Result } from "effect";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
@@ -470,10 +474,13 @@ const scheduleKindOf = optionValue(SCHEDULE_KINDS);
  */
 function ScheduleRows({
   draft,
+  problem,
   onSchedule,
   onTimezone,
 }: {
   draft: AutomationDraft;
+  /** What stops a save in the schedule, said under the row it is about. */
+  problem: string | undefined;
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
 }): React.JSX.Element {
@@ -482,6 +489,13 @@ function ScheduleRows({
   const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
   const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
+  // Note that a zone Luke cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
+  const read =
+    problem === undefined
+      ? undefined
+      : readSchedule({ cron: cronOf(schedule), timezone }, new Date());
+  const zoneRefused =
+    read !== undefined && Result.isFailure(read) && read.failure === SCHEDULE_REFUSAL.TIMEZONE;
   return (
     <>
       <SelectRow
@@ -493,7 +507,7 @@ function ScheduleRows({
         onChange={(kind) => onSchedule({ ...schedule, kind })}
       />
       {schedule.kind === SCHEDULE_KIND.CUSTOM ? (
-        <SettingsRow label="Cron">
+        <SettingsRow label="Cron" error={zoneRefused ? undefined : problem}>
           {() => (
             <span className="automation-field">
               <TextField
@@ -509,7 +523,10 @@ function ScheduleRows({
           )}
         </SettingsRow>
       ) : (
-        <SettingsRow label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}>
+        <SettingsRow
+          label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}
+          error={zoneRefused ? undefined : problem}
+        >
           {() => (
             <>
               {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
@@ -560,6 +577,7 @@ function ScheduleRows({
         rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
         placeholder="Search time zones"
         noMatch="No time zones match"
+        error={zoneRefused ? problem : undefined}
         onPick={onTimezone}
       />
     </>
@@ -1084,7 +1102,6 @@ function ModelPicker({
         ref={trigger}
         look={CHIP_LOOK.FIELD}
         chevron
-        className="settings-picker-chip"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -1093,7 +1110,7 @@ function ModelPicker({
           setOpen(!open);
         }}
       >
-        <span className="chip-name">Choose a model</span>
+        <ChipName>Choose a model</ChipName>
       </Chip>
       {drawn.mounted ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
@@ -1141,28 +1158,25 @@ function ModelRow({
         ? "It runs on your default model, which could not be read."
         : "Your default model.";
   return (
-    <div className="settings-row">
-      <span className="settings-copy">
-        <strong>Model</strong>
-        {note === undefined ? null : <small>{note}</small>}
-      </span>
-      {shown !== undefined ? (
-        <AgentModelChip
-          model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
-          models={choices.models}
-          readModels={choices.readModels}
-          usage={undefined}
-          look={CHIP_LOOK.FIELD}
-          className="settings-picker-chip"
-        />
-      ) : choices.defaultFailed ? (
-        <ModelPicker
-          models={choices.models}
-          readModels={choices.readModels}
-          onChoose={(choice) => onDraft({ choice })}
-        />
-      ) : null}
-    </div>
+    <SettingsRow label="Model" description={note}>
+      {() =>
+        shown !== undefined ? (
+          <AgentModelChip
+            model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
+            models={choices.models}
+            readModels={choices.readModels}
+            usage={undefined}
+            look={CHIP_LOOK.FIELD}
+          />
+        ) : choices.defaultFailed ? (
+          <ModelPicker
+            models={choices.models}
+            readModels={choices.readModels}
+            onChoose={(choice) => onDraft({ choice })}
+          />
+        ) : null
+      }
+    </SettingsRow>
   );
 }
 
@@ -1173,6 +1187,9 @@ function agentLabel(agent: { title: string | null }): string {
 
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
+
+/** What the agent row says where the workspace's agents could not be read. */
+const AGENTS_UNREAD = "The workspace's agents could not be read.";
 
 /** What the agent row says under its name. */
 const AGENT_DETAIL =
@@ -1187,24 +1204,27 @@ function AgentRow({
   draft,
   savedAgentId,
   agents,
+  problem,
   onDraft,
 }: {
   draft: AutomationDraft;
   /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
   agents: AgentsRead;
+  /** What stops a save here, or nothing. */
+  problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const now = useMinute();
   if (agents !== undefined && "failed" in agents) {
     return (
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Agent</strong>
-          <small>{AGENT_DETAIL}</small>
-          <small className="error-message">The workspace's agents could not be read.</small>
-        </span>
-      </div>
+      <SettingsRow
+        label="Agent"
+        description={AGENT_DETAIL}
+        error={problem === undefined ? AGENTS_UNREAD : `${AGENTS_UNREAD} ${problem}`}
+      >
+        {() => null}
+      </SettingsRow>
     );
   }
   const listed = agents?.agents ?? [];
@@ -1244,6 +1264,7 @@ function AgentRow({
         ) : undefined
       }
       noMatch={NO_MATCH}
+      error={problem}
       onPick={(agentId) => onDraft({ agentId })}
     />
   );
@@ -1284,26 +1305,29 @@ function RunsGroup({
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
     <SettingsSection title="Runs">
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Repository</strong>
-          {taskBacked ? (
-            <small>Its task's repository.</small>
-          ) : also.length === 0 ? null : (
-            <small>{`Runs start here, and also work in ${also.join(", ")}.`}</small>
-          )}
-        </span>
-        {taskBacked ? null : (
-          <RepositoryChip
-            key={repositories.scope}
-            place={CHIP_PLACE.FIELD}
-            value={draft.repository}
-            chooser={repositories}
-            onChoose={(repository) => onDraft(withRepository(draft, repository))}
-          />
-        )}
-      </div>
-      <Problem problem={problems[DRAFT_FIELD.REPOSITORY]} />
+      <SettingsRow
+        label="Repository"
+        description={
+          taskBacked
+            ? "Its task's repository."
+            : also.length === 0
+              ? undefined
+              : `Runs start here, and also work in ${also.join(", ")}.`
+        }
+        error={problems[DRAFT_FIELD.REPOSITORY]}
+      >
+        {() =>
+          taskBacked ? null : (
+            <RepositoryChip
+              key={repositories.scope}
+              place={CHIP_PLACE.FIELD}
+              value={draft.repository}
+              chooser={repositories}
+              onChoose={(repository) => onDraft(withRepository(draft, repository))}
+            />
+          )
+        }
+      </SettingsRow>
       <SelectRow
         label="Runs land in"
         value={draft.target}
@@ -1316,6 +1340,7 @@ function RunsGroup({
           draft={draft}
           savedAgentId={savedAgentId}
           agents={choices.agents}
+          problem={problems[DRAFT_FIELD.AGENT]}
           onDraft={onDraft}
         />
       ) : (
@@ -1334,7 +1359,6 @@ function RunsGroup({
           />
         </>
       )}
-      <Problem problem={problems[DRAFT_FIELD.AGENT]} />
     </SettingsSection>
   );
 }
@@ -1406,11 +1430,17 @@ function EditorForm({
           value={draft.triggerKind}
           options={TRIGGERS}
           parse={triggerKindOf}
+          error={
+            draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
+              ? undefined
+              : problems[DRAFT_FIELD.SCHEDULE]
+          }
           onChange={(triggerKind) => onDraft({ triggerKind })}
         />
         {draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE ? (
           <ScheduleRows
             draft={draft}
+            problem={problems[DRAFT_FIELD.SCHEDULE]}
             onSchedule={(schedule) => onDraft({ schedule })}
             onTimezone={(timezone) => onDraft({ timezone })}
           />
@@ -1438,7 +1468,6 @@ function EditorForm({
             onSecret={onSecret}
           />
         )}
-        <Problem problem={problems[DRAFT_FIELD.SCHEDULE]} />
       </SettingsSection>
       {review === undefined ? null : (
         <CodeReviewGroup

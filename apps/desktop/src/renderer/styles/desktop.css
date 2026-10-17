@@ -5275,37 +5275,16 @@ button.integration-tool-head:hover,
 /* A picker here grows from a Settings picker's width to name its whole
    value, an event's or a zone's, rather than cut it short; the time stands
    at that same width beside them. Where the window leaves the form narrow,
-   beside the sidebar and the runs, a row's controls drop under its name and
-   wrap, as a wrapping Settings row's do, and a picker gives way to the room
-   rather than run past its card. */
-.automation-form .settings-row {
-  flex-wrap: wrap;
-}
-
-.automation-form .settings-row > .settings-copy {
-  flex: 1 1 200px;
-}
-
+   beside the sidebar and the runs, a picker gives way to the room rather
+   than run past its card. */
 .automation-form .settings-picker {
   max-width: 100%;
 }
 
-/* The Runs card's rows not yet drawn by the shared row (repository, model,
-   agent) stand at its height and padding, and what stops a save
-   stands under its row inside the card, as a Settings refusal does. */
-.automation-form .luke-settings-section-card > .settings-row {
-  min-height: var(--luke-settings-row-min-height);
-  padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
-}
-
-.automation-form .luke-settings-section-card > .error-message {
-  margin-top: calc(-1 * var(--luke-space-4));
-  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
-  border-top: 0;
-}
-
 .automation-form .settings-picker-chip,
 .automation-form .settings-picker > .luke-chip,
+.automation-form .agent-model-chip .luke-chip,
+.automation-form .automation-model-picker > .luke-chip,
 .automation-form .agent-servers > .luke-chip {
   width: auto;
   min-width: min(200px, 100%);

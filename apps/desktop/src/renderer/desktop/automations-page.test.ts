@@ -720,6 +720,19 @@ function pickerDetail(page: HTMLElement, label: string): string | undefined {
   return id === null ? undefined : (document.getElementById(id)?.textContent ?? undefined);
 }
 
+/** Whether `words` stand in a polite live region, as a row's error line says them. */
+function announced(words: string): boolean {
+  return [...document.querySelectorAll("[aria-live=polite]")].some(
+    (region) => region.textContent === words,
+  );
+}
+
+/** What describes the picker named, each part on its own: its row's why, then its row's error. */
+function pickerDescription(page: HTMLElement, label: string): (string | undefined)[] {
+  const ids = picker(page, label).getAttribute("aria-describedby")?.split(" ") ?? [];
+  return ids.map((id) => document.getElementById(id)?.textContent ?? undefined);
+}
+
 /** Picks an option as a developer would: the picker's chip, then the menu's row of that name. */
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
@@ -1530,7 +1543,11 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
   act(() => button("Save").click());
   await settle();
   assert.deepEqual(changes, [], "a same agent with none chosen is not saved");
-  assert.match(page.textContent ?? "", /Choose the agent its runs go to\./u);
+  assert.ok(announced("Choose the agent its runs go to."), "the refusal is announced");
+  assert.ok(
+    pickerDescription(page, "Agent").includes("Choose the agent its runs go to."),
+    "the refusal describes the Agent picker it is about",
+  );
 
   pick(page, "Agent", "CI digest");
   assert.equal(picked(page, "Agent"), "CI digest");
@@ -1804,6 +1821,25 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   assert.equal(
     rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
     "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+  );
+});
+
+test("a schedule Luke cannot read is not created, and the refusal is announced under its row", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  type(page.querySelector("input[aria-label='Automation name']"), "Nightly sweep");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Sweep the stale branches.");
+  pick(page, "Repeats", "Custom");
+  type(page.querySelector("input[aria-label='Cron']"), "every night");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.deepEqual(creates, []);
+  assert.ok(announced("That isn't a schedule Luke can read."), "the refusal is announced");
+  assert.ok(
+    !pickerDescription(page, "Type").includes("That isn't a schedule Luke can read."),
+    "the refusal stands under the cron's row, not the trigger's",
   );
 });
 

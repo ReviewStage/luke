@@ -24,6 +24,7 @@ export function SelectRow<Value extends string | number>({
   changed,
   busy: restBusy,
   density,
+  error,
   onChange,
 }: {
   label: string;
@@ -45,6 +46,8 @@ export function SelectRow<Value extends string | number>({
   busy?: boolean;
   /** How the row stands; in a settings card where none is named. */
   density?: SettingsRowDensity | undefined;
+  /** What stops the caller's own save at this row, said where no write of the row's was refused. */
+  error?: string | undefined;
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
   onChange: (value: Value) => void | Promise<ActionResult>;
 }): React.JSX.Element {
@@ -56,7 +59,7 @@ export function SelectRow<Value extends string | number>({
       label={label}
       detail={detail}
       changed={changed}
-      error={rejection}
+      error={rejection ?? error}
       density={density}
       value={String(value)}
       valueLabel={chosen?.label ?? String(value)}
