@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { eventWithoutAccessTokens, withoutAccessTokens } from "./sentry-breadcrumbs";
+import {
+  eventWithoutAccessTokens,
+  transactionWithoutAccessTokens,
+  withoutAccessTokens,
+} from "./sentry-breadcrumbs";
 
 /**
  * sentry-breadcrumbs.test.ts -- a renderer's breadcrumbs as Sentry would carry them: LiveKit's token never among them.
@@ -80,4 +84,28 @@ test("an event carrying no token is sent as it was", () => {
     request: { url: "app://renderer/call.html" },
   };
   assert.equal(eventWithoutAccessTokens(event), event);
+});
+
+test("a trace whose request span carries a failed join's validate URL is dropped", () => {
+  const url = `https://x.livekit.cloud/rtc/v1/validate?access_token=${TOKEN}`;
+  const trace = {
+    type: "transaction" as const,
+    transaction: "/panel.html",
+    spans: [
+      {
+        span_id: "a1",
+        trace_id: "b2",
+        start_timestamp: 1,
+        op: "http.client",
+        description: `GET ${url}`,
+        data: { url },
+      },
+    ],
+  };
+  assert.equal(transactionWithoutAccessTokens(trace), null);
+});
+
+test("a trace carrying no token is sent as it was", () => {
+  const trace = { type: "transaction" as const, transaction: "/panel.html", spans: [] };
+  assert.equal(transactionWithoutAccessTokens(trace), trace);
 });

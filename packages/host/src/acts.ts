@@ -27,9 +27,12 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -51,13 +54,17 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
-  codingAgentOverviewAnswerViewSchema,
+  codingAgentOverviewChecksAnswerViewSchema,
+  codingAgentOverviewConversationAnswerViewSchema,
+  codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
   codingAgentPinParamsSchema,
+  codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
@@ -437,10 +444,16 @@ export const ACT_KIND = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
-  /** One agent's pull request's description, checks, reviewers, and conversation, which its Pull request tab draws. */
-  CODING_AGENTS_OVERVIEW: "codingAgents.overview",
+  /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
   /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
   /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -1236,17 +1249,38 @@ export const ACT = {
     ),
     refusal: "Could not read the agent's changes on this system.",
   },
-  [ACT_KIND.CODING_AGENTS_OVERVIEW]: {
+  [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: {
     payload: actSchema(codingAgentPullRequestParamsSchema),
-    result: wireResult<CodingAgentOverviewAnswerView>(
-      isReadable(codingAgentOverviewAnswerViewSchema),
+    result: wireResult<CodingAgentOverviewPullRequestAnswerView>(
+      isReadable(codingAgentOverviewPullRequestAnswerViewSchema),
     ),
     refusal: "Could not read the agent's pull request on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentOverviewChecksAnswerView>(
+      isReadable(codingAgentOverviewChecksAnswerViewSchema),
+    ),
+    refusal: "Could not read the pull request's checks on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentOverviewConversationAnswerView>(
+      isReadable(codingAgentOverviewConversationAnswerViewSchema),
+    ),
+    refusal: "Could not read the pull request's conversation on this system.",
   },
   [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: {
     payload: actSchema(codingAgentGitHubImageParamsSchema),
     result: wireResult<CodingAgentGitHubImageView>(isReadable(codingAgentGitHubImageViewSchema)),
     refusal: "Could not read the pull request's image on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: {
+    payload: actSchema(codingAgentPullRequestActionParamsSchema),
+    result: wireResult<CodingAgentPullRequestWriteAnswerView>(
+      isReadable(codingAgentPullRequestWriteAnswerViewSchema),
+    ),
+    refusal: "Could not change the pull request on this system.",
   },
   [ACT_KIND.AUTOMATIONS_LIST]: {
     payload: actSchema(automationListParamsSchema),

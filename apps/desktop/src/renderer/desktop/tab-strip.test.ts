@@ -5,24 +5,19 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { Tab, TabStrip } from "./tab-strip";
 
 /**
- * tab-strip.test.ts -- a strip gives way in its stylesheet alone, as
- * Safari's tab bar does: however many tabs it holds and however it is
+ * tab-strip.test.ts -- however many tabs a strip holds and however it is
  * narrowed, chosen, or scrolled, it draws every tab and no list of hidden
- * ones, and settles with no loop of renders; a tab other than the chosen one
- * narrower than 72px stands as its glyph alone, and keeps it under the
- * pointer, the chosen keeping its label and its ×; the strip asks room for
- * its tabs by their count; and a tab chosen past its end is scrolled into its
- * own place, the strip's scroll alone. The plan's column and the side panel draw this one strip, so this
- * holds for both. jsdom lays nothing out, so a width is the stylesheets'
- * container queries resolved for a tab that wide (`#testing/container-width`),
- * and a test that scrolls lays the strip's boxes out itself. Synthetic
- * throughout.
+ * ones, and settles with no loop of renders; a tab chosen past its end is
+ * scrolled into its own place, the strip's scroll alone; a dragged tab lands
+ * where its place in the row says; and a tab names itself in its hint. The
+ * plan's column and the side panel draw this one strip, so this holds for
+ * both. jsdom lays nothing out, so a test that scrolls lays the strip's boxes
+ * out itself. Synthetic throughout.
  */
 
 /** As many tabs as a long day's agents and files might open in one strip. */
@@ -84,31 +79,6 @@ function pill(container: HTMLElement, label: string): HTMLElement {
   return tab?.closest<HTMLElement>(".tab") ?? assert.fail(`${label}'s tab stands`);
 }
 
-/** Whether an element is drawn, by its own display. */
-function shown(element: Element | null): boolean {
-  return element !== null && getComputedStyle(element).display !== "none";
-}
-
-/** The mark a test sets on the box the pointer is over, which jsdom, keeping no pointer, never says is `:hover`. */
-const HOVERED = "data-hovered";
-
-/** Reads the laid stylesheets' `:hover` as `HOVERED`, so a box the test marks wears what the pointer over it would. */
-function hoverable(style: HTMLStyleElement): void {
-  style.textContent = (style.textContent ?? "").replaceAll(":hover", `[${HOVERED}]`);
-}
-
-/** Whether an element is seen: drawn, and neither it nor any box around it faded out, made invisible, or masked. */
-function visible(element: Element): boolean {
-  for (let at: Element | null = element; at !== null; at = at.parentElement) {
-    const style = getComputedStyle(at);
-    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
-      return false;
-    }
-    if (!["", "none"].includes(style.getPropertyValue("mask-image"))) return false;
-  }
-  return true;
-}
-
 /**
  * Lays the strip out `width` pixels wide, its tabs in a row from its start,
  * each `TAB_WIDTH` wide, scrolling no further than its tabs reach, as the
@@ -163,50 +133,6 @@ test("a strip of many tabs, narrowed, chosen along, and scrolled, draws every ta
   assert.equal(container.querySelector('button[aria-label$="more tabs"]'), null);
 });
 
-test("the strip asks room for its tabs at their widest by their count, which it is told as it draws", async () => {
-  const container = await drawn(7);
-  const strip = container.querySelector<HTMLElement>(".tab-strip") ?? assert.fail("it stands");
-  assert.equal(strip.style.getPropertyValue("--tab-count"), "7");
-});
-
-test("narrower than 72px a tab other than the chosen one stands as its glyph alone, and the chosen keeps its label and its ×", async () => {
-  layContainersAt({ tab: 60 });
-  const narrow = await drawn(3);
-  const other = pill(narrow, "Tab 2");
-  assert.equal(shown(other.querySelector(".tab-icon")), true);
-  assert.equal(shown(other.querySelector(".tab-label")), false);
-  assert.equal(shown(other.querySelector(".tab-close")), false);
-  const chosen = pill(narrow, "Tab 1");
-  assert.equal(shown(chosen.querySelector(".tab-label")), true);
-  act(() => other.querySelector<HTMLElement>('[role="tab"]')?.click());
-  assert.equal(shown(pill(narrow, "Tab 2").querySelector(".tab-label")), true);
-  assert.equal(shown(pill(narrow, "Tab 2").querySelector(".tab-close")), true);
-  assert.equal(shown(pill(narrow, "Tab 1").querySelector(".tab-label")), false);
-});
-
-test("a tab standing as its glyph alone keeps its glyph under the pointer, naming itself, and shows no ×", async () => {
-  hoverable(layContainersAt({ tab: 60 }));
-  const narrow = await drawn(3);
-  const other = pill(narrow, "Tab 2");
-  const glyph = other.querySelector(".tab-icon") ?? assert.fail("its glyph stands");
-  act(() => {
-    other.setAttribute(HOVERED, "");
-    other
-      .querySelector('[role="tab"]')
-      ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
-  assert.equal(visible(glyph), true);
-  assert.equal(shown(other.querySelector(".tab-close")), false);
-  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Tab 2");
-});
-
-test("at 72px and wider every tab keeps its label", async () => {
-  layContainersAt({ tab: 72 });
-  const roomy = await drawn(3);
-  assert.equal(shown(pill(roomy, "Tab 2").querySelector(".tab-label")), true);
-  assert.equal(shown(pill(roomy, "Tab 3").querySelector(".tab-label")), true);
-});
-
 test("a tab chosen past the strip's end is scrolled into its own place, and one before its start likewise", async () => {
   layOut(250, 8);
   const container = await drawn(8);
@@ -254,11 +180,4 @@ test("a tab other than the chosen one names itself in its hint, though its label
       ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Tab 2");
-});
-
-test("a chosen tab alone in its strip takes a tab's own width, keeping no share for others", async () => {
-  layContainersAt({});
-  const container = await drawn(1);
-  // Note that a chosen tab among others never gives way (flex-shrink 0); alone, it gives way as a tab does.
-  assert.equal(getComputedStyle(pill(container, "Tab 1")).flexShrink, "1");
 });

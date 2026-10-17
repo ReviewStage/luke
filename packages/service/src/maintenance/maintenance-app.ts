@@ -15,6 +15,7 @@ import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { effectPassthrough, HOSTED_REFUSAL, hostedNotFoundRoute } from "../http/http-effect.js";
+import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
@@ -25,9 +26,18 @@ import {
   VOICE_ORPHAN_SWEEP,
   VOICE_SESSION_LIMIT_MS,
 } from "../voice/orphan-sweep.js";
-import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
+import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
+
+/** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
+const SWEEP_MONITOR: CronMonitor = {
+  slug: "maintenance-sweep",
+  crontab: MAINTENANCE_SWEEP.CRONTAB,
+  maxRuntimeMinutes: MAINTENANCE_SWEEP.MAX_DURATION_SECONDS / 60,
+  checkInMarginMinutes: 1,
+  failuresBeforeIssue: 3,
+};
 
 /** How long a picture pasted into a plan waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
 const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
@@ -73,6 +83,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
   return yield* handleMaintenanceSweep({
     request,
     cronSecret: environment.cronSecret,
+    monitor: sentryCronCheckIns(SWEEP_MONITOR),
     purgeCleared: (now) => hostedStore().retention.purgeCleared(new Date(now)),
     // A call started longer ago than OpenAI's own limit has ended, whether or not its row was closed.
     purgeDeletedTaskCalls: (now) =>
