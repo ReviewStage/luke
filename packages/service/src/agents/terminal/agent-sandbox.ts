@@ -109,6 +109,15 @@ export class AgentSandbox extends Context.Service<AgentSandbox, AgentSandboxServ
   "AgentSandbox",
 ) {}
 
+/** The firewall policy that sets the GitHub token on GitHub's hosts, as eve's own `authenticateGitHub` sets it, and leaves every other host open. */
+export function githubTokenPolicy(token: Redacted.Redacted) {
+  const authorization = `Basic ${Buffer.from(`x-access-token:${Redacted.value(token)}`).toString("base64")}`;
+  const transform = [{ transform: [{ headers: { authorization } }] }];
+  return {
+    allow: { "*": [], ...Object.fromEntries(GITHUB_HOSTS.map((host) => [host, transform])) },
+  };
+}
+
 /** Where a listed sandbox stands; none listed is one the agent has not opened yet. */
 function stateOf(sandbox: ListedSandbox | undefined): SandboxState {
   if (sandbox === undefined) return SANDBOX_STATE.STARTING;
@@ -193,13 +202,8 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
         const shell = yield* api.openInteractive(running);
         return { state: SANDBOX_STATE.RUNNING, sandboxSessionId: running, shell };
       }),
-    setGitHubToken: (sandboxSessionId, token) => {
-      const authorization = `Basic ${Buffer.from(`x-access-token:${Redacted.value(token)}`).toString("base64")}`;
-      const transform = [{ transform: [{ headers: { authorization } }] }];
-      return api.updateNetworkPolicy(sandboxSessionId, {
-        allow: { "*": [], ...Object.fromEntries(GITHUB_HOSTS.map((host) => [host, transform])) },
-      });
-    },
+    setGitHubToken: (sandboxSessionId, token) =>
+      api.updateNetworkPolicy(sandboxSessionId, githubTokenPolicy(token)),
     resume: (sessionId) =>
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);

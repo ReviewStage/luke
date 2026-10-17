@@ -263,12 +263,17 @@ function SingleRelease({
 }
 
 export function ChangelogPage({ view }: { readonly view: ChangelogView }): React.JSX.Element {
+  // Note that only page one is the changelog's own address; later pages and releases sit beneath it.
+  const place = {
+    page: SITE_PAGE.CHANGELOG,
+    beneath: view.kind !== CHANGELOG_VIEW.PAGE || view.page !== 1,
+  };
   // Wide: the rail and its gutter sit beside the notes, which keep about
   // the reading column's own measure.
   return (
     <PublicPage
-      banner={<SiteNavigation current={SITE_PAGE.CHANGELOG} />}
-      footer={<SiteFooterLinks current={SITE_PAGE.CHANGELOG} />}
+      banner={<SiteNavigation current={place} />}
+      footer={<SiteFooterLinks current={place} />}
       width={PUBLIC_PAGE_WIDTH.WIDE}
     >
       <PublicSection>

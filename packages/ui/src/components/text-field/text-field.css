@@ -31,6 +31,23 @@
     resize: vertical;
   }
 
+  /* A note that grows with its words from its rows' height, up to where
+     scrolling it is kinder than a field the height of the window. Its rows
+     still set its least height, which it gives way to in a card too short
+     for it. */
+  textarea.luke-text-field[data-grow="true"] {
+    min-height: calc(
+      var(--luke-text-area-rows) *
+      var(--luke-type-body-leading) +
+      2 *
+      var(--luke-space-6) +
+      2px
+    );
+    max-height: var(--luke-text-area-grow-max);
+    field-sizing: content;
+    resize: none;
+  }
+
   .luke-text-field::placeholder {
     color: var(--luke-color-text-subtle);
   }

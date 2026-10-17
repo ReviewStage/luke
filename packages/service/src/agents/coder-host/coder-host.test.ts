@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { agentWorkspace, roster } from "@luke/database/models/chat-store";
+import {
+  agentWorkspace,
+  ensureGeneral,
+  ensureMember,
+  postMessage,
+  roster,
+} from "@luke/database/models/chat-store";
 import {
   archiveCodingAgent,
   type CodingAgentBriefText,
@@ -20,7 +26,7 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
@@ -28,6 +34,7 @@ import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { noNetwork } from "@luke/wire/testing";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
@@ -50,11 +57,10 @@ import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog
 import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
-import { noNetwork } from "../../testing/no-network.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { CODER_REFUSAL } from "./bounds.js";
-import { CHAT_TOOL_REFUSAL } from "./chat.js";
+import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import type { ProviderKeys } from "./model.js";
@@ -804,8 +810,214 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
         assert.ok(asked.includes("Invite a teammate by email."));
         assert.ok(!asked.includes("the invite table is mine"));
+        // The agent's answer to the chat notice speaks to another member, so the title reads its answer to the developer.
+        assert.ok(asked.includes("The guide is read; the plan fits the code."));
+        assert.ok(!asked.includes("Understood."));
         const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
         assert.equal(titled.title, "Teammate invitations by email");
+      }),
+  );
+
+  it.effect(
+    "a chat notice steered into the developer's own turn leaves that turn's answer to name the agent from",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const relayed = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(
+              event,
+              admitted,
+              { id: sessionId, auth, turn: { id: "turn_0" } } as never,
+              state,
+              { hash: prompt.hash },
+            ),
+          );
+        const events = codingTurn("turn_0", "turn.completed");
+        const steeredAt = events.findIndex((event) => event.type === "reasoning.completed");
+        yield* relayed(events.slice(0, steeredAt));
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: CHAT_NOTICE,
+            clientKey: "chat-notice-mid-turn",
+            sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+            metadata: {
+              author: MESSAGE_AUTHOR.AGENT,
+              channel: MESSAGE_CHANNEL.CHAT,
+              chat_seq: 41,
+              from: "agent-2",
+            },
+          },
+          Effect.succeed(true),
+        );
+        yield* relayed(events.slice(steeredAt));
+
+        const model = titleModelAnswering("Teammate invitations by email");
+        yield* titleCodingAgent(model, target, agent);
+        const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
+        assert.ok(asked.includes("The guide is read; the plan fits the code."), asked);
+      }),
+  );
+
+  it.effect(
+    "a title's recent window opening on notices steered into the developer's turn keeps that turn's answer",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const relayed = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(
+              event,
+              admitted,
+              { id: sessionId, auth, turn: { id: "turn_0" } } as never,
+              state,
+              { hash: prompt.hash },
+            ),
+          );
+        const events = codingTurn("turn_0", "turn.completed");
+        const steeredAt = events.findIndex((event) => event.type === "reasoning.completed");
+        yield* relayed(events.slice(0, steeredAt));
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        // Eight notices steered in leave the developer's line before the recent window of eight.
+        yield* Effect.forEach([1, 2, 3, 4, 5, 6, 7, 8], (at) =>
+          writer.writeAwaitingLine(
+            target,
+            {
+              text: CHAT_NOTICE,
+              clientKey: `chat-notice-steered-${at}`,
+              sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+              metadata: {
+                author: MESSAGE_AUTHOR.AGENT,
+                channel: MESSAGE_CHANNEL.CHAT,
+                chat_seq: 40 + at,
+                from: "agent-2",
+              },
+            },
+            Effect.succeed(true),
+          ),
+        );
+        yield* relayed(events.slice(steeredAt));
+
+        const model = titleModelAnswering("Teammate invitations by email");
+        yield* titleCodingAgent(model, target, agent);
+        const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
+        assert.ok(asked.includes("The guide is read; the plan fits the code."), asked);
+      }),
+  );
+
+  it.effect("a title's recent window opening on a chat notice leaves the answer to it out", () =>
+    Effect.gen(function* () {
+      const host = yield* hostOverStore();
+      const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+      const state = memoryRelayState();
+      const prompt = yield* composedPrompt(host, admitted, agent);
+      const relayed = (turnId: string, events: readonly MessageStreamEvent[]) =>
+        Effect.forEach(events, (event) =>
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          host.relay(
+            event,
+            admitted,
+            { id: sessionId, auth, turn: { id: turnId } } as never,
+            state,
+            { hash: prompt.hash },
+          ),
+        );
+      yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      // The second turn takes five notices in, the third one more, so the recent window of eight opens on a notice.
+      const notice = (at: number) =>
+        writer.writeAwaitingLine(
+          target,
+          {
+            text: CHAT_NOTICE,
+            clientKey: `chat-notice-${at}`,
+            sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+            metadata: {
+              author: MESSAGE_AUTHOR.AGENT,
+              channel: MESSAGE_CHANNEL.CHAT,
+              chat_seq: 40 + at,
+              from: "agent-2",
+            },
+          },
+          Effect.succeed(true),
+        );
+      yield* Effect.forEach([1, 2, 3, 4, 5], notice);
+      yield* relayed("turn_1", answeredTurn("turn_1", CHAT_NOTICE));
+      yield* notice(6);
+      yield* relayed("turn_2", answeredTurn("turn_2", CHAT_NOTICE));
+      const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+        Effect.provide(modelCatalogOf(CATALOG)),
+      );
+      assert.equal(page.messages.length, 10, JSON.stringify(page.messages.map((m) => m.role)));
+
+      const model = titleModelAnswering("Teammate invitations by email");
+      yield* titleCodingAgent(model, target, agent);
+      const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
+      assert.ok(asked.includes("Invite a teammate by email."), asked);
+      assert.ok(!asked.includes("Understood."), asked);
+    }),
+  );
+
+  it.effect(
+    "a title leaves out the answer to a turn a chat notice opened, though the notices it took in push that notice out of the recent window",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const relayed = (turnId: string, events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(
+              event,
+              admitted,
+              { id: sessionId, auth, turn: { id: turnId } } as never,
+              state,
+              { hash: prompt.hash },
+            ),
+          );
+        yield* relayed("turn_0", codingTurn("turn_0", "turn.completed"));
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const notice = (at: number) =>
+          writer.writeAwaitingLine(
+            target,
+            {
+              text: CHAT_NOTICE,
+              clientKey: `chat-notice-opening-${at}`,
+              sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+              metadata: {
+                author: MESSAGE_AUTHOR.AGENT,
+                channel: MESSAGE_CHANNEL.CHAT,
+                chat_seq: 40 + at,
+                from: "agent-2",
+              },
+            },
+            Effect.succeed(true),
+          );
+        // A notice opens the second turn, and the eight it takes in mid-run leave it before the recent window of eight.
+        yield* notice(0);
+        const events = answeredTurn("turn_1", CHAT_NOTICE);
+        const steeredAt = events.findIndex((event) => event.type === "message.completed");
+        yield* relayed("turn_1", events.slice(0, steeredAt));
+        yield* Effect.forEach([1, 2, 3, 4, 5, 6, 7, 8], notice);
+        yield* relayed("turn_1", events.slice(steeredAt));
+
+        const model = titleModelAnswering("Teammate invitations by email");
+        yield* titleCodingAgent(model, target, agent);
+        const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
+        assert.ok(asked.includes("Invite a teammate by email."), asked);
+        assert.ok(!asked.includes("Understood."), asked);
       }),
   );
 
@@ -839,13 +1051,16 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           host
             .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
             .pipe(Effect.provide(reachingRelay()));
-        assert.equal(yield* host.chatOffered(admitted), false);
+        assert.equal(yield* host.chatOffered(admitted, { chatOn: true }), false);
         assert.deepEqual(yield* read(), {
           status: ACTION_RESULT_STATUS.REJECTED,
           reason: CHAT_TOOL_REFUSAL.OFF,
         });
         yield* chatOn(userId);
-        assert.equal(yield* host.chatOffered(admitted), true);
+        assert.equal(yield* host.chatOffered(admitted, { chatOn: true }), true);
+        // A session started before Chat was on was told nothing of it, so it is offered no chat tool.
+        assert.equal(yield* host.chatOffered(admitted, { chatOn: false }), false);
+        assert.equal(yield* host.chatOffered(admitted, {}), false);
         const answered = yield* read();
         assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED);
       }),
@@ -894,6 +1109,62 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           refused,
           "brought back, it posts",
         );
+      }),
+  );
+
+  it.effect(
+    "a chat post lands where the deployment names no secret or no origin for eve, the members it addresses left to read it next",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, admitted } = yield* openAgent(host);
+        yield* chatOn(userId);
+        const posted = yield* host
+          .chat(admitted, {
+            tool: CHAT_TOOL.POST,
+            input: unparsedWire({ text: "Taking the invite table." }),
+            clientKey: "call-1",
+            postsInTurn: 0,
+            sandbox: () => Promise.reject(new Error("the sandbox was opened")),
+          })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* host
+          .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.ok("channels" in read);
+        assert.deepEqual(
+          read.channels.map((channel) => channel.name),
+          ["#teammate-invitations"],
+        );
+      }),
+  );
+
+  it.effect(
+    "a turn opens with no chat for an agent whose starter never turned Chat on, and with what it has not read once it is on",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+        const person = Option.getOrThrow(
+          yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
+        );
+        const general = Option.getOrThrow(yield* ensureGeneral(userId, workspace));
+        // The agent joins before the post, as a member joins the chat at its head.
+        yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id });
+        yield* postMessage(userId, workspace, {
+          authorMemberId: person.id,
+          to: { channelId: general.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
+          mentions: [],
+          clientKey: "post-1",
+        });
+        assert.equal(yield* host.chatDigest(admitted), undefined);
+        yield* chatOn(userId);
+        const digest = (yield* host.chatDigest(admitted)) ?? "";
+        assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), digest);
+        assert.ok(digest.endsWith("The invite table is mine."), digest);
       }),
   );
 });

@@ -4,10 +4,11 @@ import assert from "node:assert/strict";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { runAppCommand } from "../app-commands";
 import { PagePane, type ReadPageSource } from "./page-pane";
 
@@ -79,6 +80,8 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
 }
 
 const versionUrl = (version: number) => pageFrameUrl({ taskId: TASK, pageId: FUNNEL.id, version });
+
+beforeEach(() => fakeAppPlatform({ pageFrameUrl }));
 
 test("a page is drawn at its newest version in a frame that runs its own scripts alone, left out of the recording", () => {
   const { container, frame } = mount(FUNNEL);

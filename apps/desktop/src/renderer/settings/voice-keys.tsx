@@ -11,12 +11,6 @@ import {
   VOICE_HOTKEY_NONE,
 } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
-import { PencilIcon, ResetIcon, TrashIcon } from "@luke/ui";
-import { actionRejection } from "@luke/ui/use-setting-write";
-import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
-import type { ShortcutControl } from "@luke/voice/settings-controls";
-import type { ActionResult } from "@luke/wire";
-import { useEffect, useId, useRef, useState } from "react";
 import {
   APP_SHORTCUTS,
   commandForKey,
@@ -24,7 +18,13 @@ import {
   type KeyedCommand,
   shortcutAccelerator,
   shortcutLabel,
-} from "#shared/shortcuts";
+} from "@luke/settings/shortcuts";
+import { PencilIcon, ResetIcon, TrashIcon } from "@luke/ui";
+import { actionRejection } from "@luke/ui/use-setting-write";
+import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
+import type { ShortcutControl } from "@luke/voice/settings-controls";
+import type { ActionResult } from "@luke/wire";
+import { useEffect, useId, useRef, useState } from "react";
 import { Shortcut } from "../shortcut";
 import { AttentionMark, ChangedMark } from "./marks";
 import { MenuRow } from "./menu-row";

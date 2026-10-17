@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { channels } from "@luke/host/bridge";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { test } from "vitest";
-import { channels } from "#shared/bridge";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { followSwipes } from "./swipe-navigation";
 
 /**

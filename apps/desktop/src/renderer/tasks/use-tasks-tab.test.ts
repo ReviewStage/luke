@@ -792,6 +792,16 @@ test("Show panel on a plan whose strip holds no tab opens the tab last closed th
   assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.CALL });
 });
 
+test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows the panel empty, though another plan stands open behind it", () => {
+  const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  assert.deepEqual(tab.control().sidePanel.strip, []);
+
+  act(() => tab.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
+});
+
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },

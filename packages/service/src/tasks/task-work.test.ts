@@ -487,6 +487,29 @@ test("a turn carries its own journal as the agent tab reads one, and each worker
   assert.equal(failed?.state, TASK_WORK_STATE.FAILED);
 });
 
+test("a worker call a retried step abandoned stops standing as running once eve runs the step again, while its turn still runs", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(opening(FIRST_EVE_TURN), standing);
+  // The relay's state as the step began, which is what eve hands its retry.
+  const stepInput = standing.state.get();
+  await play(
+    callingStep(FIRST_EVE_TURN, 0, [
+      { toolName: BRAIN_DELEGATE_TOOL.name, input: { task: "Compare the two queue libraries." } },
+    ]),
+    standing,
+  );
+  const retry = { ...standing, state: memoryRelayState(stepInput) };
+  await play(answeringStep(FIRST_EVE_TURN, 0, "I'll compare them myself.").slice(0, -1), retry);
+
+  const work = await worked(target, standing);
+  assert.equal(work.state, TASK_WORK_STATE.RUNNING);
+  assert.deepEqual(
+    work.workers?.map((worker) => [worker.callId, worker.state]),
+    [["call-0-0", TASK_WORK_STATE.DONE]],
+  );
+});
+
 test("a turn's journal keeps its newest parts and says older ones were left out, every string in a call cut to the bound with the call's shape kept", async () => {
   const target = await conversation();
   const standing = standingFor(target);

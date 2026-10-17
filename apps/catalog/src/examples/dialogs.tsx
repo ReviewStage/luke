@@ -2,6 +2,7 @@ import {
   BUTTON_VARIANT,
   Button,
   DIALOG_ROLE,
+  DIALOG_SIZE,
   Dialog,
   FormField,
   GAP,
@@ -12,6 +13,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextArea,
   TextField,
 } from "@luke/ui";
 import { useId, useRef, useState } from "react";
@@ -19,10 +21,12 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * dialogs.tsx -- a dialog holding a field, and a question that must be
- * answered, a long one, each opened from its button and put away by its
- * answers, Escape, or a press on the dimmed window. The question's words
- * scroll inside the card in a short window, so its answers stay on screen.
+ * dialogs.tsx -- a dialog holding a field, a question that must be
+ * answered, a long one, and a wide note that grows with its words and rings
+ * while a file is dragged over the window, each opened from its button and
+ * put away by its answers, Escape, or a press on the dimmed window. The
+ * question's words scroll inside the card in a short window, so its answers
+ * stay on screen.
  */
 
 /** A dialog that renames a plan, its field taking focus as it opens. */
@@ -94,6 +98,57 @@ function DeleteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   );
 }
 
+/** A note being written, on the wide card, which rings while a file is dragged over the window. */
+function NoteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const [note, setNote] = useState("");
+  const [dropping, setDropping] = useState(false);
+  const field = useRef<HTMLTextAreaElement | null>(null);
+  const titleId = useId();
+  return (
+    <Dialog
+      size={DIALOG_SIZE.WIDE}
+      labelledBy={titleId}
+      initialFocus={field}
+      onDismiss={onClose}
+      dropping={dropping}
+      dropTarget={{
+        onDragOver: (event) => {
+          event.preventDefault();
+          setDropping(true);
+        },
+        onDragLeave: (event) => {
+          if (event.relatedTarget === null) setDropping(false);
+        },
+        onDrop: (event) => {
+          event.preventDefault();
+          setDropping(false);
+        },
+      }}
+    >
+      <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
+        Send feedback
+      </Text>
+      <TextArea
+        ref={field}
+        label="Feedback"
+        placeholder="What happened, and what did you expect?"
+        value={note}
+        onChange={setNote}
+        rows={5}
+        grow
+      />
+      <Inline justify={JUSTIFY.END}>
+        <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant={BUTTON_VARIANT.PRIMARY} disabled={note.trim() === ""} onClick={onClose}>
+          Send
+        </Button>
+      </Inline>
+    </Dialog>
+  );
+}
+
 /** A button that opens `Body`, which closes itself. */
 function Opener({
   label,
@@ -119,6 +174,7 @@ function Dialogs(): React.JSX.Element {
       <Inline>
         <Opener label="Rename plan…" Body={RenameDialog} />
         <Opener label="Delete plan…" Body={DeleteDialog} />
+        <Opener label="Send feedback…" Body={NoteDialog} />
       </Inline>
     </CatalogSection>
   );

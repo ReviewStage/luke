@@ -5,7 +5,7 @@ import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
 import { host } from "../host.js";
 import { runAgent } from "../runtime.js";
-import { sessionPrompt } from "../session-prompt.js";
+import { chatHanded, sessionPrompt } from "../session-prompt.js";
 
 /**
  * The relay from eve's stream into the store: every event eve records for a
@@ -28,6 +28,7 @@ export default defineHook({
       // state and the prompt's hash are this session's (`packages/service/src/agents/brain-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
+      const handed = pinnedState(chatHanded);
       return runAgent(
         Effect.gen(function* () {
           if (event.type === "session.started") {
@@ -37,7 +38,14 @@ export default defineHook({
           }
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return;
-          yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
+          yield* host.relay(
+            event,
+            admitted.success,
+            ctx.session,
+            state,
+            prompt.get(),
+            handed.get(),
+          );
         }),
       );
     },

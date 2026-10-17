@@ -15,7 +15,7 @@ export function newestToastSays(): string | undefined {
   return newestToast()?.textContent ?? undefined;
 }
 
-/** The newest toast's action, which an act raising it offered. */
+/** The newest toast's action, which an act raising it offered: its first button, the Dismiss after it. */
 export function newestToastAction(): HTMLButtonElement | undefined {
-  return newestToast()?.querySelector<HTMLButtonElement>(".toast-action") ?? undefined;
+  return newestToast()?.querySelector<HTMLButtonElement>("button") ?? undefined;
 }

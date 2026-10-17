@@ -14,7 +14,7 @@ import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remed
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon } from "@luke/ui";
+import { DocumentIcon, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
@@ -31,11 +31,11 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/task";
 import { TOOL_STATE } from "../ai-elements/tool";
+import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
 import { useMemberDirectory, usePerson } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
@@ -67,6 +67,7 @@ import {
   delegates,
   dockedTodos,
   endLine,
+  endLineContinues,
   endLineReason,
   lineSender,
   macOwnerOf,
@@ -82,7 +83,10 @@ import {
   workerStatusOf,
   workerToolState,
 } from "./coding-agent-model";
+import { ContinueAgent } from "./continue-agent";
 import { CopyMessageAction } from "./copy-message";
+import { ForkedToLine } from "./fork-action";
+import { openReply } from "./fork-model";
 import { linkChip } from "./mention-chip";
 import {
   agentMessagePlace,
@@ -92,6 +96,8 @@ import {
 } from "./message-links";
 import { useMentionDoors } from "./plan-mentions";
 import { PlanPictures } from "./plan-pictures";
+import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
+import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
@@ -965,8 +971,11 @@ export function AgentMessage({
   origin,
   arrived = NO_ARRIVED,
   planId,
+  forkable = true,
 }: {
   message: CodingAgentMessage;
+  /** Whether its tab may offer to fork at it: not the reply a running turn may still be writing (`openReply`). */
+  forkable?: boolean;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
@@ -1097,12 +1106,14 @@ export function AgentMessage({
                 <CopyMessageAction
                   words={words}
                   messageId={message.id}
+                  forkable={forkable}
                   className={SENT_ACTIONS_CLASS}
                 />
               )
             }
           />
         )}
+        {ends ? <ForkedToLine messageId={message.id} /> : null}
       </Message>
     );
   });
@@ -1131,6 +1142,8 @@ function AgentTranscriptView({
   origin,
   readerId,
   planId,
+  replay,
+  endTrail,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
@@ -1170,6 +1183,10 @@ function AgentTranscriptView({
   readerId?: string | undefined;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
   planId?: string | undefined;
+  /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
+  replay?: ReplayPlace | undefined;
+  /** What the end line ends on after its words: Continue in new agent, or the agents that continued it (`continue-agent.tsx`). */
+  endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   if (messages.length > 0) {
@@ -1184,8 +1201,11 @@ function AgentTranscriptView({
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
     const task = carded ? undefined : first;
+    // An agent started from another opens on the brief as its source's did, then the replay's card, then the note.
+    const opening = replay === undefined || first === undefined ? undefined : replayOpening(first);
     // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
     const placed = placedMessages(messages);
+    const open = openReply(messages, working);
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
@@ -1199,11 +1219,12 @@ function AgentTranscriptView({
           {placed.map(({ message, arrived }, index) => (
             <Fragment key={message.id}>
               <AgentMessage
-                message={message}
+                message={message === first && opening !== undefined ? opening.brief : message}
                 plan={message === plan}
                 planId={message === plan ? planId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
+                forkable={message.id !== open}
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
@@ -1218,6 +1239,21 @@ function AgentTranscriptView({
                   sender: lineSender(line.sentBy, readerId, members, former),
                 }))}
               />
+              {message === first && opening !== undefined && replay !== undefined ? (
+                <>
+                  <ReplayCard replay={opening.replay} place={replay} planId={planId} />
+                  {opening.note === undefined ? null : (
+                    <AgentMessage
+                      message={opening.note}
+                      plan={false}
+                      lead={lead}
+                      moving={false}
+                      delegation={delegation}
+                      sender={briefSender}
+                    />
+                  )}
+                </>
+              ) : null}
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
               ) : null}
@@ -1238,28 +1274,31 @@ function AgentTranscriptView({
           ) : (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
+              {endTrail}
             </p>
           )}
           {footer}
-          {failed ? <ReadFailure line={TRANSCRIPT_FAILED_LINE} onRetry={onRetry} /> : null}
+          {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
     );
   }
+  if (failed) {
+    return (
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {TRANSCRIPT_FAILED_LINE}
+      </ErrorState>
+    );
+  }
   return (
     <ConversationEmptyState>
-      {failed ? (
-        <ReadFailure
-          line={TRANSCRIPT_FAILED_LINE}
-          onRetry={onRetry}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
-      ) : reading && ended === undefined ? (
+      {reading && ended === undefined ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
         <p className="m-0" data-ended={ended === undefined ? undefined : ""}>
           {ended ?? lead.startingLine}
+          {ended === undefined ? null : endTrail}
         </p>
       )}
     </ConversationEmptyState>
@@ -1297,8 +1336,13 @@ function AgentTabView({
   starter,
   readerId,
   run,
+  replay,
+  endTrail,
+  closedRemedy,
 }: {
   agent: CodingAgentSummary;
+  /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
+  replay?: ReplayPlace | undefined;
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
   run?: CodingAgentOrigin | undefined;
   models: readonly CatalogModel[] | undefined;
@@ -1336,6 +1380,10 @@ function AgentTabView({
   starter?: string | undefined;
   /** The reader's own account id, whose messages the transcript names nobody over, and whose Mac its Mac commands say is theirs. */
   readerId?: string | undefined;
+  /** What a failed turn's end line ends on (`continue-agent.tsx`); none where it ends on its words. */
+  endTrail?: ReactNode;
+  /** What mends the box once it closed for good (`continue-agent.tsx`). */
+  closedRemedy?: ReactNode;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const chatOn = useChatOn();
@@ -1348,7 +1396,8 @@ function AgentTabView({
   // The door the box hands Reply, which lays a quote in at its caret.
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const origin = agentOrigin({
-    agent,
+    // An agent started from an automation's run opens on the run's prompt under the automation.
+    agent: replay === undefined ? agent : briefAgent(agent, replay.agents),
     run,
     task: cards?.task,
     onOpenTask: onOpenTarget === undefined ? undefined : () => onOpenTarget(TASK_TARGET),
@@ -1371,6 +1420,7 @@ function AgentTabView({
               origin={origin}
               readerId={readerId}
               planId={agent.planId ?? undefined}
+              replay={replay}
               delegation={{
                 models,
                 own: { model: agent.model, effort: agent.effort },
@@ -1390,6 +1440,7 @@ function AgentTabView({
               ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
               endReason={endLineReason(transcript.failure, starter)}
               onOpenApiKeys={onOpenApiKeys}
+              endTrail={endTrail}
               onRetry={transcript.onRetry}
               footer={
                 showsPublishedRow(agent.status, published) ? (
@@ -1434,6 +1485,7 @@ function AgentTabView({
             keywords={keywords}
             skills={skills}
             replyDoor={replyDoor}
+            closedRemedy={closedRemedy}
           />
         )}
       </footer>
@@ -1539,7 +1591,7 @@ export function AgentTab({
     read: control.readPullRequest,
   });
   const copyWithToast = useCopyToast();
-  const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  const openGitHub = (url: string) => appPlatform().openGitHub(url);
   // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
   const toast = useToast();
   useMessageReveal({
@@ -1551,6 +1603,11 @@ export function AgentTab({
     drawn: (messageId) => messages.some((message) => message.id === messageId),
     gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
   });
+  const starter = teammateStarter(agent.startedBy, control.me);
+  const openAgent =
+    onOpenTarget === undefined
+      ? undefined
+      : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
   return (
     <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
       <AgentTabView
@@ -1580,9 +1637,40 @@ export function AgentTab({
         onOpenApiKeys={control.onOpenApiKeys}
         keywords={control.keywords}
         skills={control.readSkills}
-        starter={teammateStarter(agent.startedBy, control.me)}
+        starter={starter}
         readerId={control.me}
         run={run}
+        replay={replayPlace({
+          agent,
+          control,
+          tile: cards?.agent,
+          target: cards?.target,
+          onOpenTarget,
+          openGitHub,
+        })}
+        endTrail={
+          endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
+            // Note that a box closed on an ended agent offers the press itself, carrying its words.
+            <ContinueAgent
+              agentId={agent.id}
+              control={control}
+              onOpenAgent={openAgent}
+              offers={composer.closed === undefined}
+            />
+          ) : undefined
+        }
+        closedRemedy={
+          <ContinueAgent
+            agentId={agent.id}
+            control={control}
+            onOpenAgent={openAgent}
+            carry={{
+              words: composer.draft,
+              attachments: composer.attachments,
+              planId: agent.planId,
+            }}
+          />
+        }
       />
     </MessagePlaceProvider>
   );

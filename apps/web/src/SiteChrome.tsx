@@ -69,26 +69,38 @@ export const SITE_PAGE = {
 
 export type SitePage = (typeof SITE_PAGE)[keyof typeof SITE_PAGE];
 
-/** What the chrome is told of the page it is drawn on: the one the reader is on. */
-type ChromeProps = { readonly current?: SitePage };
+/**
+ * Where the reader is: on `page` itself, or, `beneath` it, on a page of that
+ * part of the site (a release under the changelog).
+ */
+export type SitePlace = { readonly page: SitePage; readonly beneath?: boolean };
 
-/** The chrome's quiet link: muted until hovered, and in the text's own ink on the page it names. */
+/** What the chrome is told of the page it is drawn on: where the reader is. */
+type ChromeProps = { readonly current?: SitePlace };
+
+/** The chrome's quiet link: muted until hovered, and in the text's own ink where the reader is. */
 const QUIET_LINK =
-  "no-underline transition-colors duration-150 hover:text-foreground aria-[current=page]:text-foreground motion-reduce:transition-none";
+  "no-underline transition-colors duration-150 hover:text-foreground [&[aria-current]]:text-foreground motion-reduce:transition-none";
 
-/** What a link to `page` says about it when the reader is on `current`. */
-function currentProps(page: SitePage, current: SitePage | undefined) {
-  return { href: page, "aria-current": page === current ? ("page" as const) : undefined };
+/**
+ * What a link to `page` says about it when the reader is at `place`: the
+ * current page where they are on it, and the current part of the site where
+ * they are beneath it, since the page they are on is not the one it links to.
+ */
+function currentProps(page: SitePage, place: SitePlace | undefined) {
+  const here = place?.page === page;
+  const current = place?.beneath === true ? ("true" as const) : ("page" as const);
+  return { href: page, "aria-current": here ? current : undefined };
 }
 
 /**
  * Shared between every page so navigation and branding never drift apart:
  * the wordmark and the links the banner holds, handed to PublicPage's
- * `banner`; `current` marks the page the reader is on.
+ * `banner`; `current` marks where the reader is. Every link stands the
+ * web's 44px tall inside the 64px banner, so its hit target is the contract's
+ * without moving a word.
  */
 export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
-  // Every link stands the web's 44px tall inside the 64px banner, so its hit
-  // target is the contract's without moving a word.
   return (
     <nav aria-label="Site" className="flex items-center justify-between">
       <a
