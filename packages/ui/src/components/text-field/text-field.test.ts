@@ -36,8 +36,12 @@ function render(element: ReactElement): HTMLElement {
 }
 
 /** Types `value` into `field` as the page would hand it to React. */
-function type(field: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+function type(field: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  const prototype =
+    field instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   act(() => {
     setter?.call(field, value);
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -89,6 +93,23 @@ test("Enter answers onEnter, except the Enter that commits an input method's com
   press(field, { key: "Enter", isComposing: true });
   press(field, { key: "Enter", keyCode: 229 });
   assert.equal(page.querySelector("output")?.textContent, "1");
+});
+
+test("a text area holds the many lines its caller holds and hands back every change", () => {
+  function Notes(): React.JSX.Element {
+    const [notes, setNotes] = useState("");
+    return createElement(
+      "div",
+      null,
+      createElement(TextArea, { label: "Notes", value: notes, onChange: setNotes }),
+      createElement("output", null, notes.split("\n").length),
+    );
+  }
+  const page = render(createElement(Notes));
+  const area = page.querySelector("textarea") ?? assert.fail("no text area");
+  type(area, "One\nTwo");
+  assert.equal(page.querySelector("output")?.textContent, "2");
+  assert.equal(area.value, "One\nTwo");
 });
 
 test("inside a field, a text entry is named, described, and marked invalid by the field's words", () => {
