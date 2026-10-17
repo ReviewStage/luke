@@ -21,12 +21,13 @@ import {
   SETTINGS_VIEW,
   type SettingsView,
 } from "@luke/settings/settings-views";
+import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
 import { CloseIcon, SearchIcon } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useRef } from "react";
-import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
+import { appPlatform } from "./app-platform";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
 import { settingsPageOf } from "./settings/pages";
@@ -497,7 +498,7 @@ export function SettingsSearchField({
           }}
           onFocus={() => {
             if (placed.current) return;
-            window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+            appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
               search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
             });
           }}

@@ -17,21 +17,20 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
 import { momentText, useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
@@ -119,7 +118,7 @@ function AutomationRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   return (
     <div className="automation-row" data-enabled={String(automation.enabled)}>
@@ -303,7 +302,9 @@ function ListPage({
       </header>
       <div className="automations-scroll scroll-fade-top">
         {read === undefined ? null : "failure" in read ? (
-          <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
+          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_LINE}
+          </ErrorState>
         ) : groups.length === 0 ? (
           <div className="automations-empty">
             <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
@@ -348,7 +349,9 @@ function UnreadPage({
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
-        <ReadFailure line={UNREAD_LINE} onRetry={onRetry} place={READ_FAILURE_PLACE.CENTRED} />
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {UNREAD_LINE}
+        </ErrorState>
       </div>
     </section>
   );

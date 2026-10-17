@@ -10,6 +10,8 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
@@ -281,7 +283,7 @@ function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): TasksControl {
 
 /** The lines under the open menu's items, each with its time left off. */
 function menuFooter(): string[] {
-  const notes = document.querySelectorAll('[role="menu"] .task-menu-footer p');
+  const notes = document.querySelectorAll('[role="menu"] .luke-menu-footer p');
   return [...notes].map((note) => (lineWords(note) ?? "").replace(/ · .*$/u, ""));
 }
 
@@ -289,7 +291,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   openMenu(mountToolbar(sharedTab(DEAN.userId)));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
   // Each person stands on their face, their letter until a picture is read.
-  const faces = document.querySelectorAll('[role="menu"] .task-menu-footer .actor-mark');
+  const faces = document.querySelectorAll('[role="menu"] .luke-menu-footer .actor-mark');
   assert.deepEqual(
     [...faces].map((face) => [face.getAttribute("data-kind"), face.textContent]),
     [
@@ -297,7 +299,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
       ["person", "D"],
     ],
   );
-  const times = document.querySelectorAll('[role="menu"] .task-menu-footer time');
+  const times = document.querySelectorAll('[role="menu"] .luke-menu-footer time');
   assert.deepEqual(
     [...times].map((time) => time.getAttribute("datetime")),
     [new Date(60_000).toISOString(), new Date(120_000).toISOString()],
@@ -445,19 +447,10 @@ test("no sidebar plan wears the attention mark where its own workspace reaches i
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-        }
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   return copied;
 }
 
@@ -577,23 +570,20 @@ test("a task's card says you of the reader's own task outside a member directory
 
 /** The bridge answering the members read with `members`, each a member of the workspace. */
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: members.map((member) => ({
-                  ...member,
-                  email: `${member.userId}@example.com`,
-                  role: WORKSPACE_ROLE.MEMBER,
-                })),
-              }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
-        ),
-    },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: members.map((member) => ({
+                ...member,
+                email: `${member.userId}@example.com`,
+                role: WORKSPACE_ROLE.MEMBER,
+              })),
+            }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
+      ),
   });
 }

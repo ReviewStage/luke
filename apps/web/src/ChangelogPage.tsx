@@ -227,9 +227,14 @@ function SingleRelease({
 }
 
 export function ChangelogPage({ view }: { readonly view: ChangelogView }): React.JSX.Element {
+  // Note that only page one is the changelog's own address; later pages and releases sit beneath it.
+  const place = {
+    page: SITE_PAGE.CHANGELOG,
+    beneath: view.kind !== CHANGELOG_VIEW.PAGE || view.page !== 1,
+  };
   return (
     <>
-      <SiteHeader current={SITE_PAGE.CHANGELOG} />
+      <SiteHeader current={place} />
 
       {/* Wider than the shell: the rail and its gutter sit beside the body,
           which keeps the shell's own document measure. */}
@@ -241,7 +246,7 @@ export function ChangelogPage({ view }: { readonly view: ChangelogView }): React
         )}
       </main>
 
-      <SiteFooter current={SITE_PAGE.CHANGELOG} />
+      <SiteFooter current={place} />
     </>
   );
 }

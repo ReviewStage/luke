@@ -19,6 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -95,19 +96,15 @@ interface Drawn {
 
 /** The plan drawn in a workspace whose members read answers `MEMBERS`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
-              ? { status: ACT_OUTCOME_STATUS.DONE, value: FORMER }
-              : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        ),
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: FORMER }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      ),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -323,7 +320,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
   assert.equal(editedLines(view)[0], "Edited by Fix auth flow · now");
   assert.equal(ref?.tagName, "BUTTON");
   assert.ok(view.querySelector('.plan-edit-note .actor-mark[data-kind="agent"] .state-glyph'));
-  assert.equal(cardOf(view).querySelector(".card-name")?.textContent, "Fix auth flow");
+  assert.equal(cardOf(view).querySelector(".luke-hover-card-name")?.textContent, "Fix auth flow");
   act(() => ref?.click());
   assert.deepEqual(opened, [AGENT.id]);
 

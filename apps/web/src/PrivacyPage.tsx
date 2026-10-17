@@ -57,8 +57,8 @@ const POLICY = policyOf(privacyMarkdown);
 export function PrivacyPage(): React.JSX.Element {
   return (
     <PublicPage
-      banner={<SiteNavigation current={SITE_PAGE.PRIVACY} />}
-      footer={<SiteFooterLinks current={SITE_PAGE.PRIVACY} />}
+      banner={<SiteNavigation current={{ page: SITE_PAGE.PRIVACY }} />}
+      footer={<SiteFooterLinks current={{ page: SITE_PAGE.PRIVACY }} />}
       title={<Inline html={POLICY.title} />}
     >
       {POLICY.sections.map((section) => (

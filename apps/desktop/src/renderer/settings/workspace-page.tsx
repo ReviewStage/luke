@@ -15,8 +15,24 @@ import {
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { ConfirmDialog, ProviderMark, TrashIcon, useConfirmDialog } from "@luke/ui";
+import {
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  CHIP_LOOK,
+  Chip,
+  ConfirmDialog,
+  ProviderMark,
+  SettingsSection,
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_TYPE,
+  TextField,
+  TrashIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -33,9 +49,10 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
-import { CHIP_LOOK, Chip } from "../chip";
+// The heir's chip still wears a class of its own, until the leave flow moves.
+import { Chip as WindowChip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu } from "../desktop/action-menu";
 import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
@@ -128,7 +145,7 @@ const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 const INVITATIONS_EMPTY =
   "No invitations. Luke sends no email, so copy each invitation's link and send it yourself.";
 
-/** What a list's line says where its read did not land, in `read-failure.tsx`'s words. */
+/** What a list's line says where its read did not land, in `ErrorState`'s words. */
 const READ_FAILED = {
   MEMBERS: "The members could not be read.",
   INVITATIONS: "The invitations could not be read.",
@@ -320,7 +337,8 @@ function useMembersRead(workspaceId: string, memberCount: number | undefined) {
  * and Make member take hold at once, since either is undone by the other;
  * Make owner and Remove from workspace ask first. A role change refused is
  * said under the row. A row with no ⋯ in a list where others have one
- * keeps the ⋯'s room, so every role ends in the same place.
+ * keeps the ⋯'s room, so every role ends in the same place. The row is
+ * `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
@@ -405,20 +423,30 @@ function MemberRow({
     : [];
   const acting = profileActs.length + roleActs.length + removeActs.length > 0;
   return (
-    <>
-      <MenuRow label={`${member.name} actions`} actions={[profileActs, roleActs, removeActs]}>
-        <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />
-        <span className="settings-copy">
-          {/* The person card's own wrapper, so You stands off the name as it does on the card. */}
-          <strong className="actor-card-name">
-            {member.name}
-            {userId === readerId ? <YouBadge /> : null}
-          </strong>
-          <OneLine as="small" text={member.email} />
-        </span>
-        <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
-        {slotted && !acting ? <span className="settings-act-slot" aria-hidden="true" /> : null}
-      </MenuRow>
+    <div className="workspace-member">
+      <MenuRow
+        label={`${member.name} actions`}
+        actions={[profileActs, roleActs, removeActs]}
+        row={{
+          leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
+          label: (
+            // The person card's own wrapper, so You stands off the name as it does on the card.
+            <span className="actor-card-name">
+              {member.name}
+              {userId === readerId ? <YouBadge /> : null}
+            </span>
+          ),
+          description: <OneLine as="span" text={member.email} />,
+          control: (
+            <>
+              <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
+              {slotted && !acting ? (
+                <span className="settings-act-slot" aria-hidden="true" />
+              ) : null}
+            </>
+          ),
+        }}
+      />
       {refusal === undefined ? null : (
         <p className="error-message" role="alert">
           {refusal}
@@ -442,7 +470,7 @@ function MemberRow({
           running: TRANSFER_WORDS.RUNNING,
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -564,11 +592,11 @@ function HeirChip({
   chosen: WorkspaceMember;
   onChoose: (heir: WorkspaceMember) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
     <>
-      <Chip
+      <WindowChip
         look={CHIP_LOOK.FIELD}
         chevron
         ref={door}
@@ -578,7 +606,7 @@ function HeirChip({
       >
         <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
         <span className="chip-name">{chosen.name}</span>
-      </Chip>
+      </WindowChip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label="New owner"
@@ -756,6 +784,7 @@ function TeamMembers({
  * The role an invitation is sent as: the field chip a Settings picker wears,
  * "Member ⌄", whose menu checks the role chosen and says under each what it
  * may do, as the composer's model chip stands beside its field and its send.
+ * It is `@luke/ui`'s field `Chip`, its one width its container's.
  */
 function RoleChip({
   value,
@@ -770,15 +799,14 @@ function RoleChip({
   onChange: (role: WorkspaceInvitation["role"]) => void;
 }): React.JSX.Element {
   // The page is drawn whenever the chip is, so the menu closes with the chip unmounting.
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
-    <>
+    <span className="workspace-invite-role">
       <Chip
         look={CHIP_LOOK.FIELD}
         chevron
         ref={door}
-        className="workspace-invite-role"
         aria-label={`Invite as ${ROLE_WORDS[value]}`}
         disabled={disabled}
         {...menu.trigger()}
@@ -804,7 +832,7 @@ function RoleChip({
           onClose={menu.close}
         />
       )}
-    </>
+    </span>
   );
 }
 
@@ -814,7 +842,9 @@ function RoleChip({
  * each under the outline face a person not yet in wears, saying as what and
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
  * nothing first since inviting the address again undoes it. A refusal is
- * said under the form.
+ * said under the form. The form is `@luke/ui`'s `TextField`, the role's
+ * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
+ * led by the face, through `MenuRow`, Copy link its outline `Button`.
  */
 function Invitations({
   workspaceId,
@@ -913,29 +943,30 @@ function Invitations({
 
   return (
     <>
-      <form className="settings-row workspace-invite" onSubmit={invite}>
-        <input
-          type="email"
-          required
-          className="settings-input"
-          aria-label="Email address"
-          placeholder="name@example.com"
-          autoComplete="off"
-          spellCheck={false}
-          value={email}
-          disabled={busy}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-        <button type="submit" className="toolbar-button bordered-button" disabled={busy}>
-          Invite
-        </button>
-      </form>
-      {note === undefined ? null : (
-        <p className="error-message" role="alert">
-          {note}
-        </p>
-      )}
+      <div className="workspace-invite-row">
+        <form className="workspace-invite" onSubmit={invite}>
+          <TextField
+            type={TEXT_FIELD_TYPE.EMAIL}
+            required
+            label="Email address"
+            placeholder="name@example.com"
+            autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+            spellCheck={false}
+            value={email}
+            disabled={busy}
+            onChange={setEmail}
+          />
+          <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
+          <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE} disabled={busy}>
+            Invite
+          </Button>
+        </form>
+        {note === undefined ? null : (
+          <p className="error-message" role="alert">
+            {note}
+          </p>
+        )}
+      </div>
       {firstReadFailed !== undefined ? (
         <ReadFailed line={firstReadFailed} onRetry={read} />
       ) : pending === undefined ? (
@@ -955,21 +986,21 @@ function Invitations({
               onSelect: () => cancel(one.id),
             },
           ]}
-        >
-          <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />
-          <span className="settings-copy">
-            <OneLine as="strong" text={one.email} />
-            <small>{`Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`}</small>
-          </span>
-          {/* Luke sends no mail: the accept link is copied and sent by hand. */}
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            onClick={() => copy(one.acceptUrl, "Link copied")}
-          >
-            Copy link
-          </button>
-        </MenuRow>
+          row={{
+            leading: <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />,
+            label: <OneLine as="span" text={one.email} />,
+            description: `Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`,
+            // Luke sends no mail: the accept link is copied and sent by hand.
+            control: (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                onClick={() => copy(one.acceptUrl, "Link copied")}
+              >
+                Copy link
+              </Button>
+            ),
+          }}
+        />
       ))}
     </>
   );
@@ -1309,6 +1340,8 @@ function identityLine(workspace: Workspace): string {
  * square; Remove photo, where one is set, asks first. The new name or photo
  * arrives with the workspaces the host reads again after it; a refusal, or a
  * file that cannot be a photo, is said under the row until the next try.
+ * The row is `@luke/ui`'s `SettingsRow` led by the tile, through `MenuRow`,
+ * and Rename its outline `Button`.
  */
 function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
@@ -1389,12 +1422,42 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           : [],
       ]
     : [];
+  const rename =
+    renamable && !editing ? (
+      <Button
+        ref={button}
+        variant={BUTTON_VARIANT.OUTLINE}
+        disabled={renaming}
+        onClick={() => {
+          setRefusal(undefined);
+          setEditing(true);
+        }}
+      >
+        Rename
+      </Button>
+    ) : null;
+  const photoPicker = manages ? (
+    <input
+      ref={picker}
+      type="file"
+      accept={PHOTO_ACCEPT}
+      hidden
+      onChange={(event) => {
+        const [picked] = Array.from(event.currentTarget.files ?? []);
+        // Cleared so the same file can be picked again after it was refused.
+        event.currentTarget.value = "";
+        if (picked !== undefined) upload(picked);
+      }}
+    />
+  ) : null;
   return (
-    <>
-      <MenuRow label="Workspace actions" actions={actions}>
-        <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
-        <span className="settings-copy">
-          {editing ? (
+    <div className="workspace-identity">
+      <MenuRow
+        label="Workspace actions"
+        actions={actions}
+        row={{
+          leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
+          label: editing ? (
             <TaskNameField
               name={workspace.name}
               className="settings-input workspace-name-input"
@@ -1403,39 +1466,17 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
               onEnd={end}
             />
           ) : (
-            <strong>{workspace.name}</strong>
-          )}
-          <small>{identityLine(workspace)}</small>
-        </span>
-        {renamable && !editing ? (
-          <button
-            ref={button}
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={renaming}
-            onClick={() => {
-              setRefusal(undefined);
-              setEditing(true);
-            }}
-          >
-            Rename
-          </button>
-        ) : null}
-        {manages ? (
-          <input
-            ref={picker}
-            type="file"
-            accept={PHOTO_ACCEPT}
-            hidden
-            onChange={(event) => {
-              const [picked] = Array.from(event.currentTarget.files ?? []);
-              // Cleared so the same file can be picked again after it was refused.
-              event.currentTarget.value = "";
-              if (picked !== undefined) upload(picked);
-            }}
-          />
-        ) : null}
-      </MenuRow>
+            workspace.name
+          ),
+          description: identityLine(workspace),
+          control: (
+            <>
+              {rename}
+              {photoPicker}
+            </>
+          ),
+        }}
+      />
       {refusal === undefined ? null : (
         <p className="error-message" role="alert">
           {refusal}
@@ -1449,7 +1490,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           running: "Removing",
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -1506,22 +1547,29 @@ function ShownWorkspace({
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
   return (
     <>
-      <SettingsGroup>
+      <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
-      </SettingsGroup>
-      <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
-        <TeamMembers
-          workspace={workspace}
-          readerId={readerId}
-          members={members.read}
-          onRetry={members.retry}
-          onChanged={members.changed}
-        />
-      </SettingsGroup>
+      </SettingsSection>
+      <div {...searchAnchorProps(SETTINGS_SECTION.MEMBERS)}>
+        <SettingsSection title="Members">
+          <TeamMembers
+            workspace={workspace}
+            readerId={readerId}
+            members={members.read}
+            onRetry={members.retry}
+            onChanged={members.changed}
+          />
+        </SettingsSection>
+      </div>
       {managesWorkspace(workspace) ? (
-        <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
-          <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
-        </SettingsGroup>
+        <div {...searchAnchorProps(SETTINGS_SECTION.INVITATIONS)}>
+          <SettingsSection title="Invitations">
+            <Invitations
+              workspaceId={workspace.id}
+              owner={workspace.role === WORKSPACE_ROLE.OWNER}
+            />
+          </SettingsSection>
+        </div>
       ) : null}
       <SettingsGroup title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub workspace={workspace} />

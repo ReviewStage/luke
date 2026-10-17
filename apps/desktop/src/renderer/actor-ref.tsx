@@ -8,7 +8,7 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import type { AutomationSummary } from "@luke/features/automation-wire";
-import { WingFace } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule, WingFace } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -26,7 +26,6 @@ import {
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
-import { CardHead, CardNote, CardRule, HoverCard } from "./hover-card";
 import { useActorDoor } from "./person-door";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
 import { RelativeTime } from "./tasks/relative-time";
@@ -342,7 +341,7 @@ function ActorHead({
   return (
     <div className="actor-card-head">
       <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
-      <CardHead
+      <HoverCardHead
         name={
           you ? (
             <span className="actor-card-name">
@@ -382,8 +381,8 @@ export function PersonCard({
       />
       {latest === undefined ? null : (
         <>
-          <CardRule />
-          <CardNote>{latest}</CardNote>
+          <HoverCardRule />
+          <HoverCardNote>{latest}</HoverCardNote>
         </>
       )}
     </HoverCard>
@@ -405,8 +404,8 @@ export function LukeCard({
       <ActorHead actor={LUKE_ACTOR} sub={sub} />
       {latest === undefined ? null : (
         <>
-          <CardRule />
-          <CardNote>{latest}</CardNote>
+          <HoverCardRule />
+          <HoverCardNote>{latest}</HoverCardNote>
         </>
       )}
     </HoverCard>
@@ -435,7 +434,7 @@ function SomeoneCard({
         actor={actor}
         sub={former && actor.name !== undefined ? "Former member" : undefined}
       />
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
+      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
     </HoverCard>
   );
 }
@@ -453,7 +452,7 @@ function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
     <HoverCard data-actor-card={actor.kind}>
       <div className="actor-card-head">
         <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
-        <CardHead
+        <HoverCardHead
           name={
             actor.bot ? (
               <span className="actor-card-name">
@@ -518,13 +517,13 @@ export function AutomationCard({
         corner={automationOwnerName(automationOwner(automation), workspaceName)}
         onOpen={onOpen}
       />
-      <CardNote>{automationNextText(automation, now)}</CardNote>
+      <HoverCardNote>{automationNextText(automation, now)}</HoverCardNote>
       {lastRun === null ? null : (
-        <CardNote>
+        <HoverCardNote>
           {"Last ran "}
           <RelativeTime at={lastRun.firedAt} now={now} hint={false} ago />
           {` · ${automationRunLine(lastRun, automation.mine === true ? undefined : "its creator")}`}
-        </CardNote>
+        </HoverCardNote>
       )}
     </HoverCard>
   );

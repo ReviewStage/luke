@@ -1,7 +1,6 @@
 import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
-import { closeEveryMacTerminal } from "@luke/host/mac-terminal";
+import { closeEveryMacTerminal, reportToStderr, tolerateClosedStderr } from "@luke/host/node";
 import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
-import { reportToStderr, tolerateClosedStderr } from "@luke/host/stderr-report";
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
 import { app, Menu, protocol, shell } from "electron";
 import { menuBarDrawer } from "./app-menu";

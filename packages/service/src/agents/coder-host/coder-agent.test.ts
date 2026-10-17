@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { Duration, Redacted } from "effect";
+import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { serializeModelInputSchema } from "eve/tools";
@@ -18,6 +21,7 @@ import {
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { CODER } from "./bounds.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
@@ -173,6 +177,9 @@ test("the session and the post tool are told never to ask for a credential or a 
   assert.ok(
     INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
   );
+  assert.ok(
+    CHAT_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
+  );
 });
 
 test("the session and the post tool send whatever is ready for the developer to look at or review to the inbox, a pull request among it, and a test only the developer can run", () => {
@@ -266,5 +273,58 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
       assert.ok(instructions.includes('NODE_PATH="$(npm root -g)"'), brief);
       assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);
     }
+  }
+});
+
+/** The task link the golden's on-task prompts were composed with. */
+const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
+
+/**
+ * Main's own instructions as they stood before Chat, recorded from main's
+ * code for each brief, on a task and on none: what an agent whose starter
+ * has not turned Chat on must still read, byte for byte.
+ */
+const BEFORE_CHAT = Schema.decodeUnknownSync(
+  Schema.Record(Schema.String, Schema.Struct({ onTask: Schema.String, taskless: Schema.String })),
+)(
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL("../../../fixtures/coder-instructions/chat-off.json", import.meta.url)),
+      "utf8",
+    ),
+  ),
+);
+
+test("with Chat off the instructions are main's own, byte for byte, and with it on they add the chat section alone", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const before = BEFORE_CHAT[brief];
+    assert.ok(before, brief);
+    const off = {
+      onTask: coderInstructions("Acme/Relay", brief, true, TASK_LINK),
+      taskless: coderInstructions("Acme/Relay", brief, false, null),
+    };
+    assert.equal(off.onTask, before.onTask, brief);
+    assert.equal(off.taskless, before.taskless, brief);
+    const on = coderInstructions("Acme/Relay", brief, true, TASK_LINK, undefined, true);
+    assert.ok(on.includes("## Chat with other agents"), brief);
+    const section = on.slice(on.indexOf("\n\n## Chat with other agents"));
+    const end = section.indexOf("\n\n## ", 2);
+    assert.equal(on.replace(section.slice(0, end), ""), before.onTask, brief);
+    for (const tool of Object.values(CHAT_TOOLS)) {
+      assert.ok(!off.onTask.includes(tool.name), `${brief} with Chat off names ${tool.name}`);
+    }
+  }
+});
+
+test("with Chat on the session keeps the developer's inbox for what it needs of the developer, and is told of chat for the other agents, @luke, and people, with which to use when", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief, false, null, undefined, true);
+    assert.ok(instructions.includes("## The developer's inbox"), brief);
+    assert.ok(instructions.includes("## Chat with other agents"), brief);
+    for (const tool of [...Object.values(CHAT_TOOLS), ...Object.values(INBOX_TOOLS)]) {
+      assert.ok(instructions.includes(tool.name), `${brief} names ${tool.name}`);
+    }
+    assert.ok(instructions.includes(`\`${CHAT_NOTICE_LEAD} ·\``), brief);
+    assert.ok(instructions.includes("Never put one question in both places."), brief);
   }
 });

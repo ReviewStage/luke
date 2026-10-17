@@ -22,15 +22,19 @@ import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
+  type IntegrationProvider,
+  type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
@@ -174,6 +178,7 @@ beforeEach(() => {
   installScrollIntoView();
   secretsAsked = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   feedbackAbout = [];
   standing = [DIGEST, SWEEP, FAILING];
   lists = [];
@@ -193,135 +198,128 @@ beforeEach(() => {
   defaultRefused = false;
   catalogReads = 0;
   changeRefusal = undefined;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-          listed.push(request.payload.workspaceId);
-          if (listHeld) return new Promise(() => undefined);
-          const theirs = standing.filter(
-            (each) => each.workspaceId === request.payload.workspaceId,
-          );
-          const value = lists.shift() ?? { automations: theirs };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        listed.push(request.payload.workspaceId);
+        if (listHeld) return new Promise(() => undefined);
+        const theirs = standing.filter((each) => each.workspaceId === request.payload.workspaceId);
+        const value = lists.shift() ?? { automations: theirs };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
+        changes.push(request.payload);
+        const { automationId, change } = request.payload;
+        const was = standing.find((each) => each.id === automationId);
+        if (changeRefusal !== undefined || was === undefined) {
+          const failure = changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND;
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { failure } });
         }
-        if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
-          changes.push(request.payload);
-          const { automationId, change } = request.payload;
-          const was = standing.find((each) => each.id === automationId);
-          if (changeRefusal !== undefined || was === undefined) {
-            const failure = changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND;
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { failure } });
-          }
-          const automation = { ...was, ...change };
-          standing = standing.map((each) => (each.id === automationId ? automation : each));
-          if (heldChanges === undefined) {
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation } });
-          }
-          // A held write answers in words of its own, so which answer drew is told by the row's name.
-          const held = heldChanges;
-          const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { automation: told } };
-          return new Promise((resolve) => held.push(() => resolve(done)));
+        const automation = { ...was, ...change };
+        standing = standing.map((each) => (each.id === automationId ? automation : each));
+        if (heldChanges === undefined) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation } });
         }
-        if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
-          creates.push(request.payload);
-          const { workspaceId, name, trigger, action, scope, repositories } = request.payload;
-          const hooked = trigger.kind === AUTOMATION_TRIGGER.WEBHOOK;
-          const made = automation(42, {
-            workspaceId: workspaceId ?? WORKSPACE.id,
-            name,
-            trigger,
-            action,
-            scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
-            repositories: repositories ?? [],
-            ...(hooked
-              ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
-              : undefined),
-          });
-          standing = [made, ...standing];
-          // A webhook's secret is answered once, by the write that minted it.
-          const value = hooked
-            ? { automation: made, webhookSecret: MADE_SECRET }
-            : { automation: made };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-          // Linear and Sentry are connected; the rest are not.
-          const integrations = Object.fromEntries(
-            INTEGRATION_PROVIDER_LIST.map((provider) => [
-              provider,
-              provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
-                ? INTEGRATION_STATUS.CONNECTED
-                : INTEGRATION_STATUS.DISCONNECTED,
-            ]),
-          );
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { integrations } });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
-          catalogReads += 1;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
-          const value = defaultRefused
-            ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
-            : { choice: DEFAULT_CHOICE };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-          agentsAsked.push(request.payload);
+        // A held write answers in words of its own, so which answer drew is told by the row's name.
+        const held = heldChanges;
+        const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { automation: told } };
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
+        creates.push(request.payload);
+        const { workspaceId, name, trigger, action, scope, repositories } = request.payload;
+        const hooked = trigger.kind === AUTOMATION_TRIGGER.WEBHOOK;
+        const made = automation(42, {
+          workspaceId: workspaceId ?? WORKSPACE.id,
+          name,
+          trigger,
+          action,
+          scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
+          repositories: repositories ?? [],
+          ...(hooked
+            ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
+            : undefined),
+        });
+        standing = [made, ...standing];
+        // A webhook's secret is answered once, by the write that minted it.
+        const value = hooked
+          ? { automation: made, webhookSecret: MADE_SECRET }
+          : { automation: made };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        // Linear and Sentry are connected; the rest are not.
+        const integrations = Object.fromEntries(
+          INTEGRATION_PROVIDER_LIST.map((provider) => [
+            provider,
+            provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
+              ? INTEGRATION_STATUS.CONNECTED
+              : INTEGRATION_STATUS.DISCONNECTED,
+          ]),
+        );
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          // SAFETY: every provider on the list is given a status above, which is the whole of the record.
+          value: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
+        });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+        catalogReads += 1;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
+        const value = defaultRefused
+          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
+          : { choice: DEFAULT_CHOICE };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+        agentsAsked.push(request.payload);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { agents: [CI_DIGEST] },
+        });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
+        runsAsked.push(request.payload.automationId);
+        if (runHeld) return new Promise<never>(() => undefined);
+        if (runRefusal !== undefined) {
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
-            value: { agents: [CI_DIGEST] },
+            value: { failure: runRefusal },
           });
         }
-        if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
-          runsAsked.push(request.payload.automationId);
-          if (runHeld) return new Promise<never>(() => undefined);
-          if (runRefusal !== undefined) {
-            return Promise.resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { failure: runRefusal },
-            });
-          }
-          const made = {
-            id: "6e7f8091-a2b3-4c4d-8e5f-60718293a4b5",
-            firing: { kind: "manual" },
-            status: AUTOMATION_RUN_STATUS.STARTED,
-            reason: null,
-            agent: { id: CI_DIGEST.id, title: null, status: "starting" },
-            firedAt: 5,
-            settledAt: 5,
-          } as const;
-          runs = [made, ...runs];
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET) {
-          secretsAsked.push(request.payload.automationId);
-          const automation = standing.find((each) => each.id === request.payload.automationId);
-          const value =
-            automation === undefined
-              ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
-              : { automation, webhookSecret: ROTATED_SECRET };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
-          deletes.push(request.payload.automationId);
-          standing = standing.filter((each) => each.id !== request.payload.automationId);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        const made = {
+          id: "6e7f8091-a2b3-4c4d-8e5f-60718293a4b5",
+          firing: { kind: "manual" },
+          status: AUTOMATION_RUN_STATUS.STARTED,
+          reason: null,
+          agent: { id: CI_DIGEST.id, title: null, status: "starting" },
+          firedAt: 5,
+          settledAt: 5,
+        } as const;
+        runs = [made, ...runs];
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET) {
+        secretsAsked.push(request.payload.automationId);
+        const automation = standing.find((each) => each.id === request.payload.automationId);
+        const value =
+          automation === undefined
+            ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
+            : { automation, webhookSecret: ROTATED_SECRET };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
+        deletes.push(request.payload.automationId);
+        standing = standing.filter((each) => each.id !== request.payload.automationId);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -1238,7 +1236,7 @@ function pillOver(element: Element): string | undefined {
   return pill;
 }
 
-test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill", async () => {
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each raising its words in its pill", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
@@ -1247,11 +1245,7 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
       const press =
         [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
         assert.fail(`no ${name}`);
-      return {
-        name,
-        labelled: press.getAttribute("aria-label"),
-        pill: pillOver(press),
-      };
+      return { name, pill: pillOver(press) };
     });
 
   // A 760 window's toolbar, past the traffic lights.
@@ -1259,9 +1253,9 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", labelled: "Automations", pill: "Automations" },
-      { name: "Send feedback", labelled: "Send feedback", pill: "Send feedback" },
-      { name: "Run now", labelled: "Run now", pill: "Run now" },
+      { name: "Automations", pill: "Automations" },
+      { name: "Send feedback", pill: "Send feedback" },
+      { name: "Run now", pill: "Run now" },
     ]);
   } finally {
     narrow.remove();
@@ -1270,9 +1264,9 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", labelled: null, pill: undefined },
-      { name: "Send feedback", labelled: null, pill: undefined },
-      { name: "Run now", labelled: null, pill: undefined },
+      { name: "Automations", pill: undefined },
+      { name: "Send feedback", pill: undefined },
+      { name: "Run now", pill: undefined },
     ]);
   } finally {
     wide.remove();
@@ -1291,28 +1285,20 @@ test("the crumb naming an automation, cut short by its toolbar, reads whole on t
   assert.equal(pillOver(crumb), SWEEP.name);
 });
 
-test("a Run now still out on a toolbar too narrow for its words draws its ring in its glyph's place", async () => {
+test("a Run now still out is named by what it is doing and refuses another press", async () => {
   mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   runHeld = true;
-  const narrow = layContainersAt({ "automation-toolbar": 570 });
-  try {
-    act(() => relayout());
-    const run = button("Run now");
-    act(() => run.click());
-    await settle();
+  const run = button("Run now");
+  act(() => run.click());
+  await settle();
+  act(() => run.click());
+  await settle();
 
-    assert.deepEqual(
-      {
-        pressable: !run.disabled,
-        ring: run.querySelector('.luke-spinner[role="status"]') !== null,
-        glyph: run.querySelector("svg.lucide-play") !== null,
-      },
-      { pressable: false, ring: true, glyph: false },
-    );
-  } finally {
-    narrow.remove();
-  }
+  assert.deepEqual(
+    { name: run.getAttribute("aria-label"), busy: run.getAttribute("aria-busy"), runsAsked },
+    { name: "Running", busy: "true", runsAsked: [SWEEP.id] },
+  );
 });
 
 test("a page naming an automation the list does not hold, as a link to another workspace's may, says it is not found and draws nothing of it", async () => {

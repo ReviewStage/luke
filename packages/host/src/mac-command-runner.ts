@@ -71,7 +71,11 @@ interface CapturedText {
 }
 
 function capturedText(captured: Captured): CapturedText {
-  const text = new TextDecoder().decode(Buffer.concat(captured.chunks));
+  // Note that the chunks are decoded as one stream, so a character split across two is read whole.
+  const decoder = new TextDecoder();
+  const text =
+    captured.chunks.map((chunk) => decoder.decode(chunk, { stream: true })).join("") +
+    decoder.decode();
   const cut = captured.dropped || text.length > MAC_COMMAND_BOUNDS.MAX_OUTPUT_CHARS;
   return { text: text.slice(0, MAC_COMMAND_BOUNDS.MAX_OUTPUT_CHARS), cut };
 }

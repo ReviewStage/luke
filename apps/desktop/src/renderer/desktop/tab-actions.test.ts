@@ -2,15 +2,17 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel";
@@ -112,12 +114,16 @@ function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): HTMLEleme
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
-          looks: NO_LOOKS,
-          captions: undefined,
-          tasks: control,
-        }),
+        // Only the tabs' bars are asked about, so no bundle lands under them.
+        onSideBundles(
+          unlandedBundles(),
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            captions: undefined,
+            tasks: control,
+          }),
+        ),
       ),
     ),
   );
@@ -135,7 +141,7 @@ function readAndClose(): string[] {
   assert.ok(menu, "a menu stands open");
   const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map(
     (item) =>
-      `${item.querySelector(".task-menu-label")?.textContent}${item.disabled ? " (off)" : ""}`,
+      `${item.querySelector(".luke-menu-item-label")?.textContent}${item.disabled ? " (off)" : ""}`,
   );
   act(() => {
     menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -251,16 +257,7 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), pageFrameUrl });
   return copied;
 }
 

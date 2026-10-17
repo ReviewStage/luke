@@ -20,12 +20,13 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
@@ -160,38 +161,33 @@ let automationReads: string[] = [];
 
 beforeEach(() => {
   automationReads = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-          const value: CodingAgentInboxAnswerView = {
-            items: AGENT_INBOXES.get(request.payload.agentId) ?? [],
-            cursor: "1",
-          };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-          automationReads.push(request.payload.workspaceId ?? "");
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { automations: [SWEEP] },
-          });
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-        }
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
         const value: CodingAgentInboxAnswerView = {
-          items: INBOXES.get(request.payload.taskId) ?? [],
+          items: AGENT_INBOXES.get(request.payload.agentId) ?? [],
           cursor: "1",
         };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        automationReads.push(request.payload.workspaceId ?? "");
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { automations: [SWEEP] },
+        });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+      }
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      const value: CodingAgentInboxAnswerView = {
+        items: INBOXES.get(request.payload.taskId) ?? [],
+        cursor: "1",
+      };
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
     },
   });
 });
@@ -227,6 +223,8 @@ function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Strata
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      pages: undefined,
+      onRereadPages: () => undefined,
     },
     ...overrides,
   });

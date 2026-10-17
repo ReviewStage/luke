@@ -421,6 +421,38 @@
           "automationName": {
             "type": "string"
           },
+          "from": {
+            "type": "object",
+            "properties": {
+              "agentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "steps": {
+                "type": "number",
+                "minimum": 0
+              },
+              "totalSteps": {
+                "type": "number",
+                "minimum": 0
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "agentId",
+              "steps",
+              "totalSteps"
+            ],
+            "additionalProperties": false
+          },
           "workspaceId": {
             "type": "string"
           },
