@@ -5,8 +5,10 @@ import { Cause, Data, Duration, Effect, Queue, Stream } from "effect";
 /**
  * live-follow.ts -- a read the host follows over Neon Realtime, as Neon's guide says to: sealed statements subscribed to at the address the service names, and renewed before they expire.
  *
- * Each read is one or more parts, one sealed statement each, all on one
- * socket ("Subscribe to the sealed query"). Once every part has its first
+ * Each read is one or more parts, one sealed statement each, and every read
+ * following one address shares one client and its one socket ("Create one
+ * client for the whole app, because every subscription shares its
+ * connection"). Once every part has its first
  * result, every change of any part is the parts' rows whole, undecoded, for
  * the caller to decode at this boundary. Every seal is renewed ten seconds
  * before the earliest expires, a fetch that failed asked again a second
@@ -41,8 +43,36 @@ export interface LiveClient {
   close(): void;
 }
 
-/** Realtime's own client, at the address the service named. */
-export const openRealtimeClient = (url: string): LiveClient => createRealtimeClient({ url });
+/**
+ * One client per address, shared by every read following there: each open
+ * takes a handle, and the client's socket closes once the last handle is
+ * let go. Neon's client multiplexes every subscription over its one socket,
+ * so the host holds one socket however many reads it follows, rather than
+ * one per read.
+ */
+export function shareLiveClients(open: (url: string) => LiveClient): (url: string) => LiveClient {
+  const standing = new Map<string, { readonly client: LiveClient; holders: number }>();
+  return (url) => {
+    const shared = standing.get(url) ?? { client: open(url), holders: 0 };
+    shared.holders += 1;
+    standing.set(url, shared);
+    let held = true;
+    return {
+      subscribe: (query) => shared.client.subscribe(query),
+      close: () => {
+        if (!held) return;
+        held = false;
+        shared.holders -= 1;
+        if (shared.holders > 0) return;
+        standing.delete(url);
+        shared.client.close();
+      },
+    };
+  };
+}
+
+/** Realtime's own client at the address the service named, shared by every read following there. */
+export const openRealtimeClient = shareLiveClients((url) => createRealtimeClient({ url }));
 
 /** A read sealed for following: where to subscribe, and each part's sealed statement. */
 export interface SealedRead<Part extends string> {
