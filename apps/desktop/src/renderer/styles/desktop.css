@@ -8501,11 +8501,14 @@ button.automation-run:hover {
   padding: 0 var(--row-inset);
 }
 
+/* Note that a long name or email wraps anywhere rather than run past the
+   column or hide its end, so the head stays whole at any width. */
 .person-head-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--space-2);
+  overflow-wrap: anywhere;
 }
 
 .person-head-name {
@@ -8514,23 +8517,16 @@ button.automation-run:hover {
   align-items: center;
   gap: var(--space-8);
   margin: 0;
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
 }
 
-.person-head-line {
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.person-empty {
+/* A section's name and count, as the Issues page heads a status's group. */
+.person-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+  margin-bottom: var(--luke-space-2);
   padding: 0 var(--row-inset);
+  font-variant-numeric: tabular-nums;
 }
 
 /* The way to the rest of their tasks, standing under the section's rows. */
