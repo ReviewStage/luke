@@ -1,6 +1,7 @@
 import { DetailPage, SKELETON_SHAPE, Skeleton } from "@luke/ui";
 import { accountInitials, accountLabel } from "@luke/ui/account-initials";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /** The signed-in account the header names; read from the session, shown as-is. */
 export interface ViewerAccount {
@@ -70,6 +71,33 @@ export function AccountAvatar({
 const ACCOUNT_MENU_ITEM =
   "flex min-h-11 w-full cursor-pointer items-center px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
 
+/** Where the open menu stands in the window: its top, and its right edge's inset from the window's. */
+interface MenuPlace {
+  top: number;
+  right: number;
+}
+
+/** The menu's narrowest width, and the gap it keeps from its trigger and the window's edge. */
+const MENU_WIDTH = 200;
+const MENU_GAP = 8;
+
+/**
+ * The menu's place under `trigger`, its right edge on the trigger's, a small
+ * gap below it, and pulled in from the window's left edge where a trigger
+ * near it would push the menu past.
+ */
+function menuPlaceUnder(trigger: HTMLElement): MenuPlace {
+  const box = trigger.getBoundingClientRect();
+  const furthest = window.innerWidth - MENU_WIDTH - MENU_GAP;
+  return { top: box.bottom + MENU_GAP, right: Math.min(window.innerWidth - box.right, furthest) };
+}
+
+/**
+ * The account's menu, opened from its avatar. Note that the open menu is
+ * portalled to the body and fixed under its trigger, because the page's
+ * header clips what it holds to its own box, so a menu drawn inside it would
+ * open under the header's edge rather than over the page.
+ */
 function AccountMenu({
   account,
   avatarSkeleton = false,
@@ -79,9 +107,10 @@ function AccountMenu({
   avatarSkeleton?: boolean;
   onSignOut: () => void;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<MenuPlace>();
+  const open = place !== undefined;
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const itemRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -89,56 +118,69 @@ function AccountMenu({
     itemRef.current?.focus();
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (target instanceof Node && containerRef.current?.contains(target)) return;
-      setOpen(false);
+      if (target instanceof Node) {
+        if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      }
+      setPlace(undefined);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setOpen(false);
+      setPlace(undefined);
       triggerRef.current?.focus();
+    };
+    // The trigger moves when the window does, so the menu follows it there.
+    const onResize = () => {
+      if (triggerRef.current) setPlace(menuPlaceUnder(triggerRef.current));
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
   return (
-    <div className="relative" ref={containerRef}>
+    <>
       <button
         type="button"
         ref={triggerRef}
-        className="flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
+        className="ml-auto flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Account menu for ${accountLabel(account)}`}
-        onClick={() => setOpen(!open)}
+        onClick={(event) => setPlace(open ? undefined : menuPlaceUnder(event.currentTarget))}
       >
         {avatarSkeleton ? <AvatarSkeleton /> : <AccountAvatar account={account} />}
       </button>
-      {open ? (
-        <div
-          role="menu"
-          className="absolute top-[calc(100%+8px)] right-0 z-10 min-w-[200px] rounded-lg border border-border bg-card py-1 text-left shadow-[0_16px_48px_rgba(0,0,0,0.32)]"
-        >
-          <div className="border-b border-border px-3 py-2">
-            <div className="text-sm leading-tight font-medium">{account.name}</div>
-            <div className="truncate text-xs text-muted-foreground">{account.email}</div>
-          </div>
-          <button
-            type="button"
-            ref={itemRef}
-            role="menuitem"
-            className={ACCOUNT_MENU_ITEM}
-            onClick={onSignOut}
-          >
-            Sign out
-          </button>
-        </div>
-      ) : null}
-    </div>
+      {place === undefined
+        ? null
+        : createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              style={{ ...place, minWidth: MENU_WIDTH }}
+              className="fixed z-10 rounded-lg border border-border bg-card py-1 text-left shadow-[0_16px_48px_rgba(0,0,0,0.32)]"
+            >
+              <div className="border-b border-border px-3 py-2">
+                <div className="text-sm leading-tight font-medium">{account.name}</div>
+                <div className="truncate text-xs text-muted-foreground">{account.email}</div>
+              </div>
+              <button
+                type="button"
+                ref={itemRef}
+                role="menuitem"
+                className={ACCOUNT_MENU_ITEM}
+                onClick={onSignOut}
+              >
+                Sign out
+              </button>
+            </div>,
+            document.body,
+          )}
+    </>
   );
 }
 
@@ -171,6 +213,8 @@ export function AdminPage({
         actions={
           <>
             {controls}
+            {/* The avatar keeps to the actions' far end, on a phone too, where
+                it wraps under the controls onto a row of its own. */}
             {account ? (
               <AccountMenu
                 account={account}
@@ -178,7 +222,7 @@ export function AdminPage({
                 onSignOut={onSignOut}
               />
             ) : accountSkeleton ? (
-              <div className="flex size-11 items-center justify-center">
+              <div className="ml-auto flex size-11 items-center justify-center">
                 <AvatarSkeleton />
               </div>
             ) : null}
