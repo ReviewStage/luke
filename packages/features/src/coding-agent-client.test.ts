@@ -238,6 +238,62 @@ it.effect(
 );
 
 it.effect(
+  "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, and sends nothing that carries neither words nor files",
+  () =>
+    Effect.gen(function* () {
+      const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+      const item = {
+        id: itemId,
+        agentId: AGENT_ID,
+        key: "invite-copy",
+        revision: 1,
+        version: 4,
+        title: "What should the invitation email say?",
+        blocks: [],
+        response: { type: "text" },
+        needsReply: true,
+        status: "answered",
+        messages: [
+          {
+            id: "6e3c9a1f-2b4d-4f70-8c8e-3d5f7b9c1e2a",
+            author: "member",
+            member: { userId: "user-dana", name: "Dana" },
+            text: "Drop the emoji.",
+            createdAt: 2,
+          },
+        ],
+        postedAt: 1,
+        updatedAt: 2,
+      };
+      const path = `POST /api/inbox/${itemId}/messages`;
+      const api = fakeCloudApi({ [path]: { answer: () => ({ item }) } });
+      const refusing = fakeCloudApi({
+        [path]: {
+          answer: () => ({ error: HOSTED_API_ERROR.AGENT_NOT_READY }),
+          status: HTTP_STATUS.CONFLICT,
+        },
+      });
+      const message = { text: "  Drop the emoji.  ", clientKey: "key-1" };
+
+      const sent = yield* Effect.provide(client().messageInbox(itemId, message), api.layer);
+      const refused = yield* Effect.provide(client().messageInbox(itemId, message), refusing.layer);
+      const empty = yield* Effect.provide(
+        client().messageInbox(itemId, { text: " ", clientKey: "key-2" }),
+        api.layer,
+      );
+
+      assert.deepEqual(sent, { item });
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "null"), {
+        text: "Drop the emoji.",
+        clientKey: "key-1",
+      });
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
+      assert.deepEqual(empty, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 1, "nothing is sent for a message of neither");
+    }),
+);
+
+it.effect(
   "lists a workspace's agents by its id and the repository named, and a workspace the account is not in as not found",
   () =>
     Effect.gen(function* () {

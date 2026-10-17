@@ -22,7 +22,12 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
-import { inboxAnsweredSchema, inboxAnswerRequestSchema, inboxAnswerSchema } from "./inbox-wire.js";
+import {
+  inboxAnsweredSchema,
+  inboxAnswerRequestSchema,
+  inboxAnswerSchema,
+  inboxMessagedSchema,
+} from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -431,6 +436,11 @@ export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSc
 export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
+
+/** A message on an item's thread, as the window hears it: the item as it then stands, its thread with the message on it, or why there is no answer. */
+export const codingAgentInboxMessagedViewSchema = EffectSchema.Union([inboxMessagedSchema, failed]);
+
+export type CodingAgentInboxMessagedView = typeof codingAgentInboxMessagedViewSchema.Type;
 
 /** What waits across the account past a cursor, as main asks it: where it stands. */
 export const codingAgentAccountInboxParamsSchema = EffectSchema.Struct({
