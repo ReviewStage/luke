@@ -18,7 +18,20 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  SettingsSection,
+  Switch,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 import { useAppCommand } from "../app-commands";
@@ -26,7 +39,6 @@ import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { StateGlyph, stateEndMark } from "../state-glyph";
-import { Switch } from "../switch";
 import { momentText, useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
@@ -165,7 +177,12 @@ function AutomationRow({
   );
 }
 
-/** The list, each owner's automations under its own heading where both stand. */
+/**
+ * The list, each owner's automations in a card, under its own heading where
+ * both stand. Note that a lone owner's card is still a region named by its
+ * owner, as a headed one is by its heading, so a reader moving by landmark
+ * hears whose automations they are either way.
+ */
 function AutomationList({
   groups,
   workspace,
@@ -181,18 +198,10 @@ function AutomationList({
 }): React.JSX.Element {
   return (
     <>
-      {groups.map((group) => (
-        <section
-          key={group.owner}
-          className="automation-group"
-          aria-label={automationOwnerName(group.owner, workspace?.name)}
-        >
-          {groups.length > 1 ? (
-            <h2 className="settings-group-title">
-              {automationOwnerName(group.owner, workspace?.name)}
-            </h2>
-          ) : null}
-          <div className="settings-card">
+      {groups.map((group) => {
+        const name = automationOwnerName(group.owner, workspace?.name);
+        const card = (
+          <SettingsSection title={groups.length > 1 ? name : undefined}>
             {group.automations.map((automation) => (
               <AutomationRow
                 key={automation.id}
@@ -203,9 +212,18 @@ function AutomationList({
                 onToggle={(enabled) => onToggle(automation, enabled)}
               />
             ))}
+          </SettingsSection>
+        );
+        return groups.length > 1 ? (
+          <div key={group.owner} className="automation-group">
+            {card}
           </div>
-        </section>
-      ))}
+        ) : (
+          <section key={group.owner} className="automation-group" aria-label={name}>
+            {card}
+          </section>
+        );
+      })}
     </>
   );
 }
@@ -224,8 +242,12 @@ function SuggestedAutomations({
   onStart: (preset: AutomationPresetName) => void;
 }): React.JSX.Element {
   return (
-    <section className="settings-group automation-suggestions" aria-label="Suggested">
-      <h2 className="settings-group-title">Suggested</h2>
+    <section className="automation-suggestions" aria-label="Suggested">
+      <div className="automation-suggestions-head">
+        <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
+          Suggested
+        </Text>
+      </div>
       <div className="automation-suggestion-cards">
         {SUGGESTIONS.map(({ name, glyph }) => {
           const preset = automationPreset(name);
@@ -289,15 +311,14 @@ function ListPage({
         </div>
         <div className="desktop-toolbar-actions">
           <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
+          <Button
+            variant={BUTTON_VARIANT.OUTLINE}
+            icon={<PlusIcon />}
             disabled={workspace === undefined}
             onClick={openNew}
           >
-            <PlusIcon />
             New automation
-          </button>
+          </Button>
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
@@ -342,10 +363,9 @@ function UnreadPage({
     <section className="automations-view" aria-label="Automation">
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
-          <button type="button" className="toolbar-button" onClick={onBack}>
-            <ZapIcon />
+          <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
             Automations
-          </button>
+          </Button>
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
@@ -364,10 +384,9 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
     <section className="automations-view" aria-label="Automation">
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
-          <button type="button" className="toolbar-button" onClick={onBack}>
-            <ZapIcon />
+          <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
             Automations
-          </button>
+          </Button>
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">

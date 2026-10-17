@@ -2,11 +2,11 @@ import { PRODUCT_EVENT, type RecordProductEvent } from "@luke/features/analytics
 import type { ActRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { channels } from "@luke/host/bridge";
+import type { AppStateStore } from "@luke/host/client";
 import type { HostOperator } from "@luke/host/host-operator";
 import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
-import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";
 import type { PanelManager } from "../window/panel-manager";
 

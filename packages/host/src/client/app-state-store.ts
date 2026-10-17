@@ -1,15 +1,18 @@
-import { isDeepStrictEqual } from "node:util";
+/**
+ * app-state-store.ts -- the one document every window of a client is drawn from: the store that holds it, the push that carries it out, the patches that move it, and the projections a window is handed.
+ */
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import type { AppState } from "@luke/host/app-state";
-import type { HostBootstrap } from "@luke/host/host-operator";
-import { idleUpdateSnapshot } from "@luke/host/update-service";
 import type { HostCapability } from "@luke/settings";
+import type { BuildCommit } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
-import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
-import type { DesktopConfig } from "./services/desktop-config";
+import { type Context, Effect, Equal, type Scope, Stream, SubscriptionRef } from "effect";
+import type { AppState } from "../app-state.js";
+import type { HostBootstrap } from "../host-operator.js";
+import type { RunMode } from "../run-mode.js";
+import { idleUpdateSnapshot } from "../update-service.js";
 
 type AppStateSlice = Exclude<keyof AppState, "version">;
 
@@ -32,17 +35,17 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
 }
 
 /**
- * The one path anything in main writes what it holds: a patch of whole
+ * The one path anything in the client writes what it holds: a patch of whole
  * slices, dropped where it says nothing new, and one write of the resulting
  * document into the ref per applied patch. Nothing else may hold a copy of a
  * slice — a reader takes a snapshot, which is the document as it stands.
  *
  * The document itself is a `SubscriptionRef`, so its own `changes` Stream is
  * the one subscription a production caller forks to reach the windows.
- * `snapshot`, `update`, and `touch` are the synchronous face the rest of main
- * still holds, each running its Ref operation under the launch's own services
- * — the context of the runtime `main.ts` disposes, captured once at
- * construction — rather than the empty context plain `Effect.runSync` stands
+ * `snapshot`, `update`, and `touch` are the synchronous face the rest of the
+ * client still holds, each running its Ref operation under the launch's own
+ * services — the context of the runtime the platform's entry disposes,
+ * captured once at construction — rather than the empty context plain `Effect.runSync` stands
  * for, so a clock, a scheduler, or any other reference the launch set is the
  * one these writes run under. `runSyncWith` runs on the calling stack exactly
  * as it does without a context, and a `SubscriptionRef` read or write never
@@ -65,8 +68,10 @@ export class AppStateStore {
 
   update(patch: AppStatePatch): void {
     const previous = this.snapshot();
+    // Note that `Equal.equals` remembers its answer per pair of objects, which
+    // holds because a slice is replaced whole and never mutated in place.
     const moved = patchEntries(patch).filter(
-      ([slice, value]) => !isDeepStrictEqual(previous[slice], value),
+      ([slice, value]) => !Equal.equals(previous[slice], value),
     );
     if (moved.length === 0) return;
     const next: AppState = {
@@ -94,6 +99,33 @@ export class AppStateStore {
   get changes(): Stream.Stream<AppState> {
     return SubscriptionRef.changes(this.#ref);
   }
+}
+
+/**
+ * The one place the document becomes a push, for the client's scope: every
+ * change of it is handed to `publish`. A push that throws is reported rather
+ * than left to end the fiber: a `Stream.runForEach` that failed once would
+ * never resume, and every later write would then reach no window for the rest
+ * of the session.
+ */
+export function publishAppStateChanges(
+  state: AppStateStore,
+  publish: () => Effect.Effect<void>,
+  report: (message: string) => void,
+): Effect.Effect<void, never, Scope.Scope> {
+  return Effect.asVoid(
+    Effect.forkScoped(
+      Stream.runForEach(state.changes, () =>
+        Effect.catchDefect(publish(), (defect) =>
+          Effect.sync(() =>
+            report(
+              `the app-state push to windows failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /**
@@ -145,6 +177,20 @@ export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {
   return { avatar: held.avatar };
 }
 
+/** What a launch knows of itself before the host answers anything, which is the run slice's own facts. */
+interface ClientRunFacts {
+  readonly launch: {
+    readonly profile: string;
+    readonly captureMode: boolean;
+    readonly fixtureMode: boolean;
+  };
+  readonly runMode: Pick<RunMode, "requiresAccount" | "sendsNetwork">;
+  readonly appVersion: string;
+  readonly commit?: BuildCommit;
+  readonly packaged: boolean;
+  readonly platform: string;
+}
+
 /**
  * The document as a launch begins it: this process's own facts, what the
  * platform offers, and an empty
@@ -153,10 +199,7 @@ export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {
  * what fill the rest in.
  */
 export function initialAppState(
-  config: Pick<
-    DesktopConfig,
-    "launch" | "runMode" | "appVersion" | "commit" | "packaged" | "platform"
-  >,
+  config: ClientRunFacts,
   installSupported: boolean,
   capabilities: readonly HostCapability[],
 ): Omit<AppState, "version"> {

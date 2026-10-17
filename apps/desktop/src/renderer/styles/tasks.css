@@ -235,6 +235,11 @@
   position: relative;
 }
 
+/* A plan's task item the developer can tick from the drawn plan says so. */
+.plan-unit li.task-list-item input[type="checkbox"]:enabled {
+  cursor: pointer;
+}
+
 /* A section's heading wraps short of the row at its end, so the byline and
    the ⋯ never stand over its words, however long it runs. The room is kept
    whether or not they are shown, and in the editor too, so no heading

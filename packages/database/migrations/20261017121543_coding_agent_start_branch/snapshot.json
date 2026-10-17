@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "3990e4c3-4ad3-4cf9-8c39-d3239419515b",
+  "id": "efc374cc-05d0-489c-9c22-a5f2db270b0d",
   "prevIds": ["34cb0d36-98ce-43f7-9c02-aebb81368759", "86140e0b-e825-4025-8b49-660207288765"],
   "ddl": [
     {
@@ -4062,6 +4062,19 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "start_branch",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "title",
       "entityType": "columns",
       "schema": "public",
@@ -7105,32 +7118,6 @@
       "generated": null,
       "identity": null,
       "name": "sender_name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "messages"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sender_model",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "messages"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sender_agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "messages"

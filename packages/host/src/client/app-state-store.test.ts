@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
-import { runModeFor } from "@luke/host";
-import { type AppState, sessionReplayBootstrap } from "@luke/host/app-state";
-import type { HostBootstrap } from "@luke/host/host-operator";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
+import { type AppState, sessionReplayBootstrap } from "../app-state.js";
+import type { HostBootstrap } from "../host-operator.js";
+import { runModeFor } from "../run-mode.js";
 import {
   AppStateStore,
   bootstrapPatch,
@@ -17,11 +17,11 @@ import {
   voiceWindowGone,
   voiceWindowState,
   windowAppState,
-} from "./app-state";
+} from "./app-state-store.js";
 
 /**
  * The document and the one path out of it. What is proven here is what the
- * rest of main now leans on: a patch that says nothing changes nothing, a
+ * rest of the client leans on: a patch that says nothing changes nothing, a
  * slice is replaced whole, the version only ever climbs, and `changes`
  * carries exactly one document per applied patch.
  */

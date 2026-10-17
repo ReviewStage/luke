@@ -116,11 +116,12 @@ import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
+import { SentTime } from "./sent-time";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
-import { callHeading, useMinute } from "./task-time";
+import { useMinute } from "./task-time";
 import {
   calledAgent,
   cardTitle,
@@ -980,17 +981,6 @@ function SendingAgent({
   return <ActorRef actor={actor} card={card} onOpen={open} />;
 }
 
-/** When one of the developer's lines was sent, in the words a finished turn's line ends on (`WorkedFor`), after who sent it where anyone is named. */
-function SentTime({ at, named }: { at: number; named: boolean }): React.JSX.Element {
-  const now = useMinute();
-  return (
-    <span className="message-sent-at">
-      {named ? <span aria-hidden="true">·</span> : null}
-      <time dateTime={new Date(at).toISOString()}>{callHeading(at, now)}</time>
-    </span>
-  );
-}
-
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
 export interface ArrivedLine {
   readonly message: CodingAgentMessage;
@@ -1317,7 +1307,12 @@ function AgentTranscriptView({
               />
               {message === first && opening !== undefined && replay !== undefined ? (
                 <>
-                  <ReplayCard replay={opening.replay} place={replay} planId={planId} />
+                  <ReplayCard
+                    replay={opening.replay}
+                    sentAt={first.sentAt}
+                    place={replay}
+                    planId={planId}
+                  />
                   {opening.note === undefined ? null : (
                     <AgentMessage
                       message={opening.note}

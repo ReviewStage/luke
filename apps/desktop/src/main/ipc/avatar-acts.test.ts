@@ -5,6 +5,7 @@ import type { AvatarGrant } from "@luke/features/avatar-grant";
 import { runModeFor } from "@luke/host";
 import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
+import { AppStateStore, initialAppState } from "@luke/host/client";
 import type { HostAvatar } from "@luke/host/effect";
 import {
   AVATAR_END_REASON,
@@ -21,7 +22,6 @@ import {
 import type { UnparsedWireValue } from "@luke/wire";
 import { Context, Effect, PubSub, Stream } from "effect";
 import type { WebContents } from "electron";
-import { AppStateStore, initialAppState } from "../app-state";
 import { linkAvatar } from "../services/avatar-link";
 import { avatarActRows, avatarReports } from "./avatar-acts";
 
