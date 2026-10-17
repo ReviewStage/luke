@@ -16,6 +16,7 @@ import {
   Badge,
   type BadgeTone,
   ChevronRightIcon,
+  IconButton,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -255,7 +256,7 @@ export function IntegrationToolDetail({
   tokens,
   backLabel,
   onBack,
-  onPressStart,
+  keepFocus,
   bodyRef,
   onBodyKeyDown,
 }: {
@@ -264,11 +265,11 @@ export function IntegrationToolDetail({
   tool: IntegrationTool;
   /** The words a search asks for, marked where they landed in what it does. */
   tokens: readonly string[];
-  /** What the back is named, where the owner offers one. */
+  /** What the back is named, where the owner offers one; it stands only where both are given. */
   backLabel?: string;
   onBack?: () => void;
-  /** A pointer's press on the back, before it lands. */
-  onPressStart?: (event: React.MouseEvent) => void;
+  /** Whether a pointer's press on the back leaves the focus where it is, in a field of the owner's. */
+  keepFocus?: boolean;
   /** The page's scroller, which the owner may hand the focus to. */
   bodyRef?: React.Ref<HTMLDivElement>;
   /** A key while the scroller holds the focus. */
@@ -279,17 +280,14 @@ export function IntegrationToolDetail({
   return (
     <article className="integration-tool-detail" aria-label={title}>
       <header className="integration-tool-detail-head">
-        {onBack !== undefined ? (
+        {onBack !== undefined && backLabel !== undefined ? (
           <Tooltip label={backLabel}>
-            <button
-              type="button"
-              className="icon-button integration-tool-back"
-              aria-label={backLabel}
-              onMouseDown={onPressStart}
+            <IconButton
+              icon={<ArrowLeftIcon />}
+              label={backLabel}
+              keepFocus={keepFocus}
               onClick={onBack}
-            >
-              <ArrowLeftIcon />
-            </button>
+            />
           </Tooltip>
         ) : null}
         <h2

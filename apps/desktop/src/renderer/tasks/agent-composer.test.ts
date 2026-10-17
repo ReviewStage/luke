@@ -234,7 +234,9 @@ test("a box that opens again after a send leaves the caret on a press of its own
   typeInComposer(box.container, "Fix the bug");
   pressInComposer(box.container, "Enter");
   await settle();
-  const servers = box.container.querySelector<HTMLButtonElement>(".agent-servers-button");
+  const servers = box.container.querySelector<HTMLButtonElement>(
+    'button[aria-label="MCP servers"]',
+  );
   assert.ok(servers);
   servers.focus();
 

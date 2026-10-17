@@ -196,12 +196,13 @@ function mount(
     ),
   );
   // A press is named by its words, or by the name it gives them (a Retry
-  // keeps its words in a span of their own); the mark before them carries a
-  // title of its own.
+  // keeps its words in a span of their own, as a shared Button does); the
+  // mark before them carries a title of its own.
   const button = (words: string) =>
     [...container.querySelectorAll("button")].find(
       (each) =>
         each.getAttribute("aria-label") === words ||
+        each.querySelector(".luke-button-words")?.textContent === words ||
         [...each.childNodes].some(
           (node) => node.nodeType === Node.TEXT_NODE && node.textContent === words,
         ),

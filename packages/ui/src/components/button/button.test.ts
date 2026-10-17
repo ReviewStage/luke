@@ -8,7 +8,8 @@ import { Button, IconButton } from "./button.js";
 /**
  * button.test.ts -- a button that is not tabbable is left out of the tab
  * order, yet takes the focus a roving group hands it and is pressed as any
- * other; an ordinary button stays a Tab stop.
+ * other; an ordinary button stays a Tab stop. A button that keeps focus
+ * leaves it on the field that held it when a pointer presses it.
  */
 
 declare global {
@@ -68,4 +69,41 @@ test("a button that is not tabbable is skipped by Tab, yet takes the focus hande
   expect(document.activeElement).toBe(more);
   act(() => more.click());
   expect(pressed).toEqual(["Section actions"]);
+});
+
+test("a button that keeps focus, pressed with the pointer, leaves the focus on the field and is pressed", () => {
+  const pressed: string[] = [];
+  const container = draw(
+    createElement(
+      "div",
+      null,
+      createElement("input", { "aria-label": "Search" }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Back",
+        keepFocus: true,
+        onClick: () => pressed.push("Back"),
+      }),
+      createElement(Button, { onClick: () => pressed.push("Connect"), children: "Connect" }),
+    ),
+  );
+  const field = container.querySelector("input");
+  if (field === null) throw new Error("no field");
+  act(() => field.focus());
+
+  // Note that jsdom moves no focus on a mousedown, so the browser's move is read as the press's default action.
+  const press = (button: HTMLButtonElement) => {
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    act(() => {
+      button.dispatchEvent(down);
+      if (!down.defaultPrevented) button.focus();
+      button.click();
+    });
+  };
+
+  press(buttonNamed(container, "Back"));
+  expect(document.activeElement).toBe(field);
+  press(buttonNamed(container, "Connect"));
+  expect(document.activeElement).toBe(buttonNamed(container, "Connect"));
+  expect(pressed).toEqual(["Back", "Connect"]);
 });
