@@ -637,6 +637,34 @@
   pointer-events: none;
 }
 
+/* A task item as TipTap draws it: its box in a label and its words in a block
+   of their own after it, which would stand a line under a bullet. Laid side by
+   side, the box takes the bullet's place in the read view's size and green
+   (`markdown.css`), and the words their line beside it. */
+.plan-document-text li[data-checked] {
+  display: flex;
+  list-style: none;
+}
+
+.plan-document-text li[data-checked] > label {
+  flex: none;
+  margin: 0 0.45em 0 -1.45em;
+}
+
+.plan-document-text li[data-checked] > label > input {
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0;
+  vertical-align: -0.1em;
+  accent-color: var(--state-complete);
+}
+
+.plan-document-text li[data-checked] > div {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+}
+
 /* What the editor keeps byte for byte but does not draw as its own: inline
    HTML, a footnote, a link's definition, a block of HTML. */
 .plan-raw-block {
