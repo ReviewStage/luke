@@ -6,10 +6,12 @@ export { hostKernelLayer } from "./kernel.js";
 export {
   AppIdentity,
   Environment,
+  HostSockets,
   IdSource,
   RunMode,
   reporterLayer,
   SecretCipher,
   ShutdownSignal,
+  SignInConsent,
   StateRoot,
 } from "./seams.js";

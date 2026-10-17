@@ -20,6 +20,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -133,44 +134,41 @@ async function inbox(options: {
       status: ACT_OUTCOME_STATUS.DONE,
       value: { items, cursor: "1" } satisfies CodingAgentInboxAnswerView,
     });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-      act: (request: Act): Promise<ActOutcome> => {
-        asked.push(request);
-        switch (request.kind) {
-          case ACT_KIND.TASKS_PULL_REQUEST: {
-            const pullRequest = PULL_REQUESTS.get(request.payload.repository);
-            return Promise.resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
-              value:
-                pullRequest === undefined
-                  ? null
-                  : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
-            });
-          }
-          case ACT_KIND.CODING_AGENTS_INBOX:
-            // A read past the cursor is held open while nothing changes, as the service holds it.
-            return request.payload.after === "0"
-              ? inboxOf(options.planItems)
-              : new Promise(() => undefined);
-          case ACT_KIND.CODING_AGENTS_AGENT_INBOX:
-            return request.payload.after === "0"
-              ? inboxOf(options.sweep === undefined ? [] : [options.sweep.item])
-              : new Promise(() => undefined);
-          case ACT_KIND.CODING_AGENTS_LIST:
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
-          default:
-            return Promise.resolve({
-              status: ACT_OUTCOME_STATUS.REFUSED,
-              reason: "Not in this test.",
-            });
+  fakeAppBridge({
+    onMenuCommand: () => () => undefined,
+    recordSurfaceEvent: () => undefined,
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+    act: (request: Act): Promise<ActOutcome> => {
+      asked.push(request);
+      switch (request.kind) {
+        case ACT_KIND.TASKS_PULL_REQUEST: {
+          const pullRequest = PULL_REQUESTS.get(request.payload.repository);
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value:
+              pullRequest === undefined
+                ? null
+                : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
+          });
         }
-      },
+        case ACT_KIND.CODING_AGENTS_INBOX:
+          // A read past the cursor is held open while nothing changes, as the service holds it.
+          return request.payload.after === "0"
+            ? inboxOf(options.planItems)
+            : new Promise(() => undefined);
+        case ACT_KIND.CODING_AGENTS_AGENT_INBOX:
+          return request.payload.after === "0"
+            ? inboxOf(options.sweep === undefined ? [] : [options.sweep.item])
+            : new Promise(() => undefined);
+        case ACT_KIND.CODING_AGENTS_LIST:
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
+        default:
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.REFUSED,
+            reason: "Not in this test.",
+          });
+      }
     },
   });
   const sweep = options.sweep;

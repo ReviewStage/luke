@@ -43,14 +43,15 @@ import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
   type AppIdentity,
   type Environment,
+  HostSockets,
   Reporter,
   type SecretCipher,
   ShutdownSignal,
+  type SignInConsent,
 } from "./effect/seams.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
-import { openTerminalSocketOverWs } from "./terminal/socket-over-ws.js";
 
 /** The concerns, by the name each is built under. */
 const HOST_CONCERN = {
@@ -96,10 +97,12 @@ export const hostAssemblyLayer: Layer.Layer<
   | HostKernelTag
   | HostService
   | Reporter
+  | HostSockets
   | Environment
   | SecretCipher
   | AppIdentity
   | ShutdownSignal
+  | SignInConsent
   | FileSystem.FileSystem
   | Path.Path
   | ChildProcessSpawner.ChildProcessSpawner
@@ -110,9 +113,10 @@ export const hostAssemblyLayer: Layer.Layer<
     const hostService = yield* HostService;
     const shutdownSignal = yield* ShutdownSignal;
     const { report } = yield* Reporter;
+    const sockets = yield* HostSockets;
 
     const settings = yield* composeSettings();
-    const account = yield* composeAccount({ settings });
+    const account = yield* composeAccount({ settings, openSocket: sockets.openVoice });
     // No brain runs on this Mac: the exchange is the service's, and Luke
     // speaks only on a task's call the developer opened.
     // The tasks composer is built after the live one and ends its calls, so
@@ -214,7 +218,7 @@ export const hostAssemblyLayer: Layer.Layer<
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
-      openSocket: openTerminalSocketOverWs,
+      openSocket: sockets.openTerminal,
     });
     activeTaskId = tasks.activeTaskId;
     showPlanDraft = tasks.showDraft;

@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import {
   type HostedCodingAgentClient,
   type HostedGitHubConnectionClient,
@@ -113,6 +112,7 @@ import {
   Data,
   Duration,
   Effect,
+  Equal,
   FiberHandle,
   Option,
   Queue,
@@ -437,7 +437,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   let published: TasksView = view;
 
   function publish(): void {
-    if (isDeepStrictEqual(view, published)) return;
+    if (Equal.equals(view, published)) return;
     published = view;
     kernel.emit(GATEWAY_EVENT.TASKS_CHANGED, carried(view));
   }

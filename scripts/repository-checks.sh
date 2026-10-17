@@ -47,33 +47,76 @@ fi
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
+#
+# `@luke/host` and `@luke/host/effect` are walked the same way, because the
+# host is meant to load in a browser tab: their graphs name no `node:` module,
+# no `ws`, and no `Buffer` or `process` global, and what needs one sits behind
+# `@luke/host/node`. The walk crosses into `@luke/credentials` through the
+# doors the host names (its barrel and `/snapshot`), since the account's
+# sign-in lives there: the loopback consent sits behind
+# `@luke/credentials/node`, handed to the host as its `SignInConsent` seam.
+# Every other package a walk reaches is still left unchecked here.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
-  const root = path.join(process.argv[1], "packages/runtime/src");
-  const forbidden = /^(node:|@effect\/platform-node|effect\/sql)/;
-  const seen = new Set();
-  const offenders = [];
-  const walk = async (file) => {
-    if (seen.has(file)) return;
-    seen.add(file);
-    const text = await readFile(file, "utf8");
-    for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
-      const specifier = match[1];
-      if (forbidden.test(specifier)) {
-        offenders.push(`${path.relative(root, file)}: ${specifier}`);
-      } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
-        await walk(path.join(path.dirname(file), specifier.replace(/\.js$/, ".ts")));
-      }
-    }
+  const doors = [
+    {
+      name: "@luke/runtime/vocabulary",
+      root: "packages/runtime/src",
+      entries: ["vocabulary.ts"],
+      forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
+    },
+    {
+      name: "@luke/host and @luke/host/effect",
+      root: "packages/host/src",
+      entries: ["index.ts", "effect/index.ts"],
+      forbidden: /^(node:|ws$|@effect\/platform-node)/,
+      globals: /\b(Buffer|process)\.\w+/,
+      follows: ["@luke/credentials"],
+    },
+  ];
+  const repository = process.argv[1];
+  // A followed package is entered where its own `exports` says the
+  // specifier lands, so the walk takes the same door a resolver would.
+  const followed = async (door, specifier) => {
+    const name = door.follows?.find((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`));
+    if (!name) return undefined;
+    const directory = path.join(repository, "packages", name.slice("@luke/".length));
+    const manifest = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
+    const target = manifest.exports[`.${specifier.slice(name.length)}`];
+    return path.join(directory, target.replace(/\.js$/, ".ts"));
   };
-  await walk(path.join(root, "vocabulary.ts"));
-  if (offenders.length > 0) {
-    process.stderr.write(
-      `error: @luke/runtime/vocabulary resolves a Node-reaching import: ${offenders.join(", ")}\n`,
-    );
-    process.exit(1);
+  let failed = false;
+  for (const door of doors) {
+    const seen = new Set();
+    const offenders = [];
+    const walk = async (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const text = await readFile(file, "utf8");
+      const global = door.globals ? text.match(door.globals) : null;
+      if (global) offenders.push(`${path.relative(repository, file)}: ${global[0]}`);
+      for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
+        const specifier = match[1];
+        if (door.forbidden.test(specifier)) {
+          offenders.push(`${path.relative(repository, file)}: ${specifier}`);
+        } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
+          await walk(path.join(path.dirname(file), specifier.replace(/\.js$/, ".ts")));
+        } else {
+          const entered = await followed(door, specifier);
+          if (entered) await walk(entered);
+        }
+      }
+    };
+    for (const entry of door.entries) await walk(path.join(repository, door.root, entry));
+    if (offenders.length > 0) {
+      failed = true;
+      process.stderr.write(
+        `error: ${door.name} resolves a Node-reaching import: ${offenders.join(", ")}\n`,
+      );
+    }
   }
+  if (failed) process.exit(1);
 ' "$LUKE_REPO_ROOT"
 
 # The brand artwork has one source and committed outputs cut from it: the
@@ -421,7 +464,6 @@ node --input-type=module -e '
     "apps/web/server/build-output.ts",
     "apps/web/server/api-callers.ts",
     "apps/web/server/preview-*.ts",
-    "apps/desktop/src/renderer/global.d.ts",
     "apps/desktop/src/testing/**",
   ];
   const shell = new Set(edges.runtimeEdges);

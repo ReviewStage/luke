@@ -13,6 +13,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -184,26 +185,23 @@ afterEach(() => {
 async function drawn(text: string, workspace: Workspace) {
   const asked: Act[] = [];
   const state = stateWith(workspace);
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-      act: (request: Act): Promise<ActOutcome> => {
-        asked.push(request);
-        if (request.kind === ACT_KIND.TASKS_ISSUE) {
-          const { repository, number } = request.payload;
-          const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: issue ?? null });
-        }
-        if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
-          const { repository, number } = request.payload;
-          const pullRequest = repository === "acme/relay" ? RELAY_PULLS.get(number) : undefined;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: pullRequest ?? null });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+    act: (request: Act): Promise<ActOutcome> => {
+      asked.push(request);
+      if (request.kind === ACT_KIND.TASKS_ISSUE) {
+        const { repository, number } = request.payload;
+        const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: issue ?? null });
+      }
+      if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
+        const { repository, number } = request.payload;
+        const pullRequest = repository === "acme/relay" ? RELAY_PULLS.get(number) : undefined;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: pullRequest ?? null });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
   const container = document.body.appendChild(document.createElement("div"));

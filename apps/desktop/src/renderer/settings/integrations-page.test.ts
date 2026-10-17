@@ -29,6 +29,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
@@ -139,21 +140,18 @@ beforeEach(() => {
   accounts = [];
   addable = [];
   reopenedDuringCancel = false;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        const answer = answerOf(request);
-        if (!holdReads || request.kind !== ACT_KIND.INTEGRATIONS_STATUS) {
-          return Promise.resolve(answer);
-        }
-        const { promise, resolve } = Promise.withResolvers<ActOutcome>();
-        heldReads.push(() => resolve(answer));
-        return promise;
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      const answer = answerOf(request);
+      if (!holdReads || request.kind !== ACT_KIND.INTEGRATIONS_STATUS) {
+        return Promise.resolve(answer);
+      }
+      const { promise, resolve } = Promise.withResolvers<ActOutcome>();
+      heldReads.push(() => resolve(answer));
+      return promise;
     },
+    recordSurfaceEvent: () => undefined,
   });
 });
 

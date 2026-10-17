@@ -472,11 +472,9 @@ export function TaskCall({
           <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
         </ConversationEmptyState>
       ) : region.kind === TRANSCRIPT_REGION.FAILED ? (
-        <ConversationEmptyState>
-          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {TRANSCRIPT_FAILED_LINE}
-          </ErrorState>
-        </ConversationEmptyState>
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {TRANSCRIPT_FAILED_LINE}
+        </ErrorState>
       ) : (
         <EmptyState icon={<CallIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
       )}

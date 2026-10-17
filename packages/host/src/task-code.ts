@@ -1,4 +1,3 @@
-import { extname } from "node:path";
 import type { ShownCode, TaskFileWindow } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskFileShown } from "@luke/features/tasks-view";
 import langBash from "@shikijs/langs/bash";
@@ -173,9 +172,16 @@ function colouredLines(language: string | undefined, lines: readonly string[]): 
   return tokens.slice(0, lines.length).map((line) => compactLine(line, foreground));
 }
 
-/** The language a file is coloured as, by its extension. */
+/**
+ * The language a file is coloured as, by its extension: what follows the last
+ * dot of its name, where that dot does not open the name. Note that the name is
+ * read after the last `/`, because a path the service sends is a repository's
+ * POSIX path, and a dot in a directory is no extension.
+ */
 function languageOfPath(path: string): string | undefined {
-  return LANGUAGE_BY_EXTENSION.get(extname(path).toLowerCase());
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? LANGUAGE_BY_EXTENSION.get(name.slice(dot).toLowerCase()) : undefined;
 }
 
 /**

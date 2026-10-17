@@ -20,6 +20,7 @@ import {
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   focusedSegment,
   pressKeyIn,
@@ -114,10 +115,7 @@ beforeEach(() => {
   keys = [];
   sent = [];
   refuseWrite = false;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ act: answer, recordSurfaceEvent: () => undefined });
 });
 
 afterEach(() => {

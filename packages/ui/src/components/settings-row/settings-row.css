@@ -15,8 +15,11 @@
   .luke-settings-row-body {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: var(--luke-space-4);
+    box-sizing: border-box;
     min-width: 0;
+    min-height: var(--luke-settings-row-min-height);
     padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
   }
 

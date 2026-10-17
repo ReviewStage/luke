@@ -5,9 +5,11 @@ import {
   MARK_PROVIDER,
   ProviderMark,
   SELECT_ALIGN,
+  SELECT_WIDTH,
   Select,
   type SelectAlign,
   type SelectOption,
+  type SelectWidth,
   Stack,
 } from "@luke/ui";
 import { useState } from "react";
@@ -17,7 +19,8 @@ import { CatalogSection } from "../section";
 /**
  * select.tsx -- a select naming its value, with a value that cannot be
  * chosen now, with a glyph on each value, unavailable, hung from its
- * trailing edge, and with a long value in a narrow column.
+ * trailing edge, in the field column a settings row's pop-ups share, and
+ * with a long value in a narrow column.
  */
 
 const THEMES: readonly SelectOption<string>[] = [
@@ -43,12 +46,14 @@ function Held({
   start,
   disabled = false,
   align = SELECT_ALIGN.START,
+  width = SELECT_WIDTH.FIT,
 }: {
   label: string;
   options: readonly SelectOption<string>[];
   start: string;
   disabled?: boolean;
   align?: SelectAlign;
+  width?: SelectWidth;
 }): React.JSX.Element {
   const [value, setValue] = useState(start);
   return (
@@ -58,6 +63,7 @@ function Held({
       value={value}
       disabled={disabled}
       align={align}
+      width={width}
       onChange={setValue}
     />
   );
@@ -76,6 +82,24 @@ function SelectExample(): React.JSX.Element {
       <CatalogSection id="select-end" title="Hung from its trailing edge">
         <Stack gap={GAP.CONTROL} align={ALIGN.END}>
           <Held label="Theme" options={THEMES} start="light" align={SELECT_ALIGN.END} />
+        </Stack>
+      </CatalogSection>
+      <CatalogSection id="select-field" title="Field column">
+        <Stack gap={GAP.CONTROL} align={ALIGN.END}>
+          <Held
+            label="Theme"
+            options={THEMES}
+            start="light"
+            align={SELECT_ALIGN.END}
+            width={SELECT_WIDTH.FIELD}
+          />
+          <Held
+            label="Provider"
+            options={PROVIDERS}
+            start="github"
+            align={SELECT_ALIGN.END}
+            width={SELECT_WIDTH.FIELD}
+          />
         </Stack>
       </CatalogSection>
       <CatalogSection id="select-narrow" title="Narrow column, long value">

@@ -4,6 +4,7 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxBlock,
@@ -45,11 +46,13 @@ import {
   agentSubject,
   NOTHING_HELD,
 } from "./agent-ref";
+import { AttachedFileChips } from "./attached-file-chips";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import { InboxAnswerBox } from "./inbox-answer-box";
 import {
+  answerFileChips,
   CODE_READ,
   CODE_READ_FAILED,
   type CodeRead,
@@ -143,6 +146,9 @@ const INBOX_FAILED_LINE = "The inbox could not be read.";
 
 /** What a card says of an image whose read did not answer. */
 const IMAGE_FAILED_LINE = "The image could not be read.";
+
+/** What an answer says of the files whose read did not answer. */
+const FILES_FAILED_LINE = "Some files could not be read.";
 
 /** What a card says of a block or a response this build does not know. */
 const NEWER_LUKE = {
@@ -787,21 +793,78 @@ function pickOf(item: InboxItem, did: string, words: string | undefined): string
   return words === undefined ? sentenceCased(did) : undefined;
 }
 
-/** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip and what they wrote. */
+/**
+ * The files the developer's answer carried, as the agent's tab draws a sent
+ * message's (`attached-file-chips.tsx`): each asks for its bytes as it is
+ * first drawn, through the same read an image block's picture takes, and is
+ * drawn by its name alone until they land; where a read did not answer, a
+ * line under the files says so with Retry, as an image block's does.
+ */
+function AnswerFiles({
+  item,
+  images,
+  onImage,
+  onRetryImage,
+}: {
+  item: InboxItem;
+  images: TaskInboxControl["images"];
+  onImage: TaskInboxControl["onImage"];
+  onRetryImage: TaskInboxControl["onRetryImage"];
+}): React.ReactNode {
+  const files = item.answerFiles ?? [];
+  useEffect(() => {
+    for (const file of files) {
+      if (!images.has(file.attachmentId)) onImage(item.id, file.attachmentId);
+    }
+  }, [files, images, item.id, onImage]);
+  const failed = files.filter((file) => {
+    const read = images.get(file.attachmentId);
+    return read !== undefined && "failed" in read;
+  });
+  return (
+    <>
+      <AttachedFileChips files={answerFileChips(item, images)} />
+      {failed.length === 0 ? null : (
+        <div data-inbox-files-failed="">
+          <ErrorState
+            onRetry={() => {
+              for (const file of failed) onRetryImage(file.attachmentId);
+            }}
+          >
+            {FILES_FAILED_LINE}
+          </ErrorState>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip, the files they attached, and what they wrote. */
 function Answered({
   item,
   by,
   now,
+  images,
+  onImage,
+  onRetryImage,
 }: {
   item: InboxItem;
   by: ItemAgent;
   now: number;
+  images: TaskInboxControl["images"];
+  onImage: TaskInboxControl["onImage"];
+  onRetryImage: TaskInboxControl["onRetryImage"];
 }): React.JSX.Element | null {
   const answerer = usePerson(item.answeredBy);
   const settled = settlementOf(item);
   if (settled === undefined) return null;
   if (settled.by === SETTLED_BY.AGENT) return null;
-  const pick = pickOf(item, settled.did, settled.values ?? settled.note);
+  // Files alone are the developer's own words where they wrote none, so no "Answered it" chip stands over them.
+  const filesSay =
+    (item.answerFiles ?? []).length > 0 && item.answer?.reply === INBOX_REPLY.ANSWERED
+      ? ""
+      : undefined;
+  const pick = pickOf(item, settled.did, settled.values ?? settled.note ?? filesSay);
   return (
     <Comment
       kind={COMMENT.ANSWERED}
@@ -827,6 +890,7 @@ function Answered({
       {settled.values === undefined ? null : (
         <p className="m-0 whitespace-pre-line select-text">{settled.values}</p>
       )}
+      <AnswerFiles item={item} images={images} onImage={onImage} onRetryImage={onRetryImage} />
       {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
       {settled.note === undefined ? null : (
         <div className="select-text" data-inbox-note="">
@@ -1221,7 +1285,14 @@ export function InboxPane({
                   <Offered key={item.id} item={item} />
                 )}
               </Comment>
-              <Answered item={item} by={by} now={now} />
+              <Answered
+                item={item}
+                by={by}
+                now={now}
+                images={control.images}
+                onImage={control.onImage}
+                onRetryImage={control.onRetryImage}
+              />
               <Withdrawn item={item} by={by} now={now} />
             </ol>
           </WordsWorkspace>

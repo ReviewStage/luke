@@ -212,6 +212,41 @@ function nameWorkspace(page: { switcher: () => HTMLButtonElement | null }, name:
   return field;
 }
 
+test("a name typed after a refusal keeps the card up, takes the refusal away, and can still be created", async () => {
+  const asked: string[] = [];
+  const page = mount({
+    workspaces: [PERSONAL],
+    workspace: PERSONAL,
+    onCreateWorkspace: (name) => {
+      asked.push(name);
+      return Promise.resolve(undefined);
+    },
+  });
+  const field = nameWorkspace(page, "");
+  await act(async () => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  const refused = document.querySelector('[role="alertdialog"] [role="alert"]')?.textContent;
+
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, "P");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const typed = document.querySelector<HTMLInputElement>(
+    '[role="alertdialog"] input[aria-label="Workspace name"]',
+  )?.value;
+  const refusalAfterTyping = document.querySelector('[role="alertdialog"] [role="alert"]');
+  await act(async () => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+
+  assert.equal(refused, "Name the workspace.");
+  assert.equal(typed, "P", "the card stays up with what was typed");
+  assert.equal(refusalAfterTyping, null);
+  assert.deepEqual(asked, ["P"]);
+});
+
 test("New workspace opens on an empty name each time, so a cancelled name is not offered again", () => {
   const page = mount({ workspaces: [PERSONAL], workspace: PERSONAL });
   nameWorkspace(page, "Platform");
