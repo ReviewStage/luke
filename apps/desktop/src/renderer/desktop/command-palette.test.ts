@@ -24,14 +24,14 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
-import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
+import { appCommandOffered, runAppCommand, useAppCommand, useMenuCommands } from "../app-commands";
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel";
@@ -364,6 +364,39 @@ test("the footer names the keys that step the filters now: ← → while the fie
 
   type("");
   assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
+});
+
+/** The window behind the palette, running the menu bar's commands, its Back and Forward recorded. */
+function MenuWindow({ moves }: { moves: string[] }): null {
+  useMenuCommands(true);
+  useAppCommand(APP_COMMAND.BACK, () => moves.push("back"));
+  useAppCommand(APP_COMMAND.FORWARD, () => moves.push("forward"));
+  return null;
+}
+
+test("the menu bar's Back and Forward, a mouse's side buttons among them, leave the window behind the palette alone", () => {
+  let menuListener: ((command: AppCommand) => void) | undefined;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      onMenuCommand: (listener: (command: AppCommand) => void) => {
+        menuListener = listener;
+        return () => undefined;
+      },
+    },
+  });
+  const moves: string[] = [];
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() => root.render(createElement(MenuWindow, { moves })));
+  openPalette();
+
+  act(() => menuListener?.(APP_COMMAND.BACK));
+  act(() => menuListener?.(APP_COMMAND.FORWARD));
+  assert.deepEqual(moves, []);
+  assert.ok(field().isConnected, "the palette still stands");
+  assert.equal(chosenFilter(), "All");
 });
 
 test("an agent's row hangs its tab's card beside it while the pointer rests on it, and choosing it opens the agent's tab", () => {
