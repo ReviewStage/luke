@@ -16,6 +16,7 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
+import { appBridge } from "../app-bridge";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { readKept, writeKept } from "./folded-groups";
 
@@ -46,7 +47,7 @@ export function useFailedRunToasts(view: (place: FailedRunPlace) => void): void 
   viewing.current = view;
   useEffect(
     () =>
-      window.luke.onRunFailed(({ automationId, runId, workspaceId, words, detail }) =>
+      appBridge().onRunFailed(({ automationId, runId, workspaceId, words, detail }) =>
         toast({
           words,
           detail,

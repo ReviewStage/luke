@@ -10,6 +10,7 @@ import {
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import { unparsedWire, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { noNetwork } from "@luke/wire/testing";
 import { Effect, Result } from "effect";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 
@@ -91,7 +92,7 @@ function subject(
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-    });
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
