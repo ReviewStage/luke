@@ -453,7 +453,7 @@ export function TaskCall({
           <ConversationContent className="checkpoint-log scroll-fade">
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
-              <div className="pt-(--section-gap)">
+              <div className="pt-(--luke-section-gap)">
                 <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState>
               </div>
             ) : null}

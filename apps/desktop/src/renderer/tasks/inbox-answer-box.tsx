@@ -149,7 +149,7 @@ function SendPresses({
   if (presses !== undefined) {
     const { back, ahead } = presses;
     return (
-      <div className="inbox-presses flex gap-(--control-gap)">
+      <div className="inbox-presses flex gap-(--luke-control-gap)">
         {back === undefined ? null : (
           <Button disabled={held} onClick={() => onAnswer(back.reply)}>
             {back.label}

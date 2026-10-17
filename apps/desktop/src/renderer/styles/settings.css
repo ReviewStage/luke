@@ -7,13 +7,13 @@
 .settings-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .settings-group-title {
   margin: 0;
-  padding: 0 var(--space-2);
-  color: var(--text-secondary);
+  padding: 0 var(--luke-space-2);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -21,18 +21,18 @@
 .settings-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
 }
 
 .settings-card > .settings-row {
   min-height: var(--settings-row-height);
-  padding: var(--space-12) var(--space-16);
+  padding: var(--luke-space-12) var(--luke-space-16);
 }
 
 .settings-card > * + * {
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 /* What a card says where its rows would be: who to sign in as, a read that
@@ -41,18 +41,18 @@
   display: flex;
   min-height: var(--settings-row-height);
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
-  padding: var(--space-12) var(--space-16);
+  padding: var(--luke-space-12) var(--luke-space-16);
 }
 
 /* A row's refusal stands under the row it belongs to, inside the same rule. */
 .settings-card > .error-message {
-  padding: 0 var(--space-16) var(--space-12);
+  padding: 0 var(--luke-space-16) var(--luke-space-12);
 }
 
 .settings-card > .settings-row + .error-message {
-  margin-top: calc(-1 * var(--space-4));
+  margin-top: calc(-1 * var(--luke-space-4));
   border-top: 0;
 }
 
@@ -81,7 +81,7 @@
   min-height: 32px;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
 /* Where the query's words landed, so a result says why it matched. A wash
@@ -91,7 +91,7 @@
    around as the query changed. */
 .search-match {
   border-radius: 3px;
-  background: var(--match-wash);
+  background: var(--luke-color-match);
   color: inherit;
 }
 
@@ -108,7 +108,7 @@
 @keyframes search-landed {
   from,
   40% {
-    outline: 2px solid var(--selected-edge);
+    outline: 2px solid var(--luke-color-border-selected);
   }
 
   to {
@@ -131,14 +131,14 @@
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .settings-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   /* Note that a word longer than the room, a commit or an address, breaks
      rather than running under the control beside it. */
   overflow-wrap: break-word;
@@ -161,7 +161,7 @@
 }
 
 .settings-copy strong {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.35;
@@ -173,7 +173,7 @@
    preference, never an urgency. */
 .settings-changed {
   margin-left: 6px;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   font-weight: 500;
 }
@@ -192,8 +192,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--state-attention) 22%, transparent);
-  color: var(--state-attention);
+  background: color-mix(in srgb, var(--luke-color-attention) 22%, transparent);
+  color: var(--luke-color-attention);
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
@@ -210,7 +210,7 @@
 .settings-copy small,
 .settings-note {
   margin: 0;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -301,7 +301,7 @@
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
   opacity: 1;
 }
 
@@ -342,10 +342,10 @@
 .settings-input {
   width: 100%;
   padding: 9px 11px;
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--luke-color-border);
   border-radius: 10px;
-  background: var(--input-fill);
-  color: var(--text-primary);
+  background: var(--luke-color-input);
+  color: var(--luke-color-text);
   font-family: inherit;
   font-size: 13px;
   letter-spacing: 0.4px;
@@ -355,23 +355,23 @@
 }
 
 .settings-input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   letter-spacing: 0;
 }
 
 .settings-input:focus {
-  background: var(--input-fill-focus);
+  background: var(--luke-color-input-focus);
 }
 
 .settings-input:disabled {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   cursor: not-allowed;
 }
 
 /* A row's words that say something failed, in the failure's red over the
    muted ink every other detail wears. */
 .settings-copy .error-message {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 /* Settings › Updates: how far a download is, a thin bar under the row's
@@ -380,16 +380,16 @@
   display: block;
   width: 160px;
   height: 3px;
-  margin-top: var(--space-4);
+  margin-top: var(--luke-space-4);
   overflow: hidden;
   border-radius: 2px;
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .update-progress > span {
   display: block;
   height: 100%;
-  background: var(--state-working);
+  background: var(--luke-color-working);
 }
 
 /* Settings › Coding agents › API keys: a key being added or edited grows its
@@ -433,7 +433,7 @@
 }
 
 .api-key-hint {
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
 }
 
 /* Settings › Workspace › Invitations (`.workspace-invite-row`, a refusal
@@ -472,7 +472,7 @@
   height: 24px;
   margin: -3px 0 -3px -9px;
   padding: 0 8px;
-  border-radius: var(--control-radius);
+  border-radius: var(--luke-control-radius);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0;
@@ -771,7 +771,7 @@
   .api-key-form {
     flex-wrap: wrap;
     justify-content: flex-end;
-    row-gap: var(--space-8);
+    row-gap: var(--luke-space-8);
   }
 
   .settings-row > .settings-copy {
@@ -790,17 +790,17 @@
 .mac-repository {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding-block: var(--space-8);
+  gap: var(--luke-space-4);
+  padding-block: var(--luke-space-8);
 }
 
 .mac-repository + .mac-repository {
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 .mac-repository-command {
   flex: 1;
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
 }
 
 .mac-repository-name {

@@ -24,7 +24,7 @@
 .issue-row-identifier {
   flex: none;
   min-width: 7ch;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -32,7 +32,7 @@
 /* Each status's glyph wears the state colour the rest of the window gives that standing. */
 .issue-status-glyph {
   display: inline-flex;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .issue-status-glyph svg {
@@ -41,21 +41,21 @@
 }
 
 .issue-status-glyph[data-status="todo"] {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .issue-status-glyph[data-status="in-progress"] {
-  color: var(--state-working);
+  color: var(--luke-color-working);
 }
 
 .issue-status-glyph[data-status="done"] {
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
 }
 
 .issue-priority-mark {
   display: inline-flex;
   flex: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .issue-priority-mark svg {
@@ -64,13 +64,13 @@
 }
 
 .issue-priority-mark[data-priority="urgent"] {
-  color: var(--state-attention);
+  color: var(--luke-color-attention);
 }
 
 .issue-properties {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 /* Who filed the issue and when, and when it last changed, under its title:
@@ -89,41 +89,41 @@
 
 .issue-description-empty {
   margin: 0;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 13px;
 }
 
 /* The description at rest is a press away from its field: the Markdown it
    is, washed on hover so the press is found. */
 .issue-description {
-  margin: 0 calc(var(--space-8) * -1);
-  padding: var(--space-4) var(--space-8);
+  margin: 0 calc(var(--luke-space-8) * -1);
+  padding: var(--luke-space-4) var(--luke-space-8);
   border-radius: 8px;
   cursor: text;
   transition: background-color var(--duration-hover) ease;
 }
 
 .issue-description:hover {
-  background: var(--input-fill);
+  background: var(--luke-color-input);
 }
 
 .issue-description-editor {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 /* The field stands at least a few lines tall and grows by the developer's hand. */
 .issue-description-field {
   min-height: 160px;
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
   line-height: 1.5;
   resize: vertical;
 }
 
 .issue-description-refused {
   margin: 0;
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
   font-size: 12px;
 }
 
@@ -136,7 +136,7 @@
   flex: 1;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: var(--space-16) var(--content-inset);
+  padding: var(--luke-space-16) var(--content-inset);
 }
 
 /* The columns fill the scroller's height and share its width, each at least
@@ -146,7 +146,7 @@
   display: flex;
   min-width: min-content;
   flex: 1 0 0;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 /* A column is boxed as Factory's station is (`.factory-step`), sized for a
@@ -159,9 +159,9 @@
   flex: 1 0 240px;
   flex-direction: column;
   padding: var(--luke-space-8) var(--luke-space-4) var(--luke-space-6);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-control-radius);
-  background: var(--section-fill);
+  background: var(--luke-color-surface);
   transition:
     background-color var(--duration-hover) ease,
     border-color var(--duration-hover) ease;
@@ -173,7 +173,8 @@
   border-color: var(--luke-color-focus-ring);
   border-radius: var(--luke-control-radius);
   background:
-    linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover)), var(--section-fill);
+    linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover)),
+    var(--luke-color-surface);
 }
 
 /* A card being dragged stays in its column as its own placeholder, faded,
@@ -206,11 +207,11 @@
 
 .issue-board > [data-carried="true"] > .sidebar-task-item[data-dragging="true"] {
   background:
-    linear-gradient(var(--raised-strong), var(--raised-strong)), var(--section-fill),
-    var(--desktop-well);
+    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
+    var(--luke-color-surface), var(--desktop-well);
   box-shadow:
-    0 0 0 1px var(--hairline-strong),
-    0 4px 12px var(--shadow);
+    0 0 0 1px var(--luke-color-border-strong),
+    0 4px 12px var(--luke-color-shadow);
 }
 
 /* A column's head: its status's glyph, its name, how many it holds, and its
@@ -265,7 +266,7 @@
   display: -webkit-box;
   overflow: hidden;
   white-space: normal;
-  margin-top: var(--space-2);
+  margin-top: var(--luke-space-2);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow-wrap: anywhere;

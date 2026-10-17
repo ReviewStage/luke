@@ -177,7 +177,7 @@ const NEWER_LUKE = {
 
 /** How long ago a thread's line says something happened: muted a size down, in tabular figures, as a card's corner says it. */
 const THREAD_TIME_CLASS =
-  "text-[11.5px] whitespace-nowrap text-(color:--text-tertiary) tabular-nums";
+  "text-[11.5px] whitespace-nowrap text-(color:--luke-color-text-subtle) tabular-nums";
 
 /** What the way back from an item standing alone to the list says it does. */
 const BACK_TO_INBOX = "Back to inbox";
@@ -1481,7 +1481,7 @@ export function InboxPane({
       <div className="desktop-inbox">
         <div
           // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
-          className="inbox-board scroll-fade agent-log-over-composer ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap)"
+          className="inbox-board scroll-fade agent-log-over-composer ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--luke-section-gap)"
           data-item-id={item.id}
           ref={board}
         >

@@ -194,7 +194,7 @@ export interface PaneRoom {
   readonly pane: FloatingBox;
 }
 
-/** How near the body's right edge, in CSS pixels, the pointer peeks the pane: the sidebar's own strip at the window's left, `--space-6`. */
+/** How near the body's right edge, in CSS pixels, the pointer peeks the pane: the sidebar's own strip at the window's left, `--luke-space-6`. */
 const PEEK_EDGE = 6;
 
 /** The toggle that floats the pane over the tab, which the stylesheet draws only where the pane cannot stand beside it. */
