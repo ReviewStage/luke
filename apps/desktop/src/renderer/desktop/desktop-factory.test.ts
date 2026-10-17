@@ -217,7 +217,7 @@ test("each plan stands in its station, and what waits on the developer leads the
   // A draft with no agents stands nowhere; Talk holds only the task on a call.
   assert.deepEqual(rows(page, "talk"), []);
   assert.equal(
-    page.querySelector('section[data-step="talk"] .factory-idle')?.textContent,
+    page.querySelector('section[data-step="talk"] > p')?.textContent,
     "No task on a call",
   );
   assert.deepEqual(rows(page, "build"), [

@@ -2,7 +2,16 @@ import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-ag
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
+import {
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
@@ -363,10 +372,20 @@ function Station({
     >
       <h2 className="factory-head">
         <Icon className="factory-glyph" aria-hidden="true" />
-        <span className="factory-name">{name}</span>
-        {held > 0 ? <span className="factory-count">{held}</span> : null}
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+          {name}
+        </Text>
+        {held > 0 ? (
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            {held}
+          </Text>
+        ) : null}
       </h2>
-      {held === 0 ? <p className="factory-idle">{idle}</p> : null}
+      {held === 0 ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {idle}
+        </Text>
+      ) : null}
       {needs.length === 0 ? null : (
         <ul className="sidebar-tasks factory-rows" data-needs="">
           {needs}
@@ -623,27 +642,42 @@ function Line({
   );
 }
 
+/** The dot between the summary's parts, kept from a reader. */
+function Separator(): React.JSX.Element {
+  return (
+    <span aria-hidden="true">
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+        ·
+      </Text>
+    </span>
+  );
+}
+
 /** The line over the stations: how many things wait on the developer, how many agents work, and how much shipped today. */
 function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
   const waiting = board.stopped.length + board.blocked.length;
   return (
     <p className="factory-summary">
       {waiting === 0 ? (
-        <span>{NEEDS_YOU.NONE}</span>
+        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+          {NEEDS_YOU.NONE}
+        </Text>
       ) : (
         <span className="factory-needs">
           <span className="inbox-row-dot factory-head-dot" aria-hidden="true" />
-          {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+            {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+          </Text>
         </span>
       )}
-      <span className="factory-sep" aria-hidden="true">
-        ·
-      </span>
-      <span>{count(board.agentsWorking, "agent working", "agents working")}</span>
-      <span className="factory-sep" aria-hidden="true">
-        ·
-      </span>
-      <span>{`${board.shipped.length} shipped today`}</span>
+      <Separator />
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {count(board.agentsWorking, "agent working", "agents working")}
+      </Text>
+      <Separator />
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {`${board.shipped.length} shipped today`}
+      </Text>
     </p>
   );
 }
