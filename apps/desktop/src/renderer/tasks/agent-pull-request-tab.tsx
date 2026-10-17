@@ -1519,11 +1519,13 @@ export function AgentPullRequestTab({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's reads and the checks where their tab was shown, never before.
+  // Refresh reads again the header's reads and the checks where their tab was shown, never before,
+  // and what the agent published, which names this tab and its pin by the pull request's title.
   const refresh = () => {
     ask.pullRequest();
     ask.conversation();
     if (askedYet(checksRead)) ask.checks();
+    void control.readPullRequest(agentId).catch(() => undefined);
   };
   const parts: OverviewParts = {
     pullRequest: partOf(pullRequestRead),
@@ -1539,11 +1541,8 @@ export function AgentPullRequestTab({
   );
   const title = landed(parts.pullRequest) ?? published;
   const now = useMinute();
-  // A change is read back both ways: the tab, and what the agent published, which the plan's own marks draw.
-  const written = () => {
-    refresh();
-    void control.readPullRequest(agentId).catch(() => undefined);
-  };
+  // A change is read back as Refresh reads: the tab, and what the agent published, which the plan's own marks draw.
+  const written = refresh;
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.

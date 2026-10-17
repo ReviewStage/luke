@@ -1217,26 +1217,32 @@ function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
   };
 }
 
-test("a part whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads again the header's reads and the checks once shown", async () => {
+test("a part whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads again the header's reads, the checks once shown, and what the agent published, which names its tab", async () => {
   const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
   const later = (name: string) => ({ checks: [check(name, CHECK_STATE.PASSED)] });
-  const tab = await draw(
-    controlAnswering({
-      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
-        { pullRequest: PULL_REQUEST },
-        { pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } },
-      ),
-      checks: inTurn<CodingAgentOverviewChecksAnswerView>(
-        failure,
-        { pullRequest: later("retried") },
-        { pullRequest: later("refreshed") },
-      ),
-      conversation: inTurn<CodingAgentOverviewConversationAnswerView>(
-        { pullRequest: CONVERSATION },
-        { pullRequest: { ...CONVERSATION, conversation: CONVERSATION.conversation.slice(0, 1) } },
-      ),
-    }),
-  );
+  const publishedReads: string[] = [];
+  const control = controlAnswering({
+    pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+      { pullRequest: PULL_REQUEST },
+      { pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } },
+    ),
+    checks: inTurn<CodingAgentOverviewChecksAnswerView>(
+      failure,
+      { pullRequest: later("retried") },
+      { pullRequest: later("refreshed") },
+    ),
+    conversation: inTurn<CodingAgentOverviewConversationAnswerView>(
+      { pullRequest: CONVERSATION },
+      { pullRequest: { ...CONVERSATION, conversation: CONVERSATION.conversation.slice(0, 1) } },
+    ),
+  });
+  const tab = await draw({
+    ...control,
+    readPullRequest: (agentId) => {
+      publishedReads.push(agentId);
+      return control.readPullRequest(agentId);
+    },
+  });
   await choose(tab, "Checks");
   const checks =
     tab.querySelector('[aria-label="Checks"]') ?? assert.fail("the checks section stands");
@@ -1265,8 +1271,10 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
       (each) => each.textContent === "Refresh pull request",
     ) ?? assert.fail("the ⋯ offers Refresh");
+  assert.deepEqual(publishedReads, [], "what the agent published is not read before Refresh");
   await act(async () => refresh.click());
   await settle();
+  assert.deepEqual(publishedReads, [AGENT.id], "what names the tab and its pin is read again");
   assert.deepEqual(words(tab, ".pull-request-check-name"), ["refreshed"]);
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
