@@ -1,3 +1,4 @@
+// account-delete.test.ts -- an account's deletion takes the bearer alone: a session cookie erases nothing.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
