@@ -68,7 +68,7 @@ import { CURSOR_START, transcriptPast } from "./transcript.js";
  * idle or the hold is out; and a delegation, recorded under the child
  * conversation its call names on the pair the agent chose, which is what
  * the worker's steps are told and what its turn, relayed into that
- * conversation, records. Synthetic accounts, plans, keys, and words
+ * conversation, records. Synthetic accounts, tasks, keys, and words
  * throughout.
  */
 
@@ -147,7 +147,7 @@ function mintSession(): string {
   return `wrun_01M${String(minted).padStart(22, "0")}`;
 }
 
-/** An account with one agent started on a plan, on the model given, whose session nothing has claimed yet. */
+/** An account with one agent started on a task, on the model given, whose session nothing has claimed yet. */
 const unclaimedAgent = (
   model = "anthropic/claude-opus-5.5",
   effort = "high",
@@ -173,7 +173,7 @@ const unclaimedAgent = (
     return { userId, agent, target, auth: ownSeat(userId, agent.conversationId) };
   });
 
-/** An account with one agent started on a plan, on the model given, its session claimed as the hook claims it. */
+/** An account with one agent started on a task, on the model given, its session claimed as the hook claims it. */
 const openAgent = (
   host: CoderHost,
   model = "anthropic/claude-opus-5.5",
@@ -386,7 +386,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { admitted } = yield* openAgent(host);
-        // The same account's other conversation: a plan's, which no agent row names.
+        // The same account's other conversation: a task's, which no agent row names.
         const userId = admitted.target.userId;
         const task = yield* startTask(userId, { name: "Billing export" });
         const conversationId = Option.getOrThrow(

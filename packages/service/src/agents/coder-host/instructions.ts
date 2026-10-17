@@ -39,8 +39,8 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * the service opened it as the App in the developer's place.
  * The worker's instructions stand beside the agent's: it owns one slice,
  * grounds what it says in paths, lines, and command output, and returns a
- * result the agent reads whole, in the spirit of the planning worker's
- * (`brain-host/planning.ts`).
+ * result the agent reads whole, in the spirit of the brain's worker's
+ * (`brain-host/brain.ts`).
  */
 
 /** The words the instructions say of what the agent was handed, a plan or a prompt, where the two differ. */
@@ -97,9 +97,9 @@ const CHECKS_WORDS = {
 } as const;
 
 /**
- * What only an agent on a plan is told of: a link that names the plan, and
- * the plan's pages, which a page is saved on; an agent an automation
- * started with no plan has neither, so its instructions leave both out.
+ * What only an agent on a task is told of: a link that names the task, and
+ * the task's pages, which a page is saved on; an agent an automation
+ * started with no task has neither, so its instructions leave both out.
  */
 const TASK_PLACE_WORDS = {
   onTask: {

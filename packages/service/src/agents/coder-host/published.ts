@@ -36,14 +36,14 @@ import { CODER } from "./bounds.js";
  * (`coder-host/host.ts`'s `recordBranch`), and this module reads the row.
  * A row with no branch, as before the first turn ends in the sandbox or
  * where the checkout stood detached, published nothing, and GitHub is not
- * asked. GitHub then says what stands, once the installation of the plan's
+ * asked. GitHub then says what stands, once the installation of the task's
  * workspace is confirmed to reach the repository as a Start confirms it,
  * on a token minted for that one repository with pull requests read: a row
  * still on the repository's default branch, as an agent that only read
  * leaves it, published nothing either; otherwise the newest pull request
  * from the branch, else whether the branch was pushed at all, with the
  * pull request's head's checks. Every answer read is written on the
- * agent's row as well, the pull request or none, which is what the plan
+ * agent's row as well, the pull request or none, which is what the task
  * list reads, so the sidebar says what the last read found without asking
  * GitHub itself. The answer is kept per
  * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
@@ -53,7 +53,7 @@ import { CODER } from "./bounds.js";
  * that failed is kept for no time, so the next ask tries again.
  */
 
-/** The installation of the plan's workspace no longer reaches the agent's repository, so nothing of it is read. */
+/** The installation of the task's workspace no longer reaches the agent's repository, so nothing of it is read. */
 class RepositoryNotReachable extends Data.TaggedError("RepositoryNotReachable")<{
   readonly repository: string;
 }> {}
@@ -91,8 +91,8 @@ function nothing(agent: CodingAgent): CodingAgentPullRequestAnswer {
 
 /**
  * A token that reads the agent's pull requests, minted for its one
- * repository on the installation of its plan's workspace, as the account
- * asking reaches the plan; refused as out of reach where either no longer
+ * repository on the installation of its task's workspace, as the account
+ * asking reaches the task; refused as out of reach where either no longer
  * stands.
  */
 export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (

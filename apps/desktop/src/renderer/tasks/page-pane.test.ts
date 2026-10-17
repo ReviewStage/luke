@@ -15,7 +15,7 @@ import { PagePane, type ReadPageSource } from "./page-pane";
  * A page's tab as the developer meets it: the page drawn in a frame that
  * runs its scripts and nothing else, out of the screen recording, at its
  * newest version until they step back through the earlier ones, or its
- * HTML drawn as a File tab draws a file. Synthetic plans and pages
+ * HTML drawn as a File tab draws a file. Synthetic tasks and pages
  * throughout; main's read of a version's source is a door answering each
  * version's HTML as coloured lines.
  */
@@ -46,7 +46,7 @@ function sourceOf(version: number): CodeLines {
 
 const readSource: ReadPageSource = (version) => Promise.resolve({ lines: sourceOf(version) });
 
-/** Mounts the pane over the page as the plan lists it, answering what it draws and a way to list it again. */
+/** Mounts the pane over the page as the task lists it, answering what it draws and a way to list it again. */
 function mount(page: PageLine, read: ReadPageSource = readSource) {
   const container = document.createElement("div");
   document.body.append(container);

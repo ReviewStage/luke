@@ -240,7 +240,7 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
 
 /**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
- * own menu as macOS puts it, under the update item while there is one; the plan's commands are File's, with New Tab,
+ * own menu as macOS puts it, under the update item while there is one; the task's commands are File's, with New Tab,
  * Close Tab, and Close Window as Chrome's File keeps them, and Reopen Closed
  * Tab beside New Tab; Edit is the
  * system's own, spelt out so its Find submenu can hold the window's find as

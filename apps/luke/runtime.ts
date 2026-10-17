@@ -13,7 +13,7 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 
 /**
  * Module scope is the memoization, on the same terms as the web functions'
- * runtime: a warm instance of Luke's planning brain's service keeps its module registry, so
+ * runtime: a warm instance of Luke's brain's service keeps its module registry, so
  * the first hook of a cold start builds the layer and every later one reuses it.
  */
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;

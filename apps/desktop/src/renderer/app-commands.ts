@@ -3,7 +3,7 @@
  *
  * A command is offered by the control it belongs to, for as long as that
  * control is on screen and able: the sidebar toggle offers the sidebar's
- * chord, the open plan's toolbar its Copy and Delete. So whether a chord
+ * chord, the open task's toolbar its Copy and Delete. So whether a chord
  * answers is whether its control is there to answer it, and a chord nothing
  * offers is left to whatever else wants it. A menu-bar item reaches the same
  * offer, which is why the menu needs no state of its own.

@@ -29,7 +29,7 @@ import { Tooltip } from "./tooltip";
 /**
  * find-in-tab.tsx -- ⌘F inside the tab that holds the window's focus: a find bar at the tab's top right, its matches tinted in the tab's own text and stepped through one at a time.
  *
- * Each column of the plan's page wraps the tab it shows in a scope, which
+ * Each column of the task's page wraps the tab it shows in a scope, which
  * offers Find while the column holds the window's keys (`desktop-tasks.tsx`),
  * so ⌘F finds in the plan's document, an agent's transcript, or whatever
  * the side panel shows, and never in both columns at once, which is why

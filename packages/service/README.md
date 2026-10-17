@@ -9,7 +9,7 @@ the voice function's edge — and reaches everything else here.
 The package has no barrel. Each module is its own subpath, as
 `@luke/database`'s are (`@luke/service/http/http-effect`), and test builders
 stand at `@luke/service/testing/<name>`. A module lives in the folder of the
-domain it belongs to (`auth/`, `github/`, `plans/`, `agents/`, `voice/`, …),
+domain it belongs to (`auth/`, `github/`, `tasks/`, `agents/`, `voice/`, …),
 named by the group of this README that describes it.
 
 `src/core.ts` is the package's own door to the workspace packages it builds on,
@@ -1018,7 +1018,7 @@ notetaker's own notes (`@luke/features/plan-template`'s `planNotesSchema`)
 into the agent's plan through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the task's
-row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
+row (`task.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and Luke's "recent edits by coding agents" say what the
 row says now; the developer reads them on their next call while the
@@ -1750,7 +1750,7 @@ a task of a workspace the account is not in reads as an empty history and
 restores as `not-found`. `packages/features/src/task-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
-A task's repository is `plan.repository` (migration 0063), the full name
+A task's repository is `task.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a task with none, which is
 where every task from before repositories stands and is no error. It is
 kept only once `workspaceRepository` on the `GitHubApp` confirms the
@@ -1908,7 +1908,7 @@ so the delegation reaches
 Luke with the plan, his tools, and the conversation so far.
 The recent words ride the delegation as context, and whether an answer
 agrees to anything is Luke's instructions' to judge. The binding is the session's for life. It is written on
-the `voice_sessions` row as a plain `plan_id`,
+the `voice_sessions` row as a plain `task_id`,
 and a re-attach reads it from there, so a later connection cannot move a
 session onto another task, and one whose row names no task is refused. The Mac holds one call at a time, which outlives
 the task on screen and moves only when another task's Talk press hangs it up
@@ -2440,7 +2440,7 @@ spoken ask's turn the moment eve tells an event rather than only on its
 250 ms poll (the poll stays, for a stream refused or dropped), and nothing
 else: any other route or kind of turn carrying the secret is refused outright
 rather than passed to the account authenticator behind it. The stream read is
-the planning channel's alone; the coder channel's deployment, which presents
+the brain's channel's alone; the coder channel's deployment, which presents
 the account, is refused it. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open

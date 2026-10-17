@@ -14,7 +14,7 @@ import { pullRequestPillLabel } from "./coding-agent-model";
 /**
  * pull-request-mark.tsx -- a pull request's mark wherever the window draws one: GitHub's glyph for where it stands, in GitHub's colour for it, and red where its checks failed.
  *
- * A pull request is drawn on a sidebar plan's row and its card, on its
+ * A pull request is drawn on a sidebar task's row and its card, on its
  * agent's chip and the row a finished transcript ends on, and on its
  * Changes tab's card. Each draws this one mark, so a pull request reads
  * the same in all of them: open in the success green, a draft in the

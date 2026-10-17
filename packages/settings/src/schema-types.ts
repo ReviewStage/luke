@@ -12,7 +12,7 @@ export const SETTINGS_PAGE = {
   APPEARANCE: "appearance",
   /** The window's own shortcuts, listed to be found rather than changed. */
   SHORTCUTS: "shortcuts",
-  /** The Markdown the account's new plans start from, which is the account's on the service rather than a stored setting. */
+  /** The Markdown the account's new tasks start from, which is the account's on the service rather than a stored setting. */
   PLAN_TEMPLATE: "plan-template",
   /**
    * The coding agents' default model and effort and the account's own provider API keys, which are the account's on

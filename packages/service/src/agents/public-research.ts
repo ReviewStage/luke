@@ -26,27 +26,27 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { TurnBudget } from "./turn-budget.js";
 
 /**
- * public-research.ts -- the planning model's two public reads: a cited web search and one page's text, each bounded and each answered as data.
+ * public-research.ts -- the brain's two public reads: a cited web search and one page's text, each bounded and each answered as data.
  *
- * Note that nothing here knows which account or plan asked. A search sends
+ * Note that nothing here knows which account or task asked. A search sends
  * the model's query and this module's fixed instructions to OpenAI's
  * Responses API with its own `web_search` tool, on Luke's key and the
  * brain's model, and asks OpenAI to store nothing; a page read sends a GET
  * for the one URL the model named, with no cookie, credential, or header of
  * the account's. What comes back is the result of the one call that asked,
- * handed to the session that made it, so it reaches the plan whose
+ * handed to the session that made it, so it reaches the task whose
  * conversation asked and no other.
  *
  * A query is the model's own words, and code can only hold it to what code
  * can see: one line, at most `MAX_QUERY_CHARS`, and nothing shaped like a
  * credential (a known token prefix, a private key, a long opaque run of
  * letters and digits). Keeping private repository text out of it is the
- * planning instructions' rule and the tool's description, since a query
+ * brain's instructions' rule and the tool's description, since a query
  * naming a private thing in plain words is indistinguishable from one that
  * does not.
  *
  * A search runs at low reasoning effort and low search context, because the
- * planning turn waits on it and all it needs back is a short cited answer.
+ * brain turn waits on it and all it needs back is a short cited answer.
  * It answers `found` only with at least one cited public URL, each with the
  * words of the answer that cited it; a finished answer citing nothing is
  * `no-results` and its words go no further, so an unsourced answer is never
@@ -301,7 +301,7 @@ const RESPONSES_PATH = "/responses";
 /**
  * How hard the search model works: low reasoning effort and low search
  * context. Note that the defaults let a reasoning model search, open pages,
- * and think again for most of `SEARCH_TIMEOUT` while the planning turn waits,
+ * and think again for most of `SEARCH_TIMEOUT` while the brain turn waits,
  * and its reasoning spends the same `MAX_SEARCH_OUTPUT_TOKENS` the answer
  * needs, for a query that wants one short cited answer.
  */
@@ -343,7 +343,7 @@ const SEARCH_WEB_INPUT = Schema.Struct({
 
 const readSearchInput = readEither(SEARCH_WEB_INPUT);
 
-/** The search tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The search tool as the brain is offered it: its name, its words, and its input schema. */
 export const SEARCH_WEB_TOOL = {
   name: PUBLIC_RESEARCH_TOOL.SEARCH_WEB,
   description:
@@ -570,7 +570,7 @@ const READ_WEB_PAGE_INPUT = Schema.Struct({
 
 const readPageInput = readEither(READ_WEB_PAGE_INPUT);
 
-/** The page tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The page tool as the brain is offered it: its name, its words, and its input schema. */
 export const READ_WEB_PAGE_TOOL = {
   name: PUBLIC_RESEARCH_TOOL.READ_WEB_PAGE,
   description:

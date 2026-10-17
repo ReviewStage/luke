@@ -384,7 +384,7 @@ for (const { name, parts, standings, label } of FAILURE_LINES) {
   });
 }
 
-/** An agent of the plan's, as its list holds it. */
+/** An agent of the task's, as its list holds it. */
 function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSummary> = {}) {
   return {
     id,

@@ -114,9 +114,9 @@ export const hostAssemblyLayer: Layer.Layer<
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings });
     // No brain runs on this Mac: the exchange is the service's, and Luke
-    // speaks only on a planning call the developer opened.
-    // The planning composer is built after the live one and ends its calls, so
-    // the live composer reads the open plan, and hands it the plan's drafts
+    // speaks only on a task's call the developer opened.
+    // The tasks composer is built after the live one and ends its calls, so
+    // the live composer reads the open task, and hands it the task's drafts
     // and their activity, through these late bindings.
     let activeTaskId: () => string | undefined = () => undefined;
     let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;

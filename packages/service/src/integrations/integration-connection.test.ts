@@ -62,7 +62,7 @@ import {
 /**
  * The one connection per integration all four agents register, through the
  * token read their edges compose with each agent's own ownership check: the
- * planning model's and the coding agent's root admission, and each one's
+ * brain's and the coding agent's root admission, and each one's
  * worker's delegated admission. Linear stands for every provider. The store
  * and both hosts are the real ones over the migrations on PGlite; Vercel
  * Connect is the one double, a connector that holds a token per account.
@@ -121,7 +121,7 @@ function connectLayer(grants: Map<string, FakeGrant>) {
   return integrationConnectOf((provider) => fakeConnect(provider === LINEAR ? grants : new Map()));
 }
 
-/** The planning host over the test's store; nothing a token read reaches is a seam of its. */
+/** The brain's host over the test's store; nothing a token read reaches is a seam of its. */
 const taskBrainHost = Effect.gen(function* () {
   const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
   return brainHost({
@@ -166,7 +166,7 @@ function typedSeat(userId: string, conversationId: string): SessionAuth {
   });
 }
 
-/** An account with a plan whose conversation a planning session was claimed for, under the seat given. */
+/** An account with a task whose conversation a brain session was claimed for, under the seat given. */
 const plannedSession = (
   host: BrainHost,
   seat: (userId: string, conversationId: string) => SessionAuth,

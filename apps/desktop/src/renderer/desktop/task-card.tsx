@@ -24,25 +24,25 @@ import { strandedHome } from "./move-task-dialog";
 import { WorkspaceRef } from "./workspace-ref";
 
 /**
- * plan-card.tsx -- a sidebar plan's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
+ * task-card.tsx -- a sidebar task's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
  *
- * The mark is the working mark while an agent works on the plan, drawn and
+ * The mark is the working mark while an agent works on the task, drawn and
  * named as an agent's tab draws it (`state-glyph.tsx`), else the pull
  * request's mark (`pull-request-mark.tsx`), else nothing
- * (`plan-agents-model.ts`). The card names the plan, its repository, and
+ * (`task-agents-model.ts`). The card names the task, its repository, and
  * how long ago it was updated at its head, in a workspace others share who
  * created it, then a row for each of a few
  * agents, drawn as its tab draws it: its harness's mark wearing where it
  * stands, its tab's label, and a failure's mark at its end, with no word for where it stands, since no
  * agent anywhere else in the window says one. Then a row for each of a few
  * pull requests, its mark, and its size.
- * Each list counts what it leaves out. Everything is read from the plan
+ * Each list counts what it leaves out. Everything is read from the task
  * list's row, so the card fetches nothing.
  *
  * Three of its lines are buttons, as a GitHub hover card's are: the
  * repository and a pull request open their pages on GitHub, and an agent
- * opens the plan on its tab. Each is also offered where the card is not:
- * the plan's menu opens the repository, and the agent's tab its pull
+ * opens the task on its tab. Each is also offered where the card is not:
+ * the task's menu opens the repository, and the agent's tab its pull
  * request. The rest are facts, left as text. Its rows are set as a menu's
  * rows are, and a pinned tab's card (`sidebar-pinned-tab.tsx`) is drawn
  * from the same rows (`CardDetail`, `RepositoryDetail`, `PullRequestLine`).
@@ -55,8 +55,8 @@ const CARD_ROWS = {
 } as const;
 
 /**
- * The one mark at a plan row's end, before its time: the attention mark on
- * a plan whose repository belongs to another of the account's workspaces,
+ * The one mark at a task row's end, before its time: the attention mark on
+ * a task whose repository belongs to another of the account's workspaces,
  * which its card names (`strandedHome`); else an agent at work, else its
  * pull request, else nothing.
  */
@@ -65,7 +65,7 @@ export function TaskStatusMark({
   stranded,
 }: {
   task: TaskSummary;
-  /** The workspace the plan's repository belongs to, where the reader may move it there. */
+  /** The workspace the task's repository belongs to, where the reader may move it there. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element | null {
   if (stranded !== undefined) {
@@ -119,7 +119,7 @@ function CardLine({
   );
 }
 
-/** One of the quieter lines under a card's name, which a press opens: a plan, or a repository on GitHub. */
+/** One of the quieter lines under a card's name, which a press opens: a task, or a repository on GitHub. */
 export function CardDetail({
   glyph,
   label,
@@ -266,7 +266,7 @@ function More({ total, shown }: { total: number; shown: number }): React.JSX.Ele
 }
 
 /**
- * The card a sidebar plan hangs: its name, wrapped to two lines, and how
+ * The card a sidebar task hangs: its name, wrapped to two lines, and how
  * long ago it was updated at the head's right; its repository under the
  * name, and, where others share its workspace and the list names its
  * creator, who created it; then its agents and its pull requests, a few rows each
@@ -306,9 +306,9 @@ export function TaskCard({
   now: number;
   /** Opens a page on GitHub: the repository's, or a pull request's. */
   onOpenGitHub: (url: string) => void;
-  /** Opens the plan on one of its agents' tabs. */
+  /** Opens the task on one of its agents' tabs. */
   onShowAgent: (agentId: string) => void;
-  /** The workspace the plan's repository belongs to, where the reader may move it there, which the card names under the repository. */
+  /** The workspace the task's repository belongs to, where the reader may move it there, which the card names under the repository. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element {
   const { agents, repository } = task;
@@ -392,9 +392,9 @@ function sharedWorkspace(
 }
 
 /**
- * The plan's card as every place naming the plan hangs it, read from the
- * window's plans: its sidebar row, its tab in its own column, and the
- * Inbox's crumb. An agent's line opens the plan on that agent's tab.
+ * The task's card as every place naming the task hangs it, read from the
+ * window's tasks: its sidebar row, its tab in its own column, and the
+ * Inbox's crumb. An agent's line opens the task on that agent's tab.
  */
 export function taskCardOf(
   tasks: Pick<TasksControl, "agents" | "repositories" | "onShowAgent" | "me" | "workspaces">,
@@ -419,12 +419,12 @@ export function taskCardOf(
 }
 
 /**
- * A plan named in place: what it is drawn as, its document glyph and its
- * name as the place sets them, as one button that hangs the plan's card
- * while the pointer rests on it and opens the plan on a press, as
- * `AgentRef` names an agent. Note that the Inbox list's plan heading, whose
- * press folds it, and ⌘K's plan rows, whose card's buttons the modal
- * palette would leave unpressable, name the plan without one.
+ * A task named in place: what it is drawn as, its document glyph and its
+ * name as the place sets them, as one button that hangs the task's card
+ * while the pointer rests on it and opens the task on a press, as
+ * `AgentRef` names an agent. Note that the Inbox list's task heading, whose
+ * press folds it, and ⌘K's task rows, whose card's buttons the modal
+ * palette would leave unpressable, name the task without one.
  */
 export function TaskRef({
   task,
@@ -434,7 +434,7 @@ export function TaskRef({
   children,
 }: {
   task: Pick<TaskSummary, "name">;
-  /** The plan's card (`planCardOf`). */
+  /** The task's card (`planCardOf`). */
   card: React.ReactNode;
   onOpen: () => void;
   className?: string;

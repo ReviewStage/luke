@@ -10,7 +10,7 @@ import { runAgent } from "./runtime.js";
 /**
  * Luke's judgment on the hosted tier, as an eve agent. eve ships a default
  * tool set that reads and writes files and runs a shell; none of it is
- * offered here, because every tool the brain has is one the planning model
+ * offered here, because every tool the brain has is one the brain
  * declares, beside eve's two over the account's integrations
  * (`connections/integrations.ts`). A session has no lifetime of eve's own:
  * the conversation's rows are the record, and a session rotates when the

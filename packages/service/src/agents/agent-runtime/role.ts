@@ -1,7 +1,7 @@
 /**
  * role.ts -- the four agents Luke runs on its one agent runtime, and what sets each apart.
  *
- * The planning assistant, the coding agent, and each one's declared worker
+ * The brain, the coding agent, and each one's declared worker
  * are four eve agents over one runtime (`docs/proposals/one-agent-runtime.md`):
  * every slot of every one of them is the runtime's, told which role it
  * serves, and a role differs from another only by its profile here. The

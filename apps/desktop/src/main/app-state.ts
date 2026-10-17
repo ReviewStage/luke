@@ -115,8 +115,8 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
 
 /**
  * The document as the hidden voice window and the call window are sent it: the
- * whole of it but the planning turns' work, as the plan's work page projects
- * it and as its planning conversation reads it. Note that both are kept from
+ * whole of it but the task turns' work, as the task's work page projects
+ * it and as its task conversation reads it. Note that both are kept from
  * those windows because they draw neither, and both carry the output of
  * commands run in the developer's repository and on the developer's Mac,
  * which nothing there needs.

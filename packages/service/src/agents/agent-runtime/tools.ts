@@ -5,8 +5,8 @@
  * each tool, named once by the name a model calls it by
  * (`@luke/features/agent-tools`, which the desktop reads its calls by too),
  * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept
- * twice is derived from it: what each planning agent is offered
- * (`../brain-host/planning.ts`), what each coding agent's authored tools are
+ * twice is derived from it: what each brain agent is offered
+ * (`../brain-host/brain.ts`), what each coding agent's authored tools are
  * (`../coder-host/tool-set.ts`, held to the files under `apps/dev/tools/` by
  * its test), and every set the store writer holds a role's rows to. A tool
  * a role is not listed for is never offered to it, so adding a tool to a
@@ -28,9 +28,9 @@ export { AGENT_TOOL, type AgentTool };
 const { BRAIN, BRAIN_WORKER, CODER, CODER_WORKER } = AGENT_ROLE;
 
 /**
- * The roles each tool serves. Note that a planning worker is offered only the
+ * The roles each tool serves. Note that the brain's worker is offered only the
  * reads, never a tool that speaks, shows, or draws, because what reaches the
- * developer reaches them through the planning turn the voice follows; and a
+ * developer reaches them through the brain turn the voice follows; and a
  * coding agent's worker only the reads of the checkout and the web, so
  * workers run in parallel without colliding and the agent alone edits.
  */

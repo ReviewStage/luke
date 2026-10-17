@@ -11,7 +11,7 @@ import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark";
 import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
 
 /**
- * tab-look.tsx -- how each kind of tab looks wherever it is drawn: its glyph and its name on its tab in either strip, its pin in the sidebar, its row in either "+" menu and the plan's summary, and its row in ⌘K.
+ * tab-look.tsx -- how each kind of tab looks wherever it is drawn: its glyph and its name on its tab in either strip, its pin in the sidebar, its row in either "+" menu and the task's summary, and its row in ⌘K.
  *
  * Every place that offers a tab draws it through `tabLook`, from what that
  * place knows of the thing the tab shows, so a kind wears one glyph and one
@@ -20,7 +20,7 @@ import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
  * in every one of those places, the "+" menus' rows included: a row is
  * offered beside a strip that may not hold its tab. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
- * and section, ⌘K's plan name.
+ * and section, ⌘K's task name.
  */
 
 /** The kinds of tab, each drawn its own way. */
@@ -116,7 +116,7 @@ export function SubagentMark({ model }: { model: string | undefined }) {
  * full size, giving way to the working mark while the agent may still write
  * (`state-glyph.tsx`). A failed agent keeps its mark, and its row or tab
  * says the failure at its end (`agentEndMark`). An agent whose standing is
- * not known, a pin's whose plan is not open, wears its mark at rest, and one
+ * not known, a pin's whose task is not open, wears its mark at rest, and one
  * this window does not list, one another Mac started, the mark of no known
  * harness, so a row naming it keeps the glyph's column.
  */

@@ -27,7 +27,7 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
- * grouped under the workspace the plans' sidebar lists, Account, and This
+ * grouped under the workspace the tasks' sidebar lists, Account, and This
  * Mac, opening on Profile, and every option moved by the one-home layout is
  * drawn on its new page and on no other, as the search finds it there too.
  * The Workspace page is titled with the listed workspace and follows the
@@ -70,7 +70,7 @@ const PERSONAL: Workspace = {
   github: null,
 };
 
-/** The Workspace page's control with `listed` the workspace the plans' sidebar lists. */
+/** The Workspace page's control with `listed` the workspace the tasks' sidebar lists. */
 function listing(listed: Workspace): WorkspaceSettingsControl {
   return {
     workspaces: [PERSONAL, ACME],
@@ -150,7 +150,7 @@ function settingsProps(view: SettingsView, onViewChange: (view: SettingsView) =>
   } satisfies SettingsPanelProps;
 }
 
-/** Settings holding its own page, as the app holds it, opened on Profile, over the workspaces the plans' sidebar lists where it is handed them. */
+/** Settings holding its own page, as the app holds it, opened on Profile, over the workspaces the tasks' sidebar lists where it is handed them. */
 function SettingsHarness({
   workspace,
   opensOn = SETTINGS_VIEW.ACCOUNT,

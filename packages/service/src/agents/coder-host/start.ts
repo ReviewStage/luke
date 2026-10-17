@@ -44,28 +44,28 @@ import { readMentioned } from "../mentioned-reads.js";
 import { anthropicFastAccess } from "./account-keys.js";
 
 /**
- * start.ts -- an agent started on a plan, or in a workspace with no plan: the one path a Start takes, from the Start button, from Luke's voice, or from an automation's run.
+ * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from Luke's voice, or from an automation's run.
  *
  * The model, effort, and context window are the ask's own where it names a
  * model, the account's stored default otherwise, either checked against the
  * catalog, which also
  * refuses a stored default that has since left it; a refused choice is
  * answered as the catalog's own refusal, so the route can say invalid and
- * the voice tool can say which choices there are. The plan must name a
+ * the voice tool can say which choices there are. The task must name a
  * repository the account still reaches through the Luke GitHub App, and
  * through its workspace's installation where it has one, read now rather
- * than when the plan named it (`packages/service/src/github/workspace-repository.ts`). The
+ * than when the task named it (`packages/service/src/github/workspace-repository.ts`). The
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
- * agent's eve session opens with the plan's document as the Markdown Copy
+ * agent's eve session opens with the task's document as the Markdown Copy
  * would put on the clipboard, or with the ask's prompt in the plan's place
  * and the files attached to it, which only a prompt carries; a note the
  * ask carries rides after either under a heading of its own, so what the
  * developer said beyond the plan reaches the agent in the same first
  * message rather than as a second one on its heels. An agent
- * started with no plan is handed a prompt in a workspace the account is a
+ * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
- * workspace's installation as a plan's is.
+ * workspace's installation as a task's is.
  * The MCP servers the words mention are handed to the agent's first turn
  * whatever its switches say, but an automation's run is handed only those
  * its automation's own prompt mentions, never those of the webhook body or
@@ -162,7 +162,7 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, the plan where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
+/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
 interface StartLanding {
   readonly workspaceId: string;
   readonly repository: string;
@@ -180,7 +180,7 @@ function withNote(
   return note === undefined ? brief : `${brief}\n\n${heading}\n\n${note}`;
 }
 
-/** The plan read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a plan the agent is handed its document or the prompt; in a workspace, the prompt. */
+/** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt; in a workspace, the prompt. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -225,7 +225,7 @@ const landingOf = Effect.fnUntraced(function* (
   };
 });
 
-/** Starts the account's agent on the plan or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
+/** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
   userId: string,

@@ -13,7 +13,7 @@ import { useAutomations } from "./desktop/use-automations";
  * agent an automation started (`wanted`), and each minute after, as the
  * Automations page reads it. The window stands one around everything for
  * the listed workspace (`listed-automations.tsx`), for Home's rows and ⌘K,
- * and a place of its own, the open plan or the Inbox, shares that read
+ * and a place of its own, the open task or the Inbox, shares that read
  * where it is of the same workspace. With the experiment off, or outside a
  * directory, no automation is known, and an agent's card says nothing of
  * one.

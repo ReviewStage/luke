@@ -61,10 +61,10 @@ import type { InboxAnswerer, InboxImageReader, InboxReader } from "./use-task-in
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
 /**
- * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
+ * use-coding-agents.ts -- the open task's coding agents as one control: the agents and their status, the Start button, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
- * The agents are read when a plan opens, again after a Start or a Stop,
- * and as the plan's column's "+" opens, and never on a clock; an agent's status moves between those reads only
+ * The agents are read when a task opens, again after a Start or a Stop,
+ * and as the task's column's "+" opens, and never on a clock; an agent's status moves between those reads only
  * as its own transcript page reports it, or as the service answers a
  * message to it, which is the agent running. A Start mints a key of its own
  * for the press, so a service that did not answer is asked again under the
@@ -84,9 +84,9 @@ const NO_KEYWORDS: readonly string[] = [];
  * A draft is an agent the developer opened from the column's "+" and has
  * not yet sent anything: it exists only here, so a draft let go leaves
  * nothing behind on the service. Its first message starts the agent with
- * those words as its task, in the plan's place, under the draft's own key,
+ * those words as its task, in the task's place, under the draft's own key,
  * so a send asked again after the service did not answer is the same
- * agent; the agent's tab then opens as a Start's does. Each plan has at
+ * agent; the agent's tab then opens as a Start's does. Each task has at
  * most one draft, held with the words written in it and the choice made on
  * its chip, so a draft keeps them while its tab is away and while the
  * developer visits another plan. Its words and files are the plan's kept
@@ -94,7 +94,7 @@ const NO_KEYWORDS: readonly string[] = [];
  * outlast a relaunch too, and a plan holding them opens on its draft's tab
  * again, under the same key.
  *
- * An archived plan starts no agent and sends none a message: Start is
+ * An archived task starts no agent and sends none a message: Start is
  * unavailable and says why, and `onUnarchive` stands, which every place
  * that would have taken words offers instead. An agent already running
  * finishes the turn it is on, so its Stop stays.
@@ -102,10 +102,10 @@ const NO_KEYWORDS: readonly string[] = [];
  * An agent may be archived on its own, which the service does only once a
  * turn it still runs is stopped. The list is read with the archived agents
  * among the rest and split here: `agents` holds those standing, which is
- * every tab, row, and menu of the plan, and `archived` the rest, which the
+ * every tab, row, and menu of the task, and `archived` the rest, which the
  * summary keeps folded away with an Unarchive on each. The agent the
  * service answers moves between the two at once, and a toast offers Undo,
- * as an archived plan's does.
+ * as an archived task's does.
  */
 
 /** Who an agent's pull request names, as its Changes tab last read them, and the pull request's page they were read for. */
@@ -120,11 +120,11 @@ export interface CodingAgentsControl {
   me: string | undefined;
   /** Whether the window offers Chat (`chat-gate.ts`): what a chat notice in an agent's transcript is drawn and copied as, a card from its sender or the plain line it is. */
   chatOn: boolean;
-  /** The open plan's agents in the order started, an archived one left out, or nothing before the first read lands. */
+  /** The open task's agents in the order started, an archived one left out, or nothing before the first read lands. */
   agents: readonly CodingAgentSummary[] | undefined;
-  /** The open plan's archived agents in the order started, or nothing before the first read lands. */
+  /** The open task's archived agents in the order started, or nothing before the first read lands. */
   archived: readonly CodingAgentSummary[] | undefined;
-  /** The workspace the one agent read as its page belongs to; none on a plan, where the plan says it, and before the page's read lands. */
+  /** The workspace the one agent read as its page belongs to; none on a task, where the task says it, and before the page's read lands. */
   workspaceId?: string | undefined;
   /** The repository of the one agent read as its page, `owner/name`, on the same terms as its workspace. */
   agentRepository?: string | undefined;
@@ -132,7 +132,7 @@ export interface CodingAgentsControl {
   origin?: CodingAgentOrigin | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
-  /** Every agent of the plan by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
+  /** Every agent of the task by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
   heldIds: readonly string[] | undefined;
   /** Whether the last read of the list did not land. */
   listFailed: boolean;
@@ -148,22 +148,22 @@ export interface CodingAgentsControl {
   readDefault: () => Promise<CodingAgentDefaultAnswer>;
   /** Keeps a choice as the account's default, which Start runs on; a write that did not take is said beside Start. */
   writeDefault: (choice: ModelChoice) => Promise<CodingAgentDefaultAnswer>;
-  /** The open plan's draft agent; nothing while it has none. */
+  /** The open task's draft agent; nothing while it has none. */
   draft: AgentDraft | undefined;
-  /** Opens a draft agent on the open plan, or answers the one it has, by its key. */
+  /** Opens a draft agent on the open task, or answers the one it has, by its key. */
   onNewDraft: () => string;
-  /** Writes the open plan's draft: the words in its box, the choice on its chip, or the MCP servers it switched off. */
+  /** Writes the open task's draft: the words in its box, the choice on its chip, or the MCP servers it switched off. */
   onDraftChange: (
     change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers">>,
   ) => void;
-  /** Changes the open plan's draft's files from those it holds as the change lands. */
+  /** Changes the open task's draft's files from those it holds as the change lands. */
   onDraftAttachments: (
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
   ) => void;
   /** Lets the draft go; nothing was started, so nothing is left behind. */
   onDiscardDraft: (draftId: string) => void;
   /**
-   * Starts the draft's agent with the words as its prompt, never the plan,
+   * Starts the draft's agent with the words as its prompt, never the task,
    * and the files attached to them, on the choice where one was made and else the account's default,
    * with the MCP servers the draft switched off; the
    * agent's tab opens as a Start's does. Answers why it did not start, or
@@ -176,10 +176,10 @@ export interface CodingAgentsControl {
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
-  /** Brings the open plan back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
+  /** Brings the open task back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
   start: {
-    /** Whether a Start could run now: the plan names a repository and is not archived. */
+    /** Whether a Start could run now: the task names a repository and is not archived. */
     available: boolean;
     /** Why it cannot, said on the button, while it cannot. */
     reason: string | undefined;
@@ -211,7 +211,7 @@ export interface CodingAgentsControl {
    * its dialog or a toast of its own.
    */
   onArchive: (agentId: string, archived: boolean) => Promise<ActionResult>;
-  /** Reads the plan's agents again now, answering the one named as it stands, or nothing where the read did not land or holds no such agent. */
+  /** Reads the task's agents again now, answering the one named as it stands, or nothing where the read did not land or holds no such agent. */
   readAgent: (agentId: string) => Promise<CodingAgentSummary | undefined>;
   /** An agent's transcript page said where it stands now. */
   onStatus: (agentId: string, run: AgentRun) => void;
@@ -221,7 +221,7 @@ export interface CodingAgentsControl {
   readTranscript: TranscriptReader;
   /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
   readPullRequest: PullRequestReader;
-  /** Each of the plan's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
+  /** Each of the task's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
   pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, who it names kept in `changesPeople`. */
   readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
@@ -233,11 +233,11 @@ export interface CodingAgentsControl {
   readOverviewChecks: (agentId: string) => Promise<CodingAgentOverviewChecksAnswerView>;
   /** One read of an agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
   readOverviewConversation: (agentId: string) => Promise<CodingAgentOverviewConversationAnswerView>;
-  /** The words a dictation into an agent's box is likely to say, read off the open plan. */
+  /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
   readSkills: SkillSource | undefined;
-  /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
+  /** One read of a task's inbox past a cursor, as the Inbox tab's loop asks it. */
   readInbox: InboxReader;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
@@ -273,14 +273,14 @@ function planDraft(
   };
 }
 
-/** A Start on its way or asked again: the plan, the key the press minted, and the choice it was for. */
+/** A Start on its way or asked again: the task, the key the press minted, and the choice it was for. */
 interface PendingStart {
   taskId: string;
   key: string;
   choice: ModelChoice | undefined;
 }
 
-/** Why a Start cannot run on the open plan, while it cannot: an archive first, since unarchiving is what would be asked before any repository. */
+/** Why a Start cannot run on the open task, while it cannot: an archive first, since unarchiving is what would be asked before any repository. */
 function startReason(
   taskId: string | undefined,
   repository: string | null,
@@ -299,8 +299,8 @@ type PageList = CodingAgentListAnswer & {
 };
 
 /**
- * The read a list is taken from: the plan's agents, archived ones among
- * them, where a plan is open, and else the one agent named, read as its
+ * The read a list is taken from: the task's agents, archived ones among
+ * them, where a task is open, and else the one agent named, read as its
  * page and held as a list of one, with the workspace it belongs to.
  */
 function listRead(
@@ -336,19 +336,19 @@ function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boo
 
 export function useCodingAgents(input: {
   acts: Pick<ActHandle, "act">;
-  /** The open plan, or none; a fixture run's plans have no agents. */
+  /** The open task, or none; a fixture run's tasks have no agents. */
   taskId: string | undefined;
   /**
-   * The one agent read by its id where no plan is open, as the agent page
-   * reads an agent with no plan: the list holds that agent alone, so every
+   * The one agent read by its id where no task is open, as the agent page
+   * reads an agent with no task: the list holds that agent alone, so every
    * answer that moves it moves the page's agent too.
    */
   agentId?: string | undefined;
-  /** The open plan's repository, or null while it names none. */
+  /** The open task's repository, or null while it names none. */
   repository: string | null;
-  /** Whether the open plan is archived, which starts nothing on it. */
+  /** Whether the open task is archived, which starts nothing on it. */
   archived: boolean;
-  /** Brings the open plan back from the archive. */
+  /** Brings the open task back from the archive. */
   onUnarchive: () => void;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
@@ -398,12 +398,12 @@ export function useCodingAgents(input: {
     [toast],
   );
   // Note that the acts and the opening are read through a ref, because the
-  // tab hands new closures on every render and a read is owed to the plan
+  // tab hands new closures on every render and a read is owed to the task
   // opening, not to a render.
   const latest = useRef(input);
   latest.current = input;
 
-  // The list is this plan's: another plan's, or none, is nothing to draw.
+  // The list is this task's: another task's, or none, is nothing to draw.
   const held = ours(list) ? list.agents : undefined;
   const agents = useMemo(() => held?.filter((agent) => agent.archivedAt === undefined), [held]);
   const archivedAgents = useMemo(
@@ -413,7 +413,7 @@ export function useCodingAgents(input: {
   const listFailed = ours(list) && list.failed;
   const listMissing = ours(list) && list.missing === true;
 
-  // Read when the plan opens, or the page's agent where no plan is, and again when a Start or a Stop asks (`reads`).
+  // Read when the task opens, or the page's agent where no task is, and again when a Start or a Stop asks (`reads`).
   useEffect(() => {
     if (taskId === undefined && agentId === undefined) return;
     let live = true;
@@ -495,7 +495,7 @@ export function useCodingAgents(input: {
       });
   };
 
-  /** One Start asked of the service on the plan, held as under way until it answers. */
+  /** One Start asked of the service on the task, held as under way until it answers. */
   const askStart = (
     on: string,
     asked: Omit<ActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
@@ -509,7 +509,7 @@ export function useCodingAgents(input: {
       });
   };
 
-  /** A Start that landed: the agent joins the list and its tab opens. Note that one landing after the developer left the plan opens no tab on the plan now open. */
+  /** A Start that landed: the agent joins the list and its tab opens. Note that one landing after the developer left the task opens no tab on the task now open. */
   const landed = (on: string, agent: CodingAgentSummary) => {
     if (latest.current.taskId !== on) return;
     setList((was) =>
@@ -546,8 +546,8 @@ export function useCodingAgents(input: {
         // Only a service that never answered is asked again under the same key.
         if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
         setNote({ planId: taskId, note: startFailureNote(answer, taskId) });
-        // The note waits beside the plan's Start; a developer who left the
-        // plan while it was out hears of it now.
+        // The note waits beside the task's Start; a developer who left the
+        // task while it was out hears of it now.
         if (latest.current.taskId !== taskId) failed(START_FAILED_AWAY);
         return;
       }

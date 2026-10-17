@@ -18,7 +18,7 @@ export const MAC_COMMAND_BOUNDS = {
   DEFAULT_TIMEOUT_SECONDS: 60,
   /**
    * The longest an agent may ask for: inside the minutes one eve step may
-   * run, and short enough that the voice's ten-minute follow of a planning
+   * run, and short enough that the voice's ten-minute follow of a brain
    * turn still hears the answer after the queue, the grace, and the model.
    */
   MAX_TIMEOUT_SECONDS: 480,

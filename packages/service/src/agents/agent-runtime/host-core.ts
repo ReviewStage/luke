@@ -1,7 +1,7 @@
 /**
  * host-core.ts -- what every agent's host does the same way: admit a session, claim its conversation, and find a worker's child.
  *
- * The planning host (`../brain-host/host.ts`) and the coding agent's host
+ * The brain host (`../brain-host/host.ts`) and the coding agent's host
  * (`../coder-host/host.ts`) differ in what their agents are for, and each
  * keeps the methods its role alone has. What they share is how a session is
  * admitted for a conversation (the standing it runs under: its own, one

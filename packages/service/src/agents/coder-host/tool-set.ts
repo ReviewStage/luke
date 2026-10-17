@@ -14,7 +14,7 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * The coding agent runs eve's own tools, authored one file each under
  * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
- * search, the hosted public search and page read the planning model has
+ * search, the hosted public search and page read the brain has
  * too (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the

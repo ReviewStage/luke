@@ -4,7 +4,7 @@
 
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What docks at a column's foot: an agent's to-do list and composer, and a plan's call bar, whichever stand. */
+/** What docks at a column's foot: an agent's to-do list and composer, and a task's call bar, whichever stand. */
 const DOCKED = ".agent-todos-dock, .agent-composer, .desktop-call-bar";
 
 /** The card that floats over the column while the sidebar is folded. */
@@ -24,10 +24,10 @@ function dockHeight(column: Element): number {
  * Keeps two lengths on the shell for the folded sidebar's call card: the
  * dock of the column it stands over (`--column-dock`), which it stands just
  * above, and its own height (`--floating-card`), which the transcript under
- * it keeps clear. The column is the plan's, or an agent's page standing in
+ * it keeps clear. The column is the task's, or an agent's page standing in
  * its place, or the side panel while it fills the window. One ResizeObserver follows the column, its docked parts, and
  * the card; a MutationObserver re-reads when the column or a part arrives
- * or goes, a plan's column once it has loaded, a to-do list appearing over
+ * or goes, a task's column once it has loaded, a to-do list appearing over
  * the composer. `key` names what the shell is drawing,
  * so a page or a panel coming and going finds its column afresh. A shell
  * with no such column (Settings, a version history) says no dock at all.
@@ -40,7 +40,7 @@ export function useColumnDock(
   useLayoutEffect(() => {
     const host = shell.current;
     if (host === null) return;
-    // Found afresh on every change under the shell, because a plan still
+    // Found afresh on every change under the shell, because a task still
     // loading draws its column only once its document lands.
     const columnSelector = panelFull ? ".side-panel" : ".desktop-task-main, .agent-page";
     let column = host.querySelector(columnSelector);

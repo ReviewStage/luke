@@ -115,7 +115,7 @@ import { CODER_TOOL } from "./tool-set.js";
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
  *
- * The same shape as the planning brain's host (`brain-host/host.ts`): eve is
+ * The same shape as the brain's host (`brain-host/host.ts`): eve is
  * the runtime and the event emitter, and the host is everything eve leaves
  * to its author. Who a session is for is the conversation admission the two
  * share; what differs is that every admitted conversation is a coding
@@ -134,7 +134,7 @@ import { CODER_TOOL } from "./tool-set.js";
  * Beside the relay, each step's end and each compaction of the agent's own
  * conversation is written on the agent's row, which is what the tab's
  * context ring reads (`context-estimate.ts`).
- * Any member of the plan's workspace is admitted to an agent's conversation,
+ * Any member of the task's workspace is admitted to an agent's conversation,
  * and the plan is read and written as the member whose turn it is; the
  * agent's row, its provider keys, its checkout, and its context stay its
  * starter's, the conversation's owner, whoever is speaking to it.
@@ -159,7 +159,7 @@ interface CoderSessionPrompt {
 
 /**
  * What the coder project keeps of the session's prompt, beside the content
- * address the planning brain keeps (`brain-host/host.ts`): whether the
+ * address the brain keeps (`brain-host/host.ts`): whether the
  * prompt said the repository's CI is readable, the co-author trailer it
  * handed where it handed one, and the step its links wrote the workspace
  * under, which are what compose the same text again for a step's estimate
@@ -290,7 +290,7 @@ export interface CoderHost extends HostAdmission {
     call: InboxCall,
   ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
   /**
-   * Runs one of the agent's public reads, the planning model's own
+   * Runs one of the agent's public reads, the brain's own
    * (`../public-research.ts`): a search or a page read, under the turn's
    * budget, the search on Luke's key and counted on the account's meter.
    * The budget is the turn's own, named with its session, since eve numbers
@@ -310,7 +310,7 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
   ): Effect.Effect<PictureLookResult, never, DatabaseServices>;
-  /** Runs one `show_page` call (`../page-tool.ts`) on the agent's plan, a page's path read from the session's sandbox through the door given. */
+  /** Runs one `show_page` call (`../page-tool.ts`) on the agent's task, a page's path read from the session's sandbox through the door given. */
   showPage(
     admitted: AdmittedConversation,
     input: UnparsedWireValue,

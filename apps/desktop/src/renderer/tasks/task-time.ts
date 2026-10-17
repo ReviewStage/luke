@@ -4,13 +4,13 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { rendererRuntime } from "../renderer-runtime";
 
 /**
- * plan-time.ts -- the window's one way of saying when: how long ago in a row's few letters or a line's words, a moment in full, a span, a call's day, and the minute that says it again.
+ * task-time.ts -- the window's one way of saying when: how long ago in a row's few letters or a line's words, a moment in full, a span, a call's day, and the minute that says it again.
  *
  * A row's word is the shortest a devtool's list uses: "now", then minutes,
- * hours, days, and weeks by their letter, and the date itself once a plan is
+ * hours, days, and weeks by their letter, and the date itself once a task is
  * a month old, so a glance down the column reads like Codex's and Cursor's.
  * A line that says it in words says the same with "ago" after a count, so a
- * plan's "Edited by you · 3d ago" and its sidebar row's "3d" never part.
+ * task's "Edited by you · 3d ago" and its sidebar row's "3d" never part.
  * Every word is set in US English whatever the Mac's own region, since the
  * words around it are English, and in the Mac's own zone: a call's "Today,
  * 3:42 PM" and the "2:32 PM → 3:42 PM" its card hangs read one clock. The
@@ -31,7 +31,7 @@ const SINCE_UNITS = [
   [MINUTE, "m"],
 ] as const;
 
-/** How old a plan may be and still be counted in weeks; an older one is named by its date. */
+/** How old a task may be and still be counted in weeks; an older one is named by its date. */
 const WEEKS_COUNTED = 5 * WEEK;
 
 /** The one locale every time is said in, the window's words being English. */

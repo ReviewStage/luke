@@ -149,20 +149,20 @@ import {
 } from "./pull-request-write.js";
 
 /**
- * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
+ * coding-agents-app.ts -- a task's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one of a workspace the bearer's account is a member of: a
- * plan or an agent of any other workspace answers exactly as one that names
+ * task or an agent of any other workspace answers exactly as one that names
  * nothing. A member reads, messages, renames, re-chooses, and stops an agent
  * a teammate started, its conversation read and written under that teammate,
  * whose conversation it is. A Start
  * (`POST /api/plans/{id}/agents`) takes the one path a start takes
  * (`packages/service/src/agents/coder-host/start.ts`), which the voice brain's tool shares: the
  * model and effort checked against the catalog, the account's default where
- * the request names none, the plan's repository confirmed reachable through
+ * the request names none, the task's repository confirmed reachable through
  * the Luke GitHub App, the agent and its conversation made, and its eve
- * session opened with the plan's document, or the prompt the request named in
+ * session opened with the task's document, or the prompt the request named in
  * its place, as the first message, here under the developer's own bearer so
  * eve's door admits it as the developer. A retry carrying the same key is
  * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
@@ -238,7 +238,7 @@ import {
  */
 
 const AGENTS_PATH = {
-  /** GET lists the plan's agents, the archived ones too where `archived=include` asks; POST starts one; the rewrite moves the path's plan id into the `id` query. */
+  /** GET lists the task's agents, the archived ones too where `archived=include` asks; POST starts one; the rewrite moves the path's task id into the `id` query. */
   OF_TASK: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
@@ -262,13 +262,13 @@ const AGENTS_PATH = {
   GITHUB_IMAGE: "/api/agents/github-image",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
   SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
-  /** GET reads the plan's inbox past `after`; the rewrite moves the path's plan id into the `id` query. */
+  /** GET reads the task's inbox past `after`; the rewrite moves the path's task id into the `id` query. */
   INBOX_OF_TASK: "/api/plans/inbox",
-  /** GET reads one agent's inbox past `after`, an agent with no plan as much as one on a plan; the rewrite moves the path's agent id into the `id` query. */
+  /** GET reads one agent's inbox past `after`, an agent with no task as much as one on a task; the rewrite moves the path's agent id into the `id` query. */
   INBOX_OF_AGENT: "/api/agents/inbox",
   /** POST answers one inbox item; the rewrite moves the path's item id into the `id` query. */
   INBOX_ITEM: "/api/inbox/item",
-  /** GET reads what waits on the developer across the account's plans past `after`. */
+  /** GET reads what waits on the developer across the account's tasks past `after`. */
   INBOX: "/api/inbox",
   /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
   INBOX_ATTACHMENT: "/api/inbox/attachment",
@@ -424,7 +424,7 @@ const choiceOrInvalid = <A, E, R>(
   Effect.catchTag(effect, "ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST));
 
 /**
- * POST: an agent started on the plan, or the one a retry under the same key
+ * POST: an agent started on the task, or the one a retry under the same key
  * already started, on the one start path (`packages/service/src/agents/coder-host/start.ts`),
  * reaching eve as the developer.
  */
@@ -481,7 +481,7 @@ function listsArchived(request: Request): boolean {
   return asked === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
 }
 
-/** GET lists the plan's agents with their status; POST starts one. */
+/** GET lists the task's agents with their status; POST starts one. */
 const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -511,7 +511,7 @@ const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(f
 });
 
 /**
- * GET lists a workspace's agents, on a plan or with none, newest started
+ * GET lists a workspace's agents, on a task or with none, newest started
  * first, the archived ones left out unless `archived=include` asks,
  * narrowed to one repository where the query names one and to agents whose
  * title or task's name holds the query's words where it names some, as the plan list
@@ -743,7 +743,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   });
 });
 
-/** GET reads the agent as its own page, an agent with no plan as much as one on a plan; PATCH changes it as `changeEndpoint` does. */
+/** GET reads the agent as its own page, an agent with no task as much as one on a task; PATCH changes it as `changeEndpoint` does. */
 const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
   seams: CodingAgentsAppSeams,
   writer: Effect.Effect<StoreWriter>,
@@ -836,7 +836,7 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
 /**
  * GET reads the agent's changes: the files of the pull request its kept
  * published answer names, and who it names (`github-people.ts`), read from
- * GitHub afresh on a token minted for the agent's repository on its plan's
+ * GitHub afresh on a token minted for the agent's repository on its task's
  * workspace installation, with who its row says it writes as, or none
  * where it names no pull request yet.
  */
@@ -1094,7 +1094,7 @@ const inboxCursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return after.success;
 });
 
-/** GET reads the plan's inbox past the cursor: every item its agents posted, held open while nothing changed. */
+/** GET reads the task's inbox past the cursor: every item its agents posted, held open while nothing changed. */
 const taskInboxEndpoint = /* @__PURE__ */ Effect.fn("web/taskInboxEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -1127,7 +1127,7 @@ const agentInboxEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxEndpoint")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
-/** GET reads what waits on the developer across the account's plans past the cursor: every open item, held open while nothing changed. */
+/** GET reads what waits on the developer across the account's tasks past the cursor: every open item, held open while nothing changed. */
 const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -1210,7 +1210,7 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
 }
 
 /**
- * POST answers one item of a plan of the account's workspaces, whichever
+ * POST answers one item of a task of the account's workspaces, whichever
  * member started its agent. An answer naming a
  * revision the agent has since moved on from, or an item no longer open,
  * is answered with the item as it stands and not taken. Otherwise the

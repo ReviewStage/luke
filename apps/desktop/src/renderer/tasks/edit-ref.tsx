@@ -25,16 +25,16 @@ import { agoText } from "./task-time";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
- * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the plan's ⋯ menu.
+ * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the task's ⋯ menu.
  *
  * The writer is read through `@luke/ui/actor-model`'s `editActor`, against
- * the workspace's members the plan's directory holds (`member-directory.tsx`),
+ * the workspace's members the task's directory holds (`member-directory.tsx`),
  * and named as one target that hangs its card. A person's card says what
  * they last did in the plan, and Luke's whose call he wrote on, when, and
  * what he wrote, both read off who last changed each section, which the
- * window already holds. A coding agent found among the plan's agents wears
+ * window already holds. A coding agent found among the task's agents wears
  * its harness and where its work stands, hangs its tab's card, and opens
- * its tab on a press where the place offers that; one the plan's list does
+ * its tab on a press where the place offers that; one the task's list does
  * not hold is named alone. Luke's edit on a call names whose call it was
  * too: "your call" for the reader's own, and the teammate on their face.
  */
@@ -46,7 +46,7 @@ const ACTOR_OF_GLYPH = {
   [GLYPH_STATE.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<GlyphState, ActorState>;
 
-/** The plan's coding agents, among which an agent's edit is found, and what opens one's tab where the place offers it. */
+/** The task's coding agents, among which an agent's edit is found, and what opens one's tab where the place offers it. */
 export interface EditAgents {
   readonly control: Pick<
     CodingAgentsControl,
@@ -66,7 +66,7 @@ export interface EditPlace {
   readonly now: number;
 }
 
-/** The agent an edit names, among the plan's agents, archived or not; none where the edit names none or the list holds no such agent. */
+/** The agent an edit names, among the task's agents, archived or not; none where the edit names none or the list holds no such agent. */
 function agentOf(
   edit: PlanLastEdit,
   agents: EditAgents | undefined,
@@ -80,7 +80,7 @@ function agentOf(
   );
 }
 
-/** Who wrote an edit, an agent wearing the harness and state the plan's list finds it in; nobody for the plan before history. */
+/** Who wrote an edit, an agent wearing the harness and state the task's list finds it in; nobody for the plan before history. */
 function writerOf(edit: PlanLastEdit, place: EditPlace): Actor | undefined {
   const agent = agentOf(edit, place.agents);
   const found: EditAgent | undefined =
@@ -164,7 +164,7 @@ function WriterRef({
   if (actor.kind !== ACTOR_KIND.AGENT) {
     return <PersonRef actor={actor} place={place} sentence={sentence} faceOnly={faceOnly} />;
   }
-  // An agent the plan's list does not hold is named alone, with no card to read and no tab to open.
+  // An agent the task's list does not hold is named alone, with no card to read and no tab to open.
   if (agent === undefined || place.agents === undefined) {
     return <ActorRef actor={actor} faceOnly={faceOnly} />;
   }
