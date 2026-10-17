@@ -2990,7 +2990,7 @@ ul.actor-stack {
    long sender keeps the card's whole measure, the time on a line under it. */
 .agent-origin > .message-meta {
   flex-wrap: wrap;
-  row-gap: var(--space-2);
+  row-gap: var(--luke-space-2);
 }
 
 .agent-origin > .message-meta > .message-sender {
@@ -3002,7 +3002,7 @@ ul.actor-stack {
    each name to its first letters. */
 .agent-origin > .message-meta > .message-sender > .actor-words {
   flex-wrap: wrap;
-  row-gap: var(--space-2);
+  row-gap: var(--luke-space-2);
 }
 
 /* A task named as the sender of its plan: its document glyph standing in a
@@ -3013,7 +3013,7 @@ ul.actor-stack {
   place-items: center;
   width: 16px;
   height: 16px;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .agent-origin-glyph > svg {
@@ -3035,6 +3035,48 @@ ul.actor-stack {
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
+}
+
+/* A webhook call's body, folded inside the card under a line of its own: a
+   call's line in the muted ink, its hover fill bringing the full ink, and
+   the body as the caller sent it in the code type, broken anywhere rather
+   than run past the card. */
+.agent-origin-body {
+  font-size: 12.5px; /* off-scale: a call's line, which it sits among */
+}
+
+.agent-origin-body-line {
+  display: flex;
+  height: 28px; /* off-scale: a call's line */
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.agent-origin-body-line:hover {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+}
+
+.agent-origin-body-line > svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.agent-origin-body-text {
+  margin: 0;
+  padding: var(--luke-space-4);
+  font-family: var(--luke-font-mono);
+  font-size: 12px; /* off-scale: a call's code type */
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 /* A teammate's call at its divider: their mark and name, then when it

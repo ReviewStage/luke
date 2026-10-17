@@ -633,16 +633,14 @@ function AgentPartView({
 /** A webhook call's body inside the card of the prompt it rode in with, folded again under its own line, as the caller sent it. */
 function OriginBody({ body }: { body: string }): React.JSX.Element {
   return (
-    <Fold className="agent-origin-body text-[12.5px]">
-      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+    <Fold className="agent-origin-body">
+      <FoldSummary className="agent-origin-body-line">
         <FoldChevron />
-        <WebhookIcon className="size-4 shrink-0" aria-hidden="true" />
+        <WebhookIcon aria-hidden="true" />
         {WEBHOOK_BODY_LABEL}
       </FoldSummary>
       <FoldBody>
-        <pre className="m-0 whitespace-pre-wrap px-1 py-1 font-mono text-[12px] [overflow-wrap:anywhere]">
-          {body}
-        </pre>
+        <pre className="agent-origin-body-text">{body}</pre>
       </FoldBody>
     </Fold>
   );
