@@ -221,7 +221,7 @@ test("a press on a diagram's Show code shows its code and opens no editor", asyn
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
-test("a press on a task's checkbox ticks or clears that one item in the saved text, and opens no editor", async () => {
+test("a press on a task's checkbox ticks or clears that one item in the saved text, a second press before the plan comes back goes on from the first, and no editor opens", async () => {
   const body = [
     "## Goal",
     "Invite a *teammate*.",
@@ -234,7 +234,9 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
     "> 1. [ ] Quoted",
     "",
   ].join("\n");
+  const written = body.replace("  - [ ] Write", "  - [x] Write");
   const { container, sent, render } = mount([
+    { saved: true },
     { saved: true },
     { conflict: { current: body } },
     { saved: true },
@@ -245,34 +247,35 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
     ...block(container, "Steps").querySelectorAll<HTMLInputElement>("input[type=checkbox]"),
   ];
   assert.deepEqual(
-    boxes.map((box) => [box.disabled, box.checked]),
+    boxes.map((box) => [box.getAttribute("aria-label"), box.disabled, box.checked]),
     [
-      [false, false],
-      [false, false],
-      [false, true],
-      [false, false],
+      ["Send the invite", false, false],
+      ["Write the email", false, false],
+      ["Pick a role", false, true],
+      ["Quoted", false, false],
     ],
   );
   const [, nested, ticked, quoted] = boxes;
   assert.ok(nested && ticked && quoted, "every box is drawn");
 
-  act(() => nested.click());
-  await settle();
-  act(() => ticked.click());
-  await settle();
-  act(() => quoted.click());
-  await settle();
+  // Note that the door answers without the plan coming back, as a save still out stands.
+  for (const box of [nested, nested, ticked, quoted]) {
+    act(() => box.click());
+    await settle();
+  }
 
   assert.deepEqual(
     sent.map((request) => request.document),
     [
-      { base: body, value: body.replace("  - [ ] Write", "  - [x] Write") },
+      { base: body, value: written },
+      { base: written, value: body },
       { base: body, value: body.replace("* [X] Pick", "* [ ] Pick") },
       { base: body, value: body.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
-  assert.equal(nested.checked, true, "a saved tick stands");
+  assert.equal(nested.checked, false, "the second press cleared it again");
   assert.equal(ticked.checked, true, "a tick the save refused goes back");
+  assert.equal(quoted.checked, true, "a saved tick stands");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });

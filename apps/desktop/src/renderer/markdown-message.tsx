@@ -355,23 +355,47 @@ const glueDrawnLinks =
     }
   };
 
-/** Each task item's checkbox, by the tree's own node, and the offset its item starts at in the words. */
-const TASK_ITEMS = new WeakMap<HastElement, number>();
+/** A task item's checkbox as drawn: the offset its item starts at in the words, and the item's own words, which name it. */
+interface TaskItem {
+  readonly at: number;
+  readonly label: string;
+}
+
+/** Each task item's checkbox, by the tree's own node. */
+const TASK_ITEMS = new WeakMap<HastElement, TaskItem>();
+
+/** A list item's own words, without the words of a list nested in it. */
+function itemWords(item: HastElement): string {
+  return item.children
+    .map((child) =>
+      child.type === "element" && (child.tagName === "ul" || child.tagName === "ol")
+        ? ""
+        : wordsOf(child),
+    )
+    .join("")
+    .trim();
+}
 
 /**
  * Gives each task item's checkbox the offset its list item starts at in the
- * words, its marker's, which the tree keeps on the item and not on the box.
- * Note that the nearest item is the box's own, so a nested list's box names
- * its own item rather than the one around it.
+ * words, its marker's, which the tree keeps on the item and not on the box,
+ * and the item's words as its name. Note that the nearest item is the box's
+ * own, so a nested list's box names its own item rather than the one around it.
  */
-function placeTasks(parent: HastParent, item: number | undefined): void {
+function placeTasks(parent: HastParent, item: HastElement | undefined): void {
   for (const child of parent.children) {
     if (child.type !== "element") continue;
-    const at = child.tagName === "li" ? child.position?.start.offset : item;
-    if (child.tagName === "input" && child.properties.type === "checkbox" && at !== undefined) {
-      TASK_ITEMS.set(child, at);
+    const own = child.tagName === "li" ? child : item;
+    const at = own?.position?.start.offset;
+    if (
+      child.tagName === "input" &&
+      child.properties.type === "checkbox" &&
+      own &&
+      at !== undefined
+    ) {
+      TASK_ITEMS.set(child, { at, label: itemWords(own) });
     }
-    placeTasks(child, at);
+    placeTasks(child, own);
   }
 }
 
@@ -391,11 +415,11 @@ export type TaskToggler = (at: number) => Promise<boolean>;
  * state, so a change arriving from anyone redraws it from the words.
  */
 function TaskBox({
-  at,
+  item,
   checked,
   toggle,
 }: {
-  at: number;
+  item: TaskItem;
   checked: boolean;
   toggle: TaskToggler;
 }): React.JSX.Element {
@@ -403,10 +427,11 @@ function TaskBox({
     <input
       key={String(checked)}
       type="checkbox"
+      aria-label={item.label}
       defaultChecked={checked}
       onChange={(event) => {
         const box = event.currentTarget;
-        toggle(at).then((saved) => {
+        toggle(item.at).then((saved) => {
           if (!saved) box.checked = checked;
         });
       }}
@@ -704,11 +729,11 @@ export function MarkdownMessage({
     if (toggles) {
       const toggle: TaskToggler = (at) => toggler.current?.(at) ?? Promise.resolve(false);
       drawing.input = ({ node, ...props }) => {
-        const at = node === undefined ? undefined : TASK_ITEMS.get(node);
-        return at === undefined ? (
+        const item = node === undefined ? undefined : TASK_ITEMS.get(node);
+        return item === undefined ? (
           <input {...props} />
         ) : (
-          <TaskBox at={at} checked={props.checked === true} toggle={toggle} />
+          <TaskBox item={item} checked={props.checked === true} toggle={toggle} />
         );
       };
     }
