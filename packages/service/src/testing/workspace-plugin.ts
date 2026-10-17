@@ -17,6 +17,8 @@ import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS, SESSION_BEARER } from "../au
  * member write is the plugin's own call under a session, which
  * `sessionBearerOf` mints for an account and signs as the bearer plugin
  * hands one out, so the plugin reads it back exactly as it reads the Mac's.
+ * `sessionCookieOf` mints one as the cookie a signed-in browser carries,
+ * spelled as the bearer plugin spells the cookie it reads a bearer as.
  * The database is closed with the scope that opened it.
  */
 
@@ -33,15 +35,23 @@ export const openWorkspacePlugin = Effect.gen(function* () {
     disabledPaths: [...DISABLED_AUTH_PATHS],
     plugins: [organizationPlugin(ORGANIZATION_OPTIONS), bearer(SESSION_BEARER)],
   });
+  /** A fresh session for the account, its token signed under the plugin's secret. */
+  const signedSessionOf = async (userId: string) => {
+    const context = await plugin.$context;
+    const session = await context.internalAdapter.createSession(userId);
+    return { context, signed: `${session.token}.${await makeSignature(session.token, SECRET)}` };
+  };
   /** A fresh session for the account, as the signed bearer token the plugin would hand the Mac. */
   const sessionBearerOf = (userId: string) =>
+    Effect.promise(async () => (await signedSessionOf(userId)).signed);
+  /** A fresh session for the account, as the `Cookie` header a browser signed in to it sends. */
+  const sessionCookieOf = (userId: string) =>
     Effect.promise(async () => {
-      const context = await plugin.$context;
-      const session = await context.internalAdapter.createSession(userId);
-      return `${session.token}.${await makeSignature(session.token, SECRET)}`;
+      const { context, signed } = await signedSessionOf(userId);
+      return `${context.authCookies.sessionToken.name}=${encodeURIComponent(signed)}`;
     });
-  /** The account a request's session names, read as the routes read it. */
-  const resolveSessionUserId = (request: Request) =>
+  /** The account a request's session names, read as the routes read it, from a request or its headers alone. */
+  const resolveSessionUserId = (request: { headers: Headers }) =>
     Effect.tryPromise(async () => {
       const session = await plugin.api.getSession({ headers: request.headers });
       return Option.fromNullishOr(session?.user.id);
@@ -52,6 +62,7 @@ export const openWorkspacePlugin = Effect.gen(function* () {
     members: memberSeams(plugin.api),
     resolveSessionUserId,
     sessionBearerOf,
+    sessionCookieOf,
     database: sqlClientOverPglite(client),
   };
 });
