@@ -10,6 +10,7 @@ export * from "./components/confirm-dialog/confirm-dialog.js";
 export * from "./components/dialog/dialog.js";
 export * from "./components/empty-state/empty-state.js";
 export * from "./components/form-field/form-field.js";
+export * from "./components/form-section/form-section.js";
 export * from "./components/layout/layout.js";
 export * from "./components/list-row/list-row.js";
 export * from "./components/segmented/segmented.js";
