@@ -491,11 +491,12 @@ function ScheduleRows({
       />
       {schedule.kind === SCHEDULE_KIND.CUSTOM ? (
         <SettingsRow label="Cron">
-          {() => (
+          {(control) => (
             <span className="automation-field">
               <TextField
                 ref={cron}
                 label="Cron"
+                describedBy={control["aria-describedby"]}
                 font={TEXT_FIELD_FONT.MONO}
                 spellCheck={false}
                 value={schedule.cron}
@@ -507,7 +508,7 @@ function ScheduleRows({
         </SettingsRow>
       ) : (
         <SettingsRow label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}>
-          {() => (
+          {(control) => (
             <>
               {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
                 <Picker
@@ -537,6 +538,7 @@ function ScheduleRows({
                     ref={time}
                     type={TEXT_FIELD_TYPE.TIME}
                     label="Time"
+                    describedBy={control["aria-describedby"]}
                     value={clockValue(schedule.hour, schedule.minute)}
                     onEscape={() => time.current?.blur()}
                     onChange={(text) => {
@@ -841,6 +843,8 @@ function CodeReviewGroup({
   settings: CodeReviewSettings;
   onSettings: (settings: CodeReviewSettings) => void;
 }): React.JSX.Element {
+  // The rules file's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  const rulesFile = useRef<HTMLInputElement>(null);
   return (
     <SettingsGroup title="Code review">
       <SwitchRow
@@ -857,20 +861,25 @@ function CodeReviewGroup({
         parse={mostFindingsOf}
         onChange={(mostFindings) => onSettings({ ...settings, mostFindings })}
       />
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Rules file</strong>
-          <small>Read from the base branch, beside AGENTS.md and CLAUDE.md.</small>
-        </span>
-        <input
-          className="settings-input automation-rules-file"
-          aria-label="Rules file"
-          spellCheck={false}
-          value={settings.rulesFile}
-          onKeyDown={releaseOnEscape}
-          onChange={(event) => onSettings({ ...settings, rulesFile: event.target.value })}
-        />
-      </div>
+      <SettingsRow
+        label="Rules file"
+        description="Read from the base branch, beside AGENTS.md and CLAUDE.md."
+      >
+        {(control) => (
+          <span className="automation-field">
+            <TextField
+              ref={rulesFile}
+              label="Rules file"
+              describedBy={control["aria-describedby"]}
+              font={TEXT_FIELD_FONT.MONO}
+              spellCheck={false}
+              value={settings.rulesFile}
+              onEscape={() => rulesFile.current?.blur()}
+              onChange={(text) => onSettings({ ...settings, rulesFile: text })}
+            />
+          </span>
+        )}
+      </SettingsRow>
       <SwitchRow
         label="Fix what it finds"
         detail="Pushes its fixes to the pull request as Luke. Luke's own pushes start no review."

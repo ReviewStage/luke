@@ -2175,7 +2175,13 @@ test("a new automation started from the Code review suggestion is made on pull r
   assert.ok(cards(page).includes("Code review"));
   act(() => switchNamed("Comment when no issues are found").click());
   pick(page, "Most findings", "3");
-  type(page.querySelector("input[aria-label='Rules file']"), ".cursor/BUGBOT.md");
+  const rulesFile = page.querySelector<HTMLInputElement>("input[aria-label='Rules file']");
+  // Note that the field is described by its row's words, so a screen reader reads where the file is read from.
+  assert.equal(
+    document.getElementById(rulesFile?.getAttribute("aria-describedby") ?? "")?.textContent,
+    "Read from the base branch, beside AGENTS.md and CLAUDE.md.",
+  );
+  type(rulesFile, ".cursor/BUGBOT.md");
   act(() => button("Create").click());
   await settle();
 

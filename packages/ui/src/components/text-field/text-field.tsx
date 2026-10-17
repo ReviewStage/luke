@@ -53,7 +53,7 @@ export type TextFieldAutoComplete =
 /**
  * How a text entry is named: by its `FormField`'s label, through the field's
  * control, or by a `label` of its own where it stands alone, so none is
- * drawn without a name.
+ * drawn without a name; one standing alone is described by `describedBy`.
  */
 type Named =
   | {
@@ -65,6 +65,8 @@ type Named =
       field?: undefined;
       /** The accessible name, where no `FormField` labels it. */
       label: string;
+      /** The id of the words that say what the entry is for, where some stand beside it, as a `SettingsRow`'s description does. */
+      describedBy?: string | undefined;
     };
 
 /** What both kinds of text entry take. */
@@ -92,7 +94,8 @@ function entryAttributes(props: TextEntryProps) {
   return {
     id: props.field?.id,
     "aria-label": props.field === undefined ? props.label : undefined,
-    "aria-describedby": props.field?.["aria-describedby"],
+    "aria-describedby":
+      props.field === undefined ? props.describedBy : props.field["aria-describedby"],
     "aria-invalid": props.field?.["aria-invalid"],
     placeholder: props.placeholder,
     disabled: props.disabled,
