@@ -6,7 +6,7 @@ import { defineTool } from "eve/tools";
 import { host, runResearchTool } from "../host.js";
 
 /**
- * search_web.ts -- the planning model's own public search, the agent's under the turn's budget (`packages/service/src/agents/public-research.ts`).
+ * search_web.ts -- the brain's own public search, the agent's under the turn's budget (`packages/service/src/agents/public-research.ts`).
  */
 export default defineTool({
   description: SEARCH_WEB_TOOL.description,

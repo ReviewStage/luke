@@ -3,7 +3,7 @@ import type { TaskCallResult } from "./task-client.js";
 /**
  * workspace-call.ts -- why a workspace call did not happen, and the result a call answers.
  *
- * Its own module, apart from the client, so the planning view, which the
+ * Its own module, apart from the client, so the tasks view, which the
  * window reads, takes the words without taking the client and the account
  * call behind it into the window's bundle.
  */

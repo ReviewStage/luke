@@ -18,10 +18,9 @@ import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**
  * pull-request-mark.test.ts -- a pull request reads the same wherever the
- * window draws it: a sidebar plan's card, its agent's chip, the row a
- * transcript ends on, and its Changes tab's card each wear one mark, its
- * glyph for where it stands, the state the colour is keyed on, and the
- * words a reader who cannot see it hears.
+ * window draws it: a sidebar task's card, its agent's chip, the row a
+ * transcript ends on, and its Changes tab's card each wear one mark saying
+ * the words a reader who cannot see it hears.
  */
 
 const AGENT: CodingAgentSummary = {
@@ -83,28 +82,18 @@ function places(drawn: CodingAgentPullRequest): ReadonlyMap<string, ReactElement
   ]);
 }
 
-/** The pull request's mark as a place draws it: its glyph, its state, whether it says the checks failed, and its words. */
-function markOf(place: ReactElement): Record<string, string | null> | undefined {
+/** The words the pull request's mark says as a place draws it. */
+function markOf(place: ReactElement): string | null | undefined {
   const page = new DOMParser().parseFromString(renderToStaticMarkup(place), "text/html");
   const mark = page.querySelector("[data-pull-request-mark]");
   if (mark === null) return undefined;
-  return {
-    glyph: [...mark.classList].find((name) => name.startsWith("lucide-")) ?? null,
-    state: mark.getAttribute("data-pull-request-state"),
-    failing: mark.getAttribute("data-failing"),
-    label: mark.getAttribute("aria-label"),
-  };
+  return mark.getAttribute("aria-label");
 }
 
-test("a closed pull request whose checks failed wears one mark wherever it is drawn", () => {
+test("a closed pull request whose checks failed says so wherever it is drawn", () => {
   const drawn = places(pullRequest(PULL_REQUEST_STATE.CLOSED, CHECK_SUMMARY.FAILING));
-  const expected = {
-    glyph: "lucide-git-pull-request-closed",
-    state: PULL_REQUEST_STATE.CLOSED,
-    failing: "true",
-    label: "Pull request #42, closed, checks failing",
-  };
-  for (const [place, element] of drawn) assert.deepEqual(markOf(element), expected, place);
+  const expected = "Pull request #42, closed, checks failing";
+  for (const [place, element] of drawn) assert.equal(markOf(element), expected, place);
 });
 
 test("the agent's chip, which names the pull request in words of its own, says its checks failed too", () => {
@@ -119,13 +108,8 @@ test("the agent's chip, which names the pull request in words of its own, says i
   );
 });
 
-test("a merged pull request wears the merge glyph wherever it is drawn, its checks unsaid", () => {
+test("a merged pull request says so wherever it is drawn, its checks unsaid", () => {
   const drawn = places(pullRequest(PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING));
-  const expected = {
-    glyph: "lucide-git-merge",
-    state: PULL_REQUEST_STATE.MERGED,
-    failing: "false",
-    label: "Pull request #42, merged",
-  };
-  for (const [place, element] of drawn) assert.deepEqual(markOf(element), expected, place);
+  const expected = "Pull request #42, merged";
+  for (const [place, element] of drawn) assert.equal(markOf(element), expected, place);
 });

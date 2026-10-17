@@ -310,6 +310,8 @@ export const chatAskSchema = EffectSchema.Struct({
   needsReply: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
+export type ChatAsk = typeof chatAskSchema.Type;
+
 const postFields = {
   text: filledText(CHAT_BOUNDS.MAX_TEXT_CHARS),
   to: EffectSchema.optionalKey(chatTargetSchema),

@@ -546,7 +546,7 @@ function knownToolView(
   }
 }
 
-/** A repository command's answer as the planning model's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
+/** A repository command's answer as the brain's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
 function repositoryOutput(output: WireValue): ToolBlock {
   const reason = stringAt(output, "reason");
   if (stringAt(output, "status") === "not-run" && reason !== undefined) return textBlock(reason);
@@ -561,7 +561,7 @@ function shownLines(input: WireValue | undefined): string {
   return fileRefText({ path, startLine, endLine });
 }
 
-/** A planning call whose input is one field the row names it by, its answer as its JSON. */
+/** A brain call whose input is one field the row names it by, its answer as its JSON. */
 function namedCall(
   kind: CallKind,
   input: WireValue | undefined,
@@ -596,8 +596,8 @@ function stoppedTask(input: WireValue | undefined, jobs: WorkerJobs | undefined)
 }
 
 /**
- * A call of one of the planning model's own tools, or one eve gives a
- * planning session, drawn from its part as a coding agent's call is: its
+ * A call of one of the brain's own tools, or one eve gives a
+ * brain session, drawn from its part as a coding agent's call is: its
  * kind and the one input a reader looks for first. A look at the board
  * answers with an image of it, which is nothing to read, so it shows none;
  * a look at one of the plan's pictures is kept as whether it looked alone,
@@ -724,17 +724,17 @@ export function toolCallView(input: {
 
 /** What a call's row may open: something the window already draws in a tab of its own. */
 export const TOOL_TARGET = {
-  /** A coding agent's tab in the plan's column. */
+  /** A coding agent's tab in the task's column. */
   AGENT: "agent",
   /** A page's tab in the side panel. */
   PAGE: "page",
   /** The side panel's Board tab. */
   BOARD: "board",
-  /** The plan's own tab, its document. */
+  /** The task's own tab, its document. */
   PLAN: "plan",
   /** The File tab of a file Luke showed, its lines lit as the call showed them. */
   SHOWN_CODE: "shown-code",
-  /** The plan's Inbox tab. */
+  /** The task's Inbox tab. */
   INBOX: "inbox",
 } as const;
 
@@ -910,7 +910,7 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   return id === undefined && title === undefined ? undefined : { id, title };
 }
 
-/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the planning model's worker is handed in the task's place. */
+/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the brain's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
   MESSAGE: "message",

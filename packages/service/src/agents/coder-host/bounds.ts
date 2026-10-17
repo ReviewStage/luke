@@ -5,7 +5,7 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
  * bounds.ts -- the bounds and names the coding-agent host runs under.
  *
  * A coding agent is one eve session over a `coding_agent` conversation, run
- * by the second eve service beside the planning brain: the same door, the
+ * by the second eve service beside the brain: the same door, the
  * same conversation admission, the same relay into the store, under a
  * different agent. What differs is named here: how long its sandbox may
  * live and how large it is, how often the repository credential at its
@@ -43,7 +43,7 @@ export const CODER = {
    * own default, written down so the two cannot drift apart.
    */
   COMPACTION_THRESHOLD_SHARE: 0.9,
-  /** Where the agent's checkout stands in its sandbox, which is where the planning checkout stands too. */
+  /** Where the agent's checkout stands in its sandbox, which is where the brain's checkout stands too. */
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /** The branches an agent works on; an instruction to the model, enforced by nothing. */
   BRANCH_PREFIX: "luke/",

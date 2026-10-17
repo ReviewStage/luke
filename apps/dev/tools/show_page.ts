@@ -6,9 +6,9 @@ import { defineDynamic, defineTool } from "eve/tools";
 import { offeredPlanTools, runShowPageTool } from "../host.js";
 
 /**
- * show_page.ts -- the agent shows the developer an interactive HTML page in the plan's side panel, or a new version of one.
+ * show_page.ts -- the agent shows the developer an interactive HTML page in the task's side panel, or a new version of one.
  *
- * The planning model's tool too, one implementation for both
+ * The brain's tool too, one implementation for both
  * (`packages/service/src/plans/page-tool.ts`). The call reaches the store through the
  * host's door (`../host.ts`), as `post_to_inbox` does, and a page named by
  * its path is read from the session's sandbox through the same door eve

@@ -1,5 +1,5 @@
 /**
- * command-palette.tsx -- ⌘K: the plans, the open plan's agents and files, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
+ * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
  *
  * The palette is cmdk's own dialog, list, and keys, drawn in the window's
  * menu rows, under a row of filters as Cursor's palette has them: All, then
@@ -13,11 +13,11 @@
  *
  * It decides nothing about a command: it lists the commands whose control is
  * on screen and able right now (`app-commands.ts`), so a row runs exactly
- * what its shortcut would, Delete plan's question included, and it opens a
- * plan through the same select the sidebar does, which takes its ask back
- * when the host does not open the plan. Each plan names its repository
- * beside it, so two plans of one name can be told apart, and an archived
- * plan says so. An agent opens its tab as the column's "+" would, hanging
+ * what its shortcut would, Delete task's question included, and it opens a
+ * task through the same select the sidebar does, which takes its ask back
+ * when the host does not open the task. Each task names its repository
+ * beside it, so two tasks of one name can be told apart, and an archived
+ * task says so. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
  * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
  * says so, its own page, a subagent
@@ -26,7 +26,7 @@
  * sidebar's row for it does, and a setting lands on its row as the settings
  * search does. The pages are the sidebar's own list, and a page found ranks
  * above every setting found, so "voice" offers the page before its rows. The
- * files are the open plan's repository read whole in the one listing the File
+ * files are the open task's repository read whole in the one listing the File
  * tab's search reads, the first time a file is searched, and fuzzy-matched on
  * their paths.
  *
@@ -40,7 +40,7 @@
  *
  * Every row's value is its place in the list, never words: cmdk writes it
  * into an attribute, which the session recording does not mask
- * (`session-replay.ts`), and two plans may share a name. The search reads
+ * (`session-replay.ts`), and two tasks may share a name. The search reads
  * each row's words instead.
  */
 
@@ -148,7 +148,7 @@ const KIND_ROWS = {
 /** The first row's value: rows are valued by their place in the list, from one. */
 const FIRST_ROW = "1";
 
-/** How far the read of the open plan's files has come: asked, listed, or not listed and why. */
+/** How far the read of the open task's files has come: asked, listed, or not listed and why. */
 const FILES_READ = {
   READING: "reading",
   LISTED: "listed",
@@ -156,8 +156,8 @@ const FILES_READ = {
 } as const;
 
 /**
- * The open plan's repository as the palette read it, whole, in one listing:
- * which plan and repository it is of, and its files by path, or why they
+ * The open task's repository as the palette read it, whole, in one listing:
+ * which task and repository it is of, and its files by path, or why they
  * were not listed.
  */
 type FilesHeld = { taskId: string; repository: string } & FilesRead;
@@ -241,9 +241,9 @@ const COPY_LINK_TERMS = ["link", "share", "url"] as const;
 interface PaletteRow {
   icon?: React.ReactNode;
   label: string;
-  /** Muted words after the name: a plan's repository, an agent's plan, a setting's page. */
+  /** Muted words after the name: a task's repository, an agent's task, a setting's page. */
   detail?: string | undefined;
-  /** The workspace a plan is in where that is not the one listed, named by its tile and name before the detail. */
+  /** The workspace a task is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
   /** The mark at the row's end: a failed agent's, or a teammate's task's creator's face. */
   endMark?: React.JSX.Element | undefined;
@@ -272,7 +272,7 @@ const KEYWORD_SCORE = Number.MIN_VALUE;
 /**
  * The least of cmdk's scores the palette counts as a match. An abbreviation
  * of a row's words ("tgsb" for Toggle sidebar) scores above it, and letters
- * scattered through unrelated words ("palette" in Permanently delete plan)
+ * scattered through unrelated words ("palette" in Permanently delete task)
  * a tenth of it.
  */
 const LEAST_SCORE = 0.01;
@@ -385,7 +385,7 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
   return PALETTE_FILTERS[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
 }
 
-/** A plan's muted words: its repository, and whether it is archived. */
+/** A task's muted words: its repository, and whether it is archived. */
 function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
   const words = [task.repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
   return words.length === 0 ? undefined : words.join(" · ");
@@ -395,7 +395,7 @@ function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
  * Every plan, the pinned first, then the rest by their last activity
  * (`taskTime`), then the archived ones, each
  * in its tab's look, an archived one saying so in its detail. Within each,
- * the listed workspace's plans come first and every other workspace's after
+ * the listed workspace's tasks come first and every other workspace's after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it.
  */
@@ -463,11 +463,11 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 }
 
 /**
- * The open plan's Inbox and coding agents, as the column's "+" lists them,
+ * The open task's Inbox and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
  * lists them, then its archived agents (`archivedAgentRows`), each in its
- * row's look and words, found by its row's words, and beside the plan's
- * name; none while no plan is open. An agent opens as
+ * row's look and words, found by its row's words, and beside the task's
+ * name; none while no task is open. An agent opens as
  * its notification's click opens it, the Inbox the same way, and a
  * subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
@@ -877,7 +877,7 @@ export function CommandPalette({
     rows: SettingsSearchInput | undefined;
     onViewChange: (view: SettingsView) => void;
   };
-  /** Lists everything in the plan's repository in one read, which the Files rows are. */
+  /** Lists everything in the task's repository in one read, which the Files rows are. */
   readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -921,7 +921,7 @@ export function CommandPalette({
 
   // Note that what was chosen runs once the palette is gone and focus is
   // back where it was, because a command that moves focus (Delete's
-  // question, the New plan dialog's field) would otherwise lose it to the palette's
+  // question, the New task dialog's field) would otherwise lose it to the palette's
   // own going. The field takes focus as the palette opens, as the dialog
   // gives it, and also where it opens again while it is still leaving,
   // which the dialog, never having let it go, does not give it again.
@@ -943,7 +943,7 @@ export function CommandPalette({
     chosen.current = run;
     setOpen(false);
   };
-  // A plan, and an agent's tab, are always opened on the Plans tab, as a
+  // A task, and an agent's tab, are always opened on the Tasks tab, as a
   // press in the sidebar is.
   const onTasks = (run: () => void) =>
     choose(() => {
@@ -1004,7 +1004,7 @@ export function CommandPalette({
   const taskId = plans.activeTaskId;
   const repository =
     [...plans.tasks, ...plans.archived].find((task) => task.id === taskId)?.repository ?? null;
-  // The files held are the open plan's repository's, or none of its.
+  // The files held are the open task's repository's, or none of its.
   const held =
     files !== undefined && files.taskId === taskId && files.repository === repository
       ? files
@@ -1015,7 +1015,7 @@ export function CommandPalette({
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
-  // for a file, and kept for the opening while the plan and its repository
+  // for a file, and kept for the opening while the task and its repository
   // stay the same. A read that answers after a later one was asked is not
   // kept, since it may list an older branch than the later one does.
   useEffect(() => {

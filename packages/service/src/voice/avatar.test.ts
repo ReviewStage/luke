@@ -247,7 +247,7 @@ it.effect(
 );
 
 it.effect(
-  "a start naming a stock avatar mints Keyframe's persona for it and keeps it on the row, and one naming the default or none mints the deployment's",
+  "a start naming a stock avatar mints Keyframe's persona for it and keeps it on the row, and one naming none or one this service does not list mints the deployment's",
   () =>
     Effect.promise(async () => {
       const keyframe = scriptedKeyframe();
@@ -256,7 +256,8 @@ it.effect(
 
       const asks = [
         { requestId: "request-celia", avatar: VIDEO_AVATAR.CELIA },
-        { requestId: "request-default", avatar: VIDEO_AVATAR.DEFAULT },
+        // The `default` an earlier build stored is no avatar this service lists.
+        { requestId: "request-default", avatar: "default" },
         { requestId: "request-none" },
       ];
       for (const ask of asks) {

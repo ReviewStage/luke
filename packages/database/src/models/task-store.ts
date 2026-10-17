@@ -21,13 +21,13 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxAttachment } from "../schemas/inbox-attachment.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import { task } from "../schemas/plan.js";
-import { taskPin } from "../schemas/plan-pin.js";
 import { conversations } from "../schemas/storage.js";
+import { task } from "../schemas/task.js";
+import { taskPin } from "../schemas/task-pin.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
-import { followPlanArchive } from "./chat-store.js";
+import { followPlanArchive, movePlanChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
@@ -35,12 +35,12 @@ import { readTemplateAt } from "./plan-template-revisions.js";
 import { reachableTask, readAccountNames, taskReachableBy } from "./workspace-store.js";
 
 /**
- * task-store.ts -- the named plans of an account's workspaces, and the one document each holds.
+ * task-store.ts -- the named tasks of an account's workspaces, and the one document each holds.
  *
- * A plan is read and written by every member of the workspace it names,
+ * A task is read and written by every member of the workspace it names,
  * whichever of them started it. Every statement here names the account it
- * runs for beside the plan and gates on that account's membership
- * (`workspace-store.ts`), so a plan of a workspace the account is not in
+ * runs for beside the task and gates on that account's membership
+ * (`workspace-store.ts`), so a task of a workspace the account is not in
  * reads, saves, changes, and deletes exactly as an id that names nothing: as
  * no plan. An archive is a stamp on the row, so it is the workspace's and
  * reads alike for every member on every Mac; a pin is the reading member's
@@ -49,42 +49,42 @@ import { reachableTask, readAccountNames, taskReachableBy } from "./workspace-st
  * handed and confirmed nowhere here: whether the account reaches it through
  * the Luke GitHub App is the route's to settle before it calls, on the
  * service that reads GitHub (`github/github-app.ts`), and so is whether the
- * account is a member of the workspace a plan starts in. A save is one `update` over the row that
- * stands and never an insert, so a plan deleted before a save lands stays
- * deleted, and a save that fails leaves the document as it was. A plan's
+ * account is a member of the workspace a task starts in. A save is one `update` over the row that
+ * stands and never an insert, so a task deleted before a save lands stays
+ * deleted, and a save that fails leaves the document as it was. A task's
  * conversation is a `task` conversation of the member who opened it, opened
- * once and named on the row, and it goes with the plan: deleting the plan stamps it
- * `deleted_at`, and the conversations of the plan's coding agents with it,
+ * once and named on the row, and it goes with the task: deleting the task stamps it
+ * `deleted_at`, and the conversations of the task's coding agents with it,
  * so the purge takes their words thirty days on. Every function is an effect over the ambient `SqlClient` and names
  * no database of its own.
  */
 
 export type TaskStoreFailure = QueryError | Schema.SchemaError;
 
-/** What a plan store operation answers: an effect over the ambient client, composed into whatever called it. */
+/** What a task store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type TaskStoreEffect<A> = Effect.Effect<A, TaskStoreFailure, DatabaseServices>;
 
-/** The plan is archived, so it takes the write asked of it only once it is brought back; nothing was written. */
+/** The task is archived, so it takes the write asked of it only once it is brought back; nothing was written. */
 export class TaskArchived extends Data.TaggedError("TaskArchived") {}
 
-/** A coding agent stands on the plan that its delete was not told was stopped: one started while the delete stopped the others. */
+/** A coding agent stands on the task that its delete was not told was stopped: one started while the delete stopped the others. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
-/** What a delete that stopped the plan's agents first tells it. */
+/** What a delete that stopped the task's agents first tells it. */
 export interface TaskDeleteGuard<R> {
   /** The agents the caller stopped; any other standing refuses the delete. */
   readonly stoppedAgentIds: ReadonlySet<string>;
-  /** Run under the plan's lock before anything is deleted, given the plan's conversation and each agent's. */
+  /** Run under the task's lock before anything is deleted, given the task's conversation and each agent's. */
   readonly beforeDelete: (
     conversationIds: readonly string[],
   ) => Effect.Effect<void, QueryError | Schema.SchemaError, R>;
 }
 
 /**
- * What a change that moves a plan runs first: given the repository the row
+ * What a change that moves a task runs first: given the repository the row
  * names under its lock, the caller's confirmation that the workspace it moves
  * to reaches it, so a repository changed while the move was asked cannot
- * ride into a workspace that does not reach it. Its failure leaves the plan
+ * ride into a workspace that does not reach it. Its failure leaves the task
  * unchanged.
  */
 export type TaskMoveGuard<E, R> = (repository: string | null) => Effect.Effect<void, E, R>;
@@ -95,19 +95,19 @@ export interface LabelledAgentEdit extends PlanAgentEdit {
 }
 
 /**
- * A plan as the service holds it: what the window reads, its text, the saves
+ * A task as the service holds it: what the window reads, its text, the saves
  * coding agents made with their notes, and the conversation it resumes in, if
  * one is attached.
  */
 export interface StoredTask {
   readonly task: Task;
-  /** The account that started the plan, the one that may move it to another workspace. */
+  /** The account that started the task, the one that may move it to another workspace. */
   readonly ownerId: string;
   /** The plan's whole text. */
   readonly text: string;
   readonly agentEdits: readonly LabelledAgentEdit[];
   readonly conversationId: string | undefined;
-  /** Whether the text was ever saved since the plan started: false while nobody has written it. */
+  /** Whether the text was ever saved since the task started: false while nobody has written it. */
   readonly saved: boolean;
   /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
   readonly sectionWriters: readonly PlanSectionWriter[];
@@ -132,7 +132,7 @@ export interface NewTask {
 }
 
 /**
- * What a change to a plan names: a new name, a repository or null to clear
+ * What a change to a task names: a new name, a repository or null to clear
  * it, pinned or not, archived or not, the workspace it moves to, or any of
  * them at once. A move is its owner's alone, into a workspace they are a
  * member of, which the caller confirms first.
@@ -151,7 +151,7 @@ export interface TaskChanges {
  * The columns a line of the list reads: none of the document. Note that the
  * list projects these alone, because a migration that reshapes the document
  * lands before the build that reads the new shape is live, and a list that
- * decoded the document would then refuse every plan rather than just the one
+ * decoded the document would then refuse every task rather than just the one
  * opened.
  */
 const TASK_SUMMARY_COLUMNS = {
@@ -205,7 +205,7 @@ const TaskListRowSchema = Schema.Struct({
 const TaskRowSchema = Schema.Struct({
   ...TaskSummaryRowSchema.fields,
   agentEdits: Schema.Array(planAgentEditSchema),
-  // Every plan is one document since the backfill, so a row with none is the store breaking its own contract.
+  // Every task is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
   conversationId: Schema.NullOr(Schema.String),
   linearIssue: Schema.NullOr(taskLinearIssueSchema),
@@ -358,7 +358,7 @@ function startedText(row: TaskRow): TaskStoreEffect<string> {
  * document's body with no assumptions, since they are a section of the text,
  * and who last changed each section, as its revisions read. The row's own account is the one its
  * agents are read under. Its last edit is its newest revision, or, before its
- * history begins, the newest save a coding agent made. A plan is saved once
+ * history begins, the newest save a coding agent made. A task is saved once
  * a save has moved its last save past its start, which no creation and no
  * carrying over does.
  */
@@ -511,7 +511,7 @@ const replaceText = SqlSchema.findOneOption({
     ),
 });
 
-/** The plan row under its own lock, so a change and a save of the same plan run one after the other. */
+/** The task row under its own lock, so a change and a save of the same task run one after the other. */
 const lockTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: TaskRowSchema,
@@ -564,7 +564,7 @@ const TaskConversationRowSchema = Schema.Struct({
   conversationDeletedAt: Schema.NullOr(InstantColumnSchema),
 });
 
-/** The plan row under its own lock, with the conversation it names, the member who opened it, and whether it still stands. */
+/** The task row under its own lock, with the conversation it names, the member who opened it, and whether it still stands. */
 const lockTaskConversation = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: TaskConversationRowSchema,
@@ -624,7 +624,7 @@ const stampConversations = SqlSchema.findAll({
 });
 
 /**
- * The plan's calls that have ended, and with them the words said on each,
+ * The task's calls that have ended, and with them the words said on each,
  * which cascade with the session. A call still open is left to the sweep
  * (`purgeDeletedTaskCalls`), since the voice service still writes it and
  * the orphan sweep may still have to end it on Luke's key.
@@ -645,7 +645,7 @@ const removeEndedCalls = SqlSchema.void({
     ),
 });
 
-/** The conversations of the plan's coding agents, read before the delete cascades the rows that name them. */
+/** The conversations of the task's coding agents, read before the delete cascades the rows that name them. */
 const findAgentConversations = SqlSchema.findAll({
   Request: TaskKeySchema,
   Result: Schema.Struct({ id: Schema.String, conversationId: Schema.String }),
@@ -661,7 +661,7 @@ const findAgentConversations = SqlSchema.findAll({
 
 /**
  * Only a standing conversation of the same account may be attached, so the
- * association can name nothing the plan's owner could not read themselves.
+ * association can name nothing the task's owner could not read themselves.
  */
 const setConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -711,7 +711,7 @@ export function readStartedText(userId: string, createdAt: number): TaskStoreEff
 }
 
 /**
- * Starts a plan under the account, in the workspace it was handed, as one
+ * Starts a task under the account, in the workspace it was handed, as one
  * document, a copy of the account's own template or the default where it
  * keeps none, or empty where it skips its planning phase, with the
  * repository it was handed; it stands first in the list. A plan handed no
@@ -742,9 +742,9 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
 }
 
 /**
- * Every plan of every workspace the account is a member of, newest started first, without their documents,
+ * Every task of every workspace the account is a member of, newest started first, without their documents,
  * and without the archived ones unless `includeArchived` asks for them.
- * Nothing but starting a plan moves the order: opening, reading, saving,
+ * Nothing but starting a task moves the order: opening, reading, saving,
  * pinning, and archiving one leave every row where it stood, and the order a
  * pin draws is the window's to draw from `pinPosition` and `pinnedAt`.
  */
@@ -766,9 +766,9 @@ export function listTasks(
 }
 
 /**
- * The plan with its saved document and its conversation, or nothing for a
- * plan of a workspace the account is not in. This is the read the window opens a plan
- * through and the planning model starts and resumes from.
+ * The task with its saved document and its conversation, or nothing for a
+ * task of a workspace the account is not in. This is the read the window opens a task
+ * through and the brain starts and resumes from.
  */
 export function readTask(
   userId: string,
@@ -780,7 +780,7 @@ export function readTask(
 }
 
 /**
- * The plan as `readTask` reads it, held under the row's lock until the
+ * The task as `readTask` reads it, held under the row's lock until the
  * enclosing transaction ends, so a save formatted from it is not crossed by
  * a rename.
  */
@@ -800,9 +800,9 @@ export interface PlanTextSaveExtras {
 }
 
 /**
- * Replaces the text of a plan that is one document, with the agents' journal
+ * Replaces the text of a task that is one document, with the agents' journal
  * where it is handed, stamps the plan's pictures the text names as saved, and answers
- * the plan as saved, or nothing where the account reaches no such plan; nothing
+ * the task as saved, or nothing where the account reaches no such task; nothing
  * is ever created here.
  */
 export function savePlanText(
@@ -863,8 +863,8 @@ function pinAsAsked(
 }
 
 /**
- * The plan's automations moved along with it: their workspace and their
- * repository follow the plan's, so a plan moved to another workspace, or
+ * The task's automations moved along with it: their workspace and their
+ * repository follow the task's, so a task moved to another workspace, or
  * given another repository, leaves no automation naming the old one; one
  * moved into a personal workspace becomes personal, as everything there is.
  */
@@ -889,8 +889,9 @@ const followingAutomations = SqlSchema.void({
 });
 
 /**
- * The plan's agents and inbox moved along with it to another workspace, so
- * no row of the plan's stays tied to the workspace it left, whose deletion
+ * The task's agents and inbox moved along with it to another workspace, its
+ * chat after them (`chat-store.ts`'s `movePlanChat`), so
+ * no row of the task's stays tied to the workspace it left, whose deletion
  * would otherwise take them with it.
  */
 const followingAgentsAndInbox = Effect.fnUntraced(function* (
@@ -909,16 +910,16 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
 });
 
 /**
- * Changes the plan, a new name with its document's heading, a repository or
+ * Changes the task, a new name with its document's heading, a repository or
  * none, pinned or not, archived or not, its workspace, and answers it as
- * changed, or nothing where the account reaches no such plan. The changes
+ * changed, or nothing where the account reaches no such task. The changes
  * arrive already read under the wire's rules, and a repository already
  * confirmed reachable; a move runs the caller's guard under the row's lock
- * on the repository the plan will name once it lands. A change is
+ * on the repository the task will name once it lands. A change is
  * not a save: the document's `updatedAt` and the list's order stand. The pin
  * is the account's own and no other member's, and a pin
- * and an archive are kept apart, so a pinned plan archived and brought back
- * is pinned again. An archived plan is neither renamed nor given another
+ * and an archive are kept apart, so a pinned task archived and brought back
+ * is pinned again. An archived task is neither renamed nor given another
  * repository, read under the same lock, unless the same change brings it
  * back; its pin and its archive still change.
  */
@@ -966,6 +967,7 @@ export function updateTask<E = never, R = never>(
         }
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId);
+          yield* movePlanChat(taskId, row.organizationId);
         }
         if (changes.archived !== undefined) yield* followPlanArchive(taskId, row.archivedAt);
         return Option.some(yield* taskOf(userId, row));
@@ -975,20 +977,20 @@ export function updateTask<E = never, R = never>(
 }
 
 /**
- * Deletes the plan, its document, and its ended calls with what was said on
+ * Deletes the task, its document, and its ended calls with what was said on
  * them, and stamps its conversation and its coding agents' conversations
- * cleared; false where the account reached no such plan. The agents'
+ * cleared; false where the account reached no such task. The agents'
  * conversations are read before the delete, because the delete cascades
  * the agent rows that name them.
  *
- * A caller that stopped the plan's agents first names the ones it stopped,
+ * A caller that stopped the task's agents first names the ones it stopped,
  * and the delete fails with `PlanAgentUnstopped` where any other stands. The
- * plan's row is locked before the agents are read, so a Start racing the
+ * task's row is locked before the agents are read, so a Start racing the
  * delete either landed its agent before the read, which then refuses, or
- * waits on the lock and finds no plan to start on. What the caller hands
+ * waits on the lock and finds no task to start on. What the caller hands
  * `beforeDelete` runs under that lock once no other agent stands and before
- * anything goes, given the plan's conversation and each agent's, so what it
- * does to them happens only to a plan that is deleted.
+ * anything goes, given the task's conversation and each agent's, so what it
+ * does to them happens only to a task that is deleted.
  */
 export function deleteTask<R = never>(
   userId: string,
@@ -1024,8 +1026,8 @@ export function deleteTask<R = never>(
 }
 
 /**
- * Names the conversation the plan resumes in. False, and nothing written,
- * where the account reaches no such plan or no such standing conversation.
+ * Names the conversation the task resumes in. False, and nothing written,
+ * where the account reaches no such task or no such standing conversation.
  */
 export function attachTaskConversation(
   userId: string,
@@ -1035,19 +1037,19 @@ export function attachTaskConversation(
   return Effect.map(setConversation({ userId, taskId, conversationId }), Option.isSome);
 }
 
-/** A plan's conversation as the store addresses it: its id and the member who opened it, whose id its rows are written under. */
+/** A task's conversation as the store addresses it: its id and the member who opened it, whose id its rows are written under. */
 export interface TaskConversation {
   readonly conversationId: string;
   readonly ownerId: string;
 }
 
 /**
- * The conversation the plan's planning model runs in, opened and attached
- * now where the plan names none that still stands; nothing where the account
- * reaches no such plan. A conversation a teammate opened is answered as
- * theirs, so the caller speaks into the plan's one conversation rather than
- * opening a second; one opened here is the caller's own. The plan row's
- * lock holds two opens of one plan one after the other, so the second finds
+ * The conversation the task's brain runs in, opened and attached
+ * now where the task names none that still stands; nothing where the account
+ * reaches no such task. A conversation a teammate opened is answered as
+ * theirs, so the caller speaks into the task's one conversation rather than
+ * opening a second; one opened here is the caller's own. The task row's
+ * lock holds two opens of one task one after the other, so the second finds
  * the first's conversation rather than opening another.
  */
 export function openTaskConversation(
@@ -1082,10 +1084,10 @@ export function openTaskConversation(
 }
 
 /**
- * The plan a conversation belongs to, with its saved document; nothing for a
- * conversation no plan the account reaches names. This is how a
- * planning turn, admitted for a conversation, finds the document it is handed
- * and the plan whose repository its reads are bound to.
+ * The task a conversation belongs to, with its saved document; nothing for a
+ * conversation no task the account reaches names. This is how a
+ * brain turn, admitted for a conversation, finds the document it is handed
+ * and the task whose repository its reads are bound to.
  */
 export function readTaskOfConversation(
   userId: string,

@@ -55,7 +55,7 @@ export interface HostedStore {
   retention: {
     /** The cron's purge of every conversation, of any account, stamped past the retention window. */
     purgeCleared(now: Date): HostedStoreEffect<number>;
-    /** The cron's purge of the ended calls of every deleted plan, a sweep's worth: ended means closed, or started before `liveEdge`. */
+    /** The cron's purge of the ended calls of every deleted task, a sweep's worth: ended means closed, or started before `liveEdge`. */
     purgeDeletedTaskCalls(liveEdge: Date): HostedStoreEffect<number>;
   };
 }

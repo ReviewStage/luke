@@ -24,7 +24,7 @@ export {
  * write. A session is admitted for a conversation only when the conversation
  * the session was opened for exists, is not cleared, and the current caller
  * reaches it: the account that opened it, or a member of the workspace whose
- * plan or coding agent it is (`recorded-session.ts`). A member speaks into
+ * task or coding agent it is (`recorded-session.ts`). A member speaks into
  * the session a teammate opened, so account B, a stranger to A's workspace,
  * can neither speak into A's session nor be shown A's rows through it, while
  * a teammate of A's can. The admission names both accounts: the caller, who
@@ -91,7 +91,7 @@ const findConversation = SqlSchema.findOneOption({
 
 /**
  * Whether the account reaches the conversation whose row the admission read:
- * through the workspace of the plan or agent that names it, or, for one no
+ * through the workspace of the task or agent that names it, or, for one no
  * work names, as its opener (`conversationReachableBy`).
  */
 function reaches(

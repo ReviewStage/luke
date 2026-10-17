@@ -5,7 +5,7 @@ import { useClipped } from "./use-clipped";
  * hover-card.tsx -- the parts every hover card is drawn from: its head, its notes, and its rule, in one type scale.
  *
  * A control with more to say than a pill hangs a card in the pill's place
- * (`tooltip.tsx`'s `card`), and every card the window hangs, a plan's, a
+ * (`tooltip.tsx`'s `card`), and every card the window hangs, a task's, a
  * pinned tab's, a skill's, an agent tab's, a summary row's, a Changes
  * tab's, a turn's, and a call's, says what it says in these parts, so the
  * same name reads at the same size wherever the pointer rests. The head is

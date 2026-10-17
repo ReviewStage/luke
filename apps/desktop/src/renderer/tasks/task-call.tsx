@@ -45,13 +45,13 @@ import {
 import { WorkingLine } from "./working-time";
 
 /**
- * task-call.tsx -- the open plan's Call tab: its calls with Luke as one thread, read as a coding agent's tab reads, Luke's work drawn under the line that asked for it.
+ * task-call.tsx -- the open task's Call tab: its calls with Luke as one thread, read as a coding agent's tab reads, Luke's work drawn under the line that asked for it.
  *
  * A call lands in the thread the way a voice call lands in a chat thread.
  * Every row is a coding agent tab's own (`AgentMessage`): the developer's
  * lines are the developer's bubbles, a run of them one bubble, and Luke's
  * spoken lines are the agent's messages, a Copy under each. The work a line
- * caused stands right under it (`call-thread.ts`), each planning turn drawn
+ * caused stands right under it (`call-thread.ts`), each brain turn drawn
  * as an agent's turn is, its calls grouped and, once it has finished,
  * folded behind one line, its subagents and the coding agents it started on
  * rows of their own, and how long it worked under it, its card on hover; a
@@ -386,10 +386,10 @@ export function TaskCall({
   reveal,
   video,
 }: {
-  /** What was said on the plan's calls, as the transcript reads it. */
+  /** What was said on the task's calls, as the transcript reads it. */
   region: TranscriptRegion;
   onRetry: () => void;
-  /** The plan's planning conversation as an agent's transcript is read, its newest turns and every older page read since; none before the first read lands. */
+  /** The task's conversation with the brain as an agent's transcript is read, its newest turns and every older page read since; none before the first read lands. */
   conversation: TaskConversation;
   callLive: boolean;
   /** Reads the page before the oldest turn drawn, which the conversation's `earlier` names; the view brings it. */

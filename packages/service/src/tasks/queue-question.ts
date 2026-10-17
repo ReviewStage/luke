@@ -10,7 +10,7 @@ import {
 } from "../core.js";
 
 /**
- * queue-question.ts -- the planning model's `queue_question` tool: one question handed to the voice the moment it is ready.
+ * queue-question.ts -- the brain's `queue_question` tool: one question handed to the voice the moment it is ready.
  *
  * Note that the call does nothing when it runs. What carries the question is
  * the call itself: the store journals a tool call's input before it runs, so
@@ -48,7 +48,7 @@ const QUEUE_QUESTION_INPUT = Schema.Struct({
   ),
 });
 
-/** A question the planning model queued, read back off its journaled call. */
+/** A question the brain queued, read back off its journaled call. */
 export type QueuedQuestion = typeof QUEUE_QUESTION_INPUT.Type;
 
 // Note that a journaled call's input is the stored row's, which the AI SDK types as unknown.
@@ -58,7 +58,7 @@ const WITHDRAW_QUESTION_INPUT = Schema.Struct({ question: QUESTION_TEXT });
 
 const readWithdrawnQuestion = Schema.decodeUnknownResult(WITHDRAW_QUESTION_INPUT);
 
-/** The tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The tool as the brain is offered it: its name, its words, and its input schema. */
 export const QUEUE_QUESTION_TOOL = {
   name: AGENT_TOOL.QUEUE_QUESTION,
   description:
@@ -86,7 +86,7 @@ export function runQueueQuestion(input: UnparsedWireValue): WireRecord {
     : { status: ACTION_RESULT_STATUS.ACCEPTED };
 }
 
-/** The tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The tool as the brain is offered it: its name, its words, and its input schema. */
 export const WITHDRAW_QUESTION_TOOL = {
   name: AGENT_TOOL.WITHDRAW_QUESTION,
   description:

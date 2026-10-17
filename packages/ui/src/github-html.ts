@@ -13,8 +13,14 @@
  * GitHub writes as a `<pre>` of coloured spans with no `<code>` in it, so
  * that its lines would run together. Each becomes a fenced block in its
  * language, which the window draws and colours as it does any
- * (`transcript-markdown.tsx`). Everything else GitHub writes, a heading's
- * permalink included, the sanitizer already leaves harmless.
+ * (`transcript-markdown.tsx`). It also drops every `<source>`, the themed
+ * pictures a bot's badge is written as (`<picture>` with a dark and a light
+ * `<source srcset>`) among them, because a browser draws a matching source
+ * in place of its `<img>`: the window would ask GitHub's image proxy itself,
+ * which its policy refuses, rather than draw the `<img>` the place reads
+ * through the service, and the picture would stand broken. Everything else
+ * GitHub writes, a heading's permalink included, the sanitizer already
+ * leaves harmless.
  */
 
 /** A property's value as the parsed tree holds it: HTML's own attribute values. */
@@ -69,6 +75,8 @@ function fenced(language: string, code: string): HtmlNode {
 /** What one node of GitHub's rendering becomes: itself, nodes in its place, or nothing. */
 function reshaped(node: HtmlNode): readonly HtmlNode[] {
   if (node.type !== "element") return [node];
+  // A source is an address the window would read itself; its picture's `<img>` stands alone.
+  if (node.tagName === "source") return [];
   const classes = classesOf(node);
   // A diagram's source stands in a block naming its language (`<pre lang="mermaid">`).
   const named = node.tagName === "pre" ? node.properties?.lang : undefined;

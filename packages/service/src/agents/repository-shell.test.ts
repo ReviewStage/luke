@@ -22,8 +22,8 @@ import {
 } from "./repository-shell.js";
 
 /**
- * The planning model's shell, run in the session's sandbox on a checkout of
- * the plan's repository: the first call checks the repository out and later
+ * The brain's shell, run in the session's sandbox on a checkout of
+ * the task's repository: the first call checks the repository out and later
  * calls reuse it, every refusal answers `not-run` with why, and the token the
  * checkout reads through reaches the sandbox's firewall and nothing else.
  * The sandbox is a double at eve's boundary, GitHub a script, and the store
@@ -33,7 +33,7 @@ import {
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
-/** An installation reaching the repository, under the id given: each test connects its own to its plan's workspace, since one installation stands for one workspace. */
+/** An installation reaching the repository, under the id given: each test connects its own to its task's workspace, since one installation stands for one workspace. */
 const installationOf = (id: number): InstallationFixture => ({
   id,
   login: RELAY.owner,
@@ -46,7 +46,7 @@ const LISTING = { exitCode: 0, stdout: "README.md\nsrc\n", stderr: "" } as const
 const COMMANDS: CommandTable = (command) =>
   command === "ls" ? LISTING : command === "cat secret" ? { ...LISTING, stdout: "x" } : undefined;
 
-/** An account holding one plan, on the repository given, in a workspace the installation is connected to, and the sandbox its session opens. */
+/** An account holding one task, on the repository given, in a workspace the installation is connected to, and the sandbox its session opens. */
 const openTask = (
   repository: string | null,
   installation: InstallationFixture,

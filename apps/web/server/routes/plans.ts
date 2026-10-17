@@ -5,7 +5,7 @@ import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { routeFromHttpRouter } from "../route-effect.js";
 
-/** The account's named plans: list them (GET) or start one (POST). */
+/** The account's named tasks: list them (GET) or start one (POST). */
 export default routeFromHttpRouter(
   tasksApp({
     resolveUserId: resolveHostedUserId,

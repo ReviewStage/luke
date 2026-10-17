@@ -60,17 +60,17 @@ import { codingAgentStatusOf } from "./status.js";
  * still writes the line when the turn receives it. The turn's checkout and
  * its credential renewals run on the developer's standing with GitHub, so
  * a sign-in that lapsed is refused here rather than failing the turn's
- * first step. The caller is any member of the agent's workspace, whose plan
- * read gates the send, or for an agent with no plan whose membership of its
+ * first step. The caller is any member of the agent's workspace, whose task
+ * read gates the send, or for an agent with no task whose membership of its
  * workspace does, and whose standing with GitHub is asked, while the
  * line lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
- * exactly this message (`coder-host/channel.ts`). An archived plan's agents
+ * exactly this message (`coder-host/channel.ts`). An archived task's agents
  * take no message, so a send to one is refused before eve is asked; a turn
- * already running when the plan was archived runs on to its end. An agent
+ * already running when the task was archived runs on to its end. An agent
  * archived on its own takes none either, and is refused as one that names
  * nothing, since every list leaves it out until it is brought back.
  */
@@ -139,7 +139,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   );
   if (repeated) return STEER_OUTCOME.REPEATED;
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  // An agent on a plan answers to the plan, read as the sender; one with no plan, to its workspace.
+  // An agent on a task answers to the task, read as the sender; one with no task, to its workspace.
   const held =
     agent.taskId === null
       ? undefined

@@ -1,7 +1,7 @@
 /**
  * turn-rows.ts -- what every transcript's turn shares: how its calls are named on their rows, and how its rows fold.
  *
- * Two tabs draw a model's turns, the Call tab the planning model's and an
+ * Two tabs draw a model's turns, the Call tab the brain's and an
  * agent's tab a coding agent's, each from the message its journal stored,
  * and each reads it into blocks of its own. What they share is decided
  * here, so the two never drift: a call is one of a few kinds, each with

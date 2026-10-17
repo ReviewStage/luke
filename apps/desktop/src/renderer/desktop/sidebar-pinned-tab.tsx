@@ -20,39 +20,39 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 import { CardDetail, PullRequestLine, RepositoryDetail } from "./task-card";
 
 /**
- * sidebar-pinned-tab.tsx -- a tab of the plan's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
+ * sidebar-pinned-tab.tsx -- a tab of the task's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
  *
  * A fixed tab, a file's, or an agent's Changes pinned from its menu in the side panel, or an
- * agent's from its menu in the plan's column, stands under Pinned beside
- * the pinned plans, as a row in the plan rows' own shape: the tab's glyph,
+ * agent's from its menu in the task's column, stands under Pinned beside
+ * the pinned tasks, as a row in the task rows' own shape: the tab's glyph,
  * an agent's its harness's mark wearing where it stands as its tab does,
  * and its name on one line, cut short with a fade as a tab is. Its hover card
- * is a plan card (`task-card.tsx`), drawn from its rows: the tab's whole
- * name after its glyph, then the plan it is of, which opens the plan, and
- * the plan's repository, which opens on GitHub, and for an agent's pin or
+ * is a task card (`task-card.tsx`), drawn from its rows: the tab's whole
+ * name after its glyph, then the task it is of, which opens the task, and
+ * the task's repository, which opens on GitHub, and for an agent's pin or
  * its Changes' the pull request it opened, which opens on GitHub too, once the one read of
- * it the card makes as it opens lands. A press opens the plan, where it is not the open one, and the tab
- * in its column: an agent's in the plan's column, any other in the side
+ * it the card makes as it opens lands. A press opens the task, where it is not the open one, and the tab
+ * in its column: an agent's in the task's column, any other in the side
  * panel, opening either where it is closed. The row it opened from is
- * then the one the sidebar marks, in its plan's row's place, for as long
- * as the plan stays open, whichever of the plan's tabs is shown, until the
- * plan's own row is pressed or another plan opens. Its Unpin stands at the row's end while it is hovered or
- * reached from the keyboard, in the plan rows' Pin and Archive style, and
+ * then the one the sidebar marks, in its task's row's place, for as long
+ * as the task stays open, whichever of the task's tabs is shown, until the
+ * task's own row is pressed or another task opens. Its Unpin stands at the row's end while it is hovered or
+ * reached from the keyboard, in the task rows' Pin and Archive style, and
  * part of the row to its card, as theirs are, and
  * a right-click offers Unpin, beside an agent's two copies of its
- * transcript while its plan is open.
+ * transcript while its task is open.
  *
- * A pin outlives what it opens only on the open plan's word: an agent the
- * plan's agents no longer hold, its Changes too, or a file no longer among those Luke showed
+ * A pin outlives what it opens only on the open task's word: an agent the
+ * task's agents no longer hold, its Changes too, or a file no longer among those Luke showed
  * on it, leaves the row dimmed, opening nothing, with a quiet note on its
- * card, until it is unpinned. Another plan's pins are drawn as they were kept, since
- * nothing of that plan is read.
+ * card, until it is unpinned. Another task's pins are drawn as they were kept, since
+ * nothing of that task is read.
  */
 
-/** What a pin's card says once its plan no longer holds what it opens. */
+/** What a pin's card says once its task no longer holds what it opens. */
 const GONE_NOTE = "No longer on this task";
 
-/** Whether the open plan has said the pin's agent, the agent of its Changes, or its file is gone from it; another plan's pins and a fixed tab's never are. */
+/** Whether the open task has said the pin's agent, the agent of its Changes, or its file is gone from it; another task's pins and a fixed tab's never are. */
 function pinGone(pin: PinnedTab, tasks: TasksControl): boolean {
   const { tab } = pin;
   if (pin.task !== tasks.activeTaskId) return false;
@@ -91,9 +91,9 @@ function pinAgentId({ tab }: PinnedTab): string | undefined {
 /**
  * A pin's actions in the groups a rule divides: an agent's two copies of
  * its transcript, read whole from the service, then Unpin. Note that the
- * copies stand only while the agent's plan is open, because a copy heads its
+ * copies stand only while the agent's task is open, because a copy heads its
  * brief as the plan or the prompt the agent was handed, which only the open
- * plan's agents say.
+ * task's agents say.
  */
 function pinActionGroups(
   pin: PinnedTab,
@@ -111,7 +111,13 @@ function pinActionGroups(
       ? tasks.agents.agents?.find((each) => each.id === tab.agent)
       : undefined;
   if (agent === undefined) return [[unpin]];
-  const read = agentTranscriptRead(tasks.agents.readTranscript, agent.id, pin.label, agent.brief);
+  const read = agentTranscriptRead(
+    tasks.agents.readTranscript,
+    agent.id,
+    pin.label,
+    agent.brief,
+    tasks.agents.chatOn,
+  );
   const copy = copied(read);
   return [
     [
@@ -132,7 +138,7 @@ function pinActionGroups(
 
 /**
  * The agent an agent's pin opens, as the window last read it: the open
- * plan's own list where the pin is on it, else the few agents its plan's
+ * task's own list where the pin is on it, else the few agents its task's
  * row names. Nothing for any other pin, or an agent neither names.
  */
 function pinAgent(
@@ -177,9 +183,9 @@ function usePinPullRequest(
 }
 
 /**
- * The card a pin's row hangs, a plan card's own rows: the tab's name after
- * its glyph as its row draws it, wrapped to two lines, then the plan it is of and the plan's
- * repository, each opening where it says, a note where the plan no longer
+ * The card a pin's row hangs, a task card's own rows: the tab's name after
+ * its glyph as its row draws it, wrapped to two lines, then the task it is of and the task's
+ * repository, each opening where it says, a note where the task no longer
  * holds the tab, and under a rule an agent's pull request.
  */
 function PinnedTabCard({
@@ -223,7 +229,7 @@ function PinnedTabCard({
 }
 
 /**
- * One tab pinned to the sidebar, on a plan the sidebar lists. Note that the
+ * One tab pinned to the sidebar, on a task the sidebar lists. Note that the
  * row only says it is unavailable rather than being disabled, because a
  * disabled button hears no right-click, and its menu's Unpin is what is
  * left to do with it.
@@ -239,14 +245,14 @@ export function SidebarPinnedTab({
 }: {
   tasks: TasksControl;
   pin: PinnedTab;
-  /** Whether the open plan was opened from this pin, which the sidebar marks in the plan's place. */
+  /** Whether the open task was opened from this pin, which the sidebar marks in the task's place. */
   current: boolean;
-  /** The plan the tab is of, whose name the row's card carries. */
+  /** The task the tab is of, whose name the row's card carries. */
   task: TaskSummary;
   /** Whether the sidebar is in sight: folded away, its menu stands over nothing. */
   inSight: boolean;
   onOpen: () => void;
-  /** Opens the plan the tab is of, as its own row does. */
+  /** Opens the task the tab is of, as its own row does. */
   onOpenTask: () => void;
 }): React.JSX.Element {
   const [words, clipped] = useClipped();

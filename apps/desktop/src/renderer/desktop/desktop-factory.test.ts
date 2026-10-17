@@ -21,9 +21,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
@@ -168,7 +166,7 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
   draw(plans);
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
   const redraw = (patch: Partial<TasksControl>) => draw({ ...plans, ...patch });
-  /** The same page drawn again over another read of the plan list. */
+  /** The same page drawn again over another read of the task list. */
   const rerender = (next: readonly TaskSummary[]) =>
     draw({ ...plans, tasks: next, listed: { ...plans.listed, tasks: next } });
   return { page: container, opened, redraw, rerender };
@@ -193,17 +191,6 @@ function row(page: HTMLElement, words: string): HTMLButtonElement {
   assert.ok(found, `${words} stands`);
   return found;
 }
-
-test("the stations' rows fade under the Factory bar as they scroll up beneath it, rather than being sliced at its hairline", () => {
-  const { page } = mount([DRAFT, SEARCH, BILLING, INVITES]);
-  const sheets = layFades();
-  try {
-    const scroller = page.querySelector(".factory-scroll") ?? assert.fail("the page scrolls");
-    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
-  } finally {
-    sheets.remove();
-  }
-});
 
 test("each plan stands in its station, and what waits on the developer leads the station it holds up, each row naming its task", () => {
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
@@ -847,52 +834,4 @@ test("an agent with no task stands in Build by its automation, opens its own pag
   assert.ok(copy);
   await act(async () => copy.click());
   assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${sweep.id}`]);
-});
-
-/** The line's width inside the scroller where the window leaves Factory this wide, less its insets. */
-const LINE = {
-  /** The window at its least width, 760, the sidebar folded. */
-  NARROWEST: 720,
-  /** A 1160 window beside the sidebar at its least, 200. */
-  BESIDE_SIDEBAR: 920,
-  /** A 1400 window beside the sidebar at its default, 264. */
-  WIDE: 1096,
-} as const;
-
-/** How the line stands at a width: its stations across or down, which of them share the room the others leave, and which draw on one line. */
-function lineAt(page: HTMLElement, width: number) {
-  const style = layContainersAt({ factory: width });
-  const line = page.querySelector(".factory-line-up") ?? assert.fail("the line stands");
-  const stations = [...line.querySelectorAll<HTMLElement>("section[data-step]")];
-  const named = (pick: (station: CSSStyleDeclaration) => boolean) =>
-    stations.filter((station) => pick(getComputedStyle(station))).map((each) => each.dataset.step);
-  const drawn = {
-    stations: getComputedStyle(line).flexDirection === "column" ? "stacked" : "across",
-    sharing: named((station) => station.flexGrow !== "0"),
-    oneLine: named((station) => station.flexDirection === "row"),
-  };
-  style.remove();
-  return drawn;
-}
-
-test("where three stations side by side could not each hold a readable row they stack, the idle Talk station one line over the rest; wide, they stand across, the idle one keeping to its words and the busy ones sharing the rest", () => {
-  const { page } = mount([DRAFT, SEARCH, BILLING, INVITES]);
-  assert.ok(page.querySelector('section[data-step="talk"] .factory-idle'), "Talk is idle");
-  const stacked = { stations: "stacked", sharing: [], oneLine: ["talk"] };
-  assert.deepEqual(lineAt(page, LINE.NARROWEST), stacked);
-  assert.deepEqual(lineAt(page, LINE.BESIDE_SIDEBAR), stacked);
-  assert.deepEqual(lineAt(page, LINE.WIDE), {
-    stations: "across",
-    sharing: ["build", "ship"],
-    oneLine: [],
-  });
-});
-
-test("a row's time ends the row whether or not it names a task beside its words, so the times stand in one column", () => {
-  const { page } = mount([DRAFT, SEARCH, BILLING, INVITES]);
-  const style = layContainersAt({});
-  const times = [...page.querySelectorAll<HTMLElement>(".factory-row .sidebar-task-time")];
-  assert.ok(times.length > 0);
-  for (const time of times) assert.equal(getComputedStyle(time).marginLeft, "auto");
-  style.remove();
 });

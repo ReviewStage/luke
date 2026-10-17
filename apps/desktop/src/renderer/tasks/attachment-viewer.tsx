@@ -7,15 +7,28 @@ import {
   sizeLabel,
 } from "@luke/features/attachment-model";
 import { CloseIcon } from "@luke/ui";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from "lucide-react";
 import { useId } from "react";
+import { SHORTCUT_KEY, type ShortcutChord } from "#shared/shortcuts";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { ModalShell } from "../modal-shell";
 import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
+import { type ImageZoom, useImageZoom } from "./use-image-zoom";
 
 /**
  * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a text file's numbered lines, or any other file by its icon with a way to save it.
+ *
+ * A picture opens fitted to the window and zooms as Preview's does: a pinch
+ * or a Control-scroll about the pointer, a press to its own pixels there
+ * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
+ * moved by a drag or a two-finger scroll (`./use-image-zoom.ts`).
  *
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
@@ -24,8 +37,8 @@ import { FileTypeIcon } from "./file-type-icon";
  * whatever the place opening it offers for a picture (Add to plan, in an
  * agent's transcript), Download, and the way out. It opens in the window's one modal frame
  * (`../modal-shell.tsx`): the window dims, Tab stays inside the card, and
- * Escape, a press on the dimmed window or on the image, and the way out all
- * close it and hand focus back to the chip that opened it. The
+ * Escape, a press on the dimmed window, and the way out all close it and
+ * hand focus back to the chip that opened it. The
  * file's bytes are the chip's own, so a file in the message box and one
  * read back with the transcript open the same. A message's files are its
  * developer's own, so the card is left out of the screen recording
@@ -40,9 +53,17 @@ const VIEWER_LABEL = {
   PREVIOUS: "Previous file",
   NEXT: "Next file",
   COPY: "Copy text",
+  ZOOM_OUT: "Zoom out",
+  ZOOM_IN: "Zoom in",
   DOWNLOAD: "Download",
   CLOSE: "Close",
 } as const;
+
+/** The bare keys a picture's zoom buttons name in their hints, which `./use-image-zoom.ts` answers. */
+const ZOOM_CHORD = {
+  IN: { key: SHORTCUT_KEY.EQUALS, plain: true },
+  OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
+} as const satisfies Record<string, ShortcutChord>;
 
 /** One more thing the viewer's picture may be given to: its button's words and glyph, and what a press does with the file shown. */
 export interface ViewerAction {
@@ -83,18 +104,20 @@ function CopyTextButton({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-/** One of the header's icon buttons, its name its hint. */
+/** One of the header's icon buttons, its name its hint, beside the key that does the same where there is one. */
 function HeaderButton({
   label,
+  chord,
   onClick,
   children,
 }: {
   label: string;
+  chord?: ShortcutChord;
   onClick: () => void;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Tooltip label={label}>
+    <Tooltip label={label} chord={chord}>
       <button type="button" className="icon-button" aria-label={label} onClick={onClick}>
         {children}
       </button>
@@ -107,18 +130,22 @@ function AttachmentBody({
   file,
   base64,
   text,
-  onClose,
+  zoom,
 }: {
   file: FileChip;
   base64: string;
   text: string | undefined;
-  onClose: () => void;
+  zoom: ImageZoom;
 }): React.JSX.Element {
   if (attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
     return (
-      <div className="attachment-viewer-body">
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: Escape and the way out are the keyboard's close; a press on the picture is the pointer's. */}
-        <img className="attachment-viewer-image" src={file.url} alt={file.name} onClick={onClose} />
+      <div ref={zoom.frameRef} className="attachment-viewer-body">
+        <img
+          className="attachment-viewer-image"
+          src={file.url}
+          alt={file.name}
+          {...zoom.imageProps}
+        />
       </div>
     );
   }
@@ -173,6 +200,7 @@ export function AttachmentViewer({
 }): React.JSX.Element | null {
   const titleId = useId();
   const file = files[at];
+  const zoom = useImageZoom(file?.name ?? "", file?.url ?? "");
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);
@@ -181,9 +209,14 @@ export function AttachmentViewer({
   // because a button that went disabled under the pointer would drop the
   // keyboard's focus out of the card.
   const walk = (step: number) => onAt((at + step + files.length) % files.length);
-  // The arrows walk the message's files; a key's own default, a copy of the
-  // lines selected among them, is left alone.
+  const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
+  // The arrows walk the message's files, and a picture's zoom keys zoom it;
+  // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (image && zoom.keyDown(event)) {
+      event.preventDefault();
+      return;
+    }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     walk(event.key === "ArrowLeft" ? -1 : 1);
@@ -224,7 +257,25 @@ export function AttachmentViewer({
           </div>
         ) : null}
         {text === undefined ? null : <CopyTextButton text={text} />}
-        {action === undefined || attachmentView(file) !== ATTACHMENT_VIEW.IMAGE ? null : (
+        {image ? (
+          <>
+            <HeaderButton
+              label={VIEWER_LABEL.ZOOM_OUT}
+              chord={ZOOM_CHORD.OUT}
+              onClick={() => zoom.step(-1)}
+            >
+              <ZoomOutIcon aria-hidden="true" />
+            </HeaderButton>
+            <HeaderButton
+              label={VIEWER_LABEL.ZOOM_IN}
+              chord={ZOOM_CHORD.IN}
+              onClick={() => zoom.step(1)}
+            >
+              <ZoomInIcon aria-hidden="true" />
+            </HeaderButton>
+          </>
+        ) : null}
+        {action === undefined || !image ? null : (
           <button type="button" className="toolbar-button" onClick={() => action.onPress(file)}>
             {action.icon}
             {action.label}
@@ -237,7 +288,7 @@ export function AttachmentViewer({
           <CloseIcon />
         </HeaderButton>
       </header>
-      <AttachmentBody key={at} file={file} base64={base64} text={text} onClose={onClose} />
+      <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
     </ModalShell>
   );
 }

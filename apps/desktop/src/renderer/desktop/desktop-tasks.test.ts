@@ -13,7 +13,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
@@ -550,89 +550,49 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
   inbox.unmount();
 });
 
-test("the crumb's workspace opens that workspace's home page, the window switching to it first where another is listed", () => {
-  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null };
-  const personal = { ...acme, id: TASK.workspaceId, name: "Personal" };
-  const asked: string[] = [];
-  const pressHome = (listed: typeof acme) => {
-    const container = document.body.appendChild(document.createElement("div"));
-    const root = createRoot(container);
-    act(() =>
-      root.render(
-        onRegistry(
-          AtomRegistry.make(),
-          createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
-            looks: NO_LOOKS,
-            tasks: tasksControl({
-              page: TASKS_PAGE.DOCUMENT,
-              activeTaskId: TASK.id,
-              region: { kind: DOCUMENT_REGION.READY, task: TASK },
-              workspaces: [personal, acme],
-              workspace: listed,
-              onChooseWorkspace: (workspaceId) => asked.push(`choose ${workspaceId}`),
-              onGoHome: () => asked.push("home"),
-            }),
-          }),
-        ),
-      ),
-    );
-    const crumb = container.querySelector<HTMLButtonElement>(
-      'nav[aria-label="Where this task is"] button.task-crumb-item',
-    );
-    assert.ok(crumb, "the crumb names the plan's workspace");
-    act(() => crumb.click());
-    act(() => root.unmount());
-    container.remove();
-  };
-
-  pressHome(personal);
-  pressHome(acme);
-
-  assert.deepEqual(asked, ["home", `choose ${personal.id}`, "home"]);
-});
-
-test("the crumb says the task's repository as the sidebar does: its name alone, or owner/name where another listed shares the name", () => {
+test("a plan's document opens on its Edited by line, with no crumb over it", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
     role: WORKSPACE_ROLE.MEMBER,
     github: null,
   };
-  const task = { ...TASK, repository: "acme/web" };
-  const summary = { ...task, updatedAt: 2 };
-  const said = (others: readonly string[]) => {
-    const container = document.body.appendChild(document.createElement("div"));
-    const root = createRoot(container);
-    const listed = others.map((repository, at) => ({
-      ...summary,
-      id: `plan-${at}`,
-      repository,
-    }));
-    act(() =>
-      root.render(
-        onRegistry(
-          AtomRegistry.make(),
-          createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
-            looks: NO_LOOKS,
-            tasks: tasksControl({
-              page: TASKS_PAGE.DOCUMENT,
-              activeTaskId: task.id,
-              region: { kind: DOCUMENT_REGION.READY, task: task },
-              workspaces: [home],
-              workspace: home,
-              tasks: [summary, ...listed],
-            }),
-          }),
-        ),
-      ),
-    );
-    const words = container.querySelector(".task-crumb-repository")?.textContent;
-    act(() => root.unmount());
-    container.remove();
-    return words;
+  const task: Task = {
+    ...TASK,
+    repository: "acme/web",
+    lastEdit: {
+      actor: PLAN_ACTOR.DEVELOPER,
+      by: { userId: "user-lee", name: "Lee Park" },
+      at: 2,
+      duringCall: false,
+    },
   };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: task.id,
+            region: { kind: DOCUMENT_REGION.READY, task },
+            workspaces: [home],
+            workspace: home,
+          }),
+        }),
+      ),
+    ),
+  );
+  const scroll = container.querySelector(".desktop-document .plan-document-scroll");
+  const first = scroll?.firstElementChild;
 
-  assert.deepEqual([said([]), said(["acme/api"]), said(["other/web"])], ["web", "web", "acme/web"]);
+  assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
+  assert.ok(first?.classList.contains("plan-edit-note"), "the Edited by line leads the document");
+  assert.match(first?.textContent ?? "", /^Edited by .*Lee Park/u);
+  act(() => root.unmount());
+  container.remove();
 });

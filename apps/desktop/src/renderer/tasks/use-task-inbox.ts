@@ -29,15 +29,15 @@ import {
 } from "./inbox-model";
 
 /**
- * use-plan-inbox.ts -- the open plan's inbox as one control: its items, read on the service's held long-poll while the window shows the plans, and the answers on their way back.
+ * use-task-inbox.ts -- the open task's inbox as one control: its items, read on the service's held long-poll while the window shows the tasks, and the answers on their way back.
  *
  * The service holds a read open while nothing changed past the cursor and
  * lets it go at its own hold, so the loop is one read after another with no
  * clock of its own, as an agent's transcript is read (`use-agent-transcript.ts`);
  * each answer is the inbox whole, which replaces what was held. The loop
- * runs while the window shows the plans and a plan with an agent, or one
+ * runs while the window shows the tasks and a task with an agent, or one
  * main says an item waits on, is open, so the tab's
- * count stands whichever tab is chosen, and another plan starts from
+ * count stands whichever tab is chosen, and another task starts from
  * nothing of this one's. A read that did not answer ends the loop and says
  * so, with Try again, rather than asking again at once.
  *
@@ -47,10 +47,10 @@ import {
  * answer to an item its agent changed first is not taken, and the card says
  * so above the item as it now stands. An answer the agent was to hear
  * reached it as one of the developer's messages, which may have started
- * its turn again, so the plan's agents are read again for where they stand.
+ * its turn again, so the task's agents are read again for where they stand.
  *
  * An image block names an attachment the service keeps, and its bytes are
- * read apart from the inbox, once per attachment while the plan is open,
+ * read apart from the inbox, once per attachment while the task is open,
  * as a card first draws the block: the host fetches them under the account
  * and the hook holds them as a `data:` URL the card draws, so a read of
  * the inbox that replaces every item draws the same picture again without
@@ -72,7 +72,7 @@ import {
  * and an answer taken lets go of its own.
  */
 
-/** How one read is asked: the plan and the cursor to read past, answered as the view hears it. */
+/** How one read is asked: the task and the cursor to read past, answered as the view hears it. */
 export type InboxReader = (params: CodingAgentInboxParams) => Promise<CodingAgentInboxAnswerView>;
 
 /** How one answer is sent: the item, its revision, the answer, and the key the send is known by. */
@@ -93,7 +93,7 @@ export interface TaskInboxControl {
   readonly board: InboxBoardView;
   /** Whether a read is out, with nothing held yet to draw. */
   readonly reading: boolean;
-  /** Whether a read of the plan's inbox has answered, so the board is what it holds rather than nothing yet. */
+  /** Whether a read of the task's inbox has answered, so the board is what it holds rather than nothing yet. */
   readonly read: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
   readonly failed: boolean;
@@ -185,21 +185,21 @@ function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxI
 }
 
 export function useTaskInbox(input: {
-  /** The plan whose inbox is held, or, with `reader`, the agent with no plan whose inbox is. */
+  /** The task whose inbox is held, or, with `reader`, the agent with no task whose inbox is. */
   taskId: string | undefined;
-  /** How the inbox is read where it is one agent's with no plan rather than a plan's. */
+  /** How the inbox is read where it is one agent's with no task rather than a task's. */
   reader?: ((after: string) => Promise<CodingAgentInboxAnswerView>) | undefined;
-  /** Whether the window shows the plans. */
+  /** Whether the window shows the tasks. */
   shown: boolean;
-  /** Whether main's read of what waits across the account says an item waits on the plan. */
+  /** Whether main's read of what waits across the account says an item waits on the task. */
   waiting: boolean;
   agents: {
-    /** Every agent of the plan by id, an archived one among them, whose items still stand. */
+    /** Every agent of the task by id, an archived one among them, whose items still stand. */
     readonly heldIds: readonly string[] | undefined;
     readonly readInbox: InboxReader;
     readonly answerInbox: InboxAnswerer;
     readonly readInboxImage: InboxImageReader;
-    /** Reads the plan's agents again, for where an agent an answer reached stands now. */
+    /** Reads the task's agents again, for where an agent an answer reached stands now. */
     readonly onRetryList: () => void;
   };
 }): TaskInboxControl {
@@ -233,7 +233,7 @@ export function useTaskInbox(input: {
   const latest = useRef({ ...agents, taskId, reader: input.reader });
   latest.current = { ...agents, taskId, reader: input.reader };
 
-  // A plan with no agent, standing or archived, has no Inbox tab and nothing
+  // A task with no agent, standing or archived, has no Inbox tab and nothing
   // to read, so it holds no read open, unless an item waits on it, which an
   // agent this window has not listed, one started on another Mac, posted.
   const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
@@ -300,7 +300,7 @@ export function useTaskInbox(input: {
             note(item.id, messageFailureWords(answer.failure));
             return;
           }
-          // An answer landing after the window moved to another plan is that plan's no longer.
+          // An answer landing after the window moved to another task is that task's no longer.
           setHeld((standing) =>
             standing.taskId === askedOn
               ? { ...standing, items: withItem(standing.items, answer.item) }
@@ -346,7 +346,7 @@ export function useTaskInbox(input: {
             "failure" in answer
               ? { failed: true }
               : { url: `data:${answer.contentType};base64,${answer.base64}` };
-          // An image landing after the window moved to another plan, or after this hook's drawn read let
+          // An image landing after the window moved to another task, or after this hook's drawn read let
           // its item's block go, is kept for nobody. Note that one landing while that read is not drawn,
           // before it lands or after it failed, is kept, because the Inbox's pane draws the item from its
           // list's read then, and nothing would ask for the picture again.
@@ -357,7 +357,7 @@ export function useTaskInbox(input: {
     },
     [images, taskId],
   );
-  // Another plan's images are its own: what this one asked for is let go with its items.
+  // Another task's images are its own: what this one asked for is let go with its items.
   useEffect(() => {
     setImages(new Map());
     reading.current.clear();

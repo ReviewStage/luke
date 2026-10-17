@@ -86,9 +86,9 @@ const NO_UNSEEN_AGENTS: readonly string[] = [];
 /** Nothing waits on the developer, as the document reads before main has answered. */
 const NOTHING_WAITING: readonly AppInboxTask[] = [];
 
-/** No plan holds an inbox item, as the document reads before main has answered. */
+/** No task holds an inbox item, as the document reads before main has answered. */
 const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
-/** Nothing waiting from agents with no plan, as one value across renders. */
+/** Nothing waiting from agents with no task, as one value across renders. */
 const NOTHING_TASKLESS: readonly AppInboxTasklessItem[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
@@ -172,7 +172,7 @@ export function App(): React.JSX.Element {
     [guardLeave, setSettingsView, setTab],
   );
   // Where a link's workspace is handed, read through a ref, because the
-  // workspace Settings shows is held beside the Plans tab, built after the opener.
+  // workspace Settings shows is held beside the Tasks tab, built after the opener.
   const linkWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
   /**
    * Opens Settings at the place a link names: the workspace it names, which
@@ -274,8 +274,8 @@ export function App(): React.JSX.Element {
   const volumeHintWanted =
     fixtureMuted ||
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
-  // The Plans tab, drawn from the same voice report the strip reads, so a
-  // planning call's words and levels are the shape's as any call's are.
+  // The Tasks tab, drawn from the same voice report the strip reads, so a
+  // task call's words and levels are the shape's as any call's are.
   const tasks = useTasksTab({
     acts: { act, tell },
     tasks: state?.tasks ?? IDLE_TASKS_VIEW,
@@ -315,8 +315,8 @@ export function App(): React.JSX.Element {
       : undefined,
     !accountGated,
   );
-  // A coding agent's notification clicked: the Plans tab, on that agent,
-  // its plan's tab or its own page where it has no plan. Read through refs,
+  // A coding agent's notification clicked: the Tasks tab, on that agent,
+  // its task's tab or its own page where it has no task. Read through refs,
   // because the tab hands new closures each render and the subscription is
   // owed to the window, not to a render. Note that each way here the window
   // is moved by more than one step asks once, as a whole, while a page holds
@@ -338,9 +338,15 @@ export function App(): React.JSX.Element {
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const toast = useToast();
   const openLukeLink = (link: ReadLink) => {
-    const route = linkRoute(link, { workspaces: tasks.workspaces, factoryOn, automationsOn });
+    const route = linkRoute(link, {
+      workspaces: tasks.workspaces,
+      factoryOn,
+      automationsOn,
+      issuesOn,
+    });
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
     } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
@@ -370,8 +376,8 @@ export function App(): React.JSX.Element {
     [],
   );
   useEffect(() => window.luke.onShowFailedRun(openFailedRun), [openFailedRun]);
-  // The call card's way back: the Plans tab, on the call's plan's document,
-  // opening it where another plan, or none, is open.
+  // The call card's way back: the Tasks tab, on the call's task's document,
+  // opening it where another task, or none, is open.
   const showTask = useRef(tasks.onShowTask);
   showTask.current = tasks.onShowTask;
   useEffect(
@@ -385,7 +391,7 @@ export function App(): React.JSX.Element {
     [changeTab, guardLeave],
   );
   // The call card, while this window has the keyboard and its call bar is not
-  // on screen: another plan, the home page, Settings, or the plan itself
+  // on screen: another task, the home page, Settings, or the task itself
   // under its version history, the Inbox, an agent's page, or a side panel filling the window.
   const focused = useWindowFocused();
   const taskShown = callBarTaskId({
@@ -413,7 +419,7 @@ export function App(): React.JSX.Element {
   useAgentEndToasts(openAgent, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
   // A run that failed to start, said in the toast while the window was focused: its View opens the automation.
   useFailedRunToasts(openFailedRun);
-  // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
+  // An inbox notification clicked, or an item's toast's View: the Tasks tab, on that task's Inbox.
   const showInbox = useRef(tasks.onShowInbox);
   showInbox.current = tasks.onShowInbox;
   const openInbox = useCallback(
@@ -425,7 +431,7 @@ export function App(): React.JSX.Element {
     [changeTab, guardLeave],
   );
   useEffect(() => window.luke.onShowInbox(({ taskId }) => openInbox(taskId)), [openInbox]);
-  // A notification of an item of an agent with no plan clicked: the window's Inbox, on that item
+  // A notification of an item of an agent with no task clicked: the window's Inbox, on that item
   // in its own workspace's list, the item itself shown where the Inbox shows one column.
   const inboxDoors = useRef(tasks);
   inboxDoors.current = tasks;
@@ -534,9 +540,9 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, an agent's or a person's page, Factory, or the Automations page, back to wherever it was
+      // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Issues page, back to wherever it was
       // opened from, then a side panel filling the window back beside its
-      // plan, then an open plan back to the home page. A menu and the
+      // task, then an open task back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
       // clearing, then letting go of the caret — so neither is a layer here,
       // bar the caret Settings opens with, whose untouched Escape leaves it.
@@ -552,7 +558,8 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
-      // An open plan unwinds to the home page, which leaves it and ends
+      if (runAppCommand(APP_COMMAND.EXIT_ISSUES)) return;
+      // An open task unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       tasks.back();
     };
@@ -618,7 +625,7 @@ export function App(): React.JSX.Element {
   const workspace = {
     workspaces: tasks.workspaces,
     workspaceId: settingsWorkspace.shownId,
-    // A leave closes Settings onto the Plans tab, whose Home the tab turns to.
+    // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
     onLeft: (workspaceId: string) => {
       tasks.onLeftWorkspace(workspaceId);
       changeTab(PANEL_TAB.TASKS);
@@ -627,7 +634,7 @@ export function App(): React.JSX.Element {
     onRetryList: tasks.onRetryList,
   };
 
-  // A remedy under a refused start or message mends the plan's repository through the Plans tab's doors.
+  // A remedy under a refused start or message mends the task's repository through the Tasks tab's doors.
   const repositoryRemedies: RepositoryRemedyDoors = {
     openWorkspaceGitHub: tasks.onOpenWorkspaceGitHub,
     openGitHub: tasks.repositories.openGitHub,

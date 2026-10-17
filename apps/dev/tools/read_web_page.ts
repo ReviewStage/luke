@@ -6,7 +6,7 @@ import { defineTool } from "eve/tools";
 import { host, runResearchTool } from "../host.js";
 
 /**
- * read_web_page.ts -- the planning model's own public page read, the agent's under the turn's budget (`packages/service/src/agents/public-research.ts`).
+ * read_web_page.ts -- the brain's own public page read, the agent's under the turn's budget (`packages/service/src/agents/public-research.ts`).
  */
 export default defineTool({
   description: READ_WEB_PAGE_TOOL.description,

@@ -58,6 +58,7 @@ const TITLE = {
   [LINK_PLACE.FACTORY]: "Open Factory in Luke",
   [LINK_PLACE.SETTINGS]: "Open these settings in Luke",
   [LINK_PLACE.PERSON]: "Open this profile in Luke",
+  [LINK_PLACE.ISSUE]: "Open this issue in Luke",
 } as const satisfies Record<LinkPlaceKind, string>;
 
 /** The landing page, on whichever host served this one. */

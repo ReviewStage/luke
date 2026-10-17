@@ -24,11 +24,11 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  * first; `PUT` pins or unpins one repository and answers them all as they
  * then stand, so the window draws the service's word rather than its own
  * guess. A pin names a repository and nothing of it, so it asks GitHub
- * nothing: a repository the account no longer reaches simply groups no plan.
+ * nothing: a repository the account no longer reaches simply groups no task.
  * Every request resolves the bearer before it touches a row, and every row
  * it touches is the bearer's account's own. It stands apart from
  * `/api/plans/*` because that path's rewrite reads its next segment as a
- * plan's id.
+ * task's id.
  */
 
 const REPOSITORY_PINS_PATH = "/api/repository-pins";
