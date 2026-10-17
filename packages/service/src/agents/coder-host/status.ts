@@ -67,7 +67,7 @@ export function codingAgentStatusOf(
 }
 
 /** The host's refusal sentences a failed turn's detail may carry, by the word the wire says for each. */
-const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])[] = [
+export const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])[] = [
   [
     CODING_AGENT_FAILURE.GITHUB,
     [
