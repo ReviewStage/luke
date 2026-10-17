@@ -1,10 +1,10 @@
+import { APP_SHORTCUTS, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   type DrawnMenu,
   Menu,
   type MenuAction as SharedMenuAction,
   type MenuEntry as SharedMenuEntry,
 } from "@luke/ui";
-import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 
 /**

@@ -1,6 +1,6 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";

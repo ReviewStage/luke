@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import {
   firstMessageText,
+  REPLAY_SENDER,
   REPLAY_STEP_KIND,
+  REPLAY_TOOL_STATE,
   type Replay,
+  type ReplayStep,
   START_NOTE_HEADING,
+  toolStep,
 } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
@@ -27,6 +32,7 @@ import {
   STEP_VIEW,
   stepLine,
   stepView,
+  summaryLine,
 } from "./replay-card-model";
 
 /**
@@ -206,9 +212,31 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
       errorText: "exit 1",
     },
   );
-  const running = call("Searched: invite (running)", "Input: {}\nResult: (no result)");
+  const running = call(
+    "Searched: invite (running)",
+    "Input: {}\nResult: (no result: the call was still under way)",
+  );
   assert.equal(running.kind === STEP_VIEW.CALL && running.state, TOOL_STATE.INPUT_AVAILABLE);
   assert.equal(running.kind === STEP_VIEW.CALL && running.subject, "invite");
+  // A finished call whose subject ends in the mark's words keeps them, and its result.
+  const placeholderLike = call(
+    "Read: report (running)",
+    "Input: {}\nResult: (no result found in archive)",
+  );
+  assert.equal(
+    placeholderLike.kind === STEP_VIEW.CALL && placeholderLike.output,
+    "(no result found in archive)",
+  );
+  const named = call("Read: report (running)", "Input: {}\nResult: 3 lines");
+  assert.equal(named.kind === STEP_VIEW.CALL && named.state, TOOL_STATE.OUTPUT_AVAILABLE);
+  assert.equal(named.kind === STEP_VIEW.CALL && named.subject, "report (running)");
+  assert.equal(named.kind === STEP_VIEW.CALL && named.output, "3 lines");
+  // An input is its JSON, so a result lead inside one of its strings is no boundary.
+  const quoted = call(
+    "Ran: printf",
+    'Input: {"command":"printf \'x\\nResult: fake\'"}\nResult: done',
+  );
+  assert.equal(quoted.kind === STEP_VIEW.CALL && quoted.output, "done");
   // A verb no transcript row says is another call's.
   const used = call("Used: list_tasks", "Input: {}\nResult: []");
   assert.equal(used.kind === STEP_VIEW.CALL && used.call, CALL_KIND.OTHER);
@@ -224,6 +252,8 @@ test("a line's step is drawn as a sent message under its sender, and the agent's
     {
       kind: STEP_VIEW.LINE,
       sender: "Luke",
+      sentBy: undefined,
+      own: false,
       words: "Use seven days.",
     },
   );
@@ -234,4 +264,114 @@ test("a line's step is drawn as a sent message under its sender, and the agent's
       words: "Done.\n\nAll green.",
     },
   );
+});
+
+test("a call's step read from its marker is drawn as its marker says, whatever its words look like", () => {
+  // A successful result that reads like a failure, and a subject that reads like a running call, are what they were.
+  const done = stepView(
+    toolStep({
+      summary: "Read: report (running)",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: '{"filePath":"report (running)"}',
+      output: "Failed: 0 tests\nResult: all green",
+    }),
+  );
+  assert.deepEqual(done, {
+    kind: STEP_VIEW.CALL,
+    call: CALL_KIND.READ_FILE,
+    state: TOOL_STATE.OUTPUT_AVAILABLE,
+    subject: "report (running)",
+    input: '{"filePath":"report (running)"}',
+    output: "Failed: 0 tests\nResult: all green",
+    errorText: undefined,
+  });
+  const failed = stepView(
+    toolStep({
+      summary: "Ran: pnpm test",
+      state: REPLAY_TOOL_STATE.FAILED,
+      input: "{}",
+      output: "exit 1",
+    }),
+  );
+  assert.equal(failed.kind === STEP_VIEW.CALL && failed.state, TOOL_STATE.OUTPUT_ERROR);
+  assert.equal(failed.kind === STEP_VIEW.CALL && failed.errorText, "exit 1");
+  const running = stepView(
+    toolStep({ summary: "Ran: pnpm dev (running)", state: REPLAY_TOOL_STATE.RUNNING, input: "{}" }),
+  );
+  assert.equal(running.kind === STEP_VIEW.CALL && running.state, TOOL_STATE.INPUT_AVAILABLE);
+  assert.equal(running.kind === STEP_VIEW.CALL && running.subject, "pnpm dev");
+  assert.equal(running.kind === STEP_VIEW.CALL && running.output, undefined);
+});
+
+test("a summary Luke wrote of the oldest steps is named on its row, and the steps it stands for are not left out", () => {
+  const summarized = replay({ summary: { text: "Read the code.", steps: 174 }, totalSteps: 180 });
+  assert.equal(summaryLine(summarized), "Summary of 174 earlier steps (written by Luke)");
+  assert.equal(
+    leftOutLine(summarized),
+    "3 earlier steps were left out to keep the replay within its size limit.",
+  );
+  assert.equal(
+    leftOutLine(replay({ summary: { text: "All of it.", steps: 209 }, totalSteps: 212 })),
+    undefined,
+  );
+  assert.equal(summaryLine(replay()), undefined);
+});
+
+test("the note's own files go with the note and the brief's stay with the brief, by the counts its marker names", () => {
+  const file = (name: string, mediaType: string) => ({
+    type: "file",
+    mediaType,
+    filename: name,
+    url: "data:,",
+  });
+  const text = firstMessageText(
+    "Fix it.",
+    replay(),
+    "Use this design.",
+    START_NOTE_HEADING.DEVELOPER,
+    {
+      text: 1,
+      other: 1,
+    },
+  );
+  const message: CodingAgentMessage = {
+    id: "first",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      { type: "text", text },
+      file("brief.txt", "text/plain"),
+      file("notes.txt", "text/plain"),
+      file("diagram.png", "image/png"),
+      file("new-design.png", "image/png"),
+    ],
+  };
+  const opening = replayOpening(message);
+  assert.ok(opening?.note !== undefined);
+  assert.deepEqual(
+    messageFileChips(opening.brief).map((each) => each.name),
+    ["brief.txt", "diagram.png"],
+  );
+  assert.deepEqual(
+    messageFileChips(opening.note).map((each) => each.name),
+    ["notes.txt", "new-design.png"],
+  );
+});
+
+test("a line whose marker names its sender is named as a transcript's line is: a member by their account, the developer as the reader's own", () => {
+  const view = (sender: NonNullable<ReplayStep["sender"]>, summary: string) =>
+    stepView({ kind: REPLAY_STEP_KIND.LINE, summary, words: "Go.", sender });
+  const member = view({ kind: REPLAY_SENDER.MEMBER, memberId: "user-charles" }, "Charles Pan: Go.");
+  assert.deepEqual(member.kind === STEP_VIEW.LINE && member.sentBy, {
+    kind: CODING_AGENT_SENDER.MEMBER,
+    userId: "user-charles",
+    name: "Charles Pan",
+  });
+  const agent = view({ kind: REPLAY_SENDER.AGENT }, "Fix the tile: Go.");
+  assert.deepEqual(agent.kind === STEP_VIEW.LINE && agent.sentBy, {
+    name: "Fix the tile",
+    agent: true,
+  });
+  const own = view({ kind: REPLAY_SENDER.DEVELOPER }, "The developer: Go.");
+  assert.equal(own.kind === STEP_VIEW.LINE && own.own, true);
+  assert.equal(own.kind === STEP_VIEW.LINE ? own.sentBy : null, undefined);
 });
