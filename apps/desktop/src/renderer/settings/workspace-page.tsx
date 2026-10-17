@@ -15,6 +15,7 @@ import {
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
   BUTTON_VARIANT,
@@ -329,7 +330,8 @@ function useMembersRead(workspaceId: string, memberCount: number | undefined) {
  * and Make member take hold at once, since either is undone by the other;
  * Make owner and Remove from workspace ask first. A role change refused is
  * said under the row. A row with no ⋯ in a list where others have one
- * keeps the ⋯'s room, so every role ends in the same place.
+ * keeps the ⋯'s room, so every role ends in the same place. The row is
+ * `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
@@ -414,20 +416,30 @@ function MemberRow({
     : [];
   const acting = profileActs.length + roleActs.length + removeActs.length > 0;
   return (
-    <>
-      <MenuRow label={`${member.name} actions`} actions={[profileActs, roleActs, removeActs]}>
-        <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />
-        <span className="settings-copy">
-          {/* The person card's own wrapper, so You stands off the name as it does on the card. */}
-          <strong className="actor-card-name">
-            {member.name}
-            {userId === readerId ? <YouBadge /> : null}
-          </strong>
-          <OneLine as="small" text={member.email} />
-        </span>
-        <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
-        {slotted && !acting ? <span className="settings-act-slot" aria-hidden="true" /> : null}
-      </MenuRow>
+    <div className="workspace-member">
+      <MenuRow
+        label={`${member.name} actions`}
+        actions={[profileActs, roleActs, removeActs]}
+        row={{
+          leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
+          label: (
+            // The person card's own wrapper, so You stands off the name as it does on the card.
+            <span className="actor-card-name">
+              {member.name}
+              {userId === readerId ? <YouBadge /> : null}
+            </span>
+          ),
+          description: <OneLine as="span" text={member.email} />,
+          control: (
+            <>
+              <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
+              {slotted && !acting ? (
+                <span className="settings-act-slot" aria-hidden="true" />
+              ) : null}
+            </>
+          ),
+        }}
+      />
       {refusal === undefined ? null : (
         <p className="error-message" role="alert">
           {refusal}
@@ -451,7 +463,7 @@ function MemberRow({
           running: TRANSFER_WORDS.RUNNING,
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -1528,15 +1540,17 @@ function ShownWorkspace({
       <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
       </SettingsSection>
-      <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
-        <TeamMembers
-          workspace={workspace}
-          readerId={readerId}
-          members={members.read}
-          onRetry={members.retry}
-          onChanged={members.changed}
-        />
-      </SettingsGroup>
+      <div {...searchAnchorProps(SETTINGS_SECTION.MEMBERS)}>
+        <SettingsSection title="Members">
+          <TeamMembers
+            workspace={workspace}
+            readerId={readerId}
+            members={members.read}
+            onRetry={members.retry}
+            onChanged={members.changed}
+          />
+        </SettingsSection>
+      </div>
       {managesWorkspace(workspace) ? (
         <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
           <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
