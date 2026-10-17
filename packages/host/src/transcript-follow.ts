@@ -52,7 +52,7 @@ const HOLD = Duration.seconds(20);
 /** How long a subscription no read holds is kept, so the window's next read finds it standing. */
 const IDLE = Duration.seconds(30);
 
-/** Which transcript: an agent's own, or one of its workers' by the delegation call that started it. */
+/** Which transcript: an agent's own, or one of its workers' by the delegation call that started it. A plan's planning workers are keyed by their composer's own key, on the same terms. */
 export class TranscriptKey extends Data.Class<{
   readonly agentId: string;
   readonly callId: string | undefined;
@@ -75,9 +75,9 @@ interface Failed {
   readonly failure: string;
 }
 
-export interface TranscriptFollowDependencies {
+export interface TranscriptFollowDependencies<Key = TranscriptKey> {
   /** The transcript sealed for following; not found, or a failure where the service sealed none. */
-  readonly seal: (key: TranscriptKey) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>;
+  readonly seal: (key: Key) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>;
   readonly openLive: (url: string) => LiveClient;
   readonly now: () => number;
 }
@@ -91,7 +91,7 @@ export interface TranscriptReads {
 }
 
 /** The subscriptions the windows' reads share, each held while read and a while after. */
-export type TranscriptFollows = RcMap.RcMap<TranscriptKey, Standing>;
+export type TranscriptFollows<Key = TranscriptKey> = RcMap.RcMap<Key, Standing>;
 
 /** A digest of every part's rows, in no order of Realtime's, so only a change to a row moves it. */
 function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
@@ -102,13 +102,13 @@ function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
 }
 
 /** The map a composer holds for as long as it stands. */
-export function transcriptFollows(
-  dependencies: TranscriptFollowDependencies,
-): Effect.Effect<TranscriptFollows, never, Scope.Scope> {
+export function transcriptFollows<Key = TranscriptKey>(
+  dependencies: TranscriptFollowDependencies<Key>,
+): Effect.Effect<TranscriptFollows<Key>, never, Scope.Scope> {
   const decode = Schema.decodeUnknownOption(agentTranscriptLiveRowsSchema);
   return RcMap.make({
     idleTimeToLive: IDLE,
-    lookup: (key: TranscriptKey) =>
+    lookup: (key: Key) =>
       Effect.gen(function* () {
         const first = yield* dependencies.seal(key);
         if ("failure" in first) {
@@ -190,9 +190,9 @@ function readUntilSaid(
  * it where the transcript is not followed live, or where its subscription
  * stopped.
  */
-export function transcriptPast(
-  follows: TranscriptFollows,
-  key: TranscriptKey,
+export function transcriptPast<Key>(
+  follows: TranscriptFollows<Key>,
+  key: Key,
   reads: TranscriptReads,
 ): Effect.Effect<CodingAgentMessagesAnswerView> {
   return Effect.scoped(

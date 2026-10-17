@@ -357,6 +357,10 @@
           "dest": "/api/default.js?route=live/plan-inbox"
         },
         {
+          "src": "/api/live/plan-worker-transcript",
+          "dest": "/api/default.js?route=live/plan-worker-transcript"
+        },
+        {
           "src": "/api/mac-commands",
           "dest": "/api/default.js?route=mac-commands"
         },

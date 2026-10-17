@@ -27,6 +27,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { brainWorkerSession } from "../tasks/brain-transcript.js";
 import { type LiveSealer, LiveSealing } from "./realtime.js";
 
 /**
@@ -54,6 +55,12 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * the service look on a clock. A worker's delegation may not be recorded
  * yet, as a tab opened on its call is read before it is, so its statements
  * name the conversation the call will open rather than wait for it.
+ *
+ * `GET /api/live/plan-worker-transcript?id=&call=` answers a planning
+ * worker's transcript the same way, after the plan is read as the account:
+ * the child conversation of the plan's conversation the call's worker
+ * writes in, under the plan's conversation. Before the planner's journal
+ * names the call, it is the conversation a call that starts a worker opens.
  * Nothing else here reads a row: the store is read by Realtime.
  */
 
@@ -154,6 +161,26 @@ const agentInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxLiveEndp
   return yield* sealedScope(yield* LiveSealing, memberAgentInboxLiveStatements(userId, agent.id));
 });
 
+/** A transcript's statements sealed, with the address to subscribe at; unavailable where they could not be. */
+const sealedTranscript = (
+  sealing: Option.Option<LiveSealer>,
+  statements: ReturnType<typeof transcriptLiveStatements>,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal> =>
+  Effect.gen(function* () {
+    if (Option.isNone(sealing) || Option.isNone(statements)) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    const { seal, url } = sealing.value;
+    const queries = yield* Effect.all({
+      messages: seal(statements.value.messages),
+      turns: seal(statements.value.turns),
+      conversation: seal(statements.value.conversation),
+      agent: seal(statements.value.agent),
+      workers: seal(statements.value.workers),
+    }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
+  });
+
 const agentTranscriptLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentTranscriptLiveEndpoint")(
   function* (
     seams: LiveAppSeams,
@@ -177,22 +204,44 @@ const agentTranscriptLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentTranscri
             userId: target.userId,
             conversationId: childConversationId(target.conversationId, callId.success),
           };
-    const statements = transcriptLiveStatements(read, target.conversationId);
-    const sealing = yield* LiveSealing;
-    if (Option.isNone(sealing) || Option.isNone(statements)) {
-      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    }
-    const { seal, url } = sealing.value;
-    const queries = yield* Effect.all({
-      messages: seal(statements.value.messages),
-      turns: seal(statements.value.turns),
-      conversation: seal(statements.value.conversation),
-      agent: seal(statements.value.agent),
-      workers: seal(statements.value.workers),
-    }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
+    return yield* sealedTranscript(
+      yield* LiveSealing,
+      transcriptLiveStatements(read, target.conversationId),
+    );
   },
 );
+
+const taskWorkerTranscriptLiveEndpoint = /* @__PURE__ */ Effect.fn(
+  "web/taskWorkerTranscriptLiveEndpoint",
+)(function* (
+  seams: LiveAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | DatabaseServices
+> {
+  const request = yield* getRequest;
+  const taskId = yield* uuidOf(request, LIVE_QUERY.ID);
+  const call = readEither(codingAgentCallIdSchema)(
+    unparsedWire(new URL(request.url).searchParams.get(LIVE_QUERY.CALL) ?? ""),
+  );
+  if (Result.isFailure(call)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const userId = yield* resolvedUserId(seams, request);
+  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
+  if (Option.isNone(task) || task.value.conversationId === undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  const parent = { userId, conversationId: task.value.conversationId };
+  const session = yield* hostedStoreOrUnavailable(brainWorkerSession(parent, call.success));
+  const worker = {
+    userId,
+    conversationId: childConversationId(parent.conversationId, session ?? call.success),
+  };
+  return yield* sealedTranscript(
+    yield* LiveSealing,
+    transcriptLiveStatements(worker, parent.conversationId),
+  );
+});
 
 /** The group: each live read's path, and the hosted vocabulary's own refusal for any other. */
 export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
@@ -216,6 +265,11 @@ export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
       ANY_METHOD,
       HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT,
       hostedRefusing(agentTranscriptLiveEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.LIVE_TASK_WORKER_TRANSCRIPT,
+      hostedRefusing(taskWorkerTranscriptLiveEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );
