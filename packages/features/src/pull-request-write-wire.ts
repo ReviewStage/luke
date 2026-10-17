@@ -18,6 +18,8 @@ import { Schema as EffectSchema } from "effect";
 export const PULL_REQUEST_WRITE_BOUNDS = {
   /** The most of GitHub's own words on a refused change the answer carries. */
   MAX_REFUSAL_CHARS: 1_000,
+  /** The longest body a review may carry, GitHub's own bound on a comment's. */
+  MAX_BODY_CHARS: 65_536,
 } as const;
 
 /** The changes the Pull request tab makes, each one press. */
@@ -26,14 +28,36 @@ export const PULL_REQUEST_ACTION = {
   READY_FOR_REVIEW: "ready-for-review",
   /** An open pull request turned back into a draft. */
   CONVERT_TO_DRAFT: "convert-to-draft",
+  /** A review submitted: the member's own pending review where they hold one, else a new one. */
+  SUBMIT_REVIEW: "submit-review",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
+
+/** What a submitted review says of the pull request, as GitHub's own review box offers it. */
+export const REVIEW_EVENT = {
+  /** Feedback that neither approves nor asks for changes. */
+  COMMENT: "comment",
+  APPROVE: "approve",
+  REQUEST_CHANGES: "request-changes",
+} as const;
+
+export type ReviewEvent = (typeof REVIEW_EVENT)[keyof typeof REVIEW_EVENT];
+
+/** A review's words, Markdown, which may be empty where GitHub allows it; GitHub's bound. */
+const reviewBodySchema = EffectSchema.String.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS),
+);
 
 /** One change, as the tab asks the service to make it (POST). */
 export const pullRequestActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.READY_FOR_REVIEW) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.CONVERT_TO_DRAFT) }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.SUBMIT_REVIEW),
+    event: EffectSchema.Literals(Object.values(REVIEW_EVENT)),
+    body: reviewBodySchema,
+  }),
 ]);
 
 export type PullRequestActionRequest = typeof pullRequestActionRequestSchema.Type;
