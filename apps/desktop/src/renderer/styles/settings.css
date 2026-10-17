@@ -531,7 +531,7 @@
 .settings-card > .environment-form {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-8);
   padding: var(--space-12) var(--space-16);
 }
@@ -550,6 +550,19 @@
 
 .environment-form .environment-value {
   flex: 1 1 200px;
+  height: auto;
+  min-height: var(--control-height);
+  max-height: 160px;
+  padding: 6px var(--space-8);
+  field-sizing: content;
+  resize: none;
+  line-height: 1.4;
+}
+
+/* A secret's characters drawn as discs, as a password field draws them, in a
+   field that keeps a pasted certificate's line breaks. */
+.environment-form .environment-secret {
+  -webkit-text-security: disc;
 }
 
 .environment-form-actions {

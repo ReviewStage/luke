@@ -134,10 +134,11 @@ const button = (page: HTMLElement, words: string) =>
   ) ?? assert.fail(`no ${words} button`);
 
 const input = (page: HTMLElement, label: string) =>
-  page.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`) ??
-  assert.fail(`no ${label} field`);
+  page.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    `:is(input, textarea)[aria-label="${label}"]`,
+  ) ?? assert.fail(`no ${label} field`);
 
-function type(field: HTMLInputElement, text: string): void {
+function type(field: HTMLInputElement | HTMLTextAreaElement, text: string): void {
   act(() => {
     field.value = text;
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -178,7 +179,7 @@ test("an admin's secret is typed into a password field, sent once, gone from the
   act(() => button(page, "Add variable or secret").click());
   type(input(page, "Name"), "STRIPE_KEY");
   act(() => button(page, "Secret").click());
-  assert.equal(input(page, "Value").type, "password");
+  assert.ok(input(page, "Value").classList.contains("environment-secret"), "drawn as discs");
   type(input(page, "Value"), PASTED);
   act(() => input(page, "Value").form?.requestSubmit());
   await settle();
@@ -214,6 +215,34 @@ test("a name the service would refuse is refused on the page, saying why, and no
     "Use capital letters, digits, and underscores, not starting with a digit.",
   );
   assert.equal(reserved, "PATH is set by the sandbox or Luke. Choose another name.");
+  assert.deepEqual(saves(), []);
+});
+
+test("a multi-line secret, such as a certificate, is sent with its line breaks", async () => {
+  const certificate = "-----BEGIN CERTIFICATE-----\nMIIBsynthetic\n-----END CERTIFICATE-----";
+  const page = await mount(ACME);
+
+  await add(page, "TLS_CERT", "Secret", certificate);
+
+  assert.deepEqual(
+    saves().map((request) => request.payload.secretValue),
+    [certificate],
+  );
+});
+
+test("a name or a value past the service's bounds is refused on the page, saying why, and nothing is sent", async () => {
+  const page = await mount(ACME);
+
+  await add(page, "A".repeat(129), "Variable", "x");
+  const longName = page.querySelector('[role="alert"]')?.textContent;
+  type(input(page, "Name"), "BIG");
+  type(input(page, "Value"), "x".repeat(16_385));
+  act(() => input(page, "Value").form?.requestSubmit());
+  await settle();
+  const longValue = page.querySelector('[role="alert"]')?.textContent;
+
+  assert.equal(longName, "A name can be at most 128 characters.");
+  assert.equal(longValue, "A value can be at most 16,384 characters.");
   assert.deepEqual(saves(), []);
 });
 

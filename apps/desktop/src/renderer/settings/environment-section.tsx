@@ -50,6 +50,9 @@ const PAGE_LINE = {
   TOO_MANY: "This workspace already holds 100 variables and secrets. Remove one first.",
   BAD_NAME: "Use capital letters, digits, and underscores, not starting with a digit.",
   NO_VALUE: "Enter a value.",
+  LONG_NAME: `A name can be at most ${WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS} characters.`,
+  LONG_VALUE: `A value can be at most ${WORKSPACE_ENVIRONMENT_BOUNDS.MAX_VALUE_CHARS.toLocaleString("en-US")} characters.`,
+  NUL_VALUE: "A value can't hold a NUL character.",
   SHORT_SECRET: `A secret must be at least ${WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS} characters, so it can be hidden in what commands print.`,
   UNREADABLE: "Can no longer be read. Save it again.",
 } as const;
@@ -84,9 +87,12 @@ function refusalOf(
   value: string,
 ): string | undefined {
   if (!NAME_PATTERN.test(name)) return PAGE_LINE.BAD_NAME;
+  if (name.length > WORKSPACE_ENVIRONMENT_BOUNDS.MAX_NAME_CHARS) return PAGE_LINE.LONG_NAME;
   if (!environmentNameAllowed(name))
     return `${name} is set by the sandbox or Luke. Choose another name.`;
   if (value === "") return PAGE_LINE.NO_VALUE;
+  if (value.length > WORKSPACE_ENVIRONMENT_BOUNDS.MAX_VALUE_CHARS) return PAGE_LINE.LONG_VALUE;
+  if (value.includes("\0")) return PAGE_LINE.NUL_VALUE;
   const secret = kind === WORKSPACE_ENVIRONMENT_KIND.SECRET;
   if (secret && value.length < WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS) {
     return PAGE_LINE.SHORT_SECRET;
@@ -120,7 +126,7 @@ function EnvironmentForm({
   onCancel: () => void;
 }): React.JSX.Element {
   const nameField = useRef<HTMLInputElement | null>(null);
-  const valueField = useRef<HTMLInputElement | null>(null);
+  const valueField = useRef<HTMLTextAreaElement | null>(null);
   const [kind, setKind] = useState<WorkspaceEnvironmentKind>(
     editing?.kind ?? WORKSPACE_ENVIRONMENT_KIND.VARIABLE,
   );
@@ -183,12 +189,15 @@ function EnvironmentForm({
           disabled={saving}
           onChange={setKind}
         />
-        <input
+        <textarea
           // Keyed to the kind, so a value typed as a variable is not shown again as a secret's or the reverse.
           key={kind}
           ref={valueField}
-          type={kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? "password" : "text"}
-          className={`settings-input environment-value ${NO_CAPTURE}`}
+          // A textarea, so a certificate or a key's line breaks are kept; a secret's characters are drawn as discs.
+          rows={1}
+          className={`settings-input environment-value ${NO_CAPTURE}${
+            kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? " environment-secret" : ""
+          }`}
           aria-label="Value"
           placeholder={kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? "Paste the secret" : "Value"}
           defaultValue={
