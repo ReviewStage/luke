@@ -455,16 +455,22 @@
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
    stands under its own; a kind typed with its colon has no back arrow, so
    its glyph keeps the rows' inset. */
-.mention-menu-crumb:not(:has(.agent-servers-back)) {
+.mention-menu-crumb:not(:has(button)) {
   padding-left: calc(var(--row-inset) + var(--menu-inset));
+}
+
+/* A folder's path too long for the crumb is cut short. */
+.mention-menu-crumb-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mention-menu .mention-menu-foot {
   display: flex;
-  gap: var(--space-12);
-  padding: var(--space-6) calc(var(--row-inset) + var(--menu-inset));
-  color: var(--text-tertiary);
-  font-size: 11.5px;
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-6) calc(var(--row-inset) + var(--menu-inset));
 }
 
 /* The editor of a plan's text is the room its @ list hangs in. */

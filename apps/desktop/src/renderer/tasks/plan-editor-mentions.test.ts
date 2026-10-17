@@ -321,10 +321,7 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
 
 /** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
 function crumb(container: HTMLElement): string | undefined {
-  return (
-    container.querySelector(".mention-menu-crumb .agent-servers-page-title")?.textContent ??
-    undefined
-  );
+  return container.querySelector(".mention-menu-crumb-title")?.textContent ?? undefined;
 }
 
 test("a plan with no repository offers no files and folders to narrow to", async () => {

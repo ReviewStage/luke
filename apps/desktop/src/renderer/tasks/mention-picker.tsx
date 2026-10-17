@@ -12,7 +12,18 @@ import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ArrowLeftIcon, ChevronRightIcon, DocumentIcon, ProviderMark, UserIcon } from "@luke/ui";
+import {
+  ArrowLeftIcon,
+  ChevronRightIcon,
+  DocumentIcon,
+  IconButton,
+  ProviderMark,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  UserIcon,
+} from "@luke/ui";
 import { type Actor, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -741,23 +752,28 @@ interface Crumb {
 function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   const { kind, folder, back } = crumb;
   return (
-    <div className="agent-servers-page-head mention-menu-crumb">
+    // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
+    // biome-ignore lint/a11y/noStaticElementInteractions: the press is the back button's; the crumb only keeps the focus where it was.
+    <div
+      className="agent-servers-page-head mention-menu-crumb"
+      onMouseDown={(event) => event.preventDefault()}
+    >
       {back === undefined ? null : (
-        <button
-          type="button"
-          tabIndex={-1}
-          className="icon-button agent-servers-back"
-          aria-label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
-          onMouseDown={(event) => event.preventDefault()}
+        <IconButton
+          icon={<ArrowLeftIcon />}
+          label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}
+          tabbable={false}
           onClick={back}
-        >
-          <ArrowLeftIcon />
-        </button>
+        />
       )}
       <span className="menu-item-glyph">
         {folder === undefined ? <KindGlyph kind={kind} /> : <FolderIcon aria-hidden="true" />}
       </span>
-      <span className="agent-servers-page-title">{folder ?? kind.name}</span>
+      <span className="mention-menu-crumb-title">
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+          {folder ?? kind.name}
+        </Text>
+      </span>
     </div>
   );
 }
@@ -843,7 +859,14 @@ function MentionMenu({
       </div>
       <div className="task-compose-menu-foot mention-menu-foot" aria-hidden="true">
         {keys.map((key) => (
-          <span key={key}>{key}</span>
+          <Text
+            key={key}
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.SUBTLE}
+          >
+            {key}
+          </Text>
         ))}
       </div>
     </div>

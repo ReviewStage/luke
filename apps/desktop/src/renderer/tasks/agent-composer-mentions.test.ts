@@ -994,10 +994,7 @@ async function wideBox() {
 
 /** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
 function crumb(container: HTMLElement): string | undefined {
-  return (
-    container.querySelector(".mention-menu-crumb .agent-servers-page-title")?.textContent ??
-    undefined
-  );
+  return container.querySelector(".mention-menu-crumb-title")?.textContent ?? undefined;
 }
 
 /** The keys the list's foot names. */
@@ -1070,6 +1067,28 @@ test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words w
   assert.equal(narrowedCrumb, "Files and folders");
   assert.deepEqual(narrowed, [["Files and folders", ["apps/", "README.md"]]]);
   assert.equal(backspace.defaultPrevented, true);
+  assert.equal(composerEditor(container).textContent, "See @");
+  assert.equal(crumb(container), undefined);
+  assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");
+});
+
+test("pressing the crumb's back arrow widens the list again and keeps the caret in the composer", async () => {
+  const { container } = await wideBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+  highlightRow(container, "Mention from", "Files and folders");
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  const back = container.querySelector<HTMLButtonElement>('button[aria-label="All kinds"]');
+  assert.ok(back !== null, "the narrowed list's crumb offers the way back");
+  const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  back.dispatchEvent(press);
+  act(() => back.click());
+  await settle();
+
+  assert.equal(press.defaultPrevented, true);
+  assert.equal(back.tabIndex, -1);
   assert.equal(composerEditor(container).textContent, "See @");
   assert.equal(crumb(container), undefined);
   assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");
