@@ -1088,7 +1088,7 @@ test("start_agent forks an agent at one of its messages that read_agent names, w
   );
 });
 
-test("start_agent from another agent refuses, in words the model acts on and starting nothing, an agent of no workspace of the caller's, a message none of the source's, a prompt or a branch beside it, the caller continuing itself, a source still working, a task other than the source's, an archived task, and a source on no task", async () => {
+test("start_agent from another agent refuses, in words the model acts on and starting nothing, an agent of no workspace of the caller's, a message none of the source's, a prompt, a branch, or a new task beside it, the caller continuing itself, a source still working, a task other than the source's, an archived task, and a source on no task", async () => {
   const { workspaceId, plans, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -1108,6 +1108,7 @@ test("start_agent from another agent refuses, in words the model acts on and sta
   await refused({ from: { agentId: teammates.id, messageId: randomUUID() } }, R.NO_MESSAGE);
   await refused({ from: { agentId: teammates.id }, prompt: "Do it again." }, R.FROM_WITH_PROMPT);
   await refused({ from: { agentId: teammates.id }, branch: STACKED_BRANCH }, R.FROM_WITH_PROMPT);
+  await refused({ from: { agentId: teammates.id }, newTask: "Invoices" }, R.FROM_WITH_PROMPT);
   await refused({ from: { agentId: caller.id } }, R.SELF_CONTINUE);
   // A teammate's agent with no turn yet is still starting, and one whose turn runs is working.
   await refused({ from: { agentId: teammates.id } }, R.SOURCE_RUNNING);
