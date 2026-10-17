@@ -25,6 +25,7 @@ import {
   Chip,
   ConfirmDialog,
   ProviderMark,
+  SettingsRow,
   SettingsSection,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -215,6 +216,13 @@ const GITHUB_CONNECTED_LINE = {
   MANAGES: "Add accounts and choose repositories on GitHub.",
   MEMBER: "Accounts and repositories are managed on GitHub.",
 } as const;
+
+/** GitHub's own mark, which leads its row as a provider's leads Settings › Integrations'. */
+const GITHUB_MARK = (
+  <span className="settings-row-mark">
+    <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+  </span>
+);
 
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
 type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
@@ -1022,23 +1030,26 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
  * GitHub, an organization's logo or a person's avatar, its login, and under
  * it Connected, or that GitHub suspended or removed its installation. The
  * tile is a workspace's, keyed by the login, so the login's letter stands
- * until the picture loads and wherever it fails to.
+ * until the picture loads and wherever it fails to. It is `@luke/ui`'s
+ * `SettingsRow`, its inset its container's.
  */
 function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
   return (
-    <div className="settings-row settings-row-nested">
-      <span className="settings-row-mark">
-        <WorkspaceTile
-          workspace={{
-            id: `github:${connection.login}`,
-            name: connection.login,
-            pictureUrl: githubAccountPictureUrl(connection.login),
-          }}
-        />
-      </span>
-      <RowCopy
-        name={connection.login}
-        line={
+    <div className="workspace-github-account">
+      <SettingsRow
+        leading={
+          <span className="settings-row-mark">
+            <WorkspaceTile
+              workspace={{
+                id: `github:${connection.login}`,
+                name: connection.login,
+                pictureUrl: githubAccountPictureUrl(connection.login),
+              }}
+            />
+          </span>
+        }
+        label={connection.login}
+        description={
           connection.active ? (
             <span className="settings-state" data-state="connected">
               {GITHUB_CONNECTED}
@@ -1049,7 +1060,9 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
             </span>
           )
         }
-      />
+      >
+        {() => null}
+      </SettingsRow>
     </div>
   );
 }
@@ -1062,7 +1075,8 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
  * configure one it is on, so one door does both. Either press opens the
  * browser through the one connect, whose return to Luke adds the
  * installation to this workspace; a page that could not be opened says why
- * under the row.
+ * under the row. The row is `@luke/ui`'s `SettingsRow` led by GitHub's mark,
+ * its press the outline `Button`.
  */
 function ManagedGitHub({
   workspace,
@@ -1082,32 +1096,34 @@ function ManagedGitHub({
   };
   const connected = connections.length > 0;
   return (
-    <>
-      <div className="settings-row">
-        <span className="settings-row-mark">
-          <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-        </span>
-        <RowCopy
-          name="GitHub"
-          line={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
-        />
-        <button type="button" className="toolbar-button bordered-button" onClick={open}>
-          {connected ? (
-            <>
+    <div className="workspace-github">
+      <SettingsRow
+        leading={GITHUB_MARK}
+        label="GitHub"
+        description={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
+      >
+        {() =>
+          connected ? (
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<ExternalLinkIcon aria-hidden="true" />}
+              onClick={open}
+            >
               Manage on GitHub
-              <ExternalLinkIcon aria-hidden="true" />
-            </>
+            </Button>
           ) : (
-            "Connect"
-          )}
-        </button>
-      </div>
+            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
+              Connect
+            </Button>
+          )
+        }
+      </SettingsRow>
       {refusal === undefined ? null : (
         <p className="error-message" role="alert">
           {refusal}
         </p>
       )}
-    </>
+    </div>
   );
 }
 
@@ -1123,17 +1139,15 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
       {managesWorkspace(workspace) ? (
         <ManagedGitHub workspace={workspace} connections={connections} />
       ) : (
-        <div className="settings-row">
-          <span className="settings-row-mark">
-            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-          </span>
-          <RowCopy
-            name="GitHub"
-            line={
-              connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
-            }
-          />
-        </div>
+        <SettingsRow
+          leading={GITHUB_MARK}
+          label="GitHub"
+          description={
+            connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
+          }
+        >
+          {() => null}
+        </SettingsRow>
       )}
       {connections.map((connection) => (
         <ConnectionRow

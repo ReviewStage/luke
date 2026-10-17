@@ -394,7 +394,8 @@
 .api-key,
 .workspace-identity,
 .workspace-member,
-.workspace-invite-row {
+.workspace-invite-row,
+.workspace-github {
   display: flex;
   flex-direction: column;
 }
@@ -416,7 +417,8 @@
 .api-key > .error-message,
 .workspace-identity > .error-message,
 .workspace-member > .error-message,
-.workspace-invite-row > .error-message {
+.workspace-invite-row > .error-message,
+.workspace-github > .error-message {
   margin-top: calc(-1 * var(--luke-space-4));
   padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
 }
@@ -609,18 +611,21 @@
   height: 20px;
 }
 
-/* A row that belongs to the row above it, as a workspace's GitHub accounts
-   belong to GitHub's: inset to the words of its parent, past the parent's
-   mark and gap, so its hairline starts there too and the card reads as one
-   provider with its accounts under it. Its own mark is a tile a step
-   smaller than a provider's. */
-.settings-card > .settings-row.settings-row-nested {
-  min-height: 44px;
-  margin-left: calc(var(--space-16) + 20px + var(--space-12));
-  padding-left: 0;
+/* A workspace's GitHub account (`.workspace-github-account`), which belongs
+   to GitHub's row above it: inset to the words of its parent, past the
+   parent's mark and gap, so its hairline starts there too and the card reads
+   as one provider with its accounts under it. The row is pulled back by its
+   own inset, so its mark stands where its hairline starts. Its mark is a tile
+   a step smaller than a provider's. */
+.workspace-github-account {
+  margin-left: calc(var(--luke-settings-row-inline) + 20px + var(--luke-space-12));
 }
 
-.settings-row-nested > .settings-row-mark > .workspace-tile {
+.workspace-github-account > .luke-settings-row {
+  margin-left: calc(-1 * var(--luke-settings-row-inline));
+}
+
+.workspace-github-account .settings-row-mark > .workspace-tile {
   width: 18px;
   height: 18px;
   font-size: 11px;
