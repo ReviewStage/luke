@@ -202,6 +202,8 @@ export interface ChatMessageToast {
   messageId: string;
   /** The workspace whose chat it waits in, whose Chat on screen withdraws the toast. */
   workspaceId: string;
+  /** The plan whose channel it waits in, none outside one: that task's Chat tab on screen withdraws it too. */
+  planId: string | null;
   words: string;
   detail: string;
 }
@@ -279,8 +281,8 @@ export interface AgentNoticesDependencies {
     /** The workspace whose list holds the item, which the window lists first; absent from a service before it. */
     readonly workspaceId?: string;
   }) => void;
-  /** Brings Luke forward on its Chat: a chat notification's click. */
-  openChat: () => void;
+  /** Brings Luke forward on the Chat of the workspace a message waits in: a chat notification's click. */
+  openChat: (workspaceId: string) => void;
   /** Whether the window offers Chat, without which nothing waiting in chat is counted or announced. */
   chatOn: () => boolean;
   watchInterval?: Duration.Duration;
@@ -308,8 +310,17 @@ export interface AgentNotices {
   shown(agentId: string | null): void;
   /** The panel said which task's Inbox tab it shows, or none. */
   shownInbox(taskId: string | null): void;
-  /** The panel said whether its Chat is on screen. */
-  shownChat(workspaceId: string | null): void;
+  /** The panel said which Chat it has on screen, or none. */
+  shownChat(shown: ChatShown | null): void;
+}
+
+/**
+ * The Chat the panel has on screen: a workspace's whole Chat, where the
+ * plan is none, or one task's Chat tab, which shows only its plan's channel.
+ */
+export interface ChatShown {
+  readonly workspaceId: string;
+  readonly planId: string | null;
 }
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
@@ -446,6 +457,12 @@ function chatNoticeText(
     title: planName ?? CHAT_NOTICE_TITLE,
     body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
   };
+}
+
+/** Whether a waiting message is on the Chat shown: anywhere in a workspace's whole Chat, or in its plan's channel on a task's Chat tab. */
+function chatShows(shown: ChatShown | null, entry: AccountChatEntry): boolean {
+  if (shown === null || shown.workspaceId !== entry.workspaceId) return false;
+  return shown.planId === null || shown.planId === entry.planId;
 }
 
 /** The items each task holds waiting, the task whose item changed latest first, as the read answered them latest first. */
@@ -596,8 +613,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** The highest revision any answer for the account held of each item, so one back unchanged is known. */
     const seenRevision = new Map<string, number>();
     let shownInbox: string | null = null;
-    /** The workspace whose Chat the panel has on screen, none where no Chat is: a message waiting there is read there. */
-    let shownChat: string | null = null;
+    /** The Chat the panel has on screen, none where no Chat is: a message waiting there is read there. */
+    let shownChat: ChatShown | null = null;
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -742,7 +759,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** A chat message came to wait: told nowhere on Chat in front, in the toast elsewhere in front, and as a notification behind. */
     function announceChat(entry: AccountChatEntry): void {
-      if (focused && shownChat === entry.workspaceId) return;
+      if (focused && chatShows(shownChat, entry)) return;
       const text = chatNoticeText(
         entry,
         entry.planId === null ? undefined : taskName(entry.planId),
@@ -751,12 +768,15 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         doors.toastChat({
           messageId: entry.messageId,
           workspaceId: entry.workspaceId,
+          planId: entry.planId,
           words: text.body,
           detail: text.title,
         });
         return;
       }
-      if (dependencies.notifying()) doors.post({ ...text, onClick: dependencies.openChat });
+      if (dependencies.notifying()) {
+        doors.post({ ...text, onClick: () => dependencies.openChat(entry.workspaceId) });
+      }
     }
 
     /** An item opened: told nowhere on its task's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
@@ -1049,8 +1069,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         shownAgent = agentId;
         seen(agentId);
       },
-      shownChat: (workspaceId) => {
-        shownChat = workspaceId;
+      shownChat: (shown) => {
+        shownChat = shown;
       },
       shownInbox: (taskId) => {
         shownInbox = taskId;

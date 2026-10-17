@@ -22,6 +22,7 @@ import {
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { ChatShown } from "@luke/host/agent-notices";
 import {
   type AppInboxTask,
   type AppInboxTaskHolding,
@@ -553,6 +554,8 @@ export interface TasksControl {
   inbox: readonly AppInboxTask[];
   /** The task whose Inbox is on screen, or none: what main is told, so an item it shows is not announced. */
   inboxShown: string | null;
+  /** The Chat on screen, the window's or a task's Chat tab, or none: what main is told, so a message it shows is not announced. */
+  chatShown: ChatShown | null;
   /** Every task holding an inbox item, waiting or settled, the task whose item changed latest first: what the window's Inbox lists. */
   inboxTasks: readonly AppInboxTaskHolding[];
   /** What waits on the developer from agents with no task, as main's read last answered: what the window's Inbox lists beside the tasks' and counts with them. */
@@ -1414,27 +1417,52 @@ export function useTasksTab(input: {
       : columnShown && mainTabs.tab === MAIN_TAB.INBOX
         ? (viewed.activeTaskId ?? null)
         : null;
-  // Chat on screen, the window's or a task's Chat tab, is where what waits in chat is read, so main announces none of it then.
-  const chatOnScreen =
-    shown && (standIn?.kind === STAND_IN.CHAT || (columnShown && mainTabs.tab === MAIN_TAB.CHAT));
-  // Note that it is the listed workspace's Chat on screen, which is all a message elsewhere is not read in.
-  const chatShownIn = chatOnScreen ? (listedWorkspace?.id ?? null) : null;
+  // Chat on screen is where what waits in it is read, so main announces none of that then: the
+  // window's Chat reads the listed workspace's every channel, and a task's Chat tab only its plan's.
+  const chatShown: ChatShown | null =
+    !shown || listedWorkspace === undefined
+      ? null
+      : standIn?.kind === STAND_IN.CHAT
+        ? { workspaceId: listedWorkspace.id, planId: null }
+        : columnShown && mainTabs.tab === MAIN_TAB.CHAT && viewed.activeTaskId !== undefined
+          ? { workspaceId: listedWorkspace.id, planId: viewed.activeTaskId }
+          : null;
+  const chatShownWorkspace = chatShown?.workspaceId ?? null;
+  const chatShownPlan = chatShown?.planId ?? null;
   const reportedTab = useRef<
-    { agentId: string | null; inboxTaskId: string | null; chatShownIn: string | null } | undefined
+    | {
+        agentId: string | null;
+        inboxTaskId: string | null;
+        chatShownWorkspace: string | null;
+        chatShownPlan: string | null;
+      }
+    | undefined
   >(undefined);
   useEffect(() => {
     const was = reportedTab.current;
     if (
       was?.agentId === shownAgent &&
       was.inboxTaskId === shownInbox &&
-      was.chatShownIn === chatShownIn
+      was.chatShownWorkspace === chatShownWorkspace &&
+      was.chatShownPlan === chatShownPlan
     ) {
       return;
     }
-    const now = { agentId: shownAgent, inboxTaskId: shownInbox, chatShownIn };
-    reportedTab.current = now;
-    tell(ACT_KIND.CODING_AGENTS_SHOWN, now);
-  }, [shownAgent, shownInbox, chatShownIn, tell]);
+    reportedTab.current = {
+      agentId: shownAgent,
+      inboxTaskId: shownInbox,
+      chatShownWorkspace,
+      chatShownPlan,
+    };
+    tell(ACT_KIND.CODING_AGENTS_SHOWN, {
+      agentId: shownAgent,
+      inboxTaskId: shownInbox,
+      chatShown:
+        chatShownWorkspace === null
+          ? null
+          : { workspaceId: chatShownWorkspace, planId: chatShownPlan },
+    });
+  }, [shownAgent, shownInbox, chatShownWorkspace, chatShownPlan, tell]);
   // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
   useEffect(() => {
     if (inboxChosen !== undefined) {
@@ -2741,6 +2769,7 @@ export function useTasksTab(input: {
     ),
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
+    chatShown,
     inboxTasks: input.inboxTasks,
     inboxTaskless: input.inboxTaskless,
     failedRuns: input.failedRuns,

@@ -330,15 +330,17 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * A chat notification clicked: the panel is to open its Chat. An event,
-   * as an inbox notification's click is, because it is an ask the window
-   * answers once.
+   * A chat notification clicked: the panel is to open the Chat of the
+   * workspace its message waits in. An event, as an inbox notification's
+   * click is, because it is an ask the window answers once.
    */
   onShowChat: entry({
     kind: "subscribe",
     channel: "app:show-chat",
     args: noArgs,
-    result: result<Record<string, never>>((value) => isRecord(value)),
+    result: result<{ workspaceId: string }>(
+      (value) => isRecord(value) && isWireString(value.workspaceId),
+    ),
   }),
   /**
    * The floating call window moved under a pointer that did not: a drag of
@@ -491,11 +493,18 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:chat-message-waiting",
     args: noArgs,
-    result: result<{ messageId: string; workspaceId: string; words: string; detail: string }>(
+    result: result<{
+      messageId: string;
+      workspaceId: string;
+      planId: string | null;
+      words: string;
+      detail: string;
+    }>(
       (value) =>
         isRecord(value) &&
         isWireString(value.messageId) &&
         isWireString(value.workspaceId) &&
+        (value.planId === null || isWireString(value.planId)) &&
         isWireString(value.words) &&
         isWireString(value.detail),
     ),

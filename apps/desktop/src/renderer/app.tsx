@@ -460,16 +460,20 @@ export function App(): React.JSX.Element {
     state?.version ?? 0,
     tasks.inboxShown,
   );
-  // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the window's Chat.
-  // Note that Chat's own open asks first while a page stands its ask, as every way into Chat does.
-  const showChat = useRef(tasks.chatView.onOpen);
-  showChat.current = tasks.chatView.onOpen;
-  const openChat = useCallback(() => {
-    changeTab(PANEL_TAB.TASKS);
-    showChat.current();
-  }, [changeTab]);
-  useEffect(() => appBridge().onShowChat(() => openChat()), [openChat]);
-  useChatToasts(openChat, tasks.chatView.open ? (tasks.workspace?.id ?? null) : null);
+  // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the Chat of
+  // the workspace the message waits in, listing that workspace first where another is listed.
+  const openChat = useCallback(
+    (workspaceId: string) =>
+      guardLeave(() => {
+        const doors = inboxDoors.current;
+        changeTab(PANEL_TAB.TASKS);
+        if (doors.workspace?.id !== workspaceId) doors.onChooseWorkspace(workspaceId);
+        doors.chatView.onOpen();
+      })(),
+    [changeTab, guardLeave],
+  );
+  useEffect(() => appBridge().onShowChat(({ workspaceId }) => openChat(workspaceId)), [openChat]);
+  useChatToasts(openChat, tasks.chatShown);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

@@ -538,11 +538,19 @@ test("a pause names how long it waits, and its answer how long it waited or that
   });
 });
 
-test("a chat tool's call opens the plan's Chat tab, where what it posted or read stands", () => {
+test("a post into the plan's own channel opens the plan's Chat tab, and a post elsewhere, a read, or a resolve opens nothing", () => {
+  const target = (tool: string, input: Record<string, string | number>) =>
+    toolTarget({ tool, callId: "call", input, output: { status: "accepted" } });
+  assert.deepEqual(target("post_chat", { text: "hi" }), { kind: TOOL_TARGET.CHAT });
   assert.deepEqual(
-    ["post_chat", "read_chat", "resolve_ask"].map((tool) =>
-      toolTarget({ tool, callId: "call", input: { text: "hi" }, output: { status: "accepted" } }),
-    ),
-    [{ kind: TOOL_TARGET.CHAT }, { kind: TOOL_TARGET.CHAT }, { kind: TOOL_TARGET.CHAT }],
+    [
+      target("post_chat", { text: "hi", to: "@sam" }),
+      target("post_chat", { text: "hi", to: "#launch" }),
+      target("post_chat", { text: "hi", replyTo: 4 }),
+      target("read_chat", {}),
+      target("read_chat", { channel: "@sam" }),
+      target("resolve_ask", { key: "invite", reason: "Settled." }),
+    ],
+    [undefined, undefined, undefined, undefined, undefined, undefined],
   );
 });

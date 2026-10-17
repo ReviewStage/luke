@@ -116,8 +116,8 @@ export interface WindowService extends DesktopService {
   showFailedRun: (place: FailedRunPlace) => void;
   /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
   toastFailedRun: (run: FailedRunToast) => void;
-  /** Asks the panels to open their Chat: a chat notification's click. */
-  showChat: () => void;
+  /** Asks the panels to open the Chat of the workspace a message waits in: a chat notification's click. */
+  showChat: (workspaceId: string) => void;
   /** Asks the panels to say a chat message waits in their toast: one that came to wait while the window is focused. */
   toastChatMessage: (message: ChatMessageToast) => void;
   /**
@@ -320,8 +320,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onRunFailed, { ...place, words, detail });
   }
 
-  function showChat(): void {
-    panels.broadcast(channels.onShowChat, {});
+  function showChat(workspaceId: string): void {
+    panels.broadcast(channels.onShowChat, { workspaceId });
   }
 
   function toastChatMessage(message: ChatMessageToast): void {

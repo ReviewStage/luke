@@ -293,9 +293,9 @@ export function composeDesktop(
             state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
             EXPERIMENT.AUTOMATIONS,
           ),
-        openChat: () => {
+        openChat: (workspaceId) => {
           windows.panels.focusExpanded();
-          windows.showChat();
+          windows.showChat(workspaceId);
         },
         chatOn: () =>
           experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),

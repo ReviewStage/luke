@@ -88,7 +88,7 @@ function fixture() {
   const inboxToasted: InboxItemToast[] = [];
   const runsToasted: FailedRunToast[] = [];
   const chatToasted: ChatMessageToast[] = [];
-  let chatOpened = 0;
+  const chatOpened: string[] = [];
   let chatOn = true;
   const badges: number[] = [];
   const doors = Layer.succeed(AgentNoticeDoors, {
@@ -185,9 +185,7 @@ function fixture() {
       },
       openFailedRun: (place) => openedAutomations.push(place.automationId),
       automationsOn: () => automationsOn,
-      openChat: () => {
-        chatOpened += 1;
-      },
+      openChat: (workspaceId) => chatOpened.push(workspaceId),
       chatOn: () => chatOn,
       openInbox: (planId) => openedInboxes.push(planId),
       openTasklessItem: (item) => openedTaskless.push(item),
@@ -242,8 +240,8 @@ function fixture() {
     failedRuns,
     openedAutomations,
     chatToasted,
-    /** How many times a chat notification's click opened Chat. */
-    chatOpened: () => chatOpened,
+    /** The workspace each chat notification's click opened Chat on. */
+    chatOpened,
     /** The account's Chat experiment. */
     turnChat: (on: boolean) => {
       chatOn = on;
@@ -972,7 +970,14 @@ it.effect(
 
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
-        chat: [chatEntry(40), chatEntry(47, { reason: ACCOUNT_CHAT_REASON.MENTION, from: "luke" })],
+        chat: [
+          chatEntry(40),
+          chatEntry(47, {
+            reason: ACCOUNT_CHAT_REASON.MENTION,
+            from: "luke",
+            workspaceId: "workspace-beta",
+          }),
+        ],
         cursor: "2",
         readAt: READ_AT,
       });
@@ -983,7 +988,8 @@ it.effect(
       );
       assert.equal(f.badges.at(-1), 3);
       f.posted.find((notice) => notice.body === "@luke mentioned you")?.onClick();
-      assert.equal(f.chatOpened(), 1);
+      // Its click opens the Chat of the workspace it waits in, whichever the window lists.
+      assert.deepEqual(f.chatOpened, ["workspace-beta"]);
 
       f.focus(true);
       f.answerInbox({
@@ -1001,12 +1007,13 @@ it.effect(
         {
           messageId: chatEntry(51).messageId,
           workspaceId: "workspace-acme",
+          planId: null,
           words: "@agent-2 asked you",
           detail: "Chat",
         },
       ]);
 
-      notices.shownChat("workspace-acme");
+      notices.shownChat({ workspaceId: "workspace-acme", planId: null });
       const before = f.posted.length;
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
@@ -1027,6 +1034,35 @@ it.effect(
         [chatEntry(51).messageId, chatEntry(53).messageId],
       );
       assert.equal(f.posted.length, before);
+    }),
+);
+
+it.effect(
+  "a task's Chat tab on screen quiets only what waits in its plan's channel: a direct message and another plan's message in the same workspace are still told",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+      f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      notices.shownChat({ workspaceId: "workspace-acme", planId: TASK_ID });
+      const otherPlan = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
+      f.answerInbox({
+        items: [],
+        chat: [
+          chatEntry(60),
+          chatEntry(61, { planId: null }),
+          chatEntry(62, { planId: otherPlan }),
+        ],
+        cursor: "2",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(
+        f.chatToasted.map((toast) => toast.messageId),
+        [chatEntry(61).messageId, chatEntry(62).messageId],
+      );
     }),
 );
 
