@@ -72,6 +72,25 @@
         "maxLength": 64
       },
       "maxItems": 32
+    },
+    "from": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "agentId"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

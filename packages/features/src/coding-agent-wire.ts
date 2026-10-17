@@ -324,6 +324,19 @@ export const disabledServersSchema = EffectSchema.Array(
 );
 
 /**
+ * The agent a Start takes over from, on the same plan: everything it did
+ * where no message is named, which is a continue, or its transcript up to
+ * and including one of its own assistant messages, by that message's id as
+ * its transcript carries it, which is a fork.
+ */
+const codingAgentStartFromSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  messageId: EffectSchema.optionalKey(wireUuidSchema),
+});
+
+export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
+
+/**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
@@ -332,7 +345,10 @@ export const disabledServersSchema = EffectSchema.Array(
  * bounded as a message is: its words, the files the developer attached to
  * it, or both. With none, the agent is handed the plan, and files go only
  * with a prompt. The MCP servers its draft switched off go with it, and none
- * is off where the Start names none.
+ * is off where the Start names none. A Start `from` another agent of the
+ * plan is handed that agent's brief and its transcript replayed after it,
+ * so it names no prompt or files of its own, and it runs on that agent's
+ * choice and servers where it names none.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -342,17 +358,23 @@ export const codingAgentStartRequestFields = {
   prompt: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
+  from: EffectSchema.optionalKey(codingAgentStartFromSchema),
 };
 
-/** A Start's words or files: none, or words, files, or both, since files go only with a prompt. */
+/** A Start's words or files: none, or words, files, or both, since files go only with a prompt; none at all from another agent, whose brief it is handed. */
 const startBrief = EffectSchema.makeFilter(
   ({
     prompt,
     attachments,
+    from,
   }: {
     readonly prompt?: string;
     readonly attachments?: readonly CodingAgentAttachment[];
-  }) => (prompt === undefined ? attachments === undefined : hasWordsOrFiles(prompt, attachments)),
+    readonly from?: CodingAgentStartFrom;
+  }) =>
+    prompt === undefined
+      ? attachments === undefined
+      : from === undefined && hasWordsOrFiles(prompt, attachments),
 );
 
 /** The Start request as a caller holds it, before it is put on the wire. */
@@ -565,6 +587,20 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * started by hand, and from a service before it.
    */
   automationName: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The agent this one was started from, on the same plan, and the message
+   * of its it was forked at where it was forked rather than continued, with
+   * how many of that agent's steps its replay kept of how many there were;
+   * absent for an agent started afresh, and from a service before it.
+   */
+  from: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      agentId: wireUuidSchema,
+      messageId: EffectSchema.optionalKey(wireUuidSchema),
+      steps: countedNumber,
+      totalSteps: countedNumber,
+    }),
+  ),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

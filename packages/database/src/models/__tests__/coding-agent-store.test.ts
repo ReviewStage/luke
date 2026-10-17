@@ -31,6 +31,7 @@ import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
   archiveUnmovedCodingAgent,
+  createCodingAgent,
   delegationsOf,
   IDLE_ARCHIVE,
   linePlacesOf,
@@ -957,5 +958,54 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, agentId)));
       assert.deepEqual(yield* pinnedOnes(agentId), []);
     }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agent started from another", (it) => {
+  it.effect(
+    "an agent started from another keeps that agent, the message it forked at, and its replay's counts, read by a teammate as by its starter, and one started afresh reads from none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+        const source = Option.getOrThrow(
+          yield* createCodingAgent(starter, {
+            taskId: plan.id,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            ...choice,
+            repository: "acme/api",
+          }),
+        ).agent;
+        const startedFrom = {
+          agentId: source.id,
+          messageId: randomUUID(),
+          steps: 12,
+          totalSteps: 40,
+        };
+        const forked = Option.getOrThrow(
+          yield* createCodingAgent(teammate, {
+            taskId: plan.id,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            ...choice,
+            repository: "acme/api",
+            startedFrom,
+          }),
+        ).agent;
+
+        assert.deepEqual(source.startedFrom, null);
+        assert.deepEqual(forked.startedFrom, startedFrom);
+        assert.deepEqual(
+          Option.getOrThrow(yield* readCodingAgent(starter, forked.id)).startedFrom,
+          startedFrom,
+        );
+      }),
   );
 });

@@ -1411,6 +1411,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("disabledServers" in params
             ? { disabledServers: params.disabledServers }
             : undefined),
+          ...("from" in params ? { from: params.from } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
