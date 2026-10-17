@@ -119,26 +119,6 @@
     font-family: var(--font-page);
   }
 
-  /* The demo video deliberately draws wider than the measure and sizes
-     itself in `vw`, which counts a classic scrollbar's gutter that `100%`
-     does not. Left alone that gutter is a horizontal scrollbar on every page
-     anywhere scrollbars take space, which is everywhere the visitor is not
-     on a Mac.
-
-     It has to be `clip` and not `hidden`: `hidden` makes a scroll container,
-     which script and keyboard can scroll even without bars, where `clip`
-     merely crops. `overflow-y` is left alone, which a `clip` on the other
-     axis permits, so the page still scrolls down.
-
-     And it has to name both elements. The root's overflow propagates to the
-     viewport and the root itself is then drawn as `visible`, so `html` alone
-     clips nothing; `body` alone is likewise skipped while the root carries a
-     value. Only the pair actually holds. */
-  html,
-  body {
-    overflow-x: clip;
-  }
-
   body {
     background: var(--background);
     color: var(--foreground);
