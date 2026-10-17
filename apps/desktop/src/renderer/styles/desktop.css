@@ -5032,11 +5032,20 @@ button.integration-tool-head:hover,
   margin-top: var(--space-24);
 }
 
-/* The suggested automations, at the list's measure, a group's gap below it. */
+/* The suggested automations, at the list's measure, a group's gap below it,
+   their heading a short step above the cards and inset a hair, as a
+   settings section's is. */
 .automation-suggestions {
+  display: flex;
   width: 100%;
   max-width: var(--reading-width);
+  flex-direction: column;
+  gap: var(--space-8);
   margin-inline: auto;
+}
+
+.automation-suggestions-head {
+  padding: 0 var(--space-2);
 }
 
 .automation-group + .automation-suggestions {
@@ -5092,7 +5101,6 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 2px; /* off-scale */
 }
 
 .automation-row-name,
@@ -5102,15 +5110,19 @@ button.integration-tool-head:hover,
   white-space: nowrap;
 }
 
+/* The name in the body role, what fires it and when it runs next in the
+   caption role's quietest ink. */
 .automation-row-name {
-  color: var(--text-primary);
-  font-size: 13px;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
 }
 
 .automation-row-detail,
 .automation-row-when {
-  color: var(--text-tertiary);
-  font-size: 12px;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .automation-row-when {
@@ -5118,14 +5130,14 @@ button.integration-tool-head:hover,
   font-variant-numeric: tabular-nums;
 }
 
-/* An automation turned off reads as set aside: its name in the secondary ink. */
+/* An automation turned off reads as set aside: its name in the muted ink. */
 .automation-row[data-enabled="false"] .automation-row-name {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
-/* Who owns it, never in doubt: the workspace in the primary ink beside its
-   building, Personal in the secondary beside its lock, in a column of its
-   own so the owners line up down the card. */
+/* Who owns it, never in doubt: the workspace in the text's own ink beside
+   its photo, Personal in the muted one, set in the label role, in a column
+   of its own so the owners line up down the card. */
 .automation-owner {
   display: inline-flex;
   width: 112px; /* off-scale */
@@ -5133,9 +5145,10 @@ button.integration-tool-head:hover,
   align-items: center;
   gap: var(--space-6);
   overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 500;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
   white-space: nowrap;
 }
 
@@ -5146,7 +5159,7 @@ button.integration-tool-head:hover,
 }
 
 .automation-owner[data-owner="workspace"] {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 /* A row is its press, which opens its page, from its edge to its switch, as
@@ -5279,15 +5292,16 @@ button.integration-tool-head:hover,
 }
 
 .automation-suggestion-name {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 500;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
 }
 
 .automation-suggestion-detail {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.45;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* An automation's page: crumbs back to the list naming its owner, then its
