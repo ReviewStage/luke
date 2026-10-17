@@ -64,6 +64,7 @@ import {
   CODING_AGENT_TOOL_REFUSAL,
   runArchiveAgent,
   runListAgents,
+  runListModels,
   runListTasks,
   runMessageAgent,
   runReadAgent,
@@ -427,7 +428,8 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.ARCHIVE_AGENT
     | typeof CODER_TOOL.UNARCHIVE_AGENT
     | typeof CODER_TOOL.READ_PAGE
-    | typeof CODER_TOOL.LIST_TASKS;
+    | typeof CODER_TOOL.LIST_TASKS
+    | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
 }
@@ -442,6 +444,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.READ_PAGE]: runReadPage,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
+  [CODER_TOOL.LIST_MODELS]: runListModels,
 } as const;
 
 /** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */

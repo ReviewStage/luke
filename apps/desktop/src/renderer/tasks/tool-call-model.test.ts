@@ -498,6 +498,18 @@ test("an archive names the agent its answer titles and opens nothing, its tab be
   });
 });
 
+test("a list of the models reads as one, not as a tool this build does not know, and opens nothing", () => {
+  const call = {
+    tool: "list_models",
+    callId: "call-1",
+    input: {},
+    output: { status: "accepted", models: [], default: { model: "openai/gpt-6.1-sol" } },
+  };
+
+  assert.equal(toolCallView(call).kind, CALL_KIND.LIST_MODELS);
+  assert.equal(toolTarget(call), undefined);
+});
+
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {
   const call = (isYourTask: boolean) => ({
     tool: "read_page",
