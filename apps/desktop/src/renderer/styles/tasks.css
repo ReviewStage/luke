@@ -2990,6 +2990,12 @@ button.pull-request-check:hover {
   color: var(--danger-text);
 }
 
+/* Continued in names agents, which is no failure, so it is not drawn in a
+   closed box's danger colour. */
+.failure-note .agent-continue[data-continued] {
+  color: var(--text-secondary);
+}
+
 /* A finished turn's line (`working-time.tsx`) breaks between how long it
    worked and when it ended, never inside either. */
 [data-worked] > :is([data-worked-length], time) {
