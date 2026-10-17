@@ -103,3 +103,23 @@
   /* A row's corner and the inset together, so a highlighted row follows the menu's curve. */
   --luke-menu-radius: calc(var(--luke-menu-row-radius) + var(--luke-menu-inset));
 }
+
+/* A compact site surface, a dashboard's (`DENSITY.COMPACT` in `surface.ts`):
+   the site's roles a step down in size, its controls short enough to stand
+   in a dense header and its type a step under a public page's. It sets size
+   roles alone, each one the site's profile sets, so its faces, its spacing
+   between things, and its palette stay the site's. */
+[data-luke-profile="web"][data-luke-density="compact"] {
+  --luke-control-height: 32px;
+  --luke-control-inset: var(--luke-space-12);
+
+  --luke-type-body-size: 14px;
+  --luke-type-body-leading: 20px;
+  --luke-type-label-size: 13px;
+  --luke-type-label-leading: 18px;
+  --luke-type-title-size: 22px;
+  --luke-type-title-leading: 30px;
+
+  /* A compact menu's rows are its controls' height, as the site's are. */
+  --luke-menu-row-height: 32px;
+}
