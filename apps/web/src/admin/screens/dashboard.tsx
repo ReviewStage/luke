@@ -192,7 +192,7 @@ export function DashboardScreen({
                 grouped
               />
             </StatGroup>
-            <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]">
+            <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
               <SignupsChart
                 daily={metrics.users.dailySignups}
                 trend={metrics.users.signupTrend}

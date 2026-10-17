@@ -1,6 +1,7 @@
 /* text-field.css -- a text entry: one control's height and corner for a
    line, a field's ground inside a hairline, the body's type, and the danger
-   ink for its edge while its field says something is wrong. The keyboard's
+   ink for its edge while its field says something is wrong. Code is set
+   in the mono face where its caller asks. The keyboard's
    ring is the app's reset's, as it is for every field. */
 
 @layer components {
@@ -29,6 +30,33 @@
     height: auto;
     padding-block: var(--luke-space-6);
     resize: vertical;
+  }
+
+  /* A note that grows with its words from its rows' height, up to where
+     scrolling it is kinder than a field the height of the window. Its rows
+     still set its least height, which it gives way to in a card too short
+     for it. */
+  textarea.luke-text-field[data-grow="true"] {
+    min-height: calc(
+      var(--luke-text-area-rows) *
+      var(--luke-type-body-leading) +
+      2 *
+      var(--luke-space-6) +
+      2px
+    );
+    max-height: var(--luke-text-area-grow-max);
+    field-sizing: content;
+    resize: none;
+  }
+
+  .luke-text-field[data-font="mono"] {
+    font-family: var(--luke-font-mono);
+  }
+
+  /* A time is typed or stepped with the arrows; the engine's own clock is
+     hidden, because what it opens is the engine's picker, not the app's. */
+  .luke-text-field[type="time"]::-webkit-calendar-picker-indicator {
+    display: none;
   }
 
   .luke-text-field::placeholder {

@@ -13,7 +13,9 @@ import {
 import {
   AnchoredPopover,
   ArrowLeftIcon,
+  CHIP_LOOK,
   ChevronRightIcon,
+  Chip,
   GearIcon,
   McpIcon,
   POPOVER_ALIGN,
@@ -36,7 +38,6 @@ import {
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { CHIP_LOOK, Chip } from "../chip";
 import { useIntegrationGrant } from "../integration-grant";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
@@ -775,7 +776,7 @@ export function AgentServersButton({
           </button>
         </Tooltip>
       ) : (
-        <Chip look={CHIP_LOOK.FIELD} chevron className="settings-picker-chip" {...press}>
+        <Chip look={CHIP_LOOK.FIELD} chevron {...press}>
           {face}
         </Chip>
       )}

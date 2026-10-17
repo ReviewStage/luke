@@ -3,14 +3,21 @@ import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { ConfirmDialog, EmptyState } from "@luke/ui";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  ConfirmDialog,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  SKELETON_SHAPE,
+  Skeleton,
+} from "@luke/ui";
 import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
@@ -18,11 +25,10 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
-import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
+import { useChatOn } from "../tasks/chat-gate";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
@@ -53,13 +59,14 @@ import { CallBar } from "../tasks/tasks-parts";
 import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
-import { useOpenLink } from "../tasks/use-open-link";
+import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { useExperiment } from "../use-app-state";
+import { useCapability, useExperiment } from "../use-app-state";
+import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
@@ -133,6 +140,9 @@ import {
  * no repository is chosen, Start, a new agent, and the call's start are not
  * drawn, and a version viewed is not restored (`../tasks/archived-task.tsx`).
  */
+
+/** How wide the block standing in the plan's tab is while the plan is read: a typical tab's width. */
+const TAB_SKELETON_WIDTH = "120px";
 
 /**
  * The strip across the top of the work column, which is also the window's
@@ -275,7 +285,7 @@ function TaskInboxTab({
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
           ) : inbox.failed && listed.length === 0 ? (
             <div className="sidebar-note">
-              <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
+              <ErrorState onRetry={inbox.onRetry}>The inbox could not be read.</ErrorState>
             </div>
           ) : inbox.read && filteredOut ? (
             <NeedsYouEmpty needsYou={needsYou} onList={columns.onList} />
@@ -344,6 +354,7 @@ function PlanDocument({
   const { region } = tasks;
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
+  const chatOn = useChatOn();
   const { act } = useAct();
   const openLink = useOpenLink();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
@@ -365,6 +376,9 @@ function PlanDocument({
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
+  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
+  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -445,7 +459,7 @@ function PlanDocument({
           heading={
             <div className="desktop-toolbar-heading">
               {region.kind === DOCUMENT_REGION.READING ? (
-                <Skeleton className="tab-skeleton" />
+                <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
               ) : null}
             </div>
           }
@@ -458,11 +472,9 @@ function PlanDocument({
             {region.kind === DOCUMENT_REGION.READING ? (
               <Spinner label="Loading task" size={SPINNER_SIZE.REGION} />
             ) : region.kind === DOCUMENT_REGION.FAILED ? (
-              <ReadFailure
-                line={line}
-                onRetry={tasks.onRetryDocument}
-                place={READ_FAILURE_PLACE.CENTRED}
-              />
+              <ErrorState onRetry={tasks.onRetryDocument} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+                {line}
+              </ErrorState>
             ) : (
               <p role="alert">{line}</p>
             )}
@@ -525,11 +537,17 @@ function PlanDocument({
   // Its pull request's chip opens the same tab on the pull request's conversation.
   const openPullRequest = (agentId: string) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION);
+  // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
+  // a transcript, or an Inbox item, opens that same tab rather than GitHub.
+  const openHere = openPullRequestsHere(agents, openPullRequest);
+  const openTaskLink = (href: string) => {
+    if (!openHere(href)) openLink(href);
+  };
   // Run opens the agent's terminal of this Mac in the side panel at once;
   // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
   const { repository } = task;
   const openOnMac =
-    repository === null
+    repository === null || !macTerminalOffered
       ? undefined
       : (agentId: string) => {
           sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
@@ -554,6 +572,8 @@ function PlanDocument({
         return openColumnTab(MAIN_TAB.PLAN);
       case TOOL_TARGET.INBOX:
         return openColumnTab(MAIN_TAB.INBOX);
+      case TOOL_TARGET.CHAT:
+        return chatOn ? openColumnTab(MAIN_TAB.CHAT) : undefined;
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -631,214 +651,245 @@ function PlanDocument({
           onOpen={openAutomation}
         >
           <PlanMentions value={mentions}>
-            <div ref={setArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
-              {/* Note that the column is hidden rather than left out while the
+            <OpenHereProvider value={openHere}>
+              <div ref={setArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
+                {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
-              <div ref={setColumn} className="desktop-task-main" hidden={sidePanel.fullScreen}>
-                <Toolbar
-                  heading={
-                    <MainTabStrip
-                      task={task}
-                      taskCard={taskCardOf(tasks, listed, now)}
-                      main={mainTabs}
-                      agents={agents}
-                      unread={tasks.unreadTabs}
-                      views={views}
-                      pins={{
-                        pinned: sidePanel.pins,
-                        onPin: sidePanel.onPin,
-                        onUnpin: sidePanel.onUnpin,
-                      }}
-                      rename={archived ? undefined : rename}
-                      keys={tasks.shown && !sideFocused}
-                      shown={tasks.shown}
-                      inbox={inbox.board.open.length}
-                      actionsSlot={actionsSlot}
-                      onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
-                      onOpenOnMac={openOnMac}
-                    />
-                  }
-                >
-                  {rename.note !== undefined ? (
-                    <p className="error-message" role="alert">
-                      {rename.note}
-                    </p>
-                  ) : null}
-                  {repositoryNote !== undefined ? (
-                    <p className="error-message" role="alert">
-                      {repositoryNote}
-                    </p>
-                  ) : null}
-                  <CopyChord copy={tasks.copy} />
-                  <TerminalCommands
-                    here={terminalHere}
-                    agents={agents}
-                    sidePanel={sidePanel}
-                    onShown={showSide}
-                  />
-                  {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
-                  {tasks.history.viewing === undefined ? (
-                    <NewTabChord onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab} />
-                  ) : null}
-                  {/* Keyed once for the chip and the menu alike, so another plan
-              starts both afresh and the same plan keeps them. */}
-                  <Fragment key={task.id}>
-                    {archived ? null : (
-                      <>
-                        <RepositoryChip
-                          place={CHIP_PLACE.TOOLBAR}
-                          value={task.repository}
-                          chooser={tasks.repositories}
-                          onChoose={chooseRepository}
-                          openRequest={menuRequest}
-                        />
-                        {onTaskTab ? <StartAgentButton control={agents} /> : null}
-                      </>
-                    )}
-                    <span ref={setActionsSlot} className="toolbar-tab-actions">
-                      <TaskActions
-                        tasks={tasks}
+                <div ref={setColumn} className="desktop-task-main" hidden={sidePanel.fullScreen}>
+                  <Toolbar
+                    heading={
+                      <MainTabStrip
                         task={task}
-                        button={onTaskTab}
-                        onRename={rename.begin}
+                        taskCard={taskCardOf(tasks, listed, now)}
+                        main={mainTabs}
+                        agents={agents}
+                        unread={tasks.unreadTabs}
+                        views={views}
+                        pins={{
+                          pinned: sidePanel.pins,
+                          onPin: sidePanel.onPin,
+                          onUnpin: sidePanel.onUnpin,
+                        }}
+                        rename={archived ? undefined : rename}
+                        keys={tasks.shown && !sideFocused}
+                        shown={tasks.shown}
+                        inbox={inbox.board.open.length}
+                        chat={chatOn && tasks.chatView.available}
+                        actionsSlot={actionsSlot}
+                        onOpenTerminal={
+                          terminalsOffered
+                            ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)
+                            : undefined
+                        }
+                        onOpenOnMac={openOnMac}
                       />
-                    </span>
-                  </Fragment>
-                  <SummaryButton layout={summaryLayout} cardId={summaryCard} />
-                </Toolbar>
-                {/* The plan's banner is the whole plan's, so it stands over every
-            tab of the column, and over the panel's while that fills the window. */}
-                {sidePanel.fullScreen ? null : stranded.banner}
-                {/* The summary stands beside what the column shows, under the
-            toolbar and over the call bar, which both span the column. */}
-                <div className="desktop-plan-body">
-                  <FindScope
-                    className="desktop-task-column"
-                    active={tasks.shown && !sideFocused}
-                    subject={{ task: task.id, tab }}
+                    }
                   >
-                    {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
-                    <section
-                      className="desktop-document"
-                      role="tabpanel"
-                      aria-label={task.name}
-                      hidden={tab !== MAIN_TAB.PLAN}
-                    >
-                      {/* Keyed by the archive, so an editor still open when the plan is
-                  archived elsewhere is let go rather than left taking words. */}
-                      <PlanBody
-                        key={String(archived)}
-                        task={task}
-                        live={tasks.live}
-                        reader={{ readerId: tasks.me }}
-                        agents={{
-                          control: agents,
-                          onOpen: (agent) => mainTabs.onChoose({ agent }),
-                        }}
-                        onShowHistory={(save) => tasks.history.onOpen(task.id, save)}
-                        {...(archived
-                          ? {}
-                          : {
-                              onEdit: (request) => tasks.edit(task.id, request),
-                              // The title renames as the chip's field does, so a refusal is said beside it.
-                              onRename: (name) => rename.end({ name, byKey: true }),
-                              onDraftName: (name) => tasks.onDraftName(task.id, name),
-                            })}
-                        looks={looks}
-                        readMark={{
-                          unread: reads.markedUnread(task.id),
-                          onMark: (unread) => reads.mark(task, unread),
-                        }}
-                        sectionLinks={sectionLinksOf(task.id, workspace)}
-                      />
-                    </section>
-                    {tab === MAIN_TAB.INBOX ? (
-                      <TaskInboxTab
-                        tasks={tasks}
-                        task={listed}
-                        inbox={inbox}
-                        onOpenTask={() => mainTabs.onChoose(MAIN_TAB.PLAN)}
-                        onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
-                        openLink={openLink}
-                        code={{
-                          repository: task.repository,
-                          readFile: (window) =>
-                            act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
-                          onOpenFile: sidePanel.onOpenFile,
-                        }}
+                    {rename.note !== undefined ? (
+                      <p className="error-message" role="alert">
+                        {rename.note}
+                      </p>
+                    ) : null}
+                    {repositoryNote !== undefined ? (
+                      <p className="error-message" role="alert">
+                        {repositoryNote}
+                      </p>
+                    ) : null}
+                    <CopyChord copy={tasks.copy} />
+                    {terminalsOffered ? (
+                      <TerminalCommands
+                        here={terminalHere}
+                        agents={agents}
+                        sidePanel={sidePanel}
+                        onShown={showSide}
                       />
                     ) : null}
-                    {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
-                      <AgentPane
-                        label={mainTabLabel(tab, agents)}
-                        tabbed
-                        tab={tab}
-                        agents={agents}
-                        shown={tasks.shown && !sidePanel.fullScreen}
-                        views={views}
-                        onOpenDelegation={openDelegation}
-                        onOpenChanges={openChanges}
-                        onOpenPullRequest={openPullRequest}
-                        onOpenTarget={openTarget}
-                        cards={cards}
-                        chat={chat}
+                    {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
+                    {tasks.history.viewing === undefined ? (
+                      <NewTabChord
+                        onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
                       />
-                    )}
-                  </FindScope>
-                  <TaskSummary
-                    tasks={tasks}
-                    layout={summaryLayout}
-                    cardId={summaryCard}
-                    inbox={inbox.board}
-                    held={views.held}
-                    repository={task.repository}
-                    onOpenAgent={(agent) => openColumnTab({ agent })}
-                  />
-                </div>
-                {/* Note that a call of the plan's own still stands, so it can be
-            ended, when only a race left one on a plan just archived. */}
-                {archived && !tasks.stop.shown ? null : (
-                  <div className="desktop-call-bar">
-                    {captions}
-                    <CallBar
-                      status={tasks.status}
-                      microphone={tasks.microphone}
-                      speaker={tasks.speaker}
-                      stop={tasks.stop}
+                    ) : null}
+                    {/* Keyed once for the chip and the menu alike, so another plan
+              starts both afresh and the same plan keeps them. */}
+                    <Fragment key={task.id}>
+                      {archived ? null : (
+                        <>
+                          <RepositoryChip
+                            place={CHIP_PLACE.TOOLBAR}
+                            value={task.repository}
+                            chooser={tasks.repositories}
+                            onChoose={chooseRepository}
+                            openRequest={menuRequest}
+                          />
+                          {onTaskTab ? <StartAgentButton control={agents} /> : null}
+                        </>
+                      )}
+                      <span ref={setActionsSlot} className="toolbar-tab-actions">
+                        <TaskActions
+                          tasks={tasks}
+                          task={task}
+                          button={onTaskTab}
+                          onRename={rename.begin}
+                        />
+                      </span>
+                    </Fragment>
+                    <SummaryButton layout={summaryLayout} cardId={summaryCard} />
+                  </Toolbar>
+                  {/* The plan's banner is the whole plan's, so it stands over every
+            tab of the column, and over the panel's while that fills the window. */}
+                  {sidePanel.fullScreen ? null : stranded.banner}
+                  {/* The summary stands beside what the column shows, under the
+            toolbar and over the call bar, which both span the column. */}
+                  <div className="desktop-plan-body">
+                    <FindScope
+                      className="desktop-task-column"
+                      active={tasks.shown && !sideFocused}
+                      subject={{ task: task.id, tab }}
+                    >
+                      {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
+                      <section
+                        className="desktop-document"
+                        role="tabpanel"
+                        aria-label={task.name}
+                        hidden={tab !== MAIN_TAB.PLAN}
+                      >
+                        {/* Keyed by the archive, so an editor still open when the plan is
+                  archived elsewhere is let go rather than left taking words. */}
+                        <PlanBody
+                          key={String(archived)}
+                          task={task}
+                          live={tasks.live}
+                          reader={{ readerId: tasks.me }}
+                          agents={{
+                            control: agents,
+                            onOpen: (agent) => mainTabs.onChoose({ agent }),
+                          }}
+                          onShowHistory={(save) => tasks.history.onOpen(task.id, save)}
+                          {...(archived
+                            ? {}
+                            : {
+                                onEdit: (request) => tasks.edit(task.id, request),
+                                // The title renames as the chip's field does, so a refusal is said beside it.
+                                onRename: (name) => rename.end({ name, byKey: true }),
+                                onDraftName: (name) => tasks.onDraftName(task.id, name),
+                              })}
+                          looks={looks}
+                          readMark={{
+                            unread: reads.markedUnread(task.id),
+                            onMark: (unread) => reads.mark(task, unread),
+                          }}
+                          sectionLinks={sectionLinksOf(task.id, workspace)}
+                        />
+                      </section>
+                      {tab === MAIN_TAB.INBOX ? (
+                        <TaskInboxTab
+                          tasks={tasks}
+                          task={listed}
+                          inbox={inbox}
+                          onOpenTask={() => mainTabs.onChoose(MAIN_TAB.PLAN)}
+                          onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
+                          openLink={openTaskLink}
+                          code={{
+                            repository: task.repository,
+                            readFile: (window) =>
+                              act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
+                            onOpenFile: sidePanel.onOpenFile,
+                          }}
+                        />
+                      ) : null}
+                      {tab === MAIN_TAB.CHAT && chatOn ? (
+                        <section className="desktop-plan-chat" role="tabpanel" aria-label="Chat">
+                          <TaskChatTab tasks={tasks} taskId={task.id} />
+                        </section>
+                      ) : null}
+                      {tab === MAIN_TAB.PLAN ||
+                      tab === MAIN_TAB.INBOX ||
+                      tab === MAIN_TAB.CHAT ? null : (
+                        <AgentPane
+                          label={mainTabLabel(tab, agents)}
+                          tabbed
+                          tab={tab}
+                          agents={agents}
+                          shown={tasks.shown && !sidePanel.fullScreen}
+                          views={views}
+                          onOpenDelegation={openDelegation}
+                          onOpenChanges={openChanges}
+                          onOpenPullRequest={openPullRequest}
+                          onOpenTarget={openTarget}
+                          cards={cards}
+                          chat={chat}
+                          onFork={
+                            archived
+                              ? undefined
+                              : (fork) => openColumnTab({ draft: agents.onForkDraft(fork) })
+                          }
+                          onContinue={
+                            archived
+                              ? undefined
+                              : (agentId, words, attachments) =>
+                                  openColumnTab({
+                                    draft: agents.onContinueDraft(agentId, words, attachments),
+                                  })
+                          }
+                        />
+                      )}
+                    </FindScope>
+                    <TaskSummary
+                      tasks={tasks}
+                      layout={summaryLayout}
+                      cardId={summaryCard}
+                      inbox={inbox.board}
+                      held={views.held}
+                      repository={task.repository}
+                      onOpenAgent={(agent) => openColumnTab({ agent })}
                     />
                   </div>
-                )}
+                  {/* Note that a call of the plan's own still stands, so it can be
+            ended, when only a race left one on a plan just archived. */}
+                  {!voiceOffered || (archived && !tasks.stop.shown) ? null : (
+                    <div className="desktop-call-bar">
+                      {captions}
+                      <CallBar
+                        status={tasks.status}
+                        microphone={tasks.microphone}
+                        speaker={tasks.speaker}
+                        stop={tasks.stop}
+                      />
+                    </div>
+                  )}
+                </div>
+                {drawing.panel ? (
+                  <SidePanel
+                    {...drawing}
+                    panel={drawing.panel}
+                    unread={tasks.unreadTabs}
+                    holder={SIDE_PANEL_HOLDER.PLAN}
+                    planId={task.id}
+                    repository={task.repository}
+                    board={tasks.board}
+                    shownCode={tasks.shownCode}
+                    pages={tasks.pages}
+                    transcript={tasks.transcript}
+                    work={tasks.work}
+                    agents={agents}
+                    openAgents={mainTabs.openAgents}
+                    shownAgent={followedAgent(mainTabs.tab, {
+                      shown: tasks.shown,
+                      covered: sidePanel.fullScreen,
+                    })}
+                    views={views}
+                    shown={tasks.shown}
+                    focused={sideFocused}
+                    onOpenTarget={openTarget}
+                    cards={cards}
+                    banner={stranded.banner}
+                  />
+                ) : null}
+                {stranded.dialog}
               </div>
-              {drawing.panel ? (
-                <SidePanel
-                  {...drawing}
-                  panel={drawing.panel}
-                  unread={tasks.unreadTabs}
-                  holder={SIDE_PANEL_HOLDER.PLAN}
-                  planId={task.id}
-                  repository={task.repository}
-                  board={tasks.board}
-                  shownCode={tasks.shownCode}
-                  pages={tasks.pages}
-                  transcript={tasks.transcript}
-                  work={tasks.work}
-                  agents={agents}
-                  openAgents={mainTabs.openAgents}
-                  shownAgent={followedAgent(mainTabs.tab, {
-                    shown: tasks.shown,
-                    covered: sidePanel.fullScreen,
-                  })}
-                  views={views}
-                  shown={tasks.shown}
-                  focused={sideFocused}
-                  onOpenTarget={openTarget}
-                  cards={cards}
-                  banner={stranded.banner}
-                />
-              ) : null}
-              {stranded.dialog}
-            </div>
+            </OpenHereProvider>
           </PlanMentions>
         </AutomationDirectory>
       </MemberDirectory>

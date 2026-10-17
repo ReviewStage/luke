@@ -8,6 +8,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -18,12 +19,13 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { handState, stateWith } from "#testing/app-state";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES, handState, stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { tasksControl } from "#testing/tasks-control";
 import { useAct } from "../act";
+import { appBridge } from "../app-bridge";
 import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -62,6 +64,7 @@ const SETTINGS: SettingsPanelProps = {
     onOpenSettings: ignore,
     onTest: ignore,
   },
+  capabilities: DESKTOP_CAPABILITIES,
   updates: {
     update: {
       status: UPDATE_STATUS.IDLE,
@@ -98,13 +101,8 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
 });
 
@@ -186,6 +184,8 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        pages: undefined,
+        onRereadPages: () => undefined,
       },
       onNewTask: () => setAsked(true),
       newTask: { ...control.newTask, open: asked, onClose: () => setAsked(false) },
@@ -222,6 +222,19 @@ test("with the sidebar folded, New plan stands beside its toggle over the home p
   act(() => root?.unmount());
   root = undefined;
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New task"]);
+});
+
+test("the title bar's buttons, each wrapped in its hint, tell a reader the chord that reaches them on the button itself", () => {
+  const controls = mount(false).querySelector(".title-bar-controls:not([data-edge])");
+  assert.ok(controls, "the title bar's buttons stand");
+  const chords = [...controls.querySelectorAll("button")].map((button) => [
+    button.getAttribute("aria-label"),
+    button.getAttribute("aria-keyshortcuts"),
+  ]);
+  assert.deepEqual(chords, [
+    ["Show sidebar", "Meta+B"],
+    ["New task", "Meta+N"],
+  ]);
 });
 
 test("the home page welcomes an account with no plan, and its New plan raises the dialog over the window, which Cancel puts away", () => {
@@ -729,15 +742,12 @@ async function handBridge(): Promise<void> {
   await import("./desktop-settings");
   handState(experimentsOn(EXPERIMENT.FACTORY, EXPERIMENT.AUTOMATIONS));
   sentActs = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: { kind: string }) => {
-        sentActs.push(request.kind);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: { kind: string }) => {
+      sentActs.push(request.kind);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
   });
 }
@@ -778,7 +788,9 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
       root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
     );
     await settle();
-    toggled[place] = container.querySelector("button.side-panel-toggle") !== null;
+    toggled[place] = [...container.querySelectorAll("button")].some((button) =>
+      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
+    );
   }
   assert.deepEqual(toggled, {
     [PLACE.HOME]: false,
@@ -916,7 +928,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
   });
 
   const card = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.equal(card?.querySelector(".card-name")?.textContent, DOCUMENT_NAME);
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, DOCUMENT_NAME);
 });
 
 /** The sidebar's Chat row, where one stands. */
@@ -926,14 +938,14 @@ function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
   );
 }
 
-test("the sidebar's Chat row stands only while the account has Chat on and a chat is read, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
+test("the sidebar's Chat row stands only while the account has Chat on and a chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
-  assert.equal(chatRow(mount(false)), undefined, "no chat is read");
+  assert.equal(chatRow(mount(false)), undefined, "no chat is available");
   act(() => root?.unmount());
 
   let opened = 0;
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat, onOpen: () => (opened += 1) };
+  const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
   const page = mount(false, false, { chatView: view });
   await settle();
   const row = chatRow(page);
@@ -954,7 +966,12 @@ test("with Chat off for the account, its row stands nowhere, and Chat standing i
   handState({});
   const closed: string[] = [];
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat, onClose: () => closed.push("closed") };
+  const view = {
+    ...tasksControl().chatView,
+    available: true,
+    chat,
+    onClose: () => closed.push("closed"),
+  };
   const off = mount(false, false, { chatView: view });
   await settle();
   assert.equal(chatRow(off), undefined);
@@ -969,7 +986,7 @@ test("with Chat off for the account, its row stands nowhere, and Chat standing i
 
 test("a fixture run staged on Chat offers it with no account to turn its experiment on, where any other run does not", async () => {
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat };
+  const view = { ...tasksControl().chatView, available: true, chat };
   const run = { ...stateWith({}, {}).run, fixtureMode: true };
   handState({}, { run: { ...run, profile: RUN_PROFILE.CHAT } });
   const staged = mount(false, false, { chatView: view });

@@ -9,6 +9,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -125,13 +127,11 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
       },
     },
   );
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-    },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
   });
+  fakeAppPlatform({ pageFrameUrl });
   const container = drawn(REPLY, []);
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -143,8 +143,8 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
   });
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's tab's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, "Invite funnel");
-  assert.equal(card.querySelector(".card-sub")?.textContent, "Version 2");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Invite funnel");
+  assert.equal(card.querySelector(".luke-hover-card-sub")?.textContent, "Version 2");
   assert.equal(
     card.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId: TASK, pageId: PAGE, version: 2 }),

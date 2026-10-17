@@ -167,7 +167,7 @@
   position: absolute;
   z-index: -1;
   inset: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-control-radius);
   background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
   content: "";
@@ -210,9 +210,10 @@
 
 /* Who last edited the plan, over the document in the muted meta weight. */
 .plan-edit-note {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* Who last changed a section, and when: the writer's face and a few
@@ -233,6 +234,11 @@
 
 .plan-unit-attributed {
   position: relative;
+}
+
+/* A plan's task item the developer can tick from the drawn plan says so. */
+.plan-unit li.task-list-item input[type="checkbox"]:enabled {
+  cursor: pointer;
 }
 
 /* A section's heading wraps short of the row at its end, so the byline and
@@ -290,8 +296,8 @@
    shown as the byline is. Note that it stays drawn while its menu stands, as
    every ⋯ does. */
 .plan-unit-more {
+  display: flex;
   flex: none;
-  height: var(--control-height);
   opacity: 0;
   pointer-events: auto;
   transition: opacity var(--duration-hover) ease;
@@ -299,7 +305,7 @@
 
 .plan-unit-attributed:hover .plan-unit-more,
 .plan-unit-attributed:focus-within .plan-unit-more,
-.plan-unit-more[aria-expanded="true"] {
+.plan-unit-more:has([aria-expanded="true"]) {
   opacity: 1;
 }
 
@@ -499,16 +505,18 @@
 }
 
 /* How many sections changed since the last look, under the "Edited by"
-   line in the same muted weight, with its dismissal, held to the line's
-   own height so the button does not push the document down. */
+   line in the caption role, with its dismissal. The line keeps the room it
+   always had and the Dismiss button overhangs it, so the button does not
+   push the document down. */
 .plan-changed-note {
-  --control-height: 22px;
   display: flex;
+  height: 22px; /* off-scale: the line's room under "Edited by", which the button overhangs */
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: -6px 0 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The text open in its editor, in the document's own type, so the words do
@@ -535,7 +543,7 @@
 .plan-document-block:focus-visible::before {
   position: absolute;
   z-index: -1;
-  inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
   border-radius: 6px;
   background: color-mix(in srgb, var(--focus-ring) 14%, transparent);
   content: "";
@@ -548,7 +556,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
 .task-title-line > .task-title {
@@ -559,7 +567,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 /* The title breaks inside a word only where the word is wider than the
@@ -571,13 +579,8 @@
 
 /* The title is edited where it is drawn: its caret in the accent and no box. */
 .task-title-text {
-  caret-color: var(--accent);
+  caret-color: var(--luke-color-accent);
   outline: none; /* no ring: the caret alone, edited where it is drawn */
-}
-
-/* The section between an editor's words and what stands under them. */
-.plan-document-editor > .plan-editor-note {
-  margin-top: 0.5em;
 }
 
 /* The space between two sections, resolved at the text's own size so a
@@ -635,6 +638,34 @@
   color: var(--text-tertiary);
   content: attr(data-placeholder);
   pointer-events: none;
+}
+
+/* A task item as TipTap draws it: its box in a label and its words in a block
+   of their own after it. The label stands in the bullet's gutter exactly where
+   the read view stands its box (`markdown.css`), in its size and accent, so
+   the words keep their place as the section opens to be edited. */
+.plan-document-text li[data-checked] {
+  position: relative;
+  list-style: none;
+}
+
+.plan-document-text li[data-checked] > label {
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
+}
+
+.plan-document-text li[data-checked] > label > input {
+  display: block;
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0;
+  font: inherit;
+  accent-color: var(--luke-color-accent);
+}
+
+.plan-document-text li[data-checked] > div {
+  margin-top: 0;
 }
 
 /* What the editor keeps byte for byte but does not draw as its own: inline
@@ -703,15 +734,17 @@
 }
 
 /* What stands under the editor: a failed save, or Luke's change and the
-   choice it asks, in the muted meta weight. */
+   choice it asks, in the caption role. Note that it outranks the editor's
+   own gap between its children by coming later. */
 .plan-editor-note {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-8);
-  margin: var(--space-6) 0 0;
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-6) 0 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The Code tab: every code Luke showed on the plan, one card each under the
@@ -2929,18 +2962,129 @@ button.pull-request-check:hover {
 
 /* Coding agents --------------------------------------------------------- */
 
-/* The quiet line a transcript ends on once its turn was stopped or failed. */
+/* The block a transcript ends on once its turn was stopped or failed, or
+   once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
+   end line, then under it the row the end leads on to, Continue in new
+   agent or Continued in. In an empty transcript the two stand as siblings
+   in the empty state's own centred column instead. */
+.agent-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+/* Note that it keeps the gap the log's `space-y-3` leaves under every block
+   but its last, which the reset below takes, so a failure's press never
+   touches the pull request's row under it. */
+[role="log"] > :is(.agent-end, .agent-end-line):not(:last-child) {
+  margin-bottom: 0.75rem;
+}
+
+/* The end line: a failure's mark, its words, then what the turn cost after
+   a dot, flowing as one sentence, so a long failure wraps under its own
+   words and the mark never parts from the first of them. Note that the
+   14px mark is lowered to sit centred on the words' x-height, and that
+   only a failure is drawn in the danger ink: a stop is the developer's own
+   doing. */
 .agent-end-line {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  line-height: 18px; /* off-scale: the transcript's meta line */
+}
+
+.agent-end-line > .failed-mark {
+  margin-right: var(--space-4);
+  vertical-align: -3px; /* off-scale: centres a 14px mark on 12.5px words */
+}
+
+.agent-end-line[data-failed] > .agent-end-words {
+  color: var(--danger-text);
+}
+
+.agent-end-dot {
+  margin: 0 var(--space-4);
+}
+
+.agent-end-cost {
+  white-space: nowrap;
+}
+
+.agent-end-remedy {
+  margin-left: var(--space-8);
+  vertical-align: middle;
+}
+
+/* Where an agent may be continued (`continue-agent.tsx`), under a failed
+   turn's end line or in a closed box's note: Continue in new agent, and
+   why it did not start where it did not. */
+.agent-continue {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-8);
+}
+
+.agent-continue-note {
+  color: var(--danger-text);
+}
+
+/* The row naming the agents that continued this one, at the transcript's
+   end where an archive took the box: an arrow, as Forked to leads on its
+   split, then Continued in and the chips, which take their baseline from
+   their names, so every word stands on one line. */
+.agent-continued {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
   margin: 0;
   color: var(--text-tertiary);
   font-size: 12.5px;
 }
 
-/* Note that it keeps the gap the log's `space-y-3` leaves under every block
-   but its last, which the reset above takes, so a failure's press never
-   touches the pull request's row under it. */
-[role="log"] > .agent-end-line:not(:last-child) {
-  margin-bottom: 0.75rem;
+.agent-continued > svg {
+  align-self: center;
+}
+
+/* Continued in and its chips, in the row above or the continued box's note. */
+.agent-continued-in {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.agent-continued-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+}
+
+/* A box closed for good (`agent-composer.tsx`) wears the held look a box
+   sending does, faded, so the note and Continue under it read as the way
+   on. Note that it still takes a press, because its controls are disabled
+   one by one and its branch and changes chips still open what they name. */
+.agent-composer[data-closed] > form {
+  opacity: 0.6;
+}
+
+/* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
+   and files faded, as words that did not go, and the quiet mark under
+   them in the danger red a failure note speaks in. */
+.agent-undelivered {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 12.5px;
+}
+
+.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
+  opacity: 0.6;
 }
 
 /* A finished turn's line (`working-time.tsx`) breaks between how long it
@@ -2965,6 +3109,73 @@ button.pull-request-check:hover {
 .agent-turn-foot > [data-worked] {
   min-width: 0;
   margin-top: 0;
+}
+
+/* The quiet line under an agent's message naming the agents forked at it
+   (`fork-action.tsx`), in the meta voice a finished turn's line speaks in,
+   its chips wrapping as words do. */
+.agent-forked-to {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: var(--space-2) 0 0;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.agent-forked-to-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* A forked draft's chip over its box: what it forks, the message's opening
+   words, and the × that lets the fork go, docked on the composer's own
+   inset as the to-do list is. */
+.draft-fork-dock {
+  padding: 0 16px 8px;
+}
+
+.draft-fork-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.draft-fork-quote {
+  min-width: 0;
+  background: none;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.draft-fork-quote:hover {
+  text-decoration: underline;
+}
+
+.draft-fork-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-tertiary);
+}
+
+.draft-fork-drop:hover {
+  background: var(--section-fill);
+  color: var(--text-primary);
 }
 
 /* The room under the transcript for the composer, with no rule between
@@ -3061,6 +3272,70 @@ button.pull-request-check:hover {
   }
 }
 
+/* The shared composer card (../ai-elements/prompt-input.tsx): one card on
+   the sidebar's ground inside a hairline, ringed while its field holds the
+   caret (`.field-well`, base.css); under its field, the foot with the
+   owner's controls at its left and the round submit at its right. */
+.prompt-input {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border);
+  border-radius: 12px;
+  background: var(--desktop-sidebar);
+}
+
+.prompt-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-12);
+  padding: 0 var(--luke-space-12) var(--luke-space-12);
+}
+
+.prompt-input-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* The submit: a disc at the control's height that never changes size or
+   place, filled in ink while it takes a press and on the strong fill with a
+   muted glyph while it does not. */
+.prompt-input-submit {
+  display: flex;
+  width: var(--luke-control-height);
+  height: var(--luke-control-height);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-text);
+  color: var(--luke-color-ground);
+  cursor: default;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.prompt-input-submit:disabled {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text-muted);
+}
+
+.prompt-input-submit > svg,
+.prompt-input-submit-ring {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.prompt-input-submit > .prompt-input-submit-stop {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
    default type, and a note under it, on the transcript's own inset so the
    card and the column line up. What stands here is the room around the
@@ -3080,12 +3355,46 @@ button.pull-request-check:hover {
   padding-left: 4px;
 }
 
-/* The box's field (`composer-field.tsx`): its editor, set in the card's
-   type with no space between its paragraphs, as a textarea's lines stand,
-   and the placeholder the field draws at the editor's own insets while the
-   words are empty, dimmed with the editor while the box is held. */
+/* The box's field (`composer-field.tsx`): its editor in the body type, one
+   line to eight and then scrolling, with no space between its paragraphs,
+   as a textarea's lines stand, and the placeholder the field draws at the
+   editor's own insets while the words are empty, dimmed with the editor
+   while the box is held. No ring: the card around it rings (`.field-well`). */
 .agent-composer-field {
   position: relative;
+  --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
+}
+
+.agent-composer-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  overflow-y: auto;
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
+  background: transparent;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+  outline: none;
+  user-select: text;
+}
+
+.agent-composer-input[aria-disabled="true"] {
+  opacity: 0.6;
+}
+
+/* Note that the editor keeps its spaces as typed, as TipTap's own base rules
+   would were they let in (`composer-editor.ts`'s `injectCSS`), so the space a
+   chosen chip is followed by stands at the end of a line rather than
+   collapsing, and the caret is drawn after it, not against the chip. */
+.composer-editor {
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.composer-editor [contenteditable="false"] {
+  white-space: normal;
 }
 
 .agent-composer-input p {
@@ -3098,10 +3407,10 @@ button.pull-request-check:hover {
   right: 0;
   left: 0;
   overflow: hidden;
-  padding: 1rem 1rem 0;
-  color: var(--text-secondary);
-  font-size: var(--composer-type);
-  line-height: 1.45;
+  padding: var(--luke-space-16) var(--luke-space-16) 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   pointer-events: none;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3118,8 +3427,8 @@ button.pull-request-check:hover {
    same file. */
 .skill-chip {
   border-radius: 4px;
-  background: var(--raised-strong);
-  box-shadow: 0 0 0 2px var(--raised-strong);
+  background: var(--luke-color-fill-strong);
+  box-shadow: 0 0 0 2px var(--luke-color-fill-strong);
 }
 
 /* Note that the button keeps to its words' height, as the composer's pill
@@ -3139,8 +3448,8 @@ button.skill-chip {
 
 button.skill-chip:hover,
 .skill-chip[data-opens]:hover {
-  background: var(--selected);
-  box-shadow: 0 0 0 2px var(--selected);
+  background: var(--luke-color-fill-selected);
+  box-shadow: 0 0 0 2px var(--luke-color-fill-selected);
 }
 
 /* The list a `/` opens: a searchable menu whose field is the composer,
@@ -3162,19 +3471,10 @@ button.skill-chip:hover,
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: 12px;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.skill-menu-none {
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.skill-menu-hint {
-  font-size: 11.5px;
 }
 
 /* The foot's right: the model chip, the context ring, the microphone, and
@@ -3201,8 +3501,13 @@ button.skill-chip:hover,
   flex: none;
 }
 
-/* Note that the ⋯ is named under the foot, because desktop.css's
-   `.icon-button` comes later and would otherwise draw it. */
+/* The + and the ⋯ each stand in a box of their own, which the queries
+   below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯ stands only
+   once the card is too narrow for every press. */
+.agent-composer-attach {
+  display: flex;
+}
+
 .agent-composer-actions .agent-composer-more,
 .agent-model-chip .harness-mark {
   display: none;
@@ -3245,10 +3550,6 @@ button.skill-chip:hover,
 /* Too narrow for the model's words: the chip draws its harness's mark
    alone, where it has one, its label and hint still naming the choice. */
 @container composer (max-width: 299px) {
-  .agent-composer .agent-model-chip .luke-chip:has(.harness-mark) {
-    padding: 0 var(--space-8);
-  }
-
   .agent-composer .agent-model-chip .harness-mark {
     display: block;
   }
@@ -3256,7 +3557,7 @@ button.skill-chip:hover,
   .agent-composer
     .agent-model-chip
     .luke-chip:has(.harness-mark)
-    :is(.model-label, .settings-chevron) {
+    :is(.luke-chip-name, .settings-chevron) {
     display: none;
   }
 }
@@ -3270,12 +3571,19 @@ button.skill-chip:hover,
 }
 
 /* The Inbox's answer box draws the same card and field
-   (`inbox-answer-box.tsx`): its quiet line is cut short before its
+   (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
+   box's does, and its quiet line beside it is cut short before its
    microphone and presses are, and goes once the card is too narrow for
    both, when the microphone goes too and the presses tighten and, still
    too wide, stack at the right rather than run past the card. */
-.inbox-answer-quiet {
+.inbox-answer-tools {
   flex: 1 1 0;
+}
+
+.inbox-answer-quiet {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .inbox-answer-actions {
@@ -3308,8 +3616,9 @@ button.skill-chip:hover,
 }
 
 @container composer (max-width: 299px) {
-  .inbox-answer-foot > .inbox-answer-quiet,
-  .inbox-answer .dictate-button {
+  .inbox-answer-foot .inbox-answer-quiet,
+  .inbox-answer .dictate-button,
+  .inbox-answer:not([data-presses]) .inbox-answer-tools {
     display: none;
   }
 
@@ -3832,31 +4141,21 @@ button.attached-file-face:hover img {
 /* An archived plan's agent takes no message, so its composer's place says
    why on one quiet row (`banner.tsx`), with Unarchive as the press that
    opens it again. */
+/* The note a continued agent's box gives way to (`continue-agent.tsx`),
+   framed as the box was, on its card, edge and corner, so it stands where
+   the box stood rather than across the column. */
+.continued-composer > .banner-row {
+  padding: var(--space-8) var(--space-8) var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: 12px; /* off-scale: the composer card's corner */
+  background: var(--desktop-sidebar);
+}
+
 .archived-composer .banner-row > svg {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  color: var(--text-secondary);
-}
-
-.archived-composer-line {
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-/* Who archived an agent, and why, over the note's own line: the reason is
-   the archiver's sentence, so it wraps rather than being cut. */
-.archived-composer-words {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.archived-composer-by {
-  color: var(--text-primary);
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
+  color: var(--luke-color-text-muted);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -4236,15 +4535,7 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .model-label-detail {
-  color: var(--text-secondary);
-}
-
-/* The model chip is the toolbar chip (`chip.tsx`): the pair it names cut
-   short before the chevron where the foot is narrow. */
-.agent-model-chip .model-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--luke-color-text-muted);
 }
 
 /* The MCP servers popover: the searchable menu's surface, its search field
@@ -4899,7 +5190,7 @@ button.inbox-option:hover:not(:disabled) {
 /* An option's head (`inbox-pane.tsx`'s `OptionHead`): its label, and the
    agent's recommendation as a badge at the option's top right, so it stands
    in one place however the label wraps. The badge is the app's badge
-   (`.integration-tool-badge`) in the accent's fill, the primary button's,
+   in the accent's fill, the primary button's,
    while the item waits, and steps back to the quiet badge once it is
    settled. It sits on the label's first line, centred on its 13px words. */
 .inbox-option-head {

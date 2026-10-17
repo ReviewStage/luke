@@ -427,7 +427,7 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
       codingAgentStatusOf(turns.get(agent.conversationId), {
         createdAt: agent.createdAt,
         now,
-        lineAwaits: awaiting.has(agent.conversationId),
+        awaitingLineAt: awaiting.get(agent.conversationId),
       }),
     ),
   ).length;

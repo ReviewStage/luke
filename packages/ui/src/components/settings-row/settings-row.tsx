@@ -10,9 +10,37 @@ import { type ReactNode, useId } from "react";
  * something, as a form field's does. The row is its own inline-size
  * container, so where its controls stand is decided by the row's width and
  * not the window's: under 380px they drop below the words to the row's end.
- * The row owns its padding and the room between its parts; its edges and
- * the rules between rows are its section's.
+ * The row owns its padding, the least height its profile gives a row (the
+ * window's rows stand even whether or not they carry a description), and the
+ * room between its parts; its edges and the rules between rows are its
+ * section's.
+ *
+ * A row that stands for someone or something of its own, an account or a
+ * provider, leads with its face or mark (`leading`), centred before its
+ * words. The mark stays beside the words when the controls drop below them,
+ * and names nothing: the label alone names the row's control.
+ *
+ * A compact row (`SETTINGS_ROW_DENSITY.COMPACT`) stands bare, without
+ * padding and at a menu row's least height, where the surface around it, a
+ * popover, already insets it. Unlike a card's row it does not stack under
+ * 380px: a popover is narrower than that throughout, so its controls stay
+ * beside its words and wrap below them only where they cannot fit at all.
+ *
+ * A list row (`SETTINGS_ROW_DENSITY.LIST`) is a card's row read rather than
+ * set, a line of a reference list such as the window's keyboard shortcuts:
+ * padded at the card's inline inset, ruled, and stacking under 380px as a
+ * card's row is, but at a list's tighter block inset and least height and
+ * with its label at body weight.
  */
+
+/** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
+export const SETTINGS_ROW_DENSITY = {
+  CARD: "card",
+  COMPACT: "compact",
+  LIST: "list",
+} as const;
+
+export type SettingsRowDensity = (typeof SETTINGS_ROW_DENSITY)[keyof typeof SETTINGS_ROW_DENSITY];
 
 /** What a row hands the controls it holds. */
 export interface SettingsRowControl {
@@ -32,12 +60,18 @@ export function SettingsRow({
   label,
   description,
   error,
+  leading,
+  density = SETTINGS_ROW_DENSITY.CARD,
   children,
 }: {
   label: ReactNode;
   description?: ReactNode;
+  /** The face or mark the row leads with, before its words, where it stands for something of its own. */
+  leading?: ReactNode;
   /** What went wrong with the last write, or nothing while none did. */
   error?: ReactNode;
+  /** How the row stands; in a section's card where none is named. */
+  density?: SettingsRowDensity | undefined;
   /** The row's controls, handed the row's ids to name and describe them by. */
   children: (control: SettingsRowControl) => ReactNode;
 }): React.JSX.Element {
@@ -51,18 +85,21 @@ export function SettingsRow({
     .filter((part) => part !== undefined)
     .join(" ");
   return (
-    <div className="luke-settings-row" data-invalid={failed}>
+    <div className="luke-settings-row" data-invalid={failed} data-density={density}>
       <div className="luke-settings-row-body">
         <div className="luke-settings-row-line">
-          <div className="luke-settings-row-copy">
-            <span className="luke-settings-row-label" id={labelId}>
-              {label}
-            </span>
-            {described ? (
-              <p className="luke-settings-row-description" id={descriptionId}>
-                {description}
-              </p>
-            ) : null}
+          <div className="luke-settings-row-subject">
+            {said(leading) ? <div className="luke-settings-row-leading">{leading}</div> : null}
+            <div className="luke-settings-row-copy">
+              <span className="luke-settings-row-label" id={labelId}>
+                {label}
+              </span>
+              {described ? (
+                <p className="luke-settings-row-description" id={descriptionId}>
+                  {description}
+                </p>
+              ) : null}
+            </div>
           </div>
           <div className="luke-settings-row-controls">
             {children({

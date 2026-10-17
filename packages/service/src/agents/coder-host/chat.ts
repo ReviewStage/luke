@@ -6,6 +6,7 @@ import {
   CHAT_REFUSAL,
   type ChatChannelRow,
   type ChatMemberRow,
+  type ChatMemberSubject,
   type ChatMessageRow,
   type ChatPost,
   type ChatPosted,
@@ -22,8 +23,10 @@ import {
   memberNamed,
   openAsksOf,
   openTopicChannel,
+  peekUnread,
   postAsk,
   postMessage,
+  readThrough,
   resolveAsk,
   roster,
   seqsOf,
@@ -32,6 +35,7 @@ import {
 import { type CodingAgent, listCodingAgents } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
 import {
+  ASK_STATUS,
   CHANNEL_KIND,
   CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
@@ -67,13 +71,15 @@ import { blockWords, type ChatReceipt, type ChatTelling, tellMessage } from "./c
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
- * chat.ts -- the coding agent's chat tools: post a message in its workspace's chat, and read it.
+ * chat.ts -- the chat tools of a coding agent and of its plan's Luke: post a message in the workspace's chat, and read it.
  *
  * A coding agent is a member of its plan's workspace's chat, `@agent-N`,
  * minted the first time it posts or reads (`chat-store.ts`), and talks
  * there with the other agents, the plan's Luke, and the people of the
- * workspace. A post goes to the agent's plan channel, or a planless
- * agent's to its workspace's general channel, unless it names a
+ * workspace. The plan's Luke, `@luke`, runs the same tools as the agent of
+ * this module's words, bound in the planner's own host
+ * (`../brain-host/chat.ts`). A post goes to the agent's plan channel, or a
+ * planless agent's to its workspace's general channel, unless it names a
  * channel by `#name`, which a name no channel holds opens as a topic
  * channel, a member's DM by `@handle`, or a message to answer in its
  * thread; it is told to the members it addresses through the one door a
@@ -87,7 +93,10 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
  * sequence, which is what a reply and a read name it by. A post may carry
  * an ask under a key of the agent's (`chat-ask.ts`), which the agent
  * resolves by the key once it no longer needs it, and every read, ask, and
- * resolve answers the agent's asks as they stand. A post is the
+ * resolve answers the agent's asks as they stand. Each turn opens with
+ * what the agent has not read, bounded, as the turn's own instruction,
+ * which reads it: the message a notice steered into the turn is left out,
+ * since the notice carries it. A post is the
  * service's words on the agent's behalf, so a turn posts at most
  * `MAX_POSTS_PER_TURN` times, counted in the session's own state as
  * `edit_plan` counts its notes (`plan-edit.ts`); a repeat of one call is
@@ -183,27 +192,27 @@ export const CHAT_TOOL_REFUSAL = {
 } as const;
 
 /** A member as a read lists it: its handle, its kind, and whether it has left. */
-interface MemberLine {
+type MemberLine = {
   readonly handle: string;
   readonly kind: MemberKind;
   readonly left?: true;
-}
+};
 
 /** A channel as a read lists it: how a post names it, its kind, and what the reader has not read in it. */
-interface ChannelLine {
+type ChannelLine = {
   readonly name: string;
   readonly kind: ChannelKind;
   readonly unread: number;
-}
+};
 
 /** A message as the agent reads it: its place, where it was said, who said it, the thread it replies in by its root's place, and its words. */
-interface MessageLine {
+export type MessageLine = {
   readonly seq: number;
   readonly in: string;
   readonly from: string;
   readonly thread?: number;
   readonly text: string;
-}
+};
 
 /**
  * What a post answers: its place, where it was said or the root of the
@@ -212,13 +221,13 @@ interface MessageLine {
  * addresses failed, who read it when they next read; and the agent's asks
  * where it asked.
  */
-interface PostedLine extends ChatReceipt {
+type PostedLine = ChatReceipt & {
   readonly seq: number;
   readonly in?: string;
   readonly thread?: number;
   readonly untold?: true;
   readonly asks?: readonly AskLine[];
-}
+};
 
 /** What a call answers, as the model reads it: the post's receipt, the chat as read, or why the call did nothing. */
 export type ChatToolResult =
@@ -235,16 +244,19 @@ export type ChatToolResult =
   | { readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED; readonly asks: readonly AskLine[] }
   | { readonly status: typeof ACTION_RESULT_STATUS.REJECTED; readonly reason: string };
 
-/** The agent a read is made for: the account that started it, whose standing reaches the chat, the agent, and its plan, none for a planless agent. */
+/** Who a call speaks as: a coding agent, or the plan's Luke. */
+type ChatSelf = Exclude<ChatMemberSubject, { readonly kind: typeof MEMBER_KIND.HUMAN }>;
+
+/** The agent a read is made for: the account whose standing reaches the chat, the plan the agent is on, none for a planless agent, and the member it speaks as. */
 export interface ChatReader {
   readonly userId: string;
-  readonly agentId: string;
   readonly planId: string | null;
+  readonly self: ChatSelf;
 }
 
-/** The agent a post is made for: its repository as `owner/name`, which its code blocks must name, and how its posts are told. */
+/** The agent a post is made for: its repository as `owner/name`, which its code blocks must name, nothing where it has none, and how its posts are told. */
 export interface ChatAgent extends ChatReader {
-  readonly repository: string;
+  readonly repository: string | null;
   readonly telling: Omit<ChatTelling, "userId" | "organizationId">;
 }
 
@@ -285,6 +297,15 @@ const POST_REFUSAL = {
 
 /** The most settled asks a call answers beside the open ones: the latest, enough to see what came of what the agent asked last. */
 const SETTLED_ASKS_SHOWN = 5;
+
+/** The most messages a turn's digest carries; the rest wait for a read. */
+const DIGEST_MESSAGES = 20;
+
+/** The most characters of one message a turn's digest carries; a longer one is read whole by its channel or thread. */
+const DIGEST_MESSAGE_CHARS = 600;
+
+/** The line a turn's digest opens with. */
+export const CHAT_DIGEST_HEADING = "[chat since you last read]";
 
 /** A receipt that told no one, as a post whose telling failed answers. */
 const NO_RECEIPT: ChatReceipt = { told: [], held: [], left: [], unresolved: [] };
@@ -364,7 +385,9 @@ function atHandle(handle: string): string {
 function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return Effect.gen(function* () {
     if (agent.planId !== null) return yield* ensurePlanChannel(agent.userId, agent.planId);
-    const workspace = yield* agentWorkspace(agent.userId, agent.agentId);
+    // Only a coding agent is planless; a plan's Luke always stands on its plan.
+    if (agent.self.kind !== MEMBER_KIND.AGENT) return Option.none();
+    const workspace = yield* agentWorkspace(agent.userId, agent.self.agentId);
     if (Option.isNone(workspace)) return Option.none();
     return yield* ensureGeneral(agent.userId, workspace.value);
   });
@@ -395,10 +418,7 @@ function seatOf(
     yield* Effect.forEach(unminted, (each) =>
       ensureMember(userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId: each.id }),
     );
-    const self = yield* ensureMember(userId, organizationId, {
-      kind: MEMBER_KIND.AGENT,
-      agentId: agent.agentId,
-    });
+    const self = yield* ensureMember(userId, organizationId, agent.self);
     return Option.map(self, (member) => ({ organizationId, home: home.value, self: member }));
   });
 }
@@ -883,5 +903,117 @@ export function readAsAgent(
   ).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
+  );
+}
+
+/**
+ * What the agent has not read, as lines, marking nothing: at most the
+ * bound, oldest change first, whether more wait past them, and the place
+ * `readThroughAsAgent` moves its cursor to once they are taken in. What a
+ * turn opens with, where its tools would read the same; nothing where the
+ * agent has no seat.
+ */
+export function peekAsAgent(
+  agent: ChatReader,
+  limit: number,
+): ChatStoreEffect<
+  Option.Option<{
+    readonly messages: readonly MessageLine[];
+    readonly more: boolean;
+    readonly through: number;
+  }>
+> {
+  return Effect.gen(function* () {
+    const { userId } = agent;
+    const found = yield* seatOf(agent);
+    if (Option.isNone(found)) return Option.none();
+    const { organizationId, self } = found.value;
+    const unread = yield* peekUnread(userId, organizationId, self.id, limit);
+    if (Option.isNone(unread)) return Option.none();
+    const { messages, more, through } = unread.value;
+    const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
+    const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
+    const roots = yield* seqsOf(
+      userId,
+      organizationId,
+      messages.flatMap((message) => (message.parentId === null ? [] : [message.parentId])),
+    );
+    const named = { names, members, roots };
+    const lines = messages.map((message) => lineOf(message, named));
+    return Option.some({ messages: lines, more, through });
+  });
+}
+
+/** Marks what the agent has not read as read through the place a peek named, never back; nothing where the agent has no seat. */
+export function readThroughAsAgent(agent: ChatReader, through: number): ChatStoreEffect<void> {
+  return Effect.gen(function* () {
+    const found = yield* seatOf(agent);
+    if (Option.isNone(found)) return;
+    const { organizationId, self } = found.value;
+    yield* readThrough(agent.userId, organizationId, self.id, through);
+  });
+}
+
+/** One message as a turn's digest carries it: its place, who said it where, the thread it replies in, what it asks, and its words, bounded. */
+function digestLine(message: ChatMessageRow, line: MessageLine): string {
+  const thread = line.thread === undefined ? "" : ` (thread m ${line.thread})`;
+  const asks =
+    message.ask === null || message.askStatus !== ASK_STATUS.OPEN
+      ? ""
+      : ` asks (${message.ask.response.type})`;
+  // A message cut short says how to read it whole, since the digest marks it read: its thread, of which it is the root or a reply.
+  const words =
+    line.text.length > DIGEST_MESSAGE_CHARS
+      ? `${line.text.slice(0, DIGEST_MESSAGE_CHARS)}… (${CHAT_TOOLS.READ.name}({ thread: ${line.thread ?? line.seq} }) reads the rest)`
+      : line.text;
+  return `m ${line.seq} · ${line.from} in ${line.in}${thread}${asks}: ${words}`;
+}
+
+/**
+ * What a turn opens with: the messages the agent has not read, oldest
+ * change first, at most `DIGEST_MESSAGES`, under the digest's heading, and
+ * a line saying more wait where they do; nothing where nothing waits. The
+ * digest is a read, so the next turn carries none of it again, and a
+ * message cut short names the read that carries it whole; a turn that
+ * fails after its digest leaves what it carried to the chat's history,
+ * where a read of its channel finds it, as the planning brain's standing
+ * context leaves a turn's edits. Note that
+ * the message an outstanding notice told is left out, because the notice is
+ * already a line of the agent's conversation. Nothing where the store
+ * cannot be reached, since the turn runs as well without it.
+ */
+export function chatDigest(
+  agent: ChatReader,
+): Effect.Effect<string | undefined, never, DatabaseServices> {
+  return inTransaction(
+    Effect.gen(function* () {
+      const { userId } = agent;
+      const found = yield* seatOf(agent);
+      if (Option.isNone(found)) return undefined;
+      const { organizationId, self } = found.value;
+      const noticed =
+        self.noticeSeq !== null && self.noticeSeq > self.readSeq ? self.noticeSeq : undefined;
+      const read = yield* unreadFor(userId, organizationId, self.id, { limit: DIGEST_MESSAGES });
+      const { messages: unread, more } = Option.getOrElse(read, () => ({
+        messages: [],
+        more: false,
+      }));
+      const messages = unread.filter((message) => message.touchedSeq !== noticed);
+      if (messages.length === 0 && !more) return undefined;
+      const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
+      const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
+      const parents = messages.flatMap((message) =>
+        message.parentId === null ? [] : [message.parentId],
+      );
+      const roots = yield* seqsOf(userId, organizationId, parents);
+      const lines = messages.map((message) =>
+        digestLine(message, lineOf(message, { names, members, roots })),
+      );
+      const rest = more ? [`More waits: ${CHAT_TOOLS.READ.name} reads it.`] : [];
+      return [CHAT_DIGEST_HEADING, ...lines, ...rest].join("\n");
+    }),
+  ).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(undefined)),
   );
 }

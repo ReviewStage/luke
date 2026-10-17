@@ -15,6 +15,7 @@ import {
   GAP,
   Inline,
   JUSTIFY,
+  SKELETON_SHAPE,
   Skeleton,
   Stack,
   TEXT_ELEMENT,
@@ -117,16 +118,18 @@ export function ChartFrame({
 /**
  * A chart's card while its data is still being read: bones where the
  * heading, its caption, and the legend will be, each in the type it stands
- * for, so the words land where the bones stood.
+ * for, and a block filling a box of `plot`, the chart's own plot height, so
+ * the words and the plot land where the bones stood.
  */
 export function ChartFrameSkeleton({
   aside,
   legend,
-  children,
+  plot,
 }: {
   aside: boolean;
   legend: boolean;
-  children: React.ReactNode;
+  /** The height class of the plot the block stands for. */
+  plot: string;
 }): React.JSX.Element {
   return (
     <div className={CHART_CARD}>
@@ -141,7 +144,9 @@ export function ChartFrameSkeleton({
             </Text>
           ) : null}
         </Inline>
-        {children}
+        <div className={plot}>
+          <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+        </div>
         {legend ? (
           <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
             <Skeleton width={SKELETON_LEGEND_WIDTH} />

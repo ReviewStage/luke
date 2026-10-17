@@ -10,7 +10,7 @@ import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
  * where the provider marks are shared because the site draws them too.
  */
 
-/** Where the Codex mark's files are copied beside `renderer.js` by the build (`scripts/build.mjs`). */
+/** Where the Codex mark's files are copied beside `panel.js` by the build (`scripts/build.mjs`). */
 const CODEX_MARK_FILES = {
   ONE_X: "marks/codex-16.png",
   TWO_X: "marks/codex-32.png",
