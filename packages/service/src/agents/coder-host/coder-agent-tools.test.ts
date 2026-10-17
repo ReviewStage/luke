@@ -59,6 +59,7 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
+import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
@@ -115,6 +116,9 @@ const CATALOG: readonly OfferedModel[] = [
     efforts: ["low", "medium", "high", "max"],
   },
 ];
+/** The branch of the repository a stacked agent starts on, and the commit GitHub says it stands at. */
+const STACKED_BRANCH = "luke/invitation-expiry";
+const BRANCH_COMMIT = "89abcdef0123456789abcdef0123456789abcdef";
 /** The most characters of its own an agent's message may carry: a member's bound less its heading's room. */
 const LONGEST_PEER_WORDS = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - 1_000;
 
@@ -212,7 +216,7 @@ async function claimed(
  * installation reaching the repository is connected to the workspace:
  * every message to a session answered taken, and each written down.
  */
-async function fakeCoderEve(workspaceId: string) {
+async function fakeCoderEve(workspaceId: string, branches: readonly string[] = []) {
   installations += 1;
   const installation: InstallationFixture = {
     id: 70 + installations,
@@ -226,6 +230,11 @@ async function fakeCoderEve(workspaceId: string) {
   const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
   const github = githubReaching([installation], undefined, undefined, (request) => {
     const { pathname } = new URL(request.url);
+    // The repository holds the branches given, each at a commit; any other is GitHub's not found.
+    const ref = pathname.slice(`/repos/${RELAY_FULL_NAME}/git/ref/heads/`.length);
+    if (pathname.startsWith(`/repos/${RELAY_FULL_NAME}/git/ref/heads/`) && branches.includes(ref)) {
+      return Response.json({ object: { type: "commit", sha: BRANCH_COMMIT } });
+    }
     if (!pathname.startsWith("/eve/coder/v1/session")) return undefined;
     sent.push({ path: pathname, headers: request.headers, body: request.body });
     if (pathname === "/eve/coder/v1/session") {
@@ -680,6 +689,129 @@ test("start_agent hands over a prompt and a note each as long as a start allows,
   const message: string = JSON.parse(eve.sent[0]?.body ?? "").message;
   assert.ok(message.startsWith(prompt), "the prompt opens the first message whole");
   assert.ok(message.includes(`\n\n${note}`), "the note follows it whole");
+});
+
+test("start_agent with a title names the agent by it from the start, and a title generated later never covers it; an empty or over-long title starts nothing", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const title = "start_agent takes a title";
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt: "Add a title to start_agent.", title: `  ${title}  ` },
+    "call-titled",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  const startedId = started.agent.id;
+  assert.equal(
+    started.agent.mention,
+    `[@${title}](https://tryluke.dev/workspace-${workspaceId}/plan/${plans.invitations}/agent/${startedId})`,
+  );
+
+  // The title generated as the agent's words arrive is filled only where none stands.
+  assert.equal(
+    await database.run(fillCodingAgentTitle(caller.userId, startedId, "Generated name")),
+    false,
+  );
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
+  assert.equal(stored.title, title);
+
+  for (const [refused, key] of [
+    ["   ", "call-empty"],
+    ["a".repeat(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS + 1), "call-long"],
+  ] as const) {
+    assert.deepEqual(await call(CODER_TOOL.START_AGENT, { title: refused }, key), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+    });
+  }
+});
+
+test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const branches = [STACKED_BRANCH];
+  const eve = await fakeCoderEve(workspaceId, branches);
+  const host = hostOf(true);
+  const call = await peerCaller(host, caller, eve.services);
+  const prompt = "Send the reminder before the invitation expires.";
+
+  assert.deepEqual(
+    await call(CODER_TOOL.START_AGENT, { prompt, branch: "luke/never-pushed" }, "call-missing"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_BRANCH },
+  );
+  assert.equal(eve.sent.length, 0, "a branch GitHub does not hold starts nothing");
+  assert.deepEqual(
+    await call(CODER_TOOL.START_AGENT, { prompt, branch: "two words" }, "call-unreadable"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.UNREADABLE },
+  );
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt, branch: STACKED_BRANCH },
+    "call-stacked",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  assert.equal(eve.sent.length, 1);
+
+  // The started agent's own session checks its repository out at the branch named.
+  const stored = Option.getOrThrow(
+    await database.run(readCodingAgent(caller.userId, started.agent.id)),
+  );
+  const target = { userId: caller.userId, conversationId: stored.conversationId };
+  const session = sessionId();
+  assert.equal(await database.run(claimRuntimeSession(target, session, new Date(NOW))), true);
+  const admitted = await database.run(host.admit(seat(target), session));
+  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
+  const sandbox = sandboxDouble(() => undefined);
+  await database.run(host.checkOut(admitted.success, sandbox).pipe(Effect.provide(eve.services)));
+  assert.deepEqual(
+    sandbox.clones.map((clone) => clone.branch),
+    [STACKED_BRANCH],
+  );
+  const instructions = await database.run(
+    host.prompt(admitted.success, stored).pipe(Effect.provide(eve.services)),
+  );
+  assert.ok(
+    instructions.text.includes(`cut from \`${STACKED_BRANCH}\`, the branch you were started on`),
+    instructions.text,
+  );
+  assert.ok(
+    instructions.text.includes(`started on \`${STACKED_BRANCH}\`, so pass it as \`base\``),
+    instructions.text,
+  );
+
+  // A turn that ends on the branch it started on records no branch of its own, so the pull request
+  // already on that branch is never taken for this agent's; one it cut is recorded.
+  let standing = STACKED_BRANCH;
+  const shell = sandboxDouble((command) =>
+    command === "git branch --show-current"
+      ? { exitCode: 0, stdout: `${standing}\n`, stderr: "" }
+      : undefined,
+  );
+  shell.checkedOut = RELAY_FULL_NAME;
+  const branchOf = async () =>
+    Option.getOrThrow(await database.run(readCodingAgent(caller.userId, stored.id))).branch;
+  await database.run(host.recordBranch(admitted.success, shell));
+  assert.equal(await branchOf(), null);
+  standing = "luke/invitation-reminder";
+  await database.run(host.recordBranch(admitted.success, shell));
+  assert.equal(await branchOf(), standing);
+
+  // The same call run again once the branch is gone answers the agent its start made.
+  branches.length = 0;
+  const again = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt, branch: STACKED_BRANCH },
+    "call-stacked",
+  );
+  assert.ok(isRecord(again.agent), JSON.stringify(again));
+  assert.equal(again.agent.id, stored.id);
+  assert.equal(eve.sent.length, 1, "the call run again starts nothing");
 });
 
 test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {

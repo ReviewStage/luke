@@ -8,6 +8,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { WorkspaceTile } from "./workspace-tile";
 
 /**
@@ -32,13 +33,10 @@ let answer: TasksWorkspacePhotoAnswer = PHOTO;
 beforeEach(() => {
   sent = [];
   answer = PHOTO;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: { kind: string; payload?: unknown }) => {
-        sent.push(request);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
-      },
+  fakeAppBridge({
+    act: (request: { kind: string; payload?: unknown }) => {
+      sent.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
     },
   });
 });
@@ -155,14 +153,11 @@ test("a workspace with neither a photo nor a picture draws its letter and reads 
 test("a read of a version asked for again lands though an earlier read of it failed after the second was asked", async () => {
   // Each photo read waits until the test answers it, in the order it was asked.
   const answers: ((value: TasksWorkspacePhotoAnswer) => void)[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: () =>
-        new Promise((resolve) =>
-          answers.push((value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
-        ),
-    },
+  fakeAppBridge({
+    act: () =>
+      new Promise((resolve) =>
+        answers.push((value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
+      ),
   });
   const container = document.createElement("div");
   document.body.append(container);

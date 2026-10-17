@@ -4,6 +4,7 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { type SettingsSearchInput, searchSettings, settingsSearchEntries } from "./settings-search";
 
 /**
@@ -34,6 +35,7 @@ function workspaceFound(query: string, workspace: Workspace): readonly string[] 
     settings: settingsView(),
     voiceControlsDrawn: false,
     accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
     workspace,
   };
   const found = searchSettings(settingsSearchEntries(input), query);
@@ -91,6 +93,7 @@ test("the Workspace page's group reads Integrations, under its Workspace page ap
         settings: settingsView(),
         voiceControlsDrawn: true,
         accountDrawn: true,
+        capabilities: DESKTOP_CAPABILITIES,
         workspace: TEAM,
       }),
       "Integrations",
@@ -114,6 +117,7 @@ test("searching GitHub while signed in finds Integrations' GitHub row and nothin
     settings: settingsView(),
     voiceControlsDrawn: true,
     accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
   });
   const groups = searchSettings(entries, "GitHub")?.groups ?? [];
 
@@ -135,6 +139,7 @@ function experimentalFound(query: string, accountDrawn: boolean): readonly strin
     settings: settingsView(),
     voiceControlsDrawn: false,
     accountDrawn,
+    capabilities: DESKTOP_CAPABILITIES,
   };
   const found = searchSettings(settingsSearchEntries(input), query);
   return (found?.groups ?? [])
@@ -171,6 +176,7 @@ test("Video calls is one switch, on the Experimental page, and not among the Voi
       settings: settingsView(),
       voiceControlsDrawn: true,
       accountDrawn: true,
+      capabilities: DESKTOP_CAPABILITIES,
     }),
     "Video calls",
   );
@@ -185,6 +191,7 @@ test("no two rows the search can land on wear the same id", () => {
     settings: settingsView(),
     voiceControlsDrawn: true,
     accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
     workspace: TEAM,
   }).map((entry) => entry.id);
   assert.deepEqual(

@@ -92,7 +92,7 @@ import {
   readAsAgent,
   resolveAsAgent,
 } from "./chat.js";
-import { HELD_DOORS } from "./chat-notify.js";
+import { CHAT_DOORS } from "./chat-notify.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -269,7 +269,7 @@ export interface CoderHost extends HostAdmission {
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
-   * checkout stood detached. A read or write that fails is logged and
+   * checkout stood detached or on the branch the agent was started on. A read or write that fails is logged and
    * nothing is written, so the caller's stop of the sandbox follows either
    * way.
    */
@@ -564,7 +564,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             { kind: MENTION_KIND.TASK, taskId: agent.taskId },
             { workspace, repository: null },
           );
-    const text = coderInstructions(agent.repository, brief, ciReadable, taskLink, coAuthor, chatOn);
+    const text = coderInstructions(
+      agent.repository,
+      brief,
+      ciReadable,
+      taskLink,
+      coAuthor,
+      chatOn,
+      agent.startBranch,
+    );
     return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn };
   };
 
@@ -728,7 +736,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const agent = yield* agentOrRefused(admitted);
         const branch = yield* checkoutBranch(sandbox);
-        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, branch);
+        // Note that the branch the agent was started on is another's, such as a stacked pull
+        // request's, so standing on it is recorded as no branch of its own: no pull request
+        // and no GitHub delivery on that branch is taken for this agent's.
+        const own = branch === agent.startBranch ? null : branch;
+        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, own);
       }).pipe(
         Effect.catch((failure) =>
           Effect.logWarning(
@@ -861,7 +873,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           secret === undefined || origin === undefined
             ? EVE_UNREACHED
             : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
-        const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
+        const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
         const { clientKey, postsInTurn, sandbox } = call;
         return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
           clientKey,
