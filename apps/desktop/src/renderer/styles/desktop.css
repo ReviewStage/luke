@@ -1777,13 +1777,18 @@ ul.actor-stack {
   line-height: 1;
 }
 
-/* An open section with nothing in it says how to fill it, under its header. */
+/* An open section with nothing in it says how to fill it, under its header's
+   name, which stands at the row's inset where the section wears no icon. */
 .sidebar-section-empty {
   margin: 0;
   padding: var(--space-4) var(--row-inset) var(--space-6)
     calc(var(--row-inset) + var(--control-glyph) + var(--space-8));
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+.sidebar-own-section:not(:has(.sidebar-repository-glyph)) > .sidebar-section-empty {
+  padding-left: var(--row-inset);
 }
 
 /* The section, or Tasks, a row is carried over is washed while it is, and a

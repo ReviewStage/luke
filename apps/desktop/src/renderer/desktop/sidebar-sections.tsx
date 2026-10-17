@@ -31,6 +31,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
 import {
+  BanIcon,
   BookmarkIcon,
   BriefcaseIcon,
   BugIcon,
@@ -38,7 +39,6 @@ import {
   FlagIcon,
   FlaskConicalIcon,
   FolderIcon,
-  HashIcon,
   HeartIcon,
   LayersIcon,
   type LucideIcon,
@@ -54,11 +54,12 @@ import { SidebarGroupHeader } from "./sidebar-group-header";
 import { useRowDrag } from "./use-row-drag";
 
 /**
- * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title and an icon over the tasks kept in it, the dialog that makes and edits one, and the task menu's Move to section.
+ * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title, and an icon where one was chosen, over the tasks kept in it, the dialog that makes and edits one, and the task menu's Move to section.
  *
  * A section is the reader's own (`task-section-wire.ts`), so nothing here
  * is a teammate's. Each stands under a header like a repository's, its icon
- * where a repository's picture stands, folded and kept as a repository's
+ * where a repository's picture stands, or its title alone where it has none,
+ * folded and kept as a repository's
  * fold is, with Edit section and Delete section on its ⋯ and a right-click.
  * Its tasks stand in the order dragged, and a row is dragged within its
  * section, into another, or onto Tasks, which takes it out of every section
@@ -99,9 +100,9 @@ const TITLE_ASKED = "Name the section.";
 /** Whether a value is an icon the wire takes: one emoji, or a glyph it names. */
 const isSectionIcon = Schema.is(taskSectionIconSchema);
 
-/** A section's icon: its emoji, its glyph, or the hash every section without one wears. */
-function SectionIcon({ icon }: { icon: TaskSectionIcon | undefined }): React.JSX.Element {
-  if (icon === undefined) return <HashIcon />;
+/** A section's icon: its emoji, its glyph, or nothing for a section without one, which wears none. */
+function sectionGlyph(icon: TaskSectionIcon | undefined): React.JSX.Element | undefined {
+  if (icon === undefined) return undefined;
   if (icon.kind === TASK_SECTION_ICON_KIND.EMOJI) {
     return (
       <span className="sidebar-section-emoji" aria-hidden="true">
@@ -159,12 +160,12 @@ function SectionIconPicker({
     <fieldset className="section-icon-picker" disabled={disabled}>
       <legend className="section-icon-legend">Icon</legend>
       <div className="section-icon-choices">
-        {choice("No icon", undefined, <HashIcon />)}
+        {choice("No icon", undefined, <BanIcon />)}
         {Object.values(TASK_SECTION_GLYPH).map((glyph) =>
           choice(
             GLYPHS[glyph].label,
             { kind: TASK_SECTION_ICON_KIND.GLYPH, glyph },
-            <SectionIcon icon={{ kind: TASK_SECTION_ICON_KIND.GLYPH, glyph }} />,
+            sectionGlyph({ kind: TASK_SECTION_ICON_KIND.GLYPH, glyph }),
           ),
         )}
         {OFFERED_EMOJI.map((emoji) =>
@@ -339,16 +340,17 @@ export function moveToSectionEntry(
   const standing = sectionEntries(state).get(task.id)?.sectionId;
   const put = (sectionId: string) =>
     placeWrites(sectionOrder(state, sectionId), task.id, sectionId, 0, Date.now());
-  const sections = workspaceSections(state, task.workspaceId).map(
-    (section): MenuAction => ({
+  const sections = workspaceSections(state, task.workspaceId).map((section): MenuAction => {
+    const glyph = sectionGlyph(section.icon);
+    return {
       label: section.title,
-      icon: <SectionIcon icon={section.icon} />,
+      ...(glyph === undefined ? undefined : { icon: glyph }),
       checked: section.id === standing,
       onSelect: () => {
         if (section.id !== standing) tasks.onWriteSections(put(section.id));
       },
-    }),
-  );
+    };
+  });
   const remove: MenuAction[] =
     standing === undefined
       ? []
@@ -432,7 +434,7 @@ function SidebarSection({
   return (
     <div className="sidebar-repository sidebar-own-section" data-row-drop={section.id}>
       <SidebarGroupHeader
-        glyph={<SectionIcon icon={section.icon} />}
+        glyph={sectionGlyph(section.icon)}
         name={section.title}
         folded={folded}
         count={drawn.tasks.length}
