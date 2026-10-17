@@ -72,7 +72,8 @@ import { task } from "./task.js";
  * `started_from` is the agent of the same plan this one was started from
  * (`StoredStartedFrom`): the one it continues, or forks at one of its
  * messages, with how many of that agent's steps its first message replayed
- * of how many there were; null for an agent started afresh. The source is
+ * of how many there were, and the branch that agent's work was copied to
+ * for it where it could be; null for an agent started afresh. The source is
  * named by id and held to nothing, so an agent outlives a source discarded
  * after it.
  * `author` is who the agent's commits are by and its pull request is opened
@@ -126,14 +127,17 @@ export interface StoredAutomationOrigin {
 
 /**
  * The agent an agent was started from: its id, the assistant message it was
- * forked at where it was forked rather than continued, and how many of the
- * source's steps the replay kept of how many there were.
+ * forked at where it was forked rather than continued, how many of the
+ * source's steps the replay kept of how many there were, and the branch its
+ * work was copied to where it could be.
  */
 export interface StoredStartedFrom {
   readonly agentId: string;
   readonly messageId?: string;
   readonly steps: number;
   readonly totalSteps: number;
+  /** The branch the source's work was copied to for this agent, what it had not pushed included; absent where it could not be copied. */
+  readonly branch?: string;
 }
 
 /**

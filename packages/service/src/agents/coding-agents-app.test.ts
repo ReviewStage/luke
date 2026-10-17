@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
@@ -43,6 +45,7 @@ import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { openTaskConversation, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -126,6 +129,7 @@ import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wi
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { temporaryDirectory } from "@luke/wire/testing";
 import { and, eq } from "drizzle-orm";
 import {
   Clock,
@@ -143,6 +147,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { afterEach, type TestContext, vi } from "vitest";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
@@ -177,6 +182,13 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import {
+  fixtureOidcToken,
+  SOURCE_SANDBOX,
+  type SourceCheckout,
+  sourceCheckout,
+  sourceSandbox,
+} from "../testing/source-sandbox.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -4245,49 +4257,57 @@ function openedParts(eve: ReturnType<typeof fakeEve>) {
 }
 
 it.layer(getTestDB())("starting an agent from another", (it) => {
-  /** A source agent on the owner's plan, on a choice and servers of its own, with a transcript of two turns, a branch, and a pull request. */
-  const sourceAgent = Effect.gen(function* () {
-    const opened = yield* openTask();
-    const source = readAnswer(
-      codingAgentAnswerSchema,
-      HOSTED_HTTP_STATUS.CREATED,
-      yield* opened.ask(
-        startAs(opened.owner, opened.task.id, {
-          idempotencyKey: randomUUID(),
-          model: SOL,
-          effort: "low",
-          disabledServers: [INTEGRATION_PROVIDER.LINEAR],
-        }),
-      ),
-    ).agent;
-    const stored = Option.getOrThrow(yield* readCodingAgent(opened.owner, source.id));
-    yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
-    yield* transcriptRow(stored, 2, MESSAGE_ROLE.USER, [text("Use the mailer.")]);
-    const firstTurn = yield* transcriptRow(stored, 3, MESSAGE_ROLE.ASSISTANT, [
-      { type: "reasoning", text: "A thought of its own.", state: "done" },
-      text("On it."),
-      {
-        type: "tool-bash",
-        toolCallId: "call-1",
-        state: "output-available",
-        input: { command: "pnpm test" },
-        output: "ok",
-      },
-    ]);
-    const laterLine = yield* transcriptRow(stored, 4, MESSAGE_ROLE.USER, [text("Also add tests.")]);
-    yield* transcriptRow(stored, 5, MESSAGE_ROLE.ASSISTANT, [text("Done.")]);
-    yield* updateCodingAgentBranch(opened.owner, source.id, PUBLISHED.branch);
-    yield* recordCodingAgentPublished(opened.owner, source.id, {
-      number: PUBLISHED.number,
-      title: "Expire teammate invitations",
-      url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
-      state: PULL_REQUEST_STATE.OPEN,
-      checks: CHECK_SUMMARY.NONE,
-      additions: 4,
-      deletions: 1,
-      changedFiles: 1,
+  /** A source agent on the owner's plan, on a choice and servers of its own, with a transcript of two turns, a branch, and a pull request, its GitHub answering as given. */
+  const sourceAgentOn = (github?: RepositoryScript) =>
+    Effect.gen(function* () {
+      const opened = yield* openTask(github === undefined ? {} : { github });
+      const source = readAnswer(
+        codingAgentAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* opened.ask(
+          startAs(opened.owner, opened.task.id, {
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+          }),
+        ),
+      ).agent;
+      const stored = Option.getOrThrow(yield* readCodingAgent(opened.owner, source.id));
+      yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
+      yield* transcriptRow(stored, 2, MESSAGE_ROLE.USER, [text("Use the mailer.")]);
+      const firstTurn = yield* transcriptRow(stored, 3, MESSAGE_ROLE.ASSISTANT, [
+        { type: "reasoning", text: "A thought of its own.", state: "done" },
+        text("On it."),
+        {
+          type: "tool-bash",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { command: "pnpm test" },
+          output: "ok",
+        },
+      ]);
+      const laterLine = yield* transcriptRow(stored, 4, MESSAGE_ROLE.USER, [
+        text("Also add tests."),
+      ]);
+      yield* transcriptRow(stored, 5, MESSAGE_ROLE.ASSISTANT, [text("Done.")]);
+      yield* updateCodingAgentBranch(opened.owner, source.id, PUBLISHED.branch);
+      yield* recordCodingAgentPublished(opened.owner, source.id, {
+        number: PUBLISHED.number,
+        title: "Expire teammate invitations",
+        url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
+        state: PULL_REQUEST_STATE.OPEN,
+        checks: CHECK_SUMMARY.NONE,
+        additions: 4,
+        deletions: 1,
+        changedFiles: 1,
+      });
+      return { ...opened, source, stored, firstTurn, laterLine };
     });
-    return { ...opened, source, stored, firstTurn, laterLine };
+  const sourceAgent = sourceAgentOn();
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it.effect(
@@ -4325,6 +4345,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.match(parts.replay?.steps[2]?.words ?? "", /Result: ok/u);
         assert.match(parts.replay?.preamble ?? "", /You continue the work/u);
         assert.ok(parts.replay?.preamble.includes(PUBLISHED.branch));
+        assert.match(
+          parts.replay?.preamble ?? "",
+          /what it had not pushed could not be copied from its sandbox/u,
+          "a source that never opened a sandbox is taken up from the branch it pushed",
+        );
         assert.ok(parts.replay?.preamble.includes(`/pull/${PUBLISHED.number}`));
         assert.doesNotMatch(handed, /A thought of its own/u);
         const stored = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
@@ -4346,11 +4371,175 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
+  /** A source whose stopped sandbox holds a change it never committed, over a checkout and remote on disk, and a continue of it. */
+  const copyScenario = (t: TestContext) =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureOidcToken());
+      const checkout = sourceCheckout(yield* Effect.promise(() => temporaryDirectory(t, "copy-")));
+      writeFileSync(join(checkout.checkout, "invites.ts"), "export const ttl = 7;\n");
+      const sandbox = sourceSandbox(checkout, "stopped");
+      const opened = yield* sourceAgentOn((sent) =>
+        sandbox.answer(sent.url, sent.method, sent.body),
+      );
+      yield* claimRuntimeSession(opened.stored, "wrun_source", new Date());
+      const continued = Effect.gen(function* () {
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* opened.ask(
+            startAs(opened.owner, opened.task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: opened.source.id },
+            }),
+          ),
+        ).agent;
+        return { started, preamble: openedParts(opened.eve).parts.replay?.preamble ?? "" };
+      });
+      return { ...opened, checkout, sandbox, continued };
+    });
+
+  /** The fetch the preamble hands on, run in a checkout of the remote cloned as an agent's is, with the default branch alone; answers that checkout. */
+  const fetchedAsHanded = (checkout: SourceCheckout, preamble: string) => {
+    const fetch = /`(git remote set-branches [^`]+)`/u.exec(preamble)?.[1] ?? "";
+    const fresh = join(checkout.root, "fresh");
+    checkout.sh(
+      checkout.root,
+      "git",
+      "clone",
+      "--quiet",
+      "--single-branch",
+      "--branch",
+      "main",
+      checkout.remote,
+      fresh,
+    );
+    checkout.sh(fresh, "sh", "-c", fetch);
+    return fresh;
+  };
+
   it.effect(
-    "a fork is cut at the source's message, its turn included, and a message that is none of the source's journals is refused",
+    "a continue copies the source's checkout, what it had not committed included, to a branch of its own from the sandbox it wakes and stops again, names that branch and how a fresh checkout fetches it, and keeps it on its record",
+    (t) =>
+      Effect.gen(function* () {
+        const { checkout, sandbox, continued } = yield* copyScenario(t);
+
+        const { started, preamble } = yield* continued;
+
+        const branch = started.from?.branch ?? "";
+        assert.match(branch, /^luke\/teammate-invitations-continued-[0-9a-f]{8}$/u);
+        assert.ok(
+          preamble.includes(
+            `with what it had not committed or pushed recorded as one snapshot commit on top, is copied to the branch \`${branch}\`, made for you`,
+          ),
+        );
+        assert.ok(preamble.includes(`Its own branch was \`${PUBLISHED.branch}\``));
+        // The words the preamble hands on, run in a checkout cloned as an agent's is, find the copy.
+        const fresh = fetchedAsHanded(checkout, preamble);
+        assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), branch);
+        assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+        assert.deepEqual(
+          [sandbox.ran, sandbox.stops],
+          [[SOURCE_SANDBOX.WOKEN], [SOURCE_SANDBOX.WOKEN]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a sandbox held past the copy's own hold, by a developer's terminal or another Start's copy, is woken for the copy and left up",
+    (t) =>
+      Effect.gen(function* () {
+        const { stored, sandbox, continued } = yield* copyScenario(t);
+        yield* holdSandbox(stored.conversationId, new Date(Date.now() + 10 * 60_000));
+
+        const { started } = yield* continued;
+
+        assert.ok(started.from?.branch !== undefined);
+        assert.deepEqual([sandbox.ran, sandbox.stops], [[SOURCE_SANDBOX.WOKEN], []]);
+      }),
+  );
+
+  it.effect(
+    "a source whose task moved to another repository since it started is copied nowhere, its sandbox left asleep, and taken up from the branch it pushed, fetched as one word whatever a shell would read in its name",
+    (t) =>
+      Effect.gen(function* () {
+        const { owner, source, checkout, sandbox, continued } = yield* copyScenario(t);
+        // A name git allows whose words a shell would run, joined so it reads as no template placeholder.
+        const pushedBranch = ["luke/invites$(touch$", "{IFS}pwned)"].join("");
+        checkout.sh(
+          checkout.checkout,
+          "git",
+          "push",
+          "--quiet",
+          "origin",
+          `HEAD:refs/heads/${pushedBranch}`,
+        );
+        yield* updateCodingAgentBranch(owner, source.id, pushedBranch);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ repository: "Acme/Former" })
+            .where(eq(codingAgent.id, source.id)),
+        );
+
+        const { started, preamble } = yield* continued;
+
+        assert.equal(started.from?.branch, undefined);
+        assert.match(preamble, /what it had not pushed could not be copied from its sandbox/u);
+        assert.deepEqual([sandbox.ran, sandbox.stops, sandbox.state.status], [[], [], "stopped"]);
+        const fresh = fetchedAsHanded(checkout, preamble);
+        assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), pushedBranch);
+        assert.equal(existsSync(join(fresh, "pwned")), false);
+      }),
+  );
+
+  it.effect(
+    "a fork is cut at the source's message, its turn included, warned of the files the source edited after it, and a message that is none of the source's journals is refused",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source, firstTurn, laterLine } = yield* sourceAgent;
+        const { owner, task, ask, eve, source, stored, firstTurn, laterLine } = yield* sourceAgent;
+        const patch = (files: readonly string[]) => ({
+          patchText: `*** Begin Patch\n${files.map((file) => `*** Update File: ${file}\n@@\n-a\n+b`).join("\n")}\n*** End Patch`,
+        });
+        yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-2",
+            state: "output-available",
+            input: patch(["src/invites.ts", "src/expiry.ts"]),
+            output: "ok",
+          },
+          {
+            type: "tool-write_file",
+            toolCallId: "call-3",
+            state: "output-available",
+            input: { filePath: "src/mailer.ts", content: "x" },
+            output: "ok",
+          },
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-4",
+            state: "output-error",
+            input: patch(["src/refused.ts"]),
+            errorText: "the patch did not apply",
+          },
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-5",
+            state: "output-available",
+            input: patch(["src/invites.ts"]),
+            output: "ok",
+          },
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-6",
+            state: "output-available",
+            input: {
+              patchText:
+                "*** Begin Patch\n*** Update File: src/old.ts\n*** Move to: src/new.ts\n*** End Patch",
+            },
+            output: "ok",
+          },
+        ]);
         const fork = (messageId: string) =>
           ask(
             startAs(owner, task.id, {
@@ -4377,6 +4566,10 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ["The developer: Use the mailer.", "Said: On it.", "Ran: pnpm test"],
         );
         assert.match(parts.replay?.preamble ?? "", /You are a fork/u);
+        assert.match(
+          parts.replay?.preamble ?? "",
+          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`; undo/u,
+        );
         for (const named of [laterLine, randomUUID()]) {
           assert.deepEqual(
             yield* fork(named),
