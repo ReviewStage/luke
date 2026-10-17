@@ -27,6 +27,7 @@ for the host you are in:
 | Worker reports back | `conductor message create --session <ORCHESTRATOR_SESSION_ID>` | `message_agent` with the orchestrator's agent id |
 | Check on a silent worker | `conductor session message <sessionId>` | `read_agent` with its agent id |
 | Stop a worker | `conductor session cancel <sessionId>` | `stop_agent` with its agent id |
+| Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url, your agent id, and "report to me" |
 | Archive a worker | `conductor workspace archive <workspaceId>` | `archive_agent` with a short reason, once the agent is idle |
 | Point the user at a worker or PR | Deep links | The mentions `start_agent` answered, and the PR's URL |
 
@@ -146,29 +147,29 @@ and each message arrives as a new turn. On each report:
 - **Merged**: if any PR builds on this one, restack (Step 3), which also
   retargets the PR above to `main`. Archive the merged PR's worker.
 
-If a worker has gone silent for longer than the work plausibly takes, send it
-one message asking for status. Only then, if it still does not answer, check
-on it as the table says.
+If a worker has gone quiet far longer than its work plausibly takes, send it
+one message asking for status, and check on it as the table says. If the
+message is refused because its session has ended, the worker is dead (in
+Luke it now reads `failed`). Continue it yourself, as the table's "Continue
+a dead or stalled worker" row says; do not ask the user to.
 
-If a worker is going the wrong way (out of scope, or against an answer you
-gave it) and a message does not turn it, stop it as the table says, then
-message it the correction; the message starts a new turn on its kept branch.
+If a worker is alive but going the wrong way (out of scope, or against an
+answer you gave it) or stuck, and a message does not turn it, stop it as the
+table says, then continue it the same way, with the correction in the note.
 
-In Luke, a worker that reads `running` long after its last activity may be
-dead. Send it a one-line status message. If `message_agent` refuses it with
-"session has ended for good", the worker is dead, whether `list_agents` then
-reads it `failed` or still `running`. Post an inbox to-do (`post_to_inbox`
-with a `task` response) naming the worker's mention and PR and asking the
-user to Continue it in the app, then wait for it. Never start a replacement
-worker from scratch. Continue starts a new agent, named after the dead one
-with "(continued)", on its transcript and with its work copied to a snapshot
-branch, and tells it to open a PR from that branch. So the to-do gives the
-user a note to send with Continue, which reaches the new agent before it
-acts: "Open no PR. Keep PR <url>: fetch `<pr-branch>`, carry your snapshot
-branch's commits past its tip onto it, push them to `<pr-branch>`, and work
-there from now on. Report to agent <your agent id>." Then find the new agent
-with `list_agents`, send it the same words if it has not taken them up, and
-track it in the dead worker's place, on `<pr-branch>`.
+In Luke, the continued agent runs on the old one's task and model, with its
+transcript and a copy of its work. While the old worker's PR is open, the
+new agent carries that work onto the PR's branch and opens no second PR.
+If `start_agent` refuses because the old worker is still running, stop it
+and call again; if it names an agent that already continued it, track that
+one. In Conductor, the new session works in the old one's workspace, on its
+branch and PR; tell it to read the old transcript with `conductor session
+message <old sessionId>`.
+
+Track the new worker in the old one's place, by its id and mention, and
+archive the old one (in Conductor, `conductor session archive <old
+sessionId>`). Never start a replacement worker from scratch: the brief's
+work lives in the old worker's transcript.
 
 ## Step 3: Restack
 
@@ -219,10 +220,12 @@ issue, update the issue with the merged PRs.
 - Never do the PR's implementation work yourself.
 - Point the user at a worker or PR with a deep link or mention, not an id.
 - One PR per worker. Do not reuse a worker for a second PR; a continuation
-  of a dead worker takes over its PR.
+  of a worker takes over its source's PR.
 - A PR that builds on another gets its worker only after that PR is open.
 - Workers never restack; a restack runs only in a restack worker, while
   every affected worker holds.
-- Do not archive a worker while its PR is unmerged.
-- Stop a worker only when it goes the wrong way or will not hold for a
-  restack; never start a fresh worker to replace one whose session died.
+- Do not archive a worker while its PR is unmerged, unless a continuation
+  has taken the PR over.
+- Stop a worker only when it goes the wrong way, is stuck, or will not hold
+  for a restack. Continue a dead or stopped worker; never start a fresh one
+  to replace it.
