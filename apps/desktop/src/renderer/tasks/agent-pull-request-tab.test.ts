@@ -26,6 +26,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
+import type { DiffViewProps } from "../diff-view/contract";
 import { MemberDirectory } from "../member-directory";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -147,12 +148,22 @@ let root: Root | undefined;
 let opened: string[] = [];
 /** Every image the tab asked the service for, by its address. */
 let images: string[] = [];
+/** What each review thread's preview handed the diff bundle, in the order drawn. */
+let previews: DiffViewProps[] = [];
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
   opened = [];
   images = [];
+  previews = [];
+  // The diff bundle, a script of its own the panel loads, stood in for at its global.
+  window.lukeDiffView = {
+    mount: (_host, props) => {
+      previews.push(props);
+      return { update: () => undefined, unmount: () => undefined };
+    },
+  };
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -177,6 +188,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  delete window.lukeDiffView;
 });
 
 /** The pull request as what the agent published names it, which the tab's bar wears. */
@@ -417,7 +429,7 @@ function thread(overrides: Partial<ReviewThread> = {}): ReviewThread {
   };
 }
 
-test("a review that only left line comments draws each thread under it: its file and lines over the lines it is on in Files changed's rows, then its comments; a resolved or outdated one folds closed under its label until opened", async () => {
+test("a review that only left line comments draws each thread under it: its file and lines over the lines it is on drawn as Files changed draws a diff, then its comments; a resolved or outdated one folds closed under its label until opened", async () => {
   const review = {
     kind: CONVERSATION_ENTRY.REVIEW,
     by: CHARLES_ON_GITHUB,
@@ -460,27 +472,31 @@ test("a review that only left line comments draws each thread under it: its file
     open.querySelector(".pull-request-thread-head")?.textContent,
     "src/invite.tslines 12–13",
   );
-  const rows = [...open.querySelectorAll<HTMLElement>(".pull-request-thread-lines .code-line")];
+  const [preview] = previews;
+  assert.ok(open.querySelector(".pull-request-thread-lines"), "the open thread's lines are drawn");
   assert.deepEqual(
-    rows.map((row) => [row.dataset.diff, row.querySelector(".code-line-text")?.textContent]),
+    preview?.patch.split("\n").slice(3),
     [
-      ["context", "const three = 3;"],
-      ["context", "const four = 4;"],
-      ["removed", "  twice();"],
-      ["added", "  once();"],
-      ["added", "  done();"],
+      "@@ -10,3 +10,4 @@ export function send()",
+      " const three = 3;",
+      " const four = 4;",
+      "-  twice();",
+      "+  once();",
+      "+  done();",
+      "",
     ],
-    "the end of the hunk, from three rows above the range to its line",
+    "the end of the hunk, from three rows above the range to its line, handed to the diff bundle",
   );
+  assert.deepEqual(preview?.selected, {
+    start: 12,
+    side: "additions",
+    end: 13,
+    endSide: "additions",
+  });
   assert.deepEqual(
-    rows.map((row) => [...row.querySelectorAll(".code-line-number")].map((n) => n.textContent)),
-    [
-      ["10", "10"],
-      ["11", "11"],
-      ["12", ""],
-      ["", "12"],
-      ["", "13"],
-    ],
+    [preview?.look.layout, preview?.look.changedWords, preview?.excerpt],
+    ["unified", false, true],
+    "a preview is an excerpt drawn unified, its lines tinted whole",
   );
   assert.equal(
     open.querySelector('.pull-request-thread-comment [data-streamdown="strong"]')?.textContent,

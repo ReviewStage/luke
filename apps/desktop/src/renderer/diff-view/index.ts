@@ -36,9 +36,12 @@ import { adoptShadowStyles } from "./inline-styles";
  *
  * A changed line marks the words it changed (Pierre's `word-alt`, words
  * joined across the spaces between them) unless told not to, and a line too
- * long to compare is tinted whole. Between two hunks stands how many
+ * long to compare is tinted whole. Lines handed as selected, a review
+ * thread's, are lit in the code's blue, as a File tab's pointed lines are.
+ * Between two hunks of a file stands how many
  * unchanged lines they leave out, with no offer to show them, since the
- * service reads the patch alone and those lines are not at hand.
+ * service reads the patch alone and those lines are not at hand; an
+ * excerpt, a review thread's lines, says nothing of the lines around it.
  */
 
 /** The File tab's two themes, by Shiki's names, so a diff is coloured as the file it changes. */
@@ -75,6 +78,7 @@ const LOOK_CSS = `
     --diffs-bg-addition-emphasis-override: var(--diff-added-word);
     --diffs-bg-deletion-emphasis-override: var(--diff-removed-word);
     --diffs-bg-separator-override: var(--code-pointed);
+    --diffs-modified-color-override: var(--code-pointed-edge);
   }
   pre {
     background-color: var(--code-ground);
@@ -109,8 +113,8 @@ function look(): CSSStyleSheet {
   return lookSheet;
 }
 
-/** Pierre's options for a look. */
-function optionsOf(drawn: DiffLook): FileDiffOptions<undefined, undefined> {
+/** Pierre's options for what is drawn and how: a whole file's patch, or an excerpt with nothing said of the lines around it. */
+function optionsOf(drawn: DiffLook, excerpt: boolean): FileDiffOptions<undefined, undefined> {
   return {
     theme: THEMES,
     themeType: "system",
@@ -121,7 +125,7 @@ function optionsOf(drawn: DiffLook): FileDiffOptions<undefined, undefined> {
     maxLineDiffLength: MAX_LINE_DIFF_LENGTH,
     disableLineNumbers: !drawn.lineNumbers,
     overflow: drawn.wrap ? "wrap" : "scroll",
-    hunkSeparators: "line-info-basic",
+    hunkSeparators: excerpt ? "simple" : "line-info-basic",
     disableFileHeader: true,
   };
 }
@@ -132,18 +136,22 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   host.append(container);
   const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });
   const release = adoptShadowStyles(root, look());
-  const view = new PierreFileDiff<undefined, undefined>(optionsOf(props.look));
+  const view = new PierreFileDiff<undefined, undefined>(
+    optionsOf(props.look, props.excerpt === true),
+  );
   let patch = props.patch;
   let fileDiff = getSingularPatch(patch);
   view.render({ fileDiff, fileContainer: container });
+  view.setSelectedLines(props.selected ?? null);
   return {
     update: (next) => {
       if (next.patch !== patch) {
         patch = next.patch;
         fileDiff = getSingularPatch(patch);
       }
-      view.setOptions(optionsOf(next.look));
+      view.setOptions(optionsOf(next.look, next.excerpt === true));
       view.render({ fileDiff, fileContainer: container, forceRender: true });
+      view.setSelectedLines(next.selected ?? null);
     },
     unmount: () => {
       view.cleanUp();

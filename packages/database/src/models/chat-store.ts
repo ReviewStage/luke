@@ -2345,3 +2345,87 @@ export function readAttachment(
     return yield* findAttachment({ organizationId, messageId, attachmentId });
   });
 }
+
+const findThreadAuthors = SqlSchema.findAll({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    rootId: Schema.String,
+    beforeSeq: Schema.Number,
+  }),
+  Result: Schema.Struct({ authorMemberId: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ authorMemberId: chatMessage.authorMemberId })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.organizationId, key.organizationId),
+            or(eq(chatMessage.id, key.rootId), eq(chatMessage.parentId, key.rootId)),
+            lt(chatMessage.seq, key.beforeSeq),
+          ),
+        )
+        .orderBy(asc(chatMessage.seq)),
+    ),
+});
+
+/** Lets go of the notice stamped at the place given, where it still stands: one that could not be handed over is no notice outstanding. */
+const dropNotice = SqlSchema.void({
+  Request: Schema.Struct({ ...ReadKeySchema.fields, seq: Schema.Number }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .update(chatMember)
+        .set({ noticeSeq: null })
+        .where(
+          and(
+            eq(chatMember.id, key.readerId),
+            eq(chatMember.organizationId, key.organizationId),
+            eq(chatMember.noticeSeq, key.seq),
+          ),
+        ),
+    ),
+});
+
+/** The channel under its id in the workspace; nothing where the account is not in it or no such channel is. */
+export function channelOf(
+  userId: string,
+  organizationId: string,
+  channelId: string,
+): ChatStoreEffect<Option.Option<ChatChannelRow>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return yield* findChannelInWorkspace({ organizationId, channelId });
+  });
+}
+
+/**
+ * Who has spoken in a thread before the place given: its root's author,
+ * then each replier, each once, in the order they first spoke; none where
+ * the account is not in the workspace.
+ */
+export function threadAuthors(
+  userId: string,
+  organizationId: string,
+  rootId: string,
+  beforeSeq: number,
+): ChatStoreEffect<readonly string[]> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
+    const rows = yield* findThreadAuthors({ organizationId, rootId, beforeSeq });
+    return [...new Set(rows.map((row) => row.authorMemberId))];
+  });
+}
+
+/** Lets go of a notice stamped at the place given that could not be handed over, so the next one is told; nothing where another stands. */
+export function releaseNotice(
+  userId: string,
+  organizationId: string,
+  memberId: string,
+  seq: number,
+): ChatStoreEffect<void> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return;
+    yield* dropNotice({ readerId: memberId, organizationId, seq });
+  });
+}

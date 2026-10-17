@@ -44,8 +44,7 @@ import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
-import { DiffRowLine } from "./diff-rows";
-import { useLinesLook } from "./file-tab";
+import { PierreDiff, useDiffLook } from "./file-diff";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
 import { RelativeTime } from "./relative-time";
@@ -88,7 +87,8 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
  * the App's token (`GitHubPicture`) and any other drawn as its link, as
  * ReviewStage/stage draws them. A review carries the threads on lines it
  * started, each headed by its file and lines over the end of the hunk it was
- * made on, drawn in Files changed's own diff rows, then its comments; one
+ * made on, drawn as Files changed draws a diff with its own lines lit
+ * (`file-diff.tsx`), then its comments; one
  * resolved or outdated by a later push is folded closed under its head,
  * which says which, until opened. Every name and word here is the
  * repository's, so the tab is left out of the screen recording
@@ -482,7 +482,7 @@ function EntryWords({
 /**
  * One review thread: its file and lines at its head, with whether it was
  * resolved or a later push outdated it, which folds it closed until opened;
- * then the lines it is on, as Files changed draws a diff's rows
+ * then the lines it is on, as Files changed draws a diff, its own lines lit
  * (`threadPreview`), and its comments, oldest first, as the conversation
  * draws an entry, with the replies a read left on GitHub counted after them.
  */
@@ -495,7 +495,8 @@ function ThreadCard({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const look = useLinesLook();
+  // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
+  const look = { ...useDiffLook(false), changedWords: false };
   const openLink = useOpenLink();
   const preview = threadPreview(thread);
   const lines = threadLines(thread);
@@ -523,12 +524,13 @@ function ThreadCard({
         </FoldSummary>
         <FoldBody>
           {preview === undefined ? null : (
-            <div className="code-lines file-tab-lines pull-request-thread-lines" {...look}>
-              {preview.map((row, at) => (
-                // oxlint-disable-next-line react/no-array-index-key -- a preview's rows never move within it.
-                <DiffRowLine key={at} row={row} />
-              ))}
-            </div>
+            <PierreDiff
+              patch={preview.patch}
+              look={look}
+              selected={preview.selected}
+              excerpt
+              className="diff-view pull-request-thread-lines"
+            />
           )}
           <ol className="pull-request-thread-comments">
             {thread.comments.map((comment) => (

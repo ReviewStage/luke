@@ -7,8 +7,9 @@
  * (`@luke/service/runtime`) rather than reaching into the website's.
  */
 
+import { sentryReportingLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
-import { type Effect, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 
 /**
  * Module scope is the memoization, on the same terms as the web functions'
@@ -17,8 +18,14 @@ import { type Effect, ManagedRuntime } from "effect";
  */
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
 
-/** The one place this eve root runs an effect, which is what makes this the edge. */
+/**
+ * The one place this eve root runs an effect, which is what makes this the
+ * edge. Sentry was started by eve's instrumentation (`instrumentation/sentry.ts`)
+ * before this file loaded, so the runtime takes its reporting and not a
+ * second start. A defect is reported on the way out, since eve, the
+ * promise's caller, is not Effect and would not.
+ */
 export function runAgent<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
-  standing ??= ManagedRuntime.make(webServices);
-  return standing.runPromise(effect);
+  standing ??= ManagedRuntime.make(Layer.merge(webServices, sentryReportingLayer));
+  return standing.runPromise(Effect.withErrorReporting(effect, { defectsOnly: true }));
 }
