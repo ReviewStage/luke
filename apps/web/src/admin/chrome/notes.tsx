@@ -46,7 +46,7 @@ export function RosterNote({
   searched?: boolean | undefined;
 }): React.JSX.Element {
   return (
-    <p className="mt-3 text-sm text-muted-foreground">
+    <SectionNote>
       Active days count the window's UTC days with hosted voice or attention. Last seen is the
       account's latest sign-in session, which a sign-in moves without any hosted use.
       {truncatedTo !== undefined
@@ -54,7 +54,7 @@ export function RosterNote({
           ? ` Only the ${formatNumber(truncatedTo)} most recently active matches are listed. Narrow the search to reach the rest.`
           : ` Only the ${formatNumber(truncatedTo)} most recently active accounts are listed. Search reads every account.`
         : ""}
-    </p>
+    </SectionNote>
   );
 }
 

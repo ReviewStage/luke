@@ -76,7 +76,6 @@ export const SKELETON_SHAPE = {
   TABLE: "table",
   LINES: "lines",
   HEALTH: "health",
-  SEARCH: "search",
   MASTHEAD: "masthead",
   STATIC: "static",
 } as const;
@@ -100,11 +99,9 @@ export type SkeletonShape =
       kind: typeof SKELETON_SHAPE.TABLE;
       rows: number;
       numericColumns: number;
-      starGutter?: boolean;
     }
   | { kind: typeof SKELETON_SHAPE.LINES; bones: readonly string[] }
   | { kind: typeof SKELETON_SHAPE.HEALTH }
-  | { kind: typeof SKELETON_SHAPE.SEARCH }
   | {
       kind: typeof SKELETON_SHAPE.MASTHEAD;
       avatar?: boolean;
@@ -149,17 +146,14 @@ function SkeletonCalendarCard(): React.JSX.Element {
 function SkeletonAccountsTable({
   rows,
   numericColumns,
-  starGutter,
 }: {
   rows: number;
   numericColumns: number;
-  starGutter: boolean;
 }): React.JSX.Element {
   const columns = bones(numericColumns);
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center gap-6 border-b border-border px-5 py-3">
-        {starGutter ? <div className="w-4 shrink-0" /> : null}
         <div className="min-w-0 flex-1">
           <SkeletonLine box="h-[18px]" bone="h-3 w-16" />
         </div>
@@ -174,7 +168,6 @@ function SkeletonAccountsTable({
           key={row}
           className="flex items-center gap-6 border-b border-border px-5 py-3 last:border-0"
         >
-          {starGutter ? <div className="w-4 shrink-0" /> : null}
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Skeleton circle className="size-8 shrink-0" />
             <div className="min-w-0">
@@ -239,13 +232,7 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
         </div>
       );
     case SKELETON_SHAPE.TABLE:
-      return (
-        <SkeletonAccountsTable
-          rows={shape.rows}
-          numericColumns={shape.numericColumns}
-          starGutter={shape.starGutter === true}
-        />
-      );
+      return <SkeletonAccountsTable rows={shape.rows} numericColumns={shape.numericColumns} />;
     case SKELETON_SHAPE.LINES:
       return (
         <>
@@ -280,13 +267,6 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
           </MetricCardSkeleton>
         </div>
       );
-    case SKELETON_SHAPE.SEARCH:
-      return (
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-          <Skeleton className="h-[34px] w-full max-w-[320px]" />
-          <SkeletonLine box="h-4" bone="h-3 w-28" />
-        </div>
-      );
     case SKELETON_SHAPE.MASTHEAD:
       return (
         <div className={shape.avatar ? "flex flex-wrap items-center gap-4" : undefined}>
@@ -315,9 +295,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
 
 /**
  * What separates one region from the next. A heading carries its own margins,
- * so the region under it needs none; a masthead and the search row keep the
- * clearance the real pages give them; and words that draw themselves bring
- * whatever spacing they were written with.
+ * so the region under it needs none; a masthead keeps the clearance the real
+ * pages give it; and words that draw themselves bring whatever spacing they
+ * were written with.
  */
 function shapeSpacing(
   shape: SkeletonShape,
@@ -327,14 +307,10 @@ function shapeSpacing(
     case SKELETON_SHAPE.HEADING:
     case SKELETON_SHAPE.STATIC:
       return undefined;
-    case SKELETON_SHAPE.SEARCH:
-      return "mt-8";
     case SKELETON_SHAPE.MASTHEAD:
       return "mt-6";
     default:
-      if (previous?.kind === SKELETON_SHAPE.HEADING) return undefined;
-      // The roster's table keeps the clearance its search row is drawn with.
-      return previous?.kind === SKELETON_SHAPE.SEARCH ? "mt-4" : "mt-3";
+      return previous?.kind === SKELETON_SHAPE.HEADING ? undefined : "mt-3";
   }
 }
 
