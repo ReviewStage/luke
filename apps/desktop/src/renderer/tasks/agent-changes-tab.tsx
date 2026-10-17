@@ -11,7 +11,7 @@ import {
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
-import { CopyIcon, DownloadIcon } from "@luke/ui";
+import { CopyIcon, DownloadIcon, EmptyState } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
   ClipboardCopyIcon,
@@ -23,7 +23,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
-import { EmptyState } from "../empty-state";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";

@@ -122,7 +122,7 @@ body {
   padding: var(--luke-space-24) var(--luke-page-inset) var(--luke-space-64);
 }
 
-.catalog-example h1 {
+.catalog-example-title {
   margin: 0 0 var(--luke-space-24);
   font-size: var(--luke-type-title-size);
   line-height: var(--luke-type-title-leading);
@@ -257,6 +257,17 @@ body {
   white-space: nowrap;
 }
 
+/* A pane's room an empty state fills, tall enough to stand it above the middle. */
+.catalog-empty-room {
+  display: flex;
+  flex-direction: column;
+  height: 280px;
+}
+
+.catalog-empty-room-narrow {
+  width: 200px;
+}
+
 /* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
   padding: var(--luke-space-8);
@@ -287,6 +298,20 @@ body {
 
 .catalog-settings-narrow {
   max-width: 320px;
+}
+
+/* The window or pane a settings page fills: a fixed height, so the page
+   scrolls inside it, and a dashed edge showing where the page's own edge is. */
+.catalog-settings-frame {
+  width: 100%;
+  max-width: 880px;
+  height: 480px;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-settings-frame-narrow {
+  max-width: 400px;
 }
 
 /* The tooltip example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
@@ -354,6 +379,12 @@ body {
 
 .catalog-screen-phone {
   width: 320px;
+}
+
+/* A screen as tall as a window's content, so a collection page scrolls in it. */
+.catalog-screen-collection {
+  display: flex;
+  height: 480px;
 }
 
 /* Luke's face at the size the OAuth cards open with. */

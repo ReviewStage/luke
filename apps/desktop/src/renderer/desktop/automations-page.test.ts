@@ -1647,7 +1647,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(
-    page.querySelector("aside[aria-label='Runs'] .empty-state")?.textContent ?? "",
+    page.querySelector("aside[aria-label='Runs'] .luke-empty-state")?.textContent ?? "",
     /^No runs yet$/u,
     "the panel with no run stands the empty state",
   );

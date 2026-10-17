@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   CHAT_REFUSAL,
   type ChatChannelRow,
@@ -176,8 +177,8 @@ const AUTHOR_OF_KIND = {
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
 
-/** One block as a notice's line reads it: words as written, anything else named by what it is. */
-function blockWords(block: ChatReadBlock): string {
+/** One block as a notice's line reads it, and a read of the chat: words as written, anything else named by what it is. */
+export function blockWords(block: ChatReadBlock): string {
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
       return "text" in block ? block.text : "";
@@ -264,6 +265,9 @@ function tellAgent(
       isWorkspaceMember(agent.value.userId, organizationId),
     );
     if (!starterStays) return NOTICE_OUTCOME.LEFT;
+    // An agent whose starter has not turned Chat on has no chat tools to answer with, so it is steered nothing.
+    const chatOn = yield* hostedStoreOrUnavailable(chatEnabledFor(agent.value.userId));
+    if (!chatOn) return NOTICE_OUTCOME.HELD;
     const claimed = yield* hostedStoreOrUnavailable(
       markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
     );

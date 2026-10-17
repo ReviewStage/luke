@@ -3,7 +3,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CallIcon } from "@luke/ui";
+import { CallIcon, EmptyState } from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   type CallTurn,
@@ -27,7 +27,6 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { EmptyState } from "../empty-state";
 import { usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";

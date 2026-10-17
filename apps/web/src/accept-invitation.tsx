@@ -6,13 +6,13 @@ import {
   invitationAcceptQuery,
   invitationOfferAnswerSchema,
 } from "@luke/features/workspace-invitation-wire";
-import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { AuthPage, BUTTON_VARIANT, Button } from "@luke/ui";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { Option, Schema } from "effect";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { SignInChoices } from "./sign-in-choices";
+import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
 /**
@@ -160,6 +160,42 @@ async function accept(offer: { id: string; name: string }, addresses: Addresses)
   return said(`You joined ${offer.name}`, "Return to Luke. You can close this tab.");
 }
 
+function titleOf(view: View): string {
+  if (view.kind === VIEW.WORKING) return "Opening your invitation…";
+  if (view.kind === VIEW.OFFER) return `Join ${view.name}`;
+  return view.title;
+}
+
+function descriptionOf(view: View): string | undefined {
+  if (view.kind === VIEW.WORKING) return undefined;
+  if (view.kind !== VIEW.OFFER) return view.body;
+  if (view.inviter === undefined) {
+    return `You're invited to plan in ${view.name} on Luke, as ${view.role}.`;
+  }
+  return `${view.inviter} invited you to plan in ${view.name} on Luke, as ${view.role}.`;
+}
+
+/**
+ * The card a sign-in is asked for on, with a button for every provider. A
+ * sign-in that cannot start is said in the card's alert region. The choices'
+ * state is this card's, so it ends with the card: a session that comes and
+ * goes in another tab brings the card back without an earlier failure.
+ */
+function SignInCard({ title, body }: { title: string; body: string }): React.JSX.Element {
+  const { pending, failed, begin } = useSocialSignIn(authClient);
+  return (
+    <AuthPage title={title} description={body} error={failed ? SIGN_IN_FAILURE : undefined}>
+      <ProviderChoices pending={pending} onPress={begin} />
+    </AuthPage>
+  );
+}
+
+/**
+ * The page is one AuthPage card with no artwork, as it had none before: the
+ * title says where the invitation stands, the description what it means,
+ * and the body holds the one action that moves it on, accepting it or
+ * signing in.
+ */
 function AcceptInvitation(): React.JSX.Element {
   const [query] = useState(() => invitationAcceptQuery(window.location.search));
   const [view, setView] = useState<View>(WORKING);
@@ -190,41 +226,20 @@ function AcceptInvitation(): React.JSX.Element {
     setAccepting(false);
   };
 
+  if (view.kind === VIEW.SIGN_IN) return <SignInCard title={view.title} body={view.body} />;
   return (
-    <main className={AUTH_SHELL}>
-      <section className={AUTH_CARD} aria-labelledby="accept-title">
-        <h1 id="accept-title" className={AUTH_TITLE}>
-          {view.kind === VIEW.WORKING
-            ? "Opening your invitation…"
-            : view.kind === VIEW.OFFER
-              ? `Join ${view.name}`
-              : view.title}
-        </h1>
-        {view.kind === VIEW.SAID || view.kind === VIEW.SIGN_IN ? (
-          <p className="m-0 text-muted-foreground">{view.body}</p>
-        ) : null}
-        {view.kind === VIEW.OFFER ? (
-          <>
-            <p className="m-0 text-muted-foreground">
-              {view.inviter === undefined
-                ? `You're invited to plan in ${view.name} on Luke, as ${view.role}.`
-                : `${view.inviter} invited you to plan in ${view.name} on Luke, as ${view.role}.`}
-            </p>
-            <div className="mt-8 grid">
-              <button
-                type="button"
-                className={AUTH_BUTTON}
-                disabled={accepting}
-                onClick={() => void join(view)}
-              >
-                {accepting ? "Joining…" : "Accept invitation"}
-              </button>
-            </div>
-          </>
-        ) : null}
-        {view.kind === VIEW.SIGN_IN ? <SignInChoices client={authClient} /> : null}
-      </section>
-    </main>
+    <AuthPage title={titleOf(view)} description={descriptionOf(view)}>
+      {view.kind === VIEW.OFFER ? (
+        <Button
+          variant={BUTTON_VARIANT.OUTLINE}
+          busy={accepting}
+          busyLabel="Joining"
+          onClick={() => void join(view)}
+        >
+          Accept invitation
+        </Button>
+      ) : null}
+    </AuthPage>
   );
 }
 

@@ -885,11 +885,13 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The bar: history, the path, then the file's actions and the tree's
-   toggle at its end, in the window's toolbar buttons. */
+   toggle at its end, in the window's toolbar buttons. It stands the one
+   height of a tab's bar whatever it holds, words alone or nothing yet. */
 .file-view-bar {
   container: file-bar / inline-size;
   display: flex;
   min-width: 0;
+  min-height: var(--secondary-bar-height);
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-4);
