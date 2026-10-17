@@ -11,12 +11,6 @@ import {
   VOICE_HOTKEY_NONE,
 } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
-import { PencilIcon, ResetIcon, SettingsSection, TrashIcon } from "@luke/ui";
-import { actionRejection } from "@luke/ui/use-setting-write";
-import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
-import type { ShortcutControl } from "@luke/voice/settings-controls";
-import type { ActionResult } from "@luke/wire";
-import { useEffect, useId, useRef, useState } from "react";
 import {
   APP_SHORTCUTS,
   commandForKey,
@@ -24,7 +18,19 @@ import {
   type KeyedCommand,
   shortcutAccelerator,
   shortcutLabel,
-} from "#shared/shortcuts";
+} from "@luke/settings/shortcuts";
+import {
+  PencilIcon,
+  ResetIcon,
+  type SettingsRowControl,
+  SettingsSection,
+  TrashIcon,
+} from "@luke/ui";
+import { actionRejection } from "@luke/ui/use-setting-write";
+import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
+import type { ShortcutControl } from "@luke/voice/settings-controls";
+import type { ActionResult } from "@luke/wire";
+import { useEffect, useId, useRef, useState } from "react";
 import { Shortcut } from "../shortcut";
 import { AttentionMark, ChangedMark } from "./marks";
 import { MenuRow } from "./menu-row";
@@ -167,14 +173,22 @@ function ShortcutRow({
       : []),
   ];
 
-  const chordField = (
+  // Note that the field is described by the row's words and its refusal as
+  // well as by its chord, because a refusal still standing must be heard
+  // again when the field is returned to, not only as it arrived.
+  const chordField = (control: SettingsRowControl) => (
     <button
       ref={field}
       type="button"
       className="shortcut-field"
       disabled={busy}
       aria-pressed={recording}
-      aria-describedby={recording ? undefined : chordId}
+      aria-describedby={
+        [recording ? undefined : chordId, control["aria-describedby"]]
+          .filter((part) => part !== undefined)
+          .join(" ") || undefined
+      }
+      aria-invalid={control["aria-invalid"]}
       aria-label={
         recording
           ? `Cancel, or type the new shortcut for ${title}`
@@ -276,7 +290,7 @@ function ShortcutRow({
             detail
           ),
         error: rejection,
-        control: chordField,
+        describedControl: chordField,
       }}
     />
   );

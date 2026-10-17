@@ -11,7 +11,9 @@ import { List, ListRow } from "./list-row.js";
  * one inside the other, and an act is pressed without pressing its row. A
  * row reads as its words, title first, and Tab meets it before its acts; the
  * open one is announced as current, whether it opens something or not; and a
- * row that opens nothing is no control, though its acts still are. Synthetic
+ * row that opens nothing is no control, though its acts still are. A
+ * keyboard-driven list can hand focus back to a row through its ref, hear
+ * the keys pressed on it, and hear a right-click anywhere on it. Synthetic
  * members.
  */
 
@@ -174,4 +176,83 @@ test("a row that opens nothing is still announced as current", () => {
   );
   const current = container.querySelector('[aria-current="true"]');
   expect(current?.textContent).toBe("Running review");
+});
+
+test("focus is handed back to a row's press through its ref", () => {
+  let row: HTMLElement | null = null;
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        ref: (element: HTMLElement | null) => {
+          row = element;
+        },
+        title: "Ada Lovelace",
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  act(() => row?.focus());
+  expect(document.activeElement).toBe(button(container, "Ada Lovelace"));
+});
+
+test("a row that opens nothing hands its item to its ref", () => {
+  let row: HTMLElement | null = null;
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        ref: (element: HTMLElement | null) => {
+          row = element;
+        },
+        title: "Ada Lovelace",
+      }),
+    }),
+  );
+  expect(row).toBe(container.querySelector("li"));
+});
+
+test("a key pressed on a row reaches its handler, and a right-click anywhere on it reaches its own", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        title: "Ada Lovelace",
+        onPress: () => undefined,
+        onKeyDown: (event) => heard.push(`key ${event.key}`),
+        onContextMenu: () => heard.push("menu"),
+        actions: createElement(IconButton, { icon: glyph(), label: "More for ada" }),
+      }),
+    }),
+  );
+  const row = button(container, "Ada Lovelace");
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    button(container, "More for ada").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true }),
+    );
+  });
+  expect(heard).toEqual(["key j", "menu", "menu"]);
+});
+
+test("a row that opens nothing hears no keys, not even its acts'", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        title: "Ada Lovelace",
+        onKeyDown: (event) => heard.push(`key ${event.key}`),
+        actions: createElement(IconButton, { icon: glyph(), label: "More for ada" }),
+      }),
+    }),
+  );
+  act(() => {
+    button(container, "More for ada").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "j", bubbles: true }),
+    );
+  });
+  expect(heard).toEqual([]);
 });

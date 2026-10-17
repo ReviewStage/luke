@@ -16,6 +16,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { ReadLink } from "@luke/features/luke-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -25,6 +26,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
@@ -160,13 +163,9 @@ async function inbox({ pages }: { pages: readonly PageLine[] | undefined } = { p
   const links: ReadLink[] = [];
   const tasks: string[] = [];
   const left = { links, tasks, rereads: 0 };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: answer,
-    },
+  fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
+  fakeAppBridge({
+    act: answer,
   });
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
