@@ -136,27 +136,18 @@ importers:
       '@vitejs/plugin-react':
         specifier: 5.1.2
         version: 5.1.2(vite@7.3.1)
-      '@vitest/browser-playwright':
-        specifier: 5.0.0
-        version: 5.0.0(playwright@1.64.1)(vite@7.3.1)(vitest@5.0.0)
-      playwright:
-        specifier: 1.64.1
-        version: 1.64.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
       vite:
         specifier: 7.3.1
         version: 7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(jsdom@30.0.1)(vite@7.3.1)
 
   apps/desktop:
     dependencies:
       '@sentry/electron':
         specifier: 8.2.0
-        version: 8.2.0(@babel/core@7.29.7)(rollup@4.62.4)
+        version: 8.2.0(rollup@4.62.4)
       electron-updater:
         specifier: 6.8.9
         version: 6.8.9
@@ -1050,18 +1041,9 @@ importers:
       '@types/react-dom':
         specifier: 19.2.4
         version: 19.2.4(@types/react@19.2.18)
-      '@vitest/browser-playwright':
-        specifier: 5.0.0
-        version: 5.0.0(playwright@1.64.1)(vite@7.3.1)(vitest@5.0.0)
-      axe-core:
-        specifier: 4.14.0
-        version: 4.14.0
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
-      playwright:
-        specifier: 1.64.1
-        version: 1.64.1
       react-dom:
         specifier: 'catalog:'
         version: 19.2.8(react@19.2.8)
@@ -4737,10 +4719,6 @@ packages:
     resolution: {integrity: sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==}
     engines: {node: '>= 4.0.0'}
 
-  axe-core@4.14.0:
-    resolution: {integrity: sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ==}
-    engines: {node: '>=4'}
-
   bail@2.0.2:
     resolution: {integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==}
 
@@ -8183,7 +8161,8 @@ snapshots:
   '@biomejs/cli-win32-x64@2.5.8':
     optional: true
 
-  '@blazediff/core@1.10.0': {}
+  '@blazediff/core@1.10.0':
+    optional: true
 
   '@braintree/sanitize-url@6.0.2': {}
 
@@ -9220,7 +9199,8 @@ snapshots:
       - '@shikijs/themes'
       - shiki
 
-  '@polka/url@1.0.0-next.29': {}
+  '@polka/url@1.0.0-next.29':
+    optional: true
 
   '@posthog/browser-common@0.5.0':
     dependencies:
@@ -9919,7 +9899,7 @@ snapshots:
       - rollup
       - webpack
 
-  '@sentry/electron@8.2.0(@babel/core@7.29.7)(rollup@4.62.4)':
+  '@sentry/electron@8.2.0(rollup@4.62.4)':
     dependencies:
       '@sentry/browser': 11.7.0
       '@sentry/conventions': 0.27.0
@@ -10647,6 +10627,7 @@ snapshots:
       - msw
       - utf-8-validate
       - vite
+    optional: true
 
   '@vitest/browser@5.0.0(vite@7.3.1)(vitest@5.0.0)':
     dependencies:
@@ -10665,6 +10646,7 @@ snapshots:
       - msw
       - utf-8-validate
       - vite
+    optional: true
 
   '@vitest/mocker@5.0.0(vite@7.3.1)':
     dependencies:
@@ -10678,6 +10660,7 @@ snapshots:
   '@vitest/pretty-format@5.0.0':
     dependencies:
       tinyrainbow: 3.2.0
+    optional: true
 
   '@vitest/spy@5.0.0': {}
 
@@ -10690,12 +10673,14 @@ snapshots:
       sirv: 3.0.2
       tinyrainbow: 3.2.0
       vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(jsdom@30.0.1)(vite@7.3.1)
+    optional: true
 
   '@vitest/utils@5.0.0':
     dependencies:
       '@vitest/pretty-format': 5.0.0
       convert-source-map: 2.0.0
       tinyrainbow: 3.2.0
+    optional: true
 
   '@workflow/serde@4.1.0': {}
 
@@ -10821,8 +10806,6 @@ snapshots:
 
   at-least-node@1.0.0: {}
 
-  axe-core@4.14.0: {}
-
   bail@2.0.2: {}
 
   balanced-match@1.0.2: {}
@@ -10855,7 +10838,7 @@ snapshots:
     optionalDependencies:
       drizzle-kit: 1.0.0-rc.4
       drizzle-orm: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4)(@effect/sql-pglite@4.0.4)(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
-      next: 16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)(sass@1.51.0)
+      next: 16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)
       pg: 8.23.0
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -11736,7 +11719,8 @@ snapshots:
 
   fflate@0.4.9: {}
 
-  fflate@0.8.3: {}
+  fflate@0.8.3:
+    optional: true
 
   filelist@1.0.6:
     dependencies:
@@ -11751,7 +11735,8 @@ snapshots:
       locate-path: 6.0.0
       path-exists: 4.0.0
 
-  flatted@3.4.4: {}
+  flatted@3.4.4:
+    optional: true
 
   form-data@4.0.6:
     dependencies:
@@ -12824,7 +12809,8 @@ snapshots:
     dependencies:
       minimist: 1.2.8
 
-  mrmime@2.0.1: {}
+  mrmime@2.0.1:
+    optional: true
 
   ms@2.1.3: {}
 
@@ -12841,7 +12827,7 @@ snapshots:
 
   nanostores@1.5.0: {}
 
-  next@16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)(sass@1.51.0):
+  next@16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8):
     dependencies:
       '@next/env': 16.3.1
       '@swc/helpers': 0.5.23
@@ -12861,7 +12847,6 @@ snapshots:
       '@next/swc-win32-arm64-msvc': 16.3.1
       '@next/swc-win32-x64-msvc': 16.3.1
       '@opentelemetry/api': 1.9.1
-      sass: 1.51.0
       sharp: 0.35.3(@types/node@26.2.0)
     transitivePeerDependencies:
       - '@babel/core'
@@ -13152,11 +13137,13 @@ snapshots:
 
   picomatch@4.0.7: {}
 
-  playwright-core@1.64.1: {}
+  playwright-core@1.64.1:
+    optional: true
 
   playwright@1.64.1:
     dependencies:
       playwright-core: 1.64.1
+    optional: true
 
   plist@3.1.0:
     dependencies:
@@ -13181,7 +13168,8 @@ snapshots:
     dependencies:
       crc-32: 0.3.0
 
-  pngjs@7.0.0: {}
+  pngjs@7.0.0:
+    optional: true
 
   points-on-curve@0.2.0: {}
 
@@ -13746,6 +13734,7 @@ snapshots:
       '@polka/url': 1.0.0-next.29
       mrmime: 2.0.1
       totalist: 3.0.1
+    optional: true
 
   slice-ansi@3.0.0:
     dependencies:
@@ -13907,7 +13896,8 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.7)
       picomatch: 4.0.7
 
-  tinyrainbow@3.2.0: {}
+  tinyrainbow@3.2.0:
+    optional: true
 
   tldts-core@7.4.13: {}
 
@@ -13925,7 +13915,8 @@ snapshots:
     dependencies:
       is-number: 7.0.0
 
-  totalist@3.0.1: {}
+  totalist@3.0.1:
+    optional: true
 
   tough-cookie@6.0.2:
     dependencies:

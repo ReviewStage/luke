@@ -70,13 +70,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      # The Chromium @luke/ui's browser tests and @luke/catalog's visual
-      # comparison run in, at the build their pinned `playwright` names, with
-      # the system libraries the runner lacks. Only the fourth job runs those
-      # workspaces' tests, and this Linux runner is where the catalog's
-      # goldens are recorded and compared.
-      - if: matrix.shard == 4
-        run: pnpm --filter @luke/ui exec playwright install --with-deps chromium
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
@@ -86,16 +79,6 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      # What a failed browser test drew, beside its golden and their diff,
-      # for whoever reads the failure: synthetic catalog examples only.
-      - if: failure() && matrix.shard == 4
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
-        with:
-          name: browser-test-captures
-          path: |
-            apps/catalog/.vitest/
-            packages/ui/.vitest/
-          if-no-files-found: ignore
 
   # The generated migrations meet a real Postgres here, the major production
   # runs (Neon, 18.x), so a statement PGlite accepts and Postgres refuses is
