@@ -66,8 +66,8 @@ import { MAIN_TAB } from "./use-main-tabs";
  * nowhere, so a launch opens none. An agent's Pull request tab, kept as
  * `changes` for the tab that once showed its files alone, opened from the
  * pull request's chip or the Changes chip at its tab's foot, the "+", the
- * plan's summary, or ⌘K, shows the pull request's overview or its files
- * (`PULL_REQUEST_VIEW`), the view each agent's tab shows held for the
+ * plan's summary, or ⌘K, shows the pull request's conversation, its checks,
+ * or its files (`PULL_REQUEST_VIEW`), the view each agent's tab shows held for the
  * window's life and kept nowhere, and is
  * the one kind besides the fixed three kept as they are: one per agent,
  * since each agent works in a sandbox and a pull request of its own, it is
@@ -215,9 +215,10 @@ export interface OpenFile {
 /** A file a File tab showed, as its history holds it to show again. */
 type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn" | "commit">;
 
-/** What an agent's Pull request tab shows: the pull request's page, or its changed files. */
+/** Which of an agent's Pull request tab's tabs it shows under its fixed header: the description and conversation, the checks, or the changed files. */
 export const PULL_REQUEST_VIEW = {
-  OVERVIEW: "overview",
+  CONVERSATION: "conversation",
+  CHECKS: "checks",
   FILES: "files",
 } as const;
 
