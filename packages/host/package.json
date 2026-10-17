@@ -9,6 +9,7 @@
     "./effect": "./src/effect/index.js",
     "./node": "./src/node/index.js",
     "./acts": "./src/acts.js",
+    "./act-router": "./src/act-router/index.js",
     "./app-state": "./src/app-state.js",
     "./bridge": "./src/bridge.js",
     "./panel-avatar": "./src/panel-avatar.js",

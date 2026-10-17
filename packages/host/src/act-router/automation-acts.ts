@@ -10,14 +10,14 @@ import type {
   AutomationRunView,
   AutomationView,
 } from "@luke/features/automation-view";
-import { ACT, ACT_KIND } from "@luke/host/acts";
 import type { Effect } from "effect";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
+import { ACT, ACT_KIND } from "../acts.js";
+import { ActRefused, type ActRows, type ActSender } from "./router.js";
 
 /**
  * automation-acts.ts -- the Automations pages' asks of the host about the account's automations.
  *
- * The one check this process makes is who asked: only a panel draws the
+ * The one check these rows make is who asked: only a panel draws the
  * Automations pages, so every row refuses the takeover and the hidden voice
  * window. What the service answers comes back as the panel's own answer, or
  * why there is none. Nothing is held here.
@@ -34,7 +34,7 @@ export interface AutomationActsDependencies {
   };
 }
 
-type AutomationActKind =
+export type AutomationActKind =
   | typeof ACT_KIND.AUTOMATIONS_LIST
   | typeof ACT_KIND.AUTOMATIONS_CREATE
   | typeof ACT_KIND.AUTOMATIONS_CHANGE

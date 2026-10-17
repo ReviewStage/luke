@@ -1,3 +1,5 @@
+import type { UnparsedWireValue } from "@luke/wire";
+import { Data, Effect, Predicate } from "effect";
 import {
   ACT,
   ACT_OUTCOME_STATUS,
@@ -6,18 +8,18 @@ import {
   type ActOutcome,
   type ActPayload,
   type ActResultFor,
-} from "@luke/host/acts";
-import type { UnparsedWireValue } from "@luke/wire";
-import { Data, Effect, Predicate } from "effect";
-import type { WebContents } from "electron";
+} from "../acts.js";
 
 /**
- * Who is asking, as this process alone can tell: which window sent the act,
+ * Who is asking, as the bridge alone can tell: which window sent the act,
  * and which surface that window is drawing. A renderer cannot claim any of it
- * — the standing is read from the windows this process opened.
+ * — the standing is read from the windows the bridge's own side opened.
+ * `Sender` is the platform's own handle on that window, which nothing here
+ * reads: the desktop's is a `WebContents`, for the rows of its own that post
+ * to the window or hang a dialog over it.
  */
-export interface ActSender {
-  sender: WebContents;
+export interface ActSender<Sender = unknown> {
+  sender: Sender;
   /** A panel: Luke's window, which types asks and presses rows. */
   panel: boolean;
   /** The hidden window the conversation lives in, and the one receiver of replies. */
@@ -46,9 +48,9 @@ type ActRowFailure = ActRefused;
  * answer is a value, an effect the router runs on the launch's own runtime, or
  * — for the rows that still reach a service answering promises — a promise.
  */
-type ActRow<Kind extends ActKind> = (
+type ActRow<Kind extends ActKind, Sender> = (
   payload: ActPayload<Kind>,
-  sender: ActSender,
+  sender: ActSender<Sender>,
 ) =>
   | ActResultFor<Kind>
   | Promise<ActResultFor<Kind>>
@@ -59,12 +61,12 @@ type ActRow<Kind extends ActKind> = (
  * with no row does not build, which is the whole reason the dispatch is a
  * table rather than a switch.
  */
-export type ActRows = { readonly [Kind in ActKind]: ActRow<Kind> };
+export type ActRows<Sender = unknown> = { readonly [Kind in ActKind]: ActRow<Kind, Sender> };
 
-export interface ActRouter {
+export interface ActRouter<Sender = unknown> {
   performAct<Kind extends ActKind>(
     act: Extract<Act, { kind: Kind }>,
-    sender: ActSender,
+    sender: ActSender<Sender>,
   ): Effect.Effect<ActOutcome<Kind>>;
 }
 
@@ -72,7 +74,10 @@ export interface ActRouter {
 type AnyActPayload = ActPayload<ActKind>;
 
 /** The erased row shape the dispatch below calls; the kind's own types are checked by `ActRows`. */
-type ErasedRow = (payload: AnyActPayload, sender: ActSender) => ReturnType<ActRow<ActKind>>;
+type ErasedRow<Sender> = (
+  payload: AnyActPayload,
+  sender: ActSender<Sender>,
+) => ReturnType<ActRow<ActKind, Sender>>;
 
 function refused(reason: string): ActOutcome {
   return { status: ACT_OUTCOME_STATUS.REFUSED, reason };
@@ -93,15 +98,15 @@ function thrown<Answer>(
 /**
  * The one place a window's act becomes an effect. Four steps, in this order,
  * for every kind alike: the kind's payload schema is read again — the window's
- * preload read it before the invoke left, and reading it here is what makes
- * the schema the boundary rather than a courtesy a main-process caller could
+ * bridge read it before the act left, and reading it here is what makes
+ * the schema the boundary rather than a courtesy a caller on this side could
  * skip; then that kind's row runs, which is where its trust checks live; then
  * the answer is checked against the kind's own guard; and a row that threw is
  * answered with the kind's fixed sentence. Nothing here refuses on a reason of
  * its own, and nothing dispatches on anything but the kind.
  */
-export function createActRouter(rows: ActRows): ActRouter {
-  function perform(act: Act, sender: ActSender): Effect.Effect<ActOutcome> {
+export function createActRouter<Sender>(rows: ActRows<Sender>): ActRouter<Sender> {
+  function perform(act: Act, sender: ActSender<Sender>): Effect.Effect<ActOutcome> {
     if (!Object.hasOwn(ACT, act.kind)) {
       return Effect.succeed({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     }
@@ -116,7 +121,7 @@ export function createActRouter(rows: ActRows): ActRouter {
       // union index this dispatch is, and the answer is guarded below.
       const answer = yield* thrown(
         Effect.try({
-          try: () => (rows[act.kind] as ErasedRow)(read.value, sender),
+          try: () => (rows[act.kind] as ErasedRow<Sender>)(read.value, sender),
           catch: (error) => error,
         }),
       );
@@ -142,7 +147,10 @@ export function createActRouter(rows: ActRows): ActRouter {
   }
 
   return {
-    performAct: <Kind extends ActKind>(act: Extract<Act, { kind: Kind }>, sender: ActSender) =>
+    performAct: <Kind extends ActKind>(
+      act: Extract<Act, { kind: Kind }>,
+      sender: ActSender<Sender>,
+    ) =>
       // SAFETY: `perform` answers the outcome of the kind it was handed, which
       // is the kind this call named; the dispatch above erases the union.
       perform(act, sender) as Effect.Effect<ActOutcome<Kind>>,

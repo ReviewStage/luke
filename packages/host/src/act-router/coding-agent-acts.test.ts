@@ -23,14 +23,13 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@luke/features/pull-request-write-wire";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
-import type { WebContents } from "electron";
-import { type ActRows, type ActSender, createActRouter } from "../act-router";
-import { codingAgentActRows } from "./coding-agent-acts";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "../acts.js";
+import { codingAgentActRows } from "./coding-agent-acts.js";
+import { type ActRows, type ActSender, createActRouter } from "./router.js";
 
-// SAFETY: the router reads the sender by identity alone; one inert object is one window.
-const SENDER = {} as WebContents;
+// The platform's handle on the window that asked, which no row here reads.
+const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };

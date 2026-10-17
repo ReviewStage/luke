@@ -16,7 +16,7 @@ import {
   type TasksWorkspaceGitHubConnectAnswer,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { highlightSnippet } from "@luke/host";
+import { Effect } from "effect";
 import {
   ACT,
   ACT_KIND,
@@ -25,17 +25,16 @@ import {
   GITHUB_LAST_SIGN_IN_REFUSAL,
   LINEAR_UNAVAILABLE_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "@luke/host/acts";
-import { Effect } from "effect";
-import type { WebContents } from "electron";
-import { type ActRows, type ActSender, createActRouter } from "../act-router";
-import { tasksActRows } from "./tasks-acts";
+} from "../acts.js";
+import { highlightSnippet } from "../task-code.js";
+import { type ActRows, type ActSender, createActRouter } from "./router.js";
+import { tasksActRows } from "./tasks-acts.js";
 
 /** The one picture the fake host holds. */
 const PICTURE_ID = "picture-1";
 
-// SAFETY: the router reads the sender by identity alone; one inert object is one window.
-const SENDER = {} as WebContents;
+// The platform's handle on the window that asked, which no row here reads.
+const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };

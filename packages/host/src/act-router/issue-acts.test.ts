@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
-import type { WebContents } from "electron";
-import { type ActRows, type ActSender, createActRouter } from "../act-router";
-import { type IssueActsDependencies, issueActRows } from "./issue-acts";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "../acts.js";
+import { type IssueActsDependencies, issueActRows } from "./issue-acts.js";
+import { type ActRows, type ActSender, createActRouter } from "./router.js";
 
 /**
  * The Issues page's acts: only a panel asks, the voice and call windows are
@@ -13,8 +12,8 @@ import { type IssueActsDependencies, issueActRows } from "./issue-acts";
  * ask reaches the host with its payload as the panel sent it.
  */
 
-// SAFETY: the router reads the sender by identity alone; one inert object is one window.
-const SENDER = {} as WebContents;
+// The platform's handle on the window that asked, which no row here reads.
+const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
