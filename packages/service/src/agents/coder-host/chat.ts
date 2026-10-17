@@ -35,6 +35,7 @@ import {
 import { type CodingAgent, listCodingAgents } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
 import {
+  ASK_STATUS,
   CHANNEL_KIND,
   CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
@@ -92,7 +93,10 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
  * sequence, which is what a reply and a read name it by. A post may carry
  * an ask under a key of the agent's (`chat-ask.ts`), which the agent
  * resolves by the key once it no longer needs it, and every read, ask, and
- * resolve answers the agent's asks as they stand. A post is the
+ * resolve answers the agent's asks as they stand. Each turn opens with
+ * what the agent has not read, bounded, as the turn's own instruction,
+ * which reads it: the message a notice steered into the turn is left out,
+ * since the notice carries it. A post is the
  * service's words on the agent's behalf, so a turn posts at most
  * `MAX_POSTS_PER_TURN` times, counted in the session's own state as
  * `edit_plan` counts its notes (`plan-edit.ts`); a repeat of one call is
@@ -293,6 +297,15 @@ const POST_REFUSAL = {
 
 /** The most settled asks a call answers beside the open ones: the latest, enough to see what came of what the agent asked last. */
 const SETTLED_ASKS_SHOWN = 5;
+
+/** The most messages a turn's digest carries; the rest wait for a read. */
+const DIGEST_MESSAGES = 20;
+
+/** The most characters of one message a turn's digest carries; a longer one is read whole by its channel or thread. */
+const DIGEST_MESSAGE_CHARS = 600;
+
+/** The line a turn's digest opens with. */
+export const CHAT_DIGEST_HEADING = "[chat since you last read]";
 
 /** A receipt that told no one, as a post whose telling failed answers. */
 const NO_RECEIPT: ChatReceipt = { told: [], held: [], left: [], unresolved: [] };
@@ -939,4 +952,68 @@ export function readThroughAsAgent(agent: ChatReader, through: number): ChatStor
     const { organizationId, self } = found.value;
     yield* readThrough(agent.userId, organizationId, self.id, through);
   });
+}
+
+/** One message as a turn's digest carries it: its place, who said it where, the thread it replies in, what it asks, and its words, bounded. */
+function digestLine(message: ChatMessageRow, line: MessageLine): string {
+  const thread = line.thread === undefined ? "" : ` (thread m ${line.thread})`;
+  const asks =
+    message.ask === null || message.askStatus !== ASK_STATUS.OPEN
+      ? ""
+      : ` asks (${message.ask.response.type})`;
+  // A message cut short says how to read it whole, since the digest marks it read: its thread, of which it is the root or a reply.
+  const words =
+    line.text.length > DIGEST_MESSAGE_CHARS
+      ? `${line.text.slice(0, DIGEST_MESSAGE_CHARS)}… (${CHAT_TOOLS.READ.name}({ thread: ${line.thread ?? line.seq} }) reads the rest)`
+      : line.text;
+  return `m ${line.seq} · ${line.from} in ${line.in}${thread}${asks}: ${words}`;
+}
+
+/**
+ * What a turn opens with: the messages the agent has not read, oldest
+ * change first, at most `DIGEST_MESSAGES`, under the digest's heading, and
+ * a line saying more wait where they do; nothing where nothing waits. The
+ * digest is a read, so the next turn carries none of it again, and a
+ * message cut short names the read that carries it whole; a turn that
+ * fails after its digest leaves what it carried to the chat's history,
+ * where a read of its channel finds it, as the planning brain's standing
+ * context leaves a turn's edits. Note that
+ * the message an outstanding notice told is left out, because the notice is
+ * already a line of the agent's conversation. Nothing where the store
+ * cannot be reached, since the turn runs as well without it.
+ */
+export function chatDigest(
+  agent: ChatReader,
+): Effect.Effect<string | undefined, never, DatabaseServices> {
+  return inTransaction(
+    Effect.gen(function* () {
+      const { userId } = agent;
+      const found = yield* seatOf(agent);
+      if (Option.isNone(found)) return undefined;
+      const { organizationId, self } = found.value;
+      const noticed =
+        self.noticeSeq !== null && self.noticeSeq > self.readSeq ? self.noticeSeq : undefined;
+      const read = yield* unreadFor(userId, organizationId, self.id, { limit: DIGEST_MESSAGES });
+      const { messages: unread, more } = Option.getOrElse(read, () => ({
+        messages: [],
+        more: false,
+      }));
+      const messages = unread.filter((message) => message.touchedSeq !== noticed);
+      if (messages.length === 0 && !more) return undefined;
+      const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
+      const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
+      const parents = messages.flatMap((message) =>
+        message.parentId === null ? [] : [message.parentId],
+      );
+      const roots = yield* seqsOf(userId, organizationId, parents);
+      const lines = messages.map((message) =>
+        digestLine(message, lineOf(message, { names, members, roots })),
+      );
+      const rest = more ? [`More waits: ${CHAT_TOOLS.READ.name} reads it.`] : [];
+      return [CHAT_DIGEST_HEADING, ...lines, ...rest].join("\n");
+    }),
+  ).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(undefined)),
+  );
 }

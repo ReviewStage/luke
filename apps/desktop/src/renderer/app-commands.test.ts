@@ -5,6 +5,7 @@ import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { useAppCommand, useMenuCommands } from "./app-commands";
 import { ModalShell } from "./modal-shell";
 
@@ -19,16 +20,13 @@ let menuListener: ((command: AppCommand) => void) | undefined;
 const roots: Root[] = [];
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onMenuCommand: (listener: (command: AppCommand) => void) => {
-        menuListener = listener;
-        return () => {
-          menuListener = undefined;
-        };
-      },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    onMenuCommand: (listener: (command: AppCommand) => void) => {
+      menuListener = listener;
+      return () => {
+        menuListener = undefined;
+      };
     },
   });
 });

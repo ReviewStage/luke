@@ -137,12 +137,12 @@ function loadedUpFront(metafile, bundle) {
   return [...loaded];
 }
 
-// A document loads the renderer as a module script, or the entry's first
-// `import` is a syntax error and the window stays blank.
-async function assertModuleEntry(document) {
+// A document loads its window's entry as a module script, or the entry's
+// first `import` is a syntax error and the window stays blank.
+async function assertModuleEntry(document, entry) {
   const html = await fs.readFile(path.join(outputRoot, "renderer", document), "utf8");
-  if (!html.includes('<script type="module" src="renderer.js"></script>')) {
-    throw new Error(`${document} must load renderer.js with <script type="module">`);
+  if (!html.includes(`<script type="module" src="${entry}"></script>`)) {
+    throw new Error(`${document} must load ${entry} with <script type="module">`);
   }
 }
 
@@ -162,13 +162,24 @@ await fs.rm(outputRoot, { recursive: true, force: true });
 await fs.mkdir(path.join(outputRoot, "renderer"), { recursive: true });
 await fs.mkdir(path.join(outputRoot, "icon"), { recursive: true });
 
-// The renderer every window parses, as ES modules: an entry and the chunks it
-// imports, with no wrapper around the whole and nothing kept apart for one,
-// which is about 6 KB gzipped smaller than the same code as one script. The
-// chunks are named by their content, because esbuild names every shared one
-// `chunk`. The metafile is what the bundle budget reads the chunks off.
+// One entry per window role, by the bundle it is built into: its source, and
+// the document that loads it, copied beside it below.
+const WINDOW_ENTRIES = {
+  panel: { source: "src/renderer/index.tsx", document: "index.html" },
+  voice: { source: "src/renderer/voice/index.tsx", document: "voice.html" },
+  call: { source: "src/renderer/call/index.tsx", document: "call.html" },
+};
+
+// The renderer, as ES modules: one entry per window role, so a window parses
+// only the surface it mounts, and the chunks the entries share, with no
+// wrapper around the whole, which is about 6 KB gzipped smaller than the same
+// code as one script. The chunks are named by their content, because esbuild
+// names every shared one `chunk`. The metafile is what the bundle budget
+// reads the chunks off.
 const rendererBuild = build({
-  entryPoints: { renderer: path.join(appRoot, "src/renderer/index.tsx") },
+  entryPoints: Object.fromEntries(
+    Object.entries(WINDOW_ENTRIES).map(([name, { source }]) => [name, path.join(appRoot, source)]),
+  ),
   outdir: path.join(outputRoot, "renderer"),
   bundle: true,
   platform: "browser",
@@ -435,27 +446,23 @@ await Promise.all([
   }),
 ]);
 
-await Promise.all([
-  fs.copyFile(
-    path.join(appRoot, "src/renderer/index.html"),
-    path.join(outputRoot, "renderer/index.html"),
+// The hidden voice window's policy allows no network, the call window's may
+// reach no host, and neither records; the recording carries no words in any
+// case (`src/renderer/session-replay.ts`).
+await Promise.all(
+  Object.values(WINDOW_ENTRIES).map(({ document }) =>
+    fs.copyFile(
+      path.join(appRoot, "src/renderer", document),
+      path.join(outputRoot, "renderer", document),
+    ),
   ),
-  // The hidden voice window's document, over the same `renderer.js`: its role
-  // is main's answer, its policy allows no network, and the recording carries
-  // no words in any case (`src/renderer/session-replay.ts`).
-  fs.copyFile(
-    path.join(appRoot, "src/renderer/voice.html"),
-    path.join(outputRoot, "renderer/voice.html"),
-  ),
-  // The floating call window's document, on the same terms as the voice
-  // window's, with the stylesheet the call card is drawn in.
-  fs.copyFile(
-    path.join(appRoot, "src/renderer/call.html"),
-    path.join(outputRoot, "renderer/call.html"),
-  ),
-]);
+);
 
-await Promise.all(["index.html", "voice.html", "call.html"].map(assertModuleEntry));
+await Promise.all(
+  Object.entries(WINDOW_ENTRIES).map(([name, { document }]) =>
+    assertModuleEntry(document, `${name}.js`),
+  ),
+);
 
 await Promise.all(
   (await fs.readdir(EXCALIDRAW_FONTS))
@@ -480,8 +487,8 @@ await Promise.all(
   ),
 );
 
-// The renderer bundle is what a browser context parses at every window open,
-// the panels' and the hidden voice window's alike, so its compressed size is a
+// A window's entry is what a browser context parses as the window opens, the
+// panel's, the hidden voice window's, and the call window's, so its compressed size is a
 // cost the user pays rather than one the build absorbs. The baseline is recorded rather than
 // derived, because the number worth holding is the one a reviewer agreed to: a
 // dependency that adds a fifth to the panel is a decision, and

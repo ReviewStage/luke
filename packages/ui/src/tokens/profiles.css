@@ -22,6 +22,8 @@
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
+  /* A settings row's pop-up stands in one column whatever value it names. */
+  --luke-select-field-width: 200px;
   --luke-field-gap: var(--luke-space-16);
   --luke-section-gap: var(--luke-space-16);
   --luke-page-inset: var(--luke-space-40);
@@ -42,6 +44,11 @@
 
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
+  /* Every row stands as tall as a label and its description need, with or
+     without the description, so a card of rows reads even rather than cramped. */
+  --luke-settings-row-min-height: 52px;
+  /* The window's settings groups stand further apart than its fields. */
+  --luke-settings-section-gap: var(--luke-space-32);
 
   --luke-text-area-grow-max: 320px;
 
@@ -72,6 +79,7 @@
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
+  --luke-select-field-width: auto;
   --luke-field-gap: var(--luke-space-16);
   --luke-section-gap: var(--luke-space-16);
   --luke-page-inset: var(--luke-space-24);
@@ -92,6 +100,8 @@
 
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
+  --luke-settings-row-min-height: auto;
+  --luke-settings-section-gap: var(--luke-section-gap);
 
   --luke-text-area-grow-max: 320px;
 

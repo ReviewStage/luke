@@ -8,6 +8,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   installEditorBundle,
@@ -45,13 +46,10 @@ installEditorBundle();
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (_request: Act): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-      recordSurfaceEvent: ignore,
-    },
+  fakeAppBridge({
+    act: (_request: Act): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
+    recordSurfaceEvent: ignore,
   });
 });
 

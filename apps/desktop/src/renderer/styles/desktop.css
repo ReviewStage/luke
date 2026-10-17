@@ -2446,13 +2446,6 @@ ul.actor-stack {
   gap: var(--space-4) var(--space-8);
 }
 
-/* Factory's scroller runs to the toolbar's edge, so its failure (`@luke/ui`'s
-   `ErrorState`, centred) stands off it as Automations' does by its
-   scroller's padding. */
-.factory-scroll > .luke-error-state[data-placement="centred"] {
-  margin-top: var(--space-16);
-}
-
 .failure-note-remedy {
   height: 24px;
   padding: 0 var(--space-8);
@@ -4670,10 +4663,6 @@ button.integration-tool-head:hover,
   flex-direction: column;
 }
 
-.agent-page-note {
-  padding: var(--section-gap) var(--space-12);
-}
-
 .inbox-view-items {
   display: flex;
   min-width: 0;
@@ -6393,6 +6382,15 @@ button.automation-run:hover {
   scrollbar-gutter: stable;
 }
 
+/* A page drawn in the shared settings page (`SettingsPage`) fills the room
+   under the drag strip and scrolls in it, its top fading as the window's own
+   frame's does (`base.css`), and a landed search result keeps the page's
+   inset above it rather than the fade's. */
+.settings-page > .luke-settings-page {
+  flex: 1 1 0;
+  scroll-padding-top: var(--page-inset);
+}
+
 /* A page whose reads are out draws nothing under its name until every one
    has answered, then the whole page at once, so nothing grows into place. */
 .settings-page-scroll:has(.settings-reading) .settings {
@@ -6413,7 +6411,8 @@ button.automation-run:hover {
 
 /* A quiet act ends the line flush with the card's edge, its words rather than
    its hover's pill standing in the column. */
-.settings-page-head .quiet-button {
+.settings-page-head .quiet-button,
+.settings-page .luke-settings-page-actions .quiet-button {
   margin-right: calc(-1 * var(--space-8));
 }
 
@@ -8058,8 +8057,8 @@ button.automation-run:hover {
   color: var(--luke-color-text-subtle);
 }
 
-/* The filters under the field, one pill each, the chosen one filled as a
-   filter chip is everywhere in the window. */
+/* The filters under the field, one shared filter chip each, in a row that
+   wraps under the field. */
 .command-palette-filters {
   display: flex;
   flex: 0 0 auto;
@@ -8070,29 +8069,6 @@ button.automation-run:hover {
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 0;
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.command-palette-filter {
-  height: 24px;
-  padding: 0 var(--luke-space-8);
-  border: 1px solid transparent;
-  border-radius: var(--luke-radius-full);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.command-palette-filter:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.command-palette-filter[aria-pressed="true"] {
-  border-color: var(--luke-color-border-selected);
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
 }
 
 .command-palette-list {

@@ -8,6 +8,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures";
@@ -41,29 +42,26 @@ const roots: Root[] = [];
 beforeEach(() => {
   held = PAGE_TEXT;
   sent = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
+      }
+      if (request.kind === ACT_KIND.TASKS_EDIT) {
+        const { base, value } = request.payload.edit.document;
+        if (base !== held) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { conflict: { current: held } },
+          });
         }
-        if (request.kind === ACT_KIND.TASKS_EDIT) {
-          const { base, value } = request.payload.edit.document;
-          if (base !== held) {
-            return Promise.resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { conflict: { current: held } },
-            });
-          }
-          held = value;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      },
-      recordSurfaceEvent: () => undefined,
+        held = value;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
+    recordSurfaceEvent: () => undefined,
   });
 });
 

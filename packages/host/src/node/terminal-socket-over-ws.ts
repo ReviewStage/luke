@@ -7,7 +7,7 @@ import type {
 } from "../compose-terminals.js";
 
 /**
- * socket-over-ws.ts -- one shell's relay socket, opened over `ws`: the seam the terminal composer attaches a shell through.
+ * terminal-socket-over-ws.ts -- one shell's relay socket, opened over `ws`: the seam the terminal composer attaches a shell through.
  *
  * The socket is the scope's: it is made, and its listeners stand, in the one
  * synchronous step that acquires it, so nothing that arrives with the

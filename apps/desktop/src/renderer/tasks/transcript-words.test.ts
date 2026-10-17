@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TranscriptWords } from "./transcript-blocks";
 
@@ -60,13 +61,10 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   // A fenced block with a language asks main for its colours; refused, it is drawn plain.
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No colours here." }),
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No colours here." }),
+    recordSurfaceEvent: () => undefined,
   });
 });
 

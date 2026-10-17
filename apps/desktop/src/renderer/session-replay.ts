@@ -73,7 +73,7 @@ const ACCOUNTS_DIRECTORY = "/Users/";
 /**
  * The directory this page was loaded from, which is also where its scripts
  * are — so it is where a captured exception's stack frames point, and those
- * name `renderer.js` rather than the document itself.
+ * name `panel.js` and its chunks rather than the document itself.
  *
  * Read off `globalThis` rather than `window` so the parser can be exercised
  * with no document at all, where there is no address to match and every value

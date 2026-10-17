@@ -46,8 +46,7 @@ import {
   Stream,
 } from "effect";
 import { Base64 } from "effect/encoding";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -212,17 +211,18 @@ function resizeFrame(connection: Pick<Connection, "cols" | "rows">): string {
 
 export function composeTerminals(
   dependencies: TerminalsDependencies,
-): Effect.Effect<TerminalsComposer, never, Scope.Scope> {
+): Effect.Effect<TerminalsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const fibers = yield* FiberMap.make<string>();
-    return composed(dependencies, fibers);
+    return composed(dependencies, fibers, yield* HttpClient.HttpClient);
   });
 }
 
-/** The composer's table and its connections, built over its seams and the map every connection's fiber is held in. */
+/** The composer's table and its connections, built over its seams, the map every connection's fiber is held in, and the host's HTTP client. */
 function composed(
   dependencies: TerminalsDependencies,
   fibers: FiberMap.FiberMap<string>,
+  http: HttpClient.HttpClient,
 ): TerminalsComposer {
   const { kernel, account, client, openSocket } = dependencies;
   const connections = new Map<string, Connection>();
@@ -374,13 +374,13 @@ function composed(
   const run = (connection: Connection) =>
     Effect.asVoid(FiberMap.run(fibers, connection.connectionId, session(connection)));
 
-  /** The service asked behind the gate, over the ambient fetch client; an answer it could not give is the call's refusal. */
+  /** The service asked behind the gate, over the host's own HTTP client; an answer it could not give is the call's refusal. */
   const asked = <Answer extends object>(
     call: Effect.Effect<Answer | TerminalUnanswered, never, HttpClient.HttpClient>,
   ): Effect.Effect<WireValue, RefusedRefusal> =>
     Effect.gen(function* () {
       if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
-      const answer = yield* Effect.provide(call, FetchHttpClient.layer);
+      const answer = yield* Effect.provideService(call, HttpClient.HttpClient, http);
       if (answer === TERMINAL_UNANSWERED) {
         return yield* Effect.fail(new RefusedRefusal({ message: "the service did not answer" }));
       }
