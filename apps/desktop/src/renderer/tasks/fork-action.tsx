@@ -1,5 +1,6 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { IconButton } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ArrowRightIcon, SplitIcon, XIcon } from "lucide-react";
@@ -222,9 +223,9 @@ export function ForkChip({
         data-continue={messageId === undefined ? "" : undefined}
       >
         {messageId === undefined ? (
-          <ArrowRightIcon className="size-3.5 shrink-0" aria-hidden="true" />
+          <ArrowRightIcon className="draft-fork-glyph" aria-hidden="true" />
         ) : (
-          <SplitIcon className="size-3.5 shrink-0" aria-hidden="true" />
+          <SplitIcon className="draft-fork-glyph" aria-hidden="true" />
         )}
         <span>{messageId === undefined ? FORK_WORDS.CONTINUE_OF : FORK_WORDS.OF}</span>
         {agentChip(agentId, source, cards, open === undefined ? undefined : () => open())}
@@ -242,11 +243,11 @@ export function ForkChip({
             )}
           </>
         )}
-        <Tooltip label={drop}>
-          <button type="button" className="draft-fork-drop" aria-label={drop} onClick={onDrop}>
-            <XIcon className="size-3.5" aria-hidden="true" />
-          </button>
-        </Tooltip>
+        <span className="draft-fork-drop">
+          <Tooltip label={drop}>
+            <IconButton icon={<XIcon />} label={drop} onClick={onDrop} />
+          </Tooltip>
+        </span>
       </div>
     </div>
   );
