@@ -195,17 +195,24 @@ function SignInCard({ title, body }: { title: string; body: string }): React.JSX
  * title says where the invitation stands, the description what it means,
  * and the body holds the one action that moves it on, accepting it or
  * signing in.
+ *
+ * The invitation is read once for each account the browser is signed in as,
+ * not each time the session is read. Note that Better Auth reads the session
+ * again just after an accept and answers a new object every time, because it
+ * parses the session's dates. Reading the invitation again would find it
+ * accepted, and so spent, and say that over the join.
  */
 function AcceptInvitation(): React.JSX.Element {
   const [query] = useState(() => invitationAcceptQuery(window.location.search));
   const [view, setView] = useState<View>(WORKING);
   const [accepting, setAccepting] = useState(false);
   const session = authClient.useSession();
-  const signedIn = session.data?.user.email ?? "";
+  const account = session.data?.user.email;
+  const signedIn = account ?? "";
 
   useEffect(() => {
     if (session.isPending) return;
-    if (!session.data) {
+    if (account === undefined) {
       setView(
         signIn(
           "Sign in to accept your invitation",
@@ -216,8 +223,8 @@ function AcceptInvitation(): React.JSX.Element {
       );
       return;
     }
-    void readInvitation(query, session.data.user.email).then(setView);
-  }, [query, session.isPending, session.data]);
+    void readInvitation(query, account).then(setView);
+  }, [query, session.isPending, account]);
 
   const join = async (offer: { id: string; name: string }) => {
     if (accepting) return;

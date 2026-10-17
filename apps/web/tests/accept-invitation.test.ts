@@ -77,6 +77,11 @@ const VALID = offerRead({
   },
 });
 
+const SPENT = offerRead({ refused: INVITATION_OFFER_REFUSAL.SPENT });
+
+/** Longer than Better Auth waits, after an accept, before it reads the session again. */
+const SESSION_REREAD_DELAY_MS = 1_000;
+
 function signedInReading(offer: Answer): Map<string, () => Answer> {
   return new Map([
     ["/api/auth/get-session", () => SIGNED_IN],
@@ -112,12 +117,20 @@ afterEach(() => {
 
 test("a valid invitation names its workspace and inviter and is accepted from its button", async () => {
   let settleAccept: (answer: Answer) => void = () => undefined;
-  const answers = signedInReading(VALID);
-  const page = await openPage(answers);
+  let offer = VALID;
+  const page = await openPage(
+    new Map([
+      ["/api/auth/get-session", () => SIGNED_IN],
+      [HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER, () => offer],
+    ]),
+  );
   await titled(page, "Join Atlas");
   expect(page.textContent).toContain("Grace invited you to plan in Atlas on Luke, as member.");
   expect(buttonNames(page)).toEqual(["Accept invitation"]);
 
+  // Note that Better Auth reads the session again on a timer after an accept,
+  // so the clock is the test's from here and the test moves it past that.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.mocked(globalThis.fetch).mockImplementationOnce(
     () =>
       new Promise((settle) => {
@@ -127,16 +140,17 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await act(async () => buttonNamed(page, "Accept invitation").click());
   expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true");
 
+  offer = SPENT;
   await act(async () => settleAccept({ status: 200, body: { invitation: {}, member: {} } }));
-  await titled(page, "You joined Atlas");
+  await act(async () => vi.advanceTimersByTimeAsync(SESSION_REREAD_DELAY_MS));
+
+  expect(page.querySelector("h1")?.textContent).toBe("You joined Atlas");
   expect(page.textContent).toContain("Return to Luke. You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
 });
 
 test("a spent invitation says so and offers nothing to press", async () => {
-  const page = await openPage(
-    signedInReading(offerRead({ refused: INVITATION_OFFER_REFUSAL.SPENT })),
-  );
+  const page = await openPage(signedInReading(SPENT));
 
   await titled(page, "This invitation is no longer valid");
   expect(page.textContent).toContain("Ask whoever invited you for a new link.");
