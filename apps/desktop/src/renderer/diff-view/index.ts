@@ -42,11 +42,11 @@ import { adoptShadowStyles } from "./inline-styles";
 
 /** Each font's stack, ending in the window's own code type should the Mac lack it. */
 const FONT_STACK = {
-  [DIFF_FONT.SF_MONO]: "var(--font-mono)",
-  [DIFF_FONT.MENLO]: "Menlo, var(--font-mono)",
-  [DIFF_FONT.MONACO]: "Monaco, var(--font-mono)",
-  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--font-mono)',
-  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--font-mono)',
+  [DIFF_FONT.SF_MONO]: "var(--luke-font-mono)",
+  [DIFF_FONT.MENLO]: "Menlo, var(--luke-font-mono)",
+  [DIFF_FONT.MONACO]: "Monaco, var(--luke-font-mono)",
+  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--luke-font-mono)',
+  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--luke-font-mono)',
 } as const satisfies Record<DiffLook["font"], string>;
 
 /** Each line height as a ratio of the type's size, so a line grows with its type; the File tab's 1.6 at normal. */

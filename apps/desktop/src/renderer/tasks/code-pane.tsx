@@ -1,6 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
-import { cssCustomProperties } from "@luke/ui";
+import { cssCustomProperties, IconButton } from "@luke/ui";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -178,14 +178,11 @@ function CopyLinesButton({ lines }: { lines: string }): React.JSX.Element {
   const { state, copy } = useCopyFeedback();
   return (
     <Tooltip label={copyHint(state, COPY_LABEL)}>
-      <button
-        type="button"
-        className="icon-button code-card-action"
-        aria-label={COPY_LABEL}
+      <IconButton
+        icon={<CopyGlyph state={state} />}
+        label={COPY_LABEL}
         onClick={() => copy(lines)}
-      >
-        <CopyGlyph state={state} />
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -218,14 +215,11 @@ export function CodeCardHeader({
         {copied === undefined ? null : <CopyLinesButton lines={copied} />}
         {onOpen === undefined ? null : (
           <Tooltip label={OPEN_FILE_LABEL}>
-            <button
-              type="button"
-              className="icon-button code-card-action"
-              aria-label={OPEN_FILE_LABEL}
+            <IconButton
+              icon={<FileInputIcon aria-hidden="true" />}
+              label={OPEN_FILE_LABEL}
               onClick={onOpen}
-            >
-              <FileInputIcon aria-hidden="true" />
-            </button>
+            />
           </Tooltip>
         )}
       </span>

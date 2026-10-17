@@ -56,8 +56,8 @@
      words a changed line changed in a deeper tint of the same, and the mark
      at a changed line's edge in the colour itself. Each is mixed from the
      palette's own, which flips with the appearance, so none is restated. */
-  --diff-added-mark: var(--state-complete);
-  --diff-removed-mark: var(--danger);
+  --diff-added-mark: var(--luke-color-complete);
+  --diff-removed-mark: var(--luke-color-danger);
   --diff-added-ground: color-mix(in srgb, var(--diff-added-mark) 14%, transparent);
   --diff-removed-ground: color-mix(in srgb, var(--diff-removed-mark) 14%, transparent);
   --diff-added-word: color-mix(in srgb, var(--diff-added-mark) 34%, transparent);

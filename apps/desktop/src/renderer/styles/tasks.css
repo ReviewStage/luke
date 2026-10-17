@@ -887,22 +887,28 @@
   white-space: nowrap;
 }
 
+/* The card clips at its rounded edge, against which its header's actions
+   stand flush, so a ring inside it is drawn inside its control. */
 .code-card {
+  --focus-ring-offset: var(--focus-ring-inset);
   overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: 10px; /* off-scale: a card a step rounder than its controls */
   background: var(--code-ground);
 }
 
+/* The file at the left and the card's actions flush with its right edge,
+   so the header is the buttons' height and no more, as a transcript
+   fence's is. */
 .code-card-header {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--control-gap);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  font-size: 11.5px;
+  gap: var(--luke-control-gap);
+  padding-left: var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  font-size: 11.5px; /* off-scale: the code's own type */
 }
 
 /* A file named in place (file-ref.tsx): its type's icon at the size the
@@ -912,11 +918,11 @@
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--control-gap);
+  gap: var(--luke-control-gap);
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font: inherit;
   text-align: left;
 }
@@ -933,7 +939,7 @@
   min-width: 0;
   overflow: hidden;
   direction: rtl;
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -944,20 +950,15 @@ button.file-ref:hover .file-ref-path {
 
 .file-ref-lines {
   flex: 0 0 auto;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   white-space: nowrap;
 }
 
-/* A card's copy and its file's opening keep to the header's right, a step
-   smaller than a toolbar's. */
+/* A card's copy and its file's opening keep to the header's right. */
 .code-card-actions {
   display: flex;
   flex: 0 0 auto;
   margin-left: auto;
-}
-
-.code-card-action {
-  --control-height: 24px;
 }
 
 /* A File tab: the file's heading over its lines, which fill the tab and
@@ -999,7 +1000,7 @@ button.file-ref:hover .file-ref-path {
 }
 
 .file-tab-lines[data-line-numbers="false"] .code-line-text {
-  padding-left: var(--space-12);
+  padding-left: var(--luke-space-12);
 }
 
 /* A File tab beside its repository's tree, under one bar across both: the
@@ -1660,10 +1661,10 @@ button.file-ref:hover .file-ref-path {
 .file-tab-notice {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-8) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
   font-size: 12.5px;
   line-height: 1.5;
 }
@@ -2671,18 +2672,18 @@ button.pull-request-check:hover {
 
 .file-tab-snippet-label {
   margin: 0;
-  padding: var(--space-8) var(--space-12) var(--space-4);
-  color: var(--text-tertiary);
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+  color: var(--luke-color-text-subtle);
   font-size: 11.5px;
 }
 
 .file-tab-edge {
   display: block;
   width: 100%;
-  padding: var(--space-4) 0 var(--space-4) 48px;
+  padding: var(--luke-space-4) 0 var(--luke-space-4) 48px;
   border: 0;
   background: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font: inherit;
   text-align: left;
   -webkit-user-select: none;
@@ -2690,7 +2691,7 @@ button.pull-request-check:hover {
 }
 
 .file-tab-edge:hover:not(:disabled) {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 /* The edges run the lines' whole width, so their ring is drawn inside them. */
@@ -2842,17 +2843,17 @@ button.pull-request-check:hover {
 
 /* Luke's note reads as the step's words, so the path above it steps back. */
 .code-card:has(> .code-card-note) .file-ref {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .code-card-note {
   margin: 0;
-  padding: var(--space-8) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.5;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   overflow-wrap: anywhere;
   -webkit-user-select: text;
   user-select: text;
@@ -2860,7 +2861,6 @@ button.pull-request-check:hover {
 
 .code-card-header:has(+ .code-card-note) {
   border-bottom: 0;
-  padding-bottom: 0;
 }
 
 /* Lines wrap rather than scroll sideways, so no card takes a swipe from the
@@ -2868,10 +2868,10 @@ button.pull-request-check:hover {
    nothing by default (`base.css`): a File tab's, a card's, and an inbox
    item's code is read to be copied, the gutter's numbers left out of it. */
 .code-lines {
-  padding: var(--space-6) 0;
+  padding: var(--luke-space-6) 0;
   color: var(--code-text);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--luke-font-mono);
+  font-size: 11.5px; /* off-scale: the code's own type */
   line-height: 1.6;
   -webkit-user-select: text;
   user-select: text;
@@ -2889,8 +2889,8 @@ button.pull-request-check:hover {
 
 .code-line-number {
   flex: 0 0 auto;
-  width: 48px;
-  padding: 0 var(--space-12) 0 0;
+  width: 48px; /* off-scale: a gutter for four digits */
+  padding: 0 var(--luke-space-12) 0 0;
   color: var(--code-line-number);
   text-align: right;
   -webkit-user-select: none;
