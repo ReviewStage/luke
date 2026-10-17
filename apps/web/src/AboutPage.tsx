@@ -51,7 +51,7 @@ const FOUNDERS: readonly Founder[] = [
 export function AboutPage(): React.JSX.Element {
   return (
     <>
-      <SiteHeader current={SITE_PAGE.ABOUT} />
+      <SiteHeader current={{ page: SITE_PAGE.ABOUT }} />
 
       <main className="shell pt-12 pb-16">
         <h1 className="m-0 text-[1.75rem] leading-[1.2] font-semibold tracking-[-0.02em]">About</h1>
@@ -65,7 +65,7 @@ export function AboutPage(): React.JSX.Element {
         </div>
       </main>
 
-      <SiteFooter current={SITE_PAGE.ABOUT} />
+      <SiteFooter current={{ page: SITE_PAGE.ABOUT }} />
     </>
   );
 }

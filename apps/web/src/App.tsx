@@ -17,8 +17,8 @@ import {
 export function App(): React.JSX.Element {
   return (
     <PublicPage
-      banner={<SiteNavigation current={SITE_PAGE.HOME} />}
-      footer={<SiteFooterLinks current={SITE_PAGE.HOME} />}
+      banner={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
+      footer={<SiteFooterLinks current={{ page: SITE_PAGE.HOME }} />}
       title="A better way to plan with agents."
       titleStyle={PUBLIC_TITLE.HERO}
       lead="Talk through a feature with Luke. He reads the code while you talk and writes a plan you can paste into Claude Code or Codex."

@@ -12,15 +12,21 @@ import { PrivacyPage } from "../src/PrivacyPage";
 /**
  * The site's chrome as a reader meets it on every public page, drawn as the
  * prerender writes it: the banner's navigation names its links, the footer
- * keeps its own, and both mark the page the reader is on, and only that one.
+ * keeps its own, and both mark the page the reader is on, and only that one;
+ * a page beneath the changelog marks the changelog as the part of the site
+ * the reader is in, never as the page they are on.
  */
 
-const CHANGELOG = changelogRoutes(RELEASES).find((route) => route.path === "/changelog");
+const CHANGELOG_ROUTES = changelogRoutes(RELEASES);
 
-function ChangelogIndex(): React.JSX.Element {
-  assert.ok(CHANGELOG !== undefined);
-  return createElement(ChangelogPage, { view: CHANGELOG.view });
+/** The changelog as drawn at `path`. */
+function changelogAt(path: string): FunctionComponent {
+  const route = CHANGELOG_ROUTES.find((candidate) => candidate.path === path);
+  assert.ok(route !== undefined);
+  return () => createElement(ChangelogPage, { view: route.view });
 }
+
+const ChangelogIndex = changelogAt("/changelog");
 
 const PAGES: readonly { path: string; page: FunctionComponent; marked: readonly string[] }[] = [
   { path: "/", page: App, marked: ["Luke"] },
@@ -70,5 +76,22 @@ for (const { path, page, marked } of PAGES) {
       marked,
     );
     for (const link of current) assert.equal(link.getAttribute("href"), path);
+  });
+}
+
+for (const path of ["/changelog/page/2", `/changelog/${RELEASES[0]?.version}`]) {
+  test(`${path} marks the changelog as where the reader is, not as the page they are on`, () => {
+    const root = drawn(changelogAt(path));
+    assert.equal(root.querySelectorAll('a[aria-current="page"]').length, 0);
+    assert.deepEqual(
+      Array.from(root.querySelectorAll('a[aria-current="true"]')).map((link) => [
+        link.textContent,
+        link.getAttribute("href"),
+      ]),
+      [
+        ["Changelog", "/changelog"],
+        ["Changelog", "/changelog"],
+      ],
+    );
   });
 }
