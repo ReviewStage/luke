@@ -30,6 +30,7 @@
 @import "./components/form-section/form-section.css";
 @import "./components/hover-card/hover-card.css";
 @import "./components/public-page/public-page.css";
+@import "./components/search-field/search-field.css";
 @import "./components/text-field/text-field.css";
 @import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";

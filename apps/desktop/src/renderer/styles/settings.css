@@ -404,7 +404,8 @@
 .workspace-member,
 .workspace-invite-row,
 .workspace-github,
-.workspace-linear {
+.workspace-linear,
+.integration-row {
   display: flex;
   flex-direction: column;
 }
@@ -428,7 +429,8 @@
 .workspace-member > .error-message,
 .workspace-invite-row > .error-message,
 .workspace-github > .error-message,
-.workspace-linear > .error-message {
+.workspace-linear > .error-message,
+.integration-row > .error-message {
   margin-top: calc(-1 * var(--luke-space-4));
   padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
 }
@@ -690,9 +692,17 @@
   transform: rotate(90deg);
 }
 
-.settings-card > .integration-tools-panel {
+.integration-row > .integration-tools-panel {
   border-top: 1px solid var(--hairline);
   container: integration-tools / inline-size;
+}
+
+/* A refusal under a row whose tools stand open says so below them, over a
+   hairline of its own. */
+.integration-row > .integration-tools-panel + .error-message {
+  margin-top: 0;
+  padding-top: var(--luke-settings-row-block);
+  border-top: 1px solid var(--hairline);
 }
 
 .integration-tools-split {

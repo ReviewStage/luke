@@ -1,0 +1,107 @@
+/* search-field.css -- a search's well: a control's height and corner, the
+   hover fill for its ground inside a hairline, the magnifier at a control's
+   glyph size, the body's type, and at its end a tally, a chord, or a clear
+   nested inside the well's edge. Every part has a fixed size, so typing,
+   clearing, and focusing never move what stands beneath it. The well wears
+   the keyboard's ring while the caret is in its field, which wears none. */
+
+@layer components {
+  .luke-search-field {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    min-width: 0;
+    height: var(--luke-control-height);
+    /* Note that the leading inset is a hair less than a row's, so the
+       magnifier stands where a row's glyph does inside the well's edge. */
+    padding: 0 var(--luke-space-2) 0 calc(var(--luke-space-8) - 1px);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-fill-hover);
+    color: var(--luke-color-text-subtle);
+    cursor: text;
+    transition: border-color var(--duration-hover) ease;
+  }
+
+  .luke-search-field:has(.luke-search-field-input:focus-visible) {
+    outline: var(--focus-ring-width, 2px) solid var(--luke-color-focus-ring);
+    outline-offset: calc(var(--focus-ring-width, 2px) / -2);
+  }
+
+  .luke-search-field > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+    flex: 0 0 auto;
+  }
+
+  .luke-search-field-input {
+    min-width: 0;
+    height: 100%;
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    outline: none;
+  }
+
+  .luke-search-field-input::placeholder {
+    color: var(--luke-color-text-subtle);
+  }
+
+  .luke-search-field-tally {
+    flex: none;
+    padding-right: var(--luke-space-6);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The chord stands in the empty field until the caret arrives. */
+  .luke-search-field-shortcut {
+    display: inline-flex;
+    flex: none;
+    padding-right: var(--luke-space-6);
+  }
+
+  .luke-search-field:focus-within .luke-search-field-shortcut {
+    display: none;
+  }
+
+  /* The clear is nested in the well: as far inside its edge on every side
+     as it is from the end, with the corner that inset leaves. */
+  .luke-search-field-clear {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--luke-control-height) - 2px - 2 * var(--luke-space-2));
+    height: calc(var(--luke-control-height) - 2px - 2 * var(--luke-space-2));
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+    background: transparent;
+    color: var(--luke-color-text-muted);
+    cursor: default;
+    transition: background-color var(--duration-hover) ease;
+  }
+
+  .luke-search-field-clear:hover {
+    background: var(--luke-color-fill-selected);
+    color: var(--luke-color-text);
+  }
+
+  .luke-search-field-clear:active {
+    background: var(--luke-color-fill-pressed);
+  }
+
+  .luke-search-field-clear > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+}
