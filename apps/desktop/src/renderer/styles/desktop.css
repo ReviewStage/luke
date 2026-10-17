@@ -5454,7 +5454,7 @@ button.integration-tool-head:hover,
 }
 
 /* The Runs card's rows not yet drawn by the shared row (repository, model,
-   agent, servers) stand at its height and padding, and what stops a save
+   agent) stand at its height and padding, and what stops a save
    stands under its row inside the card, as a Settings refusal does. */
 .automation-form .luke-settings-section-card > .settings-row {
   min-height: var(--luke-settings-row-min-height);
@@ -5468,7 +5468,8 @@ button.integration-tool-head:hover,
 }
 
 .automation-form .settings-picker-chip,
-.automation-form .settings-picker > .luke-chip {
+.automation-form .settings-picker > .luke-chip,
+.automation-form .agent-servers > .luke-chip {
   width: auto;
   min-width: min(200px, 100%);
 }
