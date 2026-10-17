@@ -2898,15 +2898,90 @@ button.pull-request-check:hover {
   }
 }
 
+/* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
+   selectable, breaking a long path anywhere rather than widening the
+   column. Its headings are a note's, a step above the words around them and
+   no more, and its lists keep to the column's own indent. These stand
+   outside every layer, as the utilities they replaced won over Streamdown's
+   own spacing between blocks; its first block's top margin and its last
+   block's bottom one are still none. */
+.transcript-markdown {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.transcript-heading {
+  margin: var(--luke-space-8) 0 var(--luke-space-4);
+  font-size: var(--luke-type-body-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.transcript-heading:where([data-level="1"], [data-level="2"], [data-level="3"]) {
+  font-weight: var(--luke-weight-semibold);
+}
+
+.transcript-heading:where([data-level="1"], [data-level="2"]) {
+  margin-top: var(--luke-space-12);
+}
+
+.transcript-heading:where([data-level="1"]) {
+  font-size: var(--luke-type-dialog-size);
+}
+
+.transcript-heading:where([data-level="2"]) {
+  font-size: 14px; /* off-scale: a step between the dialog's heading and the body */
+}
+
+.transcript-list {
+  margin-block: var(--luke-space-4);
+  padding-left: var(--luke-space-20);
+  list-style-type: disc;
+}
+
+ol.transcript-list {
+  list-style-type: decimal;
+}
+
+.transcript-list-item {
+  margin-block: var(--luke-space-2);
+}
+
+.transcript-markdown > :first-child {
+  margin-top: 0;
+}
+
+.transcript-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* A tool call's input or output (../ai-elements/code-block.tsx): its words
+   as they are, in mono, wrapping anywhere rather than widening the
+   transcript, and scrolling inside the block past its height. */
+.code-block {
+  max-height: 256px; /* off-scale: a block's tallest before it scrolls */
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  overflow: auto;
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-mono);
+  font-size: 11.5px; /* off-scale: the Code tab cards' type */
+  line-height: 1.625;
+  overflow-wrap: anywhere;
+  user-select: text;
+  white-space: pre-wrap;
+}
+
 /* A transcript's fenced block (transcript-markdown.tsx), drawn as a Code
    tab card is: the code's own ground inside a hairline, a header naming
    the language with the copy at its right, and the lines in the cards'
-   type. The lines keep whole and scroll sideways inside the block, so a
-   long one never widens the transcript. */
+   type. The copy is the window's own icon button, flush with the header's
+   right edge, so the header is the button's height and no more. The lines
+   keep whole and scroll sideways inside the block, so a long one never
+   widens the transcript. */
 .transcript-code {
   overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
   background: var(--code-ground);
 }
 
@@ -2915,18 +2990,19 @@ button.pull-request-check:hover {
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: var(--control-gap);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-size: 11.5px;
+  gap: var(--luke-control-gap);
+  padding-left: var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .transcript-code-language {
   min-width: 0;
   overflow: hidden;
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
   text-overflow: ellipsis;
   text-transform: lowercase;
   white-space: nowrap;
@@ -2934,12 +3010,12 @@ button.pull-request-check:hover {
 
 .transcript-code-body {
   margin: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--luke-space-8) var(--luke-space-12);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   color: var(--code-text);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--luke-font-mono);
+  font-size: 11.5px; /* off-scale: the Code tab cards' type */
   line-height: 1.6;
   overflow-wrap: normal;
   tab-size: 2;
@@ -2953,18 +3029,18 @@ button.pull-request-check:hover {
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */
 .transcript-inline-code {
   padding: 0.1em 0.35em;
-  border-radius: 4px;
-  background: var(--raised-strong);
-  font-family: var(--font-mono);
+  border-radius: 4px; /* off-scale: a corner in step with the words' own size */
+  background: var(--luke-color-fill-strong);
+  font-family: var(--luke-font-mono);
   font-size: 0.9em;
 }
 
 /* A transcript's table: no box, a hairline under each row, the header in
-   the secondary colour at medium weight, the outer columns flush with the
-   words around it. A table wider than the column scrolls sideways inside
-   its own box, fading each edge it hides columns past as a Markdown table
-   does (markdown.css). A cell keeps the alignment its column's rule gave it,
-   which it carries as its own style. */
+   the muted ink at the label's weight, the outer columns flush with the
+   words around it, in the body's type. A table wider than the column
+   scrolls sideways inside its own box, fading each edge it hides columns
+   past as a Markdown table does (markdown.css). A cell keeps the alignment
+   its column's rule gave it, which it carries as its own style. */
 .transcript-table {
   max-width: 100%;
   overflow-x: auto;
@@ -2974,14 +3050,14 @@ button.pull-request-check:hover {
 .transcript-table > table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: var(--luke-type-body-size);
   font-variant-numeric: tabular-nums;
-  line-height: 1.5;
+  line-height: var(--luke-type-body-leading);
 }
 
 .transcript-table :is(th, td) {
-  padding: var(--space-6) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
   overflow-wrap: normal;
   text-align: left;
   vertical-align: top;
@@ -2996,9 +3072,9 @@ button.pull-request-check:hover {
 }
 
 .transcript-table th {
-  border-bottom-color: var(--hairline-strong);
-  color: var(--text-secondary);
-  font-weight: 500;
+  border-bottom-color: var(--luke-color-border-strong);
+  color: var(--luke-color-text-muted);
+  font-weight: var(--luke-weight-medium);
   white-space: nowrap;
 }
 
