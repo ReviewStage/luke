@@ -88,6 +88,7 @@ import {
   macOwnerOf,
   messageWords,
   newestTodos,
+  newTaskCallIds,
   placedMessages,
   providerOf,
   settledPlanEdits,
@@ -1651,6 +1652,14 @@ export function AgentTab({
     seenListCalls.current = new Set(listCalls);
     if (landed) readAgents();
   }, [listCalls, readAgents]);
+  // A start that made a new task adds it to the sidebar only once the tasks are read again.
+  const newTaskCalls = useMemo(() => newTaskCallIds(transcript.messages), [transcript.messages]);
+  const seenNewTaskCalls = useRef<ReadonlySet<string>>(new Set(newTaskCalls));
+  useEffect(() => {
+    const landed = newTaskCalls.some((id) => !seenNewTaskCalls.current.has(id));
+    seenNewTaskCalls.current = new Set(newTaskCalls);
+    if (landed) tell(ACT_KIND.TASKS_REFRESH);
+  }, [newTaskCalls, tell]);
   const composer = useAgentComposer({
     agentId: agent.id,
     taskId: agent.planId,
