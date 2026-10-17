@@ -192,8 +192,9 @@ function LineSender({
   const actor =
     view.sentBy === undefined ? undefined : lineSender(view.sentBy, readerId, members, former);
   if (actor !== undefined) return <ActorRef actor={actor} />;
-  // A member's line the reader sent is theirs, as the developer's own is.
-  return <>{view.own || view.sentBy !== undefined ? OWN_WORD : view.sender}</>;
+  // A member's line the reader sent is theirs, as the developer's own is; one the window cannot place keeps its name.
+  const mine = readerId !== undefined && view.sentBy?.userId === readerId;
+  return <>{view.own || mine ? OWN_WORD : view.sender}</>;
 }
 
 /**

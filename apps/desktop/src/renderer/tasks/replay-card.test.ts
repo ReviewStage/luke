@@ -412,6 +412,8 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
     line("Nightly: deploy: Go.", { kind: REPLAY_SENDER.AUTOMATION }),
     line("octocat: Go.", { kind: REPLAY_SENDER.GITHUB }),
     line("The developer: Go.", { kind: REPLAY_SENDER.DEVELOPER }),
+    // A member the window cannot tell from the reader, with no reader known, keeps their name.
+    line("Ana Ruiz: Go.", { kind: REPLAY_SENDER.MEMBER, memberId: "user-ana" }),
     line("Charles Pan: Go."),
   ];
   const { container } = await drawn(
@@ -432,6 +434,7 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
     [ACTOR_KIND.AUTOMATION, "Nightly: deploy"],
     [ACTOR_KIND.GITHUB, "octocat"],
     ["", "You"],
+    ["", "Ana Ruiz"],
     ["", "Charles Pan"],
   ]);
 });

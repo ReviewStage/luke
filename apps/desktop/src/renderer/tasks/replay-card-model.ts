@@ -63,8 +63,8 @@ const CALL_PARTS = {
 /** What the service adds to a call's summary while the call was still under way. */
 const RUNNING_MARK = " (running)";
 
-/** How the service's result of a call still under way begins, which with the mark tells a running call from one whose subject ends in the mark's words. */
-const NO_RESULT_LEAD = "(no result";
+/** The service's whole result of a call still under way, which with the mark tells a running call from one whose subject ends in the mark's words. */
+const NO_RESULT = "(no result: the call was still under way)";
 
 /**
  * The kind of call each verb the service says a call in names, the first
@@ -348,8 +348,7 @@ function spelledCall(step: ReplayStep): CallRead {
   const input = at < 0 ? words : words.slice(0, at);
   const result = at < 0 ? undefined : words.slice(at + CALL_PARTS.RESULT.length);
   const running =
-    step.summary.endsWith(RUNNING_MARK) &&
-    (result === undefined || result.startsWith(NO_RESULT_LEAD));
+    step.summary.endsWith(RUNNING_MARK) && (result === undefined || result === NO_RESULT);
   const failed = !running && result?.startsWith(CALL_PARTS.FAILED) === true;
   return {
     state: running

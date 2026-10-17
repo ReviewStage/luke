@@ -212,10 +212,21 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
       errorText: "exit 1",
     },
   );
-  const running = call("Searched: invite (running)", "Input: {}\nResult: (no result)");
+  const running = call(
+    "Searched: invite (running)",
+    "Input: {}\nResult: (no result: the call was still under way)",
+  );
   assert.equal(running.kind === STEP_VIEW.CALL && running.state, TOOL_STATE.INPUT_AVAILABLE);
   assert.equal(running.kind === STEP_VIEW.CALL && running.subject, "invite");
   // A finished call whose subject ends in the mark's words keeps them, and its result.
+  const placeholderLike = call(
+    "Read: report (running)",
+    "Input: {}\nResult: (no result found in archive)",
+  );
+  assert.equal(
+    placeholderLike.kind === STEP_VIEW.CALL && placeholderLike.output,
+    "(no result found in archive)",
+  );
   const named = call("Read: report (running)", "Input: {}\nResult: 3 lines");
   assert.equal(named.kind === STEP_VIEW.CALL && named.state, TOOL_STATE.OUTPUT_AVAILABLE);
   assert.equal(named.kind === STEP_VIEW.CALL && named.subject, "report (running)");
