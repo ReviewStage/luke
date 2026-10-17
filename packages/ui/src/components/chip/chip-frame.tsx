@@ -12,6 +12,7 @@ export const CHIP_LOOK = {
   TOOLBAR: "toolbar",
   PILL: "pill",
   FIELD: "field",
+  FILTER: "filter",
 } as const;
 
 export type ChipLook = (typeof CHIP_LOOK)[keyof typeof CHIP_LOOK];

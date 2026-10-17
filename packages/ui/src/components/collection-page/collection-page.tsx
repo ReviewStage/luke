@@ -1,4 +1,5 @@
 import { type ReactNode, useId } from "react";
+import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
 import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 
 /**
@@ -14,6 +15,11 @@ import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.j
  * blocks where the rows will be, and the empty and failed states stand a
  * little above the room's middle, so swapping one state for another moves
  * nothing above it.
+ *
+ * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
+ * header: the toolbar stands still above the filters, and the page is named
+ * by the toolbar's title. A board that scrolls sideways stands its content
+ * across the whole room (`PAGE_WIDTH.FULL`) rather than at the measure.
  *
  * The empty and failed states are the caller's, handed in whole, since an
  * empty collection says what to do about it and a failed one how to retry.
@@ -58,23 +64,16 @@ function LoadingRows({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/** A collection's page: `title` and `actions`, `filters` under them, and the content `state` says. */
+/** A collection's page: its heading, `filters` under it, and the content `state` says. */
 export function CollectionPage({
-  title,
-  description,
-  actions,
   filters,
   state,
   loadingLabel,
   empty,
   error,
   children,
-}: {
-  /** What the collection is, which names the page. */
-  title: ReactNode;
-  description?: ReactNode;
-  /** The page's own acts at the header's end (a Button to make one). */
-  actions?: ReactNode;
+  ...heading
+}: PageHeading & {
   /** What narrows the collection (a search field, chips, a Segmented), on one wrapping line. */
   filters?: ReactNode;
   state: CollectionState;
@@ -88,22 +87,43 @@ export function CollectionPage({
   children?: ReactNode;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
+  const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
+  const filterLine = said(filters) ? (
+    <div className="luke-collection-page-filters">{filters}</div>
+  ) : null;
   return (
-    <section className="luke-collection-page" aria-labelledby={titleId}>
-      <div className="luke-collection-page-top">
-        <header className="luke-collection-page-header">
-          <div className="luke-collection-page-heading">
-            <h1 className="luke-collection-page-title" id={titleId}>
-              {title}
-            </h1>
-            {said(description) ? (
-              <p className="luke-collection-page-description">{description}</p>
+    <section
+      className="luke-collection-page"
+      data-frame={heading.frame ?? PAGE_FRAME.PAGE}
+      data-width={heading.width ?? PAGE_WIDTH.MEASURE}
+      aria-labelledby={underToolbar ? undefined : titleId}
+      aria-label={underToolbar ? heading.label : undefined}
+    >
+      {underToolbar ? (
+        <>
+          {heading.toolbar}
+          {filterLine === null ? null : (
+            <div className="luke-collection-page-top">{filterLine}</div>
+          )}
+        </>
+      ) : (
+        <div className="luke-collection-page-top">
+          <header className="luke-collection-page-header">
+            <div className="luke-collection-page-heading">
+              <h1 className="luke-collection-page-title" id={titleId}>
+                {heading.title}
+              </h1>
+              {said(heading.description) ? (
+                <p className="luke-collection-page-description">{heading.description}</p>
+              ) : null}
+            </div>
+            {said(heading.actions) ? (
+              <div className="luke-collection-page-actions">{heading.actions}</div>
             ) : null}
-          </div>
-          {said(actions) ? <div className="luke-collection-page-actions">{actions}</div> : null}
-        </header>
-        {said(filters) ? <div className="luke-collection-page-filters">{filters}</div> : null}
-      </div>
+          </header>
+          {filterLine}
+        </div>
+      )}
       <div className="luke-collection-page-scroll">
         <div className="luke-collection-page-content">
           {state === COLLECTION_STATE.LOADING ? <LoadingRows label={loadingLabel} /> : null}
