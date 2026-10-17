@@ -8,6 +8,7 @@ import {
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
+  type CodingAgentReviewOptionsAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CONTEXT_WINDOW,
@@ -229,6 +230,8 @@ export interface CodingAgentsControl {
   changesPeople: ReadonlyMap<string, HeldPeople>;
   /** One read of an agent's pull request itself as its Pull request tab's overview draws it: its description, branches, mergeability, and people. */
   readOverviewPullRequest: (agentId: string) => Promise<CodingAgentOverviewPullRequestAnswerView>;
+  /** One read of what the reviewer and label pickers of an agent's Pull request tab offer. */
+  readReviewOptions: (agentId: string) => Promise<CodingAgentReviewOptionsAnswerView>;
   /** One read of the checks on an agent's pull request's head, as its overview draws them. */
   readOverviewChecks: (agentId: string) => Promise<CodingAgentOverviewChecksAnswerView>;
   /** One read of an agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
@@ -865,6 +868,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readReviewOptions = useCallback<CodingAgentsControl["readReviewOptions"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS, { agentId }),
+    [act],
+  );
+
   const readOverviewChecks = useCallback<CodingAgentsControl["readOverviewChecks"]>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, { agentId }),
     [act],
@@ -956,6 +964,7 @@ export function useCodingAgents(input: {
     readChanges,
     changesPeople,
     readOverviewPullRequest,
+    readReviewOptions,
     readOverviewChecks,
     readOverviewConversation,
     keywords: input.keywords ?? NO_KEYWORDS,

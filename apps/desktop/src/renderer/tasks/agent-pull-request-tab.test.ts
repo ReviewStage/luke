@@ -255,6 +255,7 @@ function published(state: PullRequestState) {
 /** The overview's three reads, any of them answering otherwise than the fixtures above. */
 interface OverviewReads {
   readonly pullRequest?: CodingAgentsControl["readOverviewPullRequest"];
+  readonly reviewOptions?: CodingAgentsControl["readReviewOptions"];
   readonly checks?: CodingAgentsControl["readOverviewChecks"];
   readonly conversation?: CodingAgentsControl["readOverviewConversation"];
 }
@@ -277,6 +278,7 @@ function controlAnswering(
     readOverviewConversation:
       reads.conversation ?? (() => Promise.resolve({ pullRequest: CONVERSATION })),
     readChanges,
+    ...(reads.reviewOptions === undefined ? undefined : { readReviewOptions: reads.reviewOptions }),
   });
 }
 
@@ -1769,4 +1771,146 @@ test("a pull request in no stack draws no stack", async () => {
   );
   assert.ok(tab.querySelector(".pull-request-header .pull-request-branches") !== null);
   assert.equal(tab.querySelector(".pull-request-stack"), null);
+});
+
+/** The items of the menu standing open, by their words and whether each is checked. */
+function menuItems(): { readonly label: string; readonly checked: string | null }[] {
+  return [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      ':is([role="menuitem"], [role="menuitemcheckbox"])',
+    ),
+  ].map((item) => ({
+    label: item.querySelector(".task-menu-label")?.textContent ?? "",
+    checked: item.getAttribute("aria-checked"),
+  }));
+}
+
+/** Presses the menu item that begins with the words given. */
+async function pressItem(words: string): Promise<void> {
+  const item =
+    [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        ':is([role="menuitem"], [role="menuitemcheckbox"])',
+      ),
+    ].find((each) => each.textContent?.startsWith(words)) ??
+    assert.fail(`the menu offers ${words}`);
+  act(() => item.click());
+  await settle();
+}
+
+test("the reviewer picker reads what the repository offers once, as it first opens, lists its teams then its people, the author left out and those asked checked, and asks a review of one chosen, as the member, reading the pull request again", async () => {
+  let optionReads = 0;
+  let pullRequestReads = 0;
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () => {
+        pullRequestReads += 1;
+        return Promise.resolve({
+          pullRequest: {
+            ...PULL_REQUEST,
+            requested: [CHARLES_ON_GITHUB],
+            requestedTeams: [{ slug: "platform", name: "Platform" }],
+          },
+        });
+      },
+      reviewOptions: () => {
+        optionReads += 1;
+        return Promise.resolve({
+          labels: [],
+          users: [
+            CHARLES_ON_GITHUB,
+            { login: "priyan", bot: false },
+            PULL_REQUEST.author ?? assert.fail(),
+          ],
+          teams: [
+            { slug: "platform", name: "Platform" },
+            { slug: "design", name: "Design" },
+          ],
+        });
+      },
+    }),
+  );
+  const picker =
+    tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Edit reviewers"]') ??
+    assert.fail("the reviewer picker stands beside the reviewers");
+  assert.equal(optionReads, 0, "nothing is read before the picker opens");
+
+  act(() => picker.click());
+  await settle();
+  assert.deepEqual(
+    menuItems().map(({ checked }) => checked),
+    ["true", "false", "true", "false"],
+  );
+  assert.deepEqual(
+    menuItems().map(({ label }) => label),
+    ["Platform", "Design", "charlespan", "priyan"],
+  );
+  await pressItem("priyan");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      { action: PULL_REQUEST_ACTION.REQUEST_REVIEW, reviewer: { kind: "user", name: "priyan" } },
+    ],
+  ]);
+  assert.equal(pullRequestReads, 2, "the pull request is read again once GitHub took it");
+  act(() => picker.click());
+  await settle();
+  assert.equal(optionReads, 1, "what the repository offers is read once");
+  await pressItem("Platform");
+  assert.deepEqual(changes.at(-1), [
+    AGENT.id,
+    {
+      action: PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST,
+      reviewer: { kind: "team", name: "platform" },
+    },
+  ]);
+});
+
+test("the label picker lists the repository's labels, those on the pull request checked, and takes one off or puts one on as chosen; a merged pull request is offered no reviewers", async () => {
+  const tab = await draw(
+    controlAnswering(
+      {
+        pullRequest: () =>
+          Promise.resolve({
+            pullRequest: {
+              ...PULL_REQUEST,
+              state: PULL_REQUEST_STATE.MERGED,
+              mergedAt: 2_000,
+              labels: [{ name: "bug", color: "d73a4a" }],
+            },
+          }),
+        reviewOptions: () =>
+          Promise.resolve({
+            labels: [
+              { name: "bug", color: "d73a4a" },
+              { name: "docs", color: "0075ca" },
+            ],
+            users: [],
+            teams: [],
+          }),
+      },
+      PULL_REQUEST_STATE.MERGED,
+    ),
+  );
+  assert.equal(tab.querySelector('[aria-label="Edit reviewers"]'), null);
+  const picker =
+    tab.querySelector<HTMLButtonElement>('.pull-request-label-row [aria-label="Edit labels"]') ??
+    assert.fail("the label picker stands at the labels' end");
+
+  act(() => picker.click());
+  await settle();
+  assert.deepEqual(menuItems(), [
+    { label: "bug", checked: "true" },
+    { label: "docs", checked: "false" },
+  ]);
+  await pressItem("bug");
+  act(() => picker.click());
+  await settle();
+  await pressItem("docs");
+
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.REMOVE_LABEL, label: "bug" }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.ADD_LABEL, label: "docs" }],
+  ]);
 });

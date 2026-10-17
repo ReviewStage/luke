@@ -123,6 +123,27 @@
                   },
                   "maxItems": 50
                 },
+                "requestedTeams": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "slug": {
+                        "type": "string",
+                        "maxLength": 255
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "slug",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 50
+                },
                 "labels": {
                   "type": "array",
                   "items": {

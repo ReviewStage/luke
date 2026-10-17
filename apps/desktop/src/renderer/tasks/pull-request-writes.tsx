@@ -38,19 +38,33 @@ import { PullRequestMark } from "./pull-request-mark";
  * sign in with GitHub again where it would not take the member's sign-in,
  * and Luke's own words where the change never reached GitHub.
  *
- * The pill is the one control here so far, as stage-cli's status pill is:
+ * The pill is one control here, as stage-cli's status pill is:
  * it opens a menu offering what may be done from where the pull request
  * stands, Ready for review for a draft and Convert to draft for one open,
  * and stays a plain pill once it is merged or closed. It and the line are
- * drawn by whatever bar the tab wears, so they move with it.
+ * drawn by whatever bar the tab wears, so they move with it. The header's
+ * reviewer and label pickers send their changes through the same writes
+ * (`pull-request-pickers.tsx`).
  */
 
-/** What each change says on the menu, and while it is out. */
+/** The changes the pill makes, of where the pull request stands. */
+type StateAction =
+  | typeof PULL_REQUEST_ACTION.READY_FOR_REVIEW
+  | typeof PULL_REQUEST_ACTION.CONVERT_TO_DRAFT;
+
+/** What each of the pill's changes says on its menu, and on the pill while it is out. */
 const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: "Ready for review",
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: "Convert to draft",
-  [PULL_REQUEST_ACTION.SUBMIT_REVIEW]: "Submit review",
-} as const satisfies Record<PullRequestAction, string>;
+} as const satisfies Record<StateAction, string>;
+
+/** Whether the change out is one of the pill's own, which the pill says while it is out. */
+function stateAction(action: PullRequestAction | undefined): action is StateAction {
+  return (
+    action === PULL_REQUEST_ACTION.READY_FOR_REVIEW ||
+    action === PULL_REQUEST_ACTION.CONVERT_TO_DRAFT
+  );
+}
 
 /** The word for where the pull request stands, which the pill says. */
 const STATE_WORDS = {
@@ -190,9 +204,9 @@ export function PullRequestStateMenu({
   const inner = (
     <>
       <PullRequestMark pullRequest={pullRequest} />
-      {writes.pending === undefined
-        ? STATE_WORDS[pullRequest.state]
-        : `${ACTION_WORDS[writes.pending]}…`}
+      {stateAction(writes.pending)
+        ? `${ACTION_WORDS[writes.pending]}…`
+        : STATE_WORDS[pullRequest.state]}
     </>
   );
   if (actions.length === 0) {

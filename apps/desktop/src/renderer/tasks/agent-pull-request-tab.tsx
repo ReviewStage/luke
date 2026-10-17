@@ -68,6 +68,12 @@ import {
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
+import {
+  LabelPicker,
+  ReviewerPicker,
+  type ReviewOptions,
+  useReviewOptions,
+} from "./pull-request-pickers";
 import { PullRequestReview } from "./pull-request-review";
 import { PullRequestStack } from "./pull-request-stack";
 import {
@@ -881,7 +887,16 @@ interface OverviewParts {
 }
 
 /** Under the title: its labels, the branches and the stack it stands in, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
-function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }): React.JSX.Element {
+function PullRequestHead({
+  parts,
+  now,
+  editing,
+}: {
+  parts: OverviewParts;
+  now: number;
+  /** The tab's writes and what its pickers offer, which the reviewer and label pickers send through and read. */
+  editing: { readonly writes: PullRequestWrites; readonly options: ReviewOptions };
+}): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
     return (
@@ -906,7 +921,10 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
     <>
-      <PullRequestLabels labels={pullRequest.labels ?? []} />
+      <div className="pull-request-label-row">
+        <PullRequestLabels labels={pullRequest.labels ?? []} />
+        <LabelPicker labels={pullRequest.labels ?? []} {...editing} />
+      </div>
       <div className="pull-request-branch-row">
         <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
           <p className="pull-request-branches">
@@ -924,7 +942,17 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
           {mergedAt === null ? null : "Merged "}
           <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
         </span>
-        {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+        <span className="pull-request-reviewers">
+          {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+          {open ? (
+            <ReviewerPicker
+              author={author?.login}
+              requested={pullRequest.requested}
+              requestedTeams={pullRequest.requestedTeams ?? []}
+              {...editing}
+            />
+          ) : null}
+        </span>
       </div>
       {open ? <MergeLine pullRequest={pullRequest} /> : null}
     </>
@@ -1567,6 +1595,7 @@ export function AgentPullRequestTab({
   };
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
+  const options = useReviewOptions(agentId, control.readReviewOptions);
   return (
     <div className="file-view pull-request-tab ph-no-capture">
       <PullRequestBar
@@ -1583,7 +1612,7 @@ export function AgentPullRequestTab({
         <>
           <header className="pull-request-header">
             <HeaderTitle title={title} />
-            <PullRequestHead parts={parts} now={now} />
+            <PullRequestHead parts={parts} now={now} editing={{ writes, options }} />
           </header>
           <PullRequestTabs
             tabs={tabsOf(parts, published, bar)}
