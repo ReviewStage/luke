@@ -47,7 +47,7 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { type EveReach, eveFor, stoppedForGood } from "../agents/coder-host/stop.js";
+import { type EveReach, eveFor, standsStopped, stoppedForGood } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   CURSOR_START,
@@ -128,7 +128,8 @@ import { readTaskCode, readTaskWork } from "./task-work-store.js";
  * `GET /api/tasks/{id}` is the window opening a plan, a read that moves
  * nothing: the list stands newest started first whatever is opened. Its
  * `DELETE` stops every coding agent of the plan first, through the one Stop
- * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the plan. Each
+ * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the plan, as
+ * its archive stops them before it archives them with the plan. Each
  * row of the list carries what the plan's coding agents are doing and what
  * they published, in brief, where it has any (`packages/service/src/agents/plan-agents.ts`). A pin
  * and an archive are changes like a rename, though a pin is the asking
@@ -507,8 +508,19 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
  * move is confirmed in the workspace the plan moves to, and a move confirms
  * the repository the row names under its lock, so one changed meanwhile is
  * the one confirmed.
+ *
+ * An archive stops every coding agent of the plan first, as a Stop and an
+ * agent's own archive stop one, then archives them with the plan under its
+ * lock (`updateTask`), each read again under its conversation's lock. An
+ * eve that refuses a Stop, an agent still coming up or with a message
+ * awaiting its turn, which no Stop can name yet, or one handed a message
+ * after it was stopped, leaves the plan and every agent standing and the
+ * archive refused as not ready, so it is asked again a moment later.
  */
 const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: TasksAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
   userId: string,
   taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -526,6 +538,13 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       : Effect.succeed(organizationId);
   const repository =
     "repository" in changes ? yield* reachableRepository(workspace, changes.repository) : undefined;
+  const archiving = changes.archived === true;
+  if (archiving) {
+    const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
+    yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, agent), {
+      discard: true,
+    });
+  }
   const task = yield* updateTask(
     userId,
     taskId,
@@ -538,11 +557,14 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       ...("archived" in changes ? { archived: changes.archived } : undefined),
     },
     organizationId === undefined ? undefined : movedRepositoryReached(organizationId),
+    archiving ? standsStopped : undefined,
   ).pipe(
     Effect.catch((failure) =>
       failure._tag === "MoveRefused"
         ? Effect.fail(failure.refusal)
-        : hostedStoreOrArchived(Effect.fail(failure)),
+        : failure._tag === "TaskAgentUnstopped"
+          ? Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY)
+          : hostedStoreOrArchived(Effect.fail(failure)),
     ),
   );
   if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -614,7 +636,9 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/taskEndpoint")(function* (
       plan: opened.value.task,
     } satisfies TaskAnswer);
   }
-  if (incoming.method === HTTP_METHOD.PATCH) return yield* updateEndpoint(userId, taskId);
+  if (incoming.method === HTTP_METHOD.PATCH) {
+    return yield* updateEndpoint(seams, writer, request, userId, taskId);
+  }
   return yield* deleteEndpoint(seams, writer, request, userId, taskId);
 });
 

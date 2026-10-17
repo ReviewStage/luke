@@ -597,3 +597,60 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
     },
   });
 }
+test("Archive asks first of a plan with agents, from its menu and its row's own button alike, and archives on its answer, while a plan with none archives at once", async () => {
+  const working: TaskSummary = {
+    ...OTHER,
+    agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
+  };
+  const idle: TaskSummary = {
+    ...OTHER,
+    id: "5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    name: "Rate limits",
+  };
+  const marked: [string, TaskMark][] = [];
+  const tasks = tasksControl({
+    tasks: [working, idle],
+    onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
+  });
+  const asked: Asked = {
+    opened: [],
+    openedOnGitHub: [],
+    changed: [],
+    deleted: [],
+    renamed: [],
+    marked: [],
+  };
+  const archiveButton = (container: HTMLElement) => {
+    const button = container.querySelector('.sidebar-task-mark[aria-label="Archive"]');
+    assert.ok(button instanceof HTMLButtonElement);
+    return button;
+  };
+
+  const row = mount(sidebarTask(tasks, working, asked));
+  act(() => archiveButton(row).click());
+  assert.equal(asking(), true, "Archive asks first of a plan with agents");
+  assert.equal(
+    dialog()?.textContent?.includes(
+      "Archiving “Billing export” will stop and archive all its agents. Unarchiving it brings them back.",
+    ),
+    true,
+  );
+  act(() => answer("Cancel").click());
+  assert.deepEqual(marked, []);
+  const rowButton = row.querySelector(".sidebar-task");
+  assert.ok(rowButton instanceof HTMLButtonElement);
+  rightClick(rowButton, 40, 60);
+  choose("Archive");
+  await act(async () => answer("Archive").click());
+  assert.deepEqual(marked, [[working.id, "archive"]]);
+  assert.equal(asking(), false);
+
+  unmountAll();
+  const idleArchive = archiveButton(mount(sidebarTask(tasks, idle, asked)));
+  act(() => idleArchive.click());
+  assert.equal(asking(), false, "a plan with no agents archives at once");
+  assert.deepEqual(marked, [
+    [working.id, "archive"],
+    [idle.id, "archive"],
+  ]);
+});

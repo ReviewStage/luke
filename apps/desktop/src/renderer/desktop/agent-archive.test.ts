@@ -108,7 +108,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchiv
   );
 }
 
-test("an archived agent's card says who archived it, an agent or Luke for a member, the reader as you, and the reason given", () => {
+test("an archived agent's card says who archived it, an agent or Luke for a member, the reader as you, the reason given, and an archive made with its task", () => {
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
   const byAgent = archivedCardNotes("user-sam", {
     by: CODING_AGENT_ARCHIVER.AGENT,
@@ -121,10 +121,20 @@ test("an archived agent's card says who archived it, an agent or Luke for a memb
   });
   document.body.innerHTML = "";
   const byLuke = archivedCardNotes("user-dean", { by: CODING_AGENT_ARCHIVER.LUKE, member: dean });
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  document.body.innerHTML = "";
+  const withTask = archivedCardNotes("user-sam", {
+    by: CODING_AGENT_ARCHIVER.MEMBER,
+    member: dean,
+    withTask: true,
+  });
 
   assert.deepEqual(byAgent, [
     "Archived by Bill by seat for Dean Stratakos",
     "Its pull request merged.",
   ]);
   assert.deepEqual(byLuke, ["Archived by Luke for you"]);
+  assert.deepEqual(withTask, ["Archived with its task by Dean Stratakos"]);
 });

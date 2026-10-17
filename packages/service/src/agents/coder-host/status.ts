@@ -183,6 +183,7 @@ function archivedByOf(
       ? undefined
       : { agent: { id: archive.agentId, name: archive.agentName ?? "" } }),
     ...(archive.reason === undefined ? undefined : { reason: archive.reason }),
+    ...(archive.withTask === true ? { withTask: true } : undefined),
   };
 }
 

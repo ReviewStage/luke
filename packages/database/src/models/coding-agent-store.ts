@@ -298,6 +298,7 @@ const ArchivedByColumnSchema = Schema.NullOr(
     agentId: Schema.optionalKey(Schema.String),
     agentName: Schema.optionalKey(Schema.String),
     reason: Schema.optionalKey(Schema.String),
+    withTask: Schema.optionalKey(Schema.Boolean),
   }),
 );
 /** An author as the agent's row holds it. */

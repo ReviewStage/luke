@@ -7,6 +7,7 @@ import {
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
+import type { TaskArchivedAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
@@ -26,13 +27,18 @@ import {
   type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
-import { type AgentTurnStanding, codingAgentSummary, summaryAccounts } from "./status.js";
+import {
+  type AgentTurnStanding,
+  codingAgentStatusOf,
+  codingAgentSummary,
+  summaryAccounts,
+} from "./status.js";
 
 /**
  * stop.ts -- the one Stop: eve's cancel of a coding agent's turn under way, then the row's stamp.
  *
- * A Stop pressed on the agent, its archive, and the delete of the plan it
- * works on all stop it here, reaching eve as the developer over the
+ * A Stop pressed on the agent, its archive, and the archive or the delete of
+ * the plan it works on all stop it here, reaching eve as the developer over the
  * request's own authorization. The cancel names the turn the row was
  * written for, so a turn that ended meanwhile is not followed by a newer
  * one stopped in its place, and an eve that refuses leaves the row as it
@@ -163,4 +169,23 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }
+});
+
+/**
+ * Whether an agent a plan's archive stopped still stands stopped, read under
+ * its conversation's lock as the archive holds it: neither starting, nor
+ * running, nor holding a line awaiting the turn it opens, a turn whose Stop
+ * is on its way to eve reading as stopped, as `stoppedForGood` reads it.
+ */
+export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
+  agent: TaskArchivedAgent,
+) {
+  const turns = yield* latestTurnsOfReached([agent.conversationId]);
+  const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);
+  const status = codingAgentStatusOf(turns.get(agent.conversationId), {
+    createdAt: agent.createdAt,
+    now: yield* Clock.currentTimeMillis,
+    lineAwaits: awaiting.has(agent.conversationId),
+  });
+  return status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
 });
