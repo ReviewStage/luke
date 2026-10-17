@@ -5260,24 +5260,6 @@ button.integration-tool-head:hover,
   gap: var(--section-gap);
 }
 
-/* A row holding two controls, a day and its time or an address and its
-   copy, stands them a control's gap apart at the row's end. */
-.automation-row-controls {
-  display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--control-gap);
-}
-
-/* A field beside the pickers stands at their height and corner, so a row's
-   controls read as one set. */
-.automation-row-controls > .settings-input {
-  height: var(--control-height);
-  padding-block: 0;
-  border-radius: var(--control-radius);
-}
-
 /* The servers left on, by their marks, inside the servers row's field chip. */
 .automation-servers {
   display: inline-flex;
@@ -5304,10 +5286,6 @@ button.integration-tool-head:hover,
   flex: 1 1 200px;
 }
 
-.automation-row-controls {
-  flex-wrap: wrap;
-}
-
 .automation-form .settings-picker {
   max-width: 100%;
 }
@@ -5324,10 +5302,10 @@ button.integration-tool-head:hover,
   max-width: 100%;
 }
 
-.automation-webhook-url {
+/* A webhook's address or its shown secret, a little wider to show more of it. */
+.automation-webhook-field {
   width: 240px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  max-width: 100%;
 }
 
 /* What stops a save stands under its row inside the card, as a Settings
