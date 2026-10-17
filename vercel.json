@@ -353,6 +353,10 @@
           "dest": "/api/default.js?route=live/plan-inbox"
         },
         {
+          "src": "/api/live/plans",
+          "dest": "/api/default.js?route=live/plans"
+        },
+        {
           "src": "/api/mac-commands",
           "dest": "/api/default.js?route=mac-commands"
         },

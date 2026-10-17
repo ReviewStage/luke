@@ -22,6 +22,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { taskListLiveStatements } from "../tasks/task-list-live.js";
 import { type LiveSealer, LiveSealing } from "./realtime.js";
 
 /**
@@ -41,6 +42,9 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * one plan's inbox, or one agent's, the same way: its open items and its
  * latest settled ones as one statement, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
+ * `GET /api/live/plans` answers the plan list the same way: the plans the
+ * account reaches and every agent of them and with no plan, as two sealed
+ * statements built with the account's id (`task-list-live.ts`).
  * Nothing else here reads a row: the store is read by Realtime.
  */
 
@@ -114,6 +118,29 @@ const getRequest = Effect.gen(function* () {
   return yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
 });
 
+const taskListLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskListLiveEndpoint")(function* (
+  seams: LiveAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest
+> {
+  const request = yield* getRequest;
+  const account = yield* seams.resolveUserId(request);
+  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const sealing = yield* LiveSealing;
+  const statements = taskListLiveStatements(account.value);
+  if (Option.isNone(sealing) || Option.isNone(statements)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  const { seal, url } = sealing.value;
+  const queries = yield* Effect.all({
+    plans: seal(statements.value.plans),
+    agents: seal(statements.value.agents),
+  }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
+});
+
 const taskInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskInboxLiveEndpoint")(function* (
   seams: LiveAppSeams,
 ): Effect.fn.Return<
@@ -158,6 +185,11 @@ export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
       ANY_METHOD,
       HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX,
       hostedRefusing(agentInboxLiveEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.LIVE_TASKS,
+      hostedRefusing(taskListLiveEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

@@ -16,6 +16,7 @@
     "./issue-view": "./src/issue-view.js",
     "./avatar-grant": "./src/avatar-grant.js",
     "./live-wire": "./src/live-wire.js",
+    "./task-list-live": "./src/task-list-live.js",
     "./video-avatar": "./src/video-avatar.js",
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",
