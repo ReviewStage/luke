@@ -111,6 +111,43 @@ export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRe
 }
 
 /**
+ * Refuses, as unauthenticated, a request that carries no `Authorization`:
+ * one that only a browser's session cookie could name. A request that
+ * carries one is read by its bearer alone (`auth/bearer.ts`'s
+ * `requestUserId`), so an endpoint asks for this where its work reaches eve
+ * as the developer over that bearer and must not go on without it: a
+ * delete ends the eve sessions of what it deletes (`agents/retire-sessions.ts`),
+ * and a refusal there goes unnoticed. Note that the endpoint asks for it
+ * itself rather than its route file handing the group a bearer-only
+ * resolver, because every function holding a group answers every path the
+ * group declares (`apps/web/server/function-dispatch.ts`).
+ */
+export function hostedBearerOnly(request: Request): Effect.Effect<void, HostedRefusal> {
+  return request.headers.has("authorization")
+    ? Effect.void
+    : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+}
+
+/**
+ * The headers bytes a member, an agent, or GitHub wrote are served under
+ * beside the type the service checked them to be: a task's picture, an
+ * inbox attachment, a picture a tool answered, a workspace's photo, and an
+ * image GitHub's rendering of a pull request names. The browser is told not
+ * to sniff them for another type; nothing on the way may keep a copy, since
+ * they are one account's or one workspace's; and a document a browser opens
+ * from them runs no script, loads nothing, and stands in an origin of its
+ * own (`sandbox`). Note that the policy is what keeps markup among them, an
+ * SVG's, from acting as this origin, because every account route takes the
+ * browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`) and a
+ * tab opened on one of these paths carries it.
+ */
+export const HOSTED_BYTES_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "cache-control": "private, no-store",
+  "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+} as const;
+
+/**
  * A store read or write the handler cannot answer without: its failure is
  * logged and the request is refused as unavailable, since a database the
  * service cannot reach is an outage the caller may retry and not a defect of

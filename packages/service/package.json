@@ -195,6 +195,7 @@
     "./terminal/service": "./src/terminal/service.js",
     "./testing/clock-driven": "./src/testing/clock-driven.js",
     "./testing/coder-scripted-model": "./src/testing/coder-scripted-model.js",
+    "./testing/content-policy": "./src/testing/content-policy.js",
     "./testing/eve-events": "./src/testing/eve-events.js",
     "./testing/eve-scripted-model": "./src/testing/eve-scripted-model.js",
     "./testing/eve-turns": "./src/testing/eve-turns.js",
