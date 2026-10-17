@@ -1,5 +1,6 @@
 import type { CodeLines } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
+import { IconButton } from "@luke/ui";
 import {
   type ComponentProps,
   createContext,
@@ -166,14 +167,11 @@ function CopyCodeButton({ code }: { code: string }): ReactNode {
   const { state, copy } = useCopyFeedback();
   return (
     <Tooltip label={copyHint(state, COPY_LABEL)}>
-      <button
-        type="button"
-        className="icon-button code-card-action"
-        aria-label={COPY_LABEL}
+      <IconButton
+        icon={<CopyGlyph state={state} />}
+        label={COPY_LABEL}
         onClick={() => copy(code)}
-      >
-        <CopyGlyph state={state} />
-      </button>
+      />
     </Tooltip>
   );
 }

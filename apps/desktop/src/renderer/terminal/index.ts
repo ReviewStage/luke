@@ -1,8 +1,9 @@
 import type { TerminalModule } from "./contract";
+import "./index.css";
 import { mountTerminal } from "./terminal-surface";
 
 /**
- * index.ts -- the terminal bundle: xterm.js and its addons, set on `window` for a Terminal tab to mount (`./contract.ts`).
+ * index.ts -- the terminal bundle: xterm.js and its addons, and their stylesheet, imported by a Terminal tab to mount (`./contract.ts`).
  */
 
-window.lukeTerminal = { mount: mountTerminal } satisfies TerminalModule;
+export const terminal: TerminalModule = { mount: mountTerminal };

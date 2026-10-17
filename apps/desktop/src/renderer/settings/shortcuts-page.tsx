@@ -1,8 +1,8 @@
-import type { ExperimentChoices } from "@luke/settings";
+import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
+import { APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
+import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection } from "@luke/ui";
 import { Shortcut } from "../shortcut";
-import { SettingsGroup } from "./settings-group";
 
 /**
  * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: the window's own shortcuts, grouped as the menu bar groups them, listed to be found rather than changed.
@@ -16,28 +16,40 @@ import { SettingsGroup } from "./settings-group";
  * answers only while Luke's window has the keyboard, so they are fixed and
  * listed here to be found, not chosen, under the groups the table keeps —
  * the menu bar's own — each row the command's name and its chord. A gated
- * feature's shortcut is listed only while the account has its experiment on.
+ * feature's shortcut is listed only while the account has its experiment on,
+ * and a platform feature's only where the platform offers it.
+ *
+ * Each group is `@luke/ui`'s `SettingsSection` and each command its
+ * `SettingsRow` at the list density, a reference's line rather than a
+ * setting's, the chord in the row's controls. Note that each row stands
+ * in a wrapper wearing its search anchor, because the shared row takes no
+ * attribute of a caller's.
  */
 export function WindowShortcutSections({
   experiments,
+  capabilities,
 }: {
   experiments: ExperimentChoices;
+  capabilities: readonly HostCapability[];
 }): React.JSX.Element {
   return (
     <>
-      {shownShortcutGroups(experiments).map((group) => (
-        <SettingsGroup key={group.title} title={group.title}>
+      {shownShortcutGroups(experiments, capabilities).map((group) => (
+        <SettingsSection key={group.title} title={group.title}>
           {group.commands.map((command) => (
-            <div
-              key={command}
-              className="settings-row shortcut-row"
-              {...searchAnchorProps(command)}
-            >
-              <span className="shortcut-name">{APP_SHORTCUTS[command].label}</span>
-              <Shortcut chord={APP_SHORTCUTS[command].chord} spoken />
+            <div key={command} {...searchAnchorProps(command)}>
+              <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={APP_SHORTCUTS[command].label}>
+                {() => (
+                  <Shortcut
+                    className="shortcut-value"
+                    chord={APP_SHORTCUTS[command].chord}
+                    spoken
+                  />
+                )}
+              </SettingsRow>
             </div>
           ))}
-        </SettingsGroup>
+        </SettingsSection>
       ))}
     </>
   );

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { Duration, Redacted } from "effect";
+import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { serializeModelInputSchema } from "eve/tools";
@@ -10,14 +13,17 @@ import { toolsOf } from "../agent-runtime/tools.js";
 import { DEPLOYMENT_PRESENCE, lukeAccount } from "../brain-host/auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_AUTHENTICATOR,
   BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
   BRAIN_HOST_HEADER,
+  BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "../brain-host/bounds.js";
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { CODER } from "./bounds.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
@@ -63,8 +69,9 @@ function deploymentOpening(turn: string): Request {
   });
 }
 
-test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, and its typed opening of the account's own conversation, are minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; a spoken turn, a stream, and another account's session are refused", async () => {
-  const channel = coderChannelInput(
+/** The coder channel over a store in which the account reaches its own session and conversation alone. */
+function coderChannel() {
+  return coderChannelInput(
     async () => undefined,
     {
       reachesSession: async (userId, sessionId) => userId === ACCOUNT && sessionId === OWN_SESSION,
@@ -77,14 +84,23 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
       presents: DEPLOYMENT_PRESENCE.ACCOUNT,
     },
   );
-  assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
-  const door = async (request: Request): Promise<DoorAnswer> => {
+}
+
+/** The channel's door as a request meets it: the principal admitted, or the word refused with. */
+function doorOf(channel: ReturnType<typeof coderChannelInput>) {
+  return async (request: Request): Promise<DoorAnswer> => {
     const answer = await routeAuth(request, channel.auth);
     if (!(answer instanceof Response)) return { admitted: answer };
     // SAFETY: eve's own refusal body, whose `error` field is the word the door threw.
     const refusal = (await answer.json()) as { error: string };
     return { refused: refusal.error };
   };
+}
+
+test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, and its typed opening of the account's own conversation, are minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; a spoken turn, a stream, and another account's session are refused", async () => {
+  const channel = coderChannel();
+  assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
+  const door = doorOf(channel);
 
   // The developer's own follow-up on the same session, as the agent's turn runs under it.
   const developer = await lukeAccount(async () => ACCOUNT)(
@@ -132,6 +148,24 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
   });
 });
 
+test("the deployment's cancel of a turn, which a continue started through start_agent stops its source with, is admitted on the named account's own session as the developer's own principal, with no row of the table, and refused on a session the account does not reach", async () => {
+  const door = doorOf(coderChannel());
+  const cancel = (sessionId: string) =>
+    new Request(`https://luke.test/eve/v1/session/${sessionId}/cancel`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${SECRET}`, [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT },
+    });
+
+  const { admitted } = await door(cancel(OWN_SESSION));
+  assert.ok(admitted);
+  assert.deepEqual(
+    [admitted.authenticator, admitted.principalType, admitted.principalId],
+    [BRAIN_HOST_AUTHENTICATOR.ACCOUNT, BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT, ACCOUNT],
+  );
+  assert.equal(admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER], BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: BRAIN_HOST_REFUSAL.NOT_OWNER });
+});
+
 test("an agent on a task is told of the task's links and pages, and one an automation started with no task of neither", () => {
   const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
@@ -172,6 +206,9 @@ test("the session and the post tool are told never to ask for a credential or a 
   }
   assert.ok(
     INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
+  );
+  assert.ok(
+    CHAT_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
   );
 });
 
@@ -266,5 +303,58 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
       assert.ok(instructions.includes('NODE_PATH="$(npm root -g)"'), brief);
       assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);
     }
+  }
+});
+
+/** The task link the golden's on-task prompts were composed with. */
+const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
+
+/**
+ * Main's own instructions as they stood before Chat, recorded from main's
+ * code for each brief, on a task and on none: what an agent whose starter
+ * has not turned Chat on must still read, byte for byte.
+ */
+const BEFORE_CHAT = Schema.decodeUnknownSync(
+  Schema.Record(Schema.String, Schema.Struct({ onTask: Schema.String, taskless: Schema.String })),
+)(
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL("../../../fixtures/coder-instructions/chat-off.json", import.meta.url)),
+      "utf8",
+    ),
+  ),
+);
+
+test("with Chat off the instructions are main's own, byte for byte, and with it on they add the chat section alone", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const before = BEFORE_CHAT[brief];
+    assert.ok(before, brief);
+    const off = {
+      onTask: coderInstructions("Acme/Relay", brief, true, TASK_LINK),
+      taskless: coderInstructions("Acme/Relay", brief, false, null),
+    };
+    assert.equal(off.onTask, before.onTask, brief);
+    assert.equal(off.taskless, before.taskless, brief);
+    const on = coderInstructions("Acme/Relay", brief, true, TASK_LINK, undefined, true);
+    assert.ok(on.includes("## Chat with other agents"), brief);
+    const section = on.slice(on.indexOf("\n\n## Chat with other agents"));
+    const end = section.indexOf("\n\n## ", 2);
+    assert.equal(on.replace(section.slice(0, end), ""), before.onTask, brief);
+    for (const tool of Object.values(CHAT_TOOLS)) {
+      assert.ok(!off.onTask.includes(tool.name), `${brief} with Chat off names ${tool.name}`);
+    }
+  }
+});
+
+test("with Chat on the session keeps the developer's inbox for what it needs of the developer, and is told of chat for the other agents, @luke, and people, with which to use when", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief, false, null, undefined, true);
+    assert.ok(instructions.includes("## The developer's inbox"), brief);
+    assert.ok(instructions.includes("## Chat with other agents"), brief);
+    for (const tool of [...Object.values(CHAT_TOOLS), ...Object.values(INBOX_TOOLS)]) {
+      assert.ok(instructions.includes(tool.name), `${brief} names ${tool.name}`);
+    }
+    assert.ok(instructions.includes(`\`${CHAT_NOTICE_LEAD} ·\``), brief);
+    assert.ok(instructions.includes("Never put one question in both places."), brief);
   }
 });

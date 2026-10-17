@@ -231,6 +231,30 @@ body {
   gap: var(--luke-space-12);
 }
 
+/* The row the menu example right-clicks, marked out so a reader sees where to press. */
+.catalog-menu-row {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: var(--luke-space-24) var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+/* A row of attachment chips, with room above for the discs on their corners. */
+.catalog-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-12);
+  margin: 0;
+  padding: var(--luke-space-12) 0 0;
+  list-style: none;
+}
+
 /* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;
@@ -265,6 +289,16 @@ body {
 }
 
 .catalog-empty-room-narrow {
+  width: 200px;
+}
+
+/* A region a failed read would have filled, its failure centred in it. */
+.catalog-error-region {
+  align-items: center;
+  justify-content: center;
+}
+
+.catalog-error-narrow {
   width: 200px;
 }
 
@@ -314,9 +348,31 @@ body {
   max-width: 400px;
 }
 
-/* The tooltip example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
+/* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;
+}
+
+/* A toolbar folding its buttons, as an app's container query does. */
+.catalog-folded {
+  --luke-fold: folded;
+}
+
+/* A toolbar whose corner resizes it, folding its buttons below 360px. */
+.catalog-folding-toolbar {
+  overflow: hidden;
+  width: 480px;
+  max-width: 100%;
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  resize: horizontal;
+  container: catalog-folding-toolbar / inline-size;
+}
+
+@container catalog-folding-toolbar (width < 360px) {
+  .catalog-folding-toolbar > * {
+    --luke-fold: folded;
+  }
 }
 
 /* A bare text input standing in for a control an example holds. */
@@ -346,7 +402,13 @@ body {
   height: 120px;
 }
 
-/* Room a placeholder stands in, as wide as what it stands for. */
+/* Room a placeholder stands in, as wide as what it stands for; a block's
+   room is a plot's whole box. */
+.catalog-skeleton-block {
+  width: 240px;
+  height: 96px;
+}
+
 .catalog-skeleton-line {
   width: 160px;
 }
@@ -392,6 +454,83 @@ body {
 .catalog-screen-detail {
   display: flex;
   height: 480px;
+}
+
+/* The window's toolbar a page under the toolbar frame stands still: one
+   row, its title at the toolbar's own 15px, a hairline under it, as the
+   desktop window draws it. */
+.catalog-window-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  min-height: 46px;
+  padding: var(--luke-space-8) var(--luke-page-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.catalog-window-toolbar-title {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: var(--luke-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A board's columns, each a card's width, which outrun a narrow screen so
+   the page scrolls them sideways. */
+.catalog-board {
+  display: flex;
+  gap: var(--luke-space-12);
+}
+
+.catalog-board-column {
+  flex: 1 0 220px;
+}
+
+/* A screen as tall as a window, which scrolls the public page it holds as a
+   document would, so its banner stands still at the top. */
+.catalog-screen-public {
+  height: 480px;
+  overflow-y: auto;
+}
+
+/* The words an example lays in a public page's banner and footer, as the
+   site's own chrome lays them. */
+.catalog-public-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-16);
+}
+
+.catalog-public-wordmark {
+  font-family: var(--luke-font-display);
+  font-weight: var(--luke-weight-bold);
+}
+
+.catalog-public-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-16);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-label-size);
+}
+
+.catalog-public-footer {
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A release in the wide page's example: its version and date on a rail
+   beside its notes, as the changelog lays them. */
+.catalog-public-release {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: var(--luke-space-40);
 }
 
 /* Luke's face at the size the OAuth cards open with. */

@@ -7,5 +7,5 @@
  * `Chip` when its screen is migrated.
  */
 
-export { CHIP_LOOK, type ChipLook } from "@luke/ui";
+export { CHIP_LOOK } from "@luke/ui";
 export { CompatChip as Chip } from "@luke/ui/compat";

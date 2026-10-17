@@ -175,6 +175,83 @@
     "automationName": {
       "type": "string"
     },
+    "from": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "messageSteps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "messageStepParts": {
+          "type": "number",
+          "minimum": 0
+        },
+        "steps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "totalSteps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "branch": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "steps",
+        "totalSteps"
+      ],
+      "additionalProperties": false
+    },
+    "continuedBy": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forked": {
+            "type": "boolean"
+          },
+          "messageId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          }
+        },
+        "required": [
+          "agentId",
+          "title",
+          "forked"
+        ],
+        "additionalProperties": false
+      }
+    },
     "workspaceId": {
       "type": "string"
     },

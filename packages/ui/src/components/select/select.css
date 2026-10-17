@@ -1,0 +1,8 @@
+/* select.css -- a select's width where it is not its value's own: the
+   field column a settings row's pop-ups share, its profile's role. */
+
+@layer components {
+  .luke-select-field {
+    width: var(--luke-select-field-width);
+  }
+}

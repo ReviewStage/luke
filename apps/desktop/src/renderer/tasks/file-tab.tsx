@@ -1,12 +1,12 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { ERROR_STATE_PLACEMENT, ErrorState, type ErrorStatePlacement } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { useFindOpen } from "../find-in-tab";
-import { READ_FAILURE_PLACE, ReadFailure, type ReadFailurePlace } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
@@ -230,14 +230,18 @@ function ReadNotice({
   /** The commit the file was read at, where one pinned it. */
   commit: string | undefined;
   onRetry: () => void;
-  place: ReadFailurePlace;
+  place: ErrorStatePlacement;
 }): React.JSX.Element {
   if (read.kind === FILE_READ.FAILED || refusalPasses(read.refusal)) {
     const line =
       read.kind === FILE_READ.FAILED
         ? "The file could not be read."
         : refusalLine(read.refusal, read.branch, commit);
-    return <ReadFailure line={line} onRetry={onRetry} place={place} />;
+    return (
+      <ErrorState onRetry={onRetry} placement={place}>
+        {line}
+      </ErrorState>
+    );
   }
   return (
     <p className="m-0" role="alert">
@@ -419,7 +423,7 @@ export function FileTab({
             read={read}
             commit={file.commit}
             onRetry={readLit}
-            place={READ_FAILURE_PLACE.CENTRED}
+            place={ERROR_STATE_PLACEMENT.CENTRED}
           />
         </div>
       ) : (
@@ -429,7 +433,7 @@ export function FileTab({
               read={read}
               commit={file.commit}
               onRetry={readLit}
-              place={READ_FAILURE_PLACE.INLINE}
+              place={ERROR_STATE_PLACEMENT.INLINE}
             />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
