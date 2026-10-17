@@ -18,7 +18,7 @@ import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
 import { personalWorkspace } from "../../schemas/personal-workspace.js";
-import { task } from "../../schemas/plan.js";
+import { task } from "../../schemas/task.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   automationRunsSince,

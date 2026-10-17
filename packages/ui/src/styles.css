@@ -12,6 +12,7 @@
 @import "./components/text/text.css";
 @import "./components/button/button.css";
 @import "./components/chip/chip.css";
+@import "./components/dialog/dialog.css";
 @import "./components/form-field/form-field.css";
 @import "./components/text-field/text-field.css";
 @import "./components/checkbox/checkbox.css";
@@ -20,4 +21,4 @@
 @import "./components/spinner/spinner.css";
 @import "./components/skeleton/skeleton.css";
 @import "./components/settings-row/settings-row.css";
-@import "./components/dialog/dialog.css";
+@import "./components/auth-page/auth-page.css";

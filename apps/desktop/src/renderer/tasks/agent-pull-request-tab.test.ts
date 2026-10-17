@@ -187,6 +187,8 @@ let previews: DiffViewProps[] = [];
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+/** What the service waits on before it answers a change, where a test holds it; none answers at once. */
+let changeHeld: Promise<void> | undefined;
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -197,6 +199,7 @@ beforeEach(() => {
   previews = [];
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+  changeHeld = undefined;
   // The diff bundle, a script of its own the panel loads, stood in for at its global.
   window.lukeDiffView = {
     mount: (_host, props) => {
@@ -213,7 +216,11 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
         if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
           changes.push([request.payload.agentId, request.payload.request]);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: changeAnswer });
+          const answer = changeAnswer;
+          return (changeHeld ?? Promise.resolve()).then(() => ({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: answer,
+          }));
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
           images.push(request.payload.src);
@@ -1591,4 +1598,171 @@ test("a press outside the review panel closes it, its words kept, and one on a s
   } finally {
     vi.restoreAllMocks();
   }
+});
+
+/** A review carrying the threads given, as the conversation's read answers one. */
+function reviewWith(threads: readonly ReviewThread[]): CodingAgentOverviewConversation {
+  return {
+    ...CONVERSATION,
+    conversation: [
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.COMMENTED,
+        html: null,
+        body: "",
+        at: 2_500,
+        url: `${PAGE}#pullrequestreview-9`,
+        threads,
+      },
+    ],
+  };
+}
+
+/** The press of the words given under the thread. */
+function threadPress(thread: HTMLElement, label: string): HTMLButtonElement {
+  return (
+    [...thread.querySelectorAll<HTMLButtonElement>(".pull-request-thread-actions button")].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the thread offers ${label}`)
+  );
+}
+
+/** Writes a reply on the thread as the member would, the field opened first. */
+function writeReply(thread: HTMLElement, words: string): void {
+  act(() => threadPress(thread, "Reply…").click());
+  const field =
+    thread.querySelector<HTMLTextAreaElement>('textarea[aria-label="Reply"]') ??
+    assert.fail("Reply… opens the reply's field");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The thread as GitHub holds it once the changes asked so far were made: their replies after its comment, and resolved by the last resolve or unresolve. */
+function threadAfterChanges(): ReviewThread {
+  const base = thread({ id: "PRRT_flag" });
+  let resolved = false;
+  const replies: ReviewThread["comments"][number][] = [];
+  for (const [, request] of changes) {
+    if (request.action === PULL_REQUEST_ACTION.REPLY_TO_THREAD) {
+      replies.push({
+        by: CHARLES_ON_GITHUB,
+        html: null,
+        body: request.body,
+        at: 3_000,
+        url: `${PAGE}#discussion_r${10 + replies.length}`,
+      });
+    }
+    if (request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD) resolved = true;
+    if (request.action === PULL_REQUEST_ACTION.UNRESOLVE_THREAD) resolved = false;
+  }
+  return { ...base, resolved, comments: [...base.comments, ...replies] };
+}
+
+test("a thread is replied on, resolved, and opened again from under its comments, each asked of the service for the agent by the thread's id, the thread then drawn as GitHub holds it", async () => {
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => Promise.resolve({ pullRequest: reviewWith([threadAfterChanges()]) }),
+    }),
+  );
+  const card = (): HTMLElement =>
+    tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+  const labels = () => words(card(), ".pull-request-thread-label");
+
+  writeReply(card(), "Renamed in the next push.");
+  act(() => threadPress(card(), "Reply").click());
+  await settle();
+  assert.equal(card().querySelector("textarea"), null, "the field closes once GitHub took it");
+  assert.match(
+    card().querySelector(".pull-request-thread-comments")?.textContent ?? "",
+    /Renamed in the next push\./u,
+    "the reply is drawn under the thread once read again",
+  );
+
+  act(() => threadPress(card(), "Resolve conversation").click());
+  await settle();
+  assert.deepEqual(labels(), ["Resolved"]);
+
+  act(() => threadPress(card(), "Unresolve conversation").click());
+  await settle();
+  assert.deepEqual(labels(), []);
+  assert.ok(threadPress(card(), "Resolve conversation"), "the thread stands open again");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.REPLY_TO_THREAD,
+        threadId: "PRRT_flag",
+        body: "Renamed in the next push.",
+      },
+    ],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.UNRESOLVE_THREAD, threadId: "PRRT_flag" }],
+  ]);
+});
+
+test("while a thread's resolve is out, its reply stands still, neither sent nor let go, so nothing is posted twice", async () => {
+  const held = Promise.withResolvers<void>();
+  changeHeld = held.promise;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => Promise.resolve({ pullRequest: reviewWith([threadAfterChanges()]) }),
+    }),
+  );
+  const card = (): HTMLElement =>
+    tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+
+  writeReply(card(), "Done.");
+  act(() => threadPress(card(), "Resolve conversation").click());
+  const field = card().querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail();
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  assert.equal(threadPress(card(), "Reply").disabled, true);
+  assert.equal(card().querySelector("textarea")?.value, "Done.", "Escape lets nothing go");
+  held.resolve();
+  await settle();
+  assert.deepEqual(
+    changes.map(([, request]) => request.action),
+    [PULL_REQUEST_ACTION.RESOLVE_THREAD],
+  );
+});
+
+test("a reply GitHub refuses says so under its thread in GitHub's own words, its words kept, and a thread read with no id offers nothing to press", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Pull request review thread is locked",
+  };
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: reviewWith([
+            thread({ id: "PRRT_flag" }),
+            thread({ path: "src/other.ts", comments: [] }),
+          ]),
+        }),
+    }),
+  );
+  const [withId, withoutId] = [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")];
+  assert.ok(withId !== undefined && withoutId !== undefined);
+
+  writeReply(withId, "Done.");
+  act(() => threadPress(withId, "Reply").click());
+  await settle();
+
+  assert.equal(
+    withId.querySelector(".pull-request-thread-note .failure-note-words")?.textContent,
+    "GitHub said: Pull request review thread is locked",
+  );
+  assert.equal(withId.querySelector("textarea")?.value, "Done.");
+  assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
 });
