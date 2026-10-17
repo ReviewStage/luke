@@ -49,6 +49,7 @@ export function ContinueAgent({
   control,
   onOpenAgent,
   carry,
+  offers = true,
 }: {
   agentId: string;
   control: Pick<
@@ -59,6 +60,8 @@ export function ContinueAgent({
   onOpenAgent: ((agentId: string) => void) | undefined;
   /** The closed box's words and files, which the press carries; none for a press that carries nothing. */
   carry?: ContinueCarry | undefined;
+  /** Whether the press may stand here, where no other place offers it; the agents that continued it are named all the same. */
+  offers?: boolean;
 }): React.JSX.Element | null {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
@@ -68,7 +71,7 @@ export function ContinueAgent({
     [agentId, control.agents, control.archived],
   );
   const { continueAgent } = control;
-  const trail = continueTrail(continuations, continueAgent !== undefined);
+  const trail = continueTrail(continuations, offers && continueAgent !== undefined);
 
   const press = () => {
     if (continueAgent === undefined || busy) return;

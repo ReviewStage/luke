@@ -477,3 +477,30 @@ test("words changed in the closed box while its continue is out stay once it lan
   );
   assert.equal(composerEditor(tab.container).textContent, "Fix tests and lint");
 });
+
+test("a failed agent whose box closed still names the agents that continued it on its end line, which stands whatever replaces the box", async () => {
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.SANDBOX,
+    message: { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED },
+    seed: { words: "Finish the tests.", files: [] },
+    others: [
+      agentOf(NEXT, {
+        title: "Fix the tile (2)",
+        from: { agentId: SOURCE, steps: 1, totalSteps: 1 },
+      }),
+    ],
+  });
+  const send =
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ??
+    assert.fail("the box offers Send");
+  await act(async () => send.click());
+  await settle();
+
+  const line = tab.endLine() ?? assert.fail("the turn ends on its line");
+  assert.match(
+    line.querySelector("[data-continued]")?.textContent ?? "",
+    /Continued in.*Fix the tile \(2\)/,
+  );
+  assert.equal(tab.buttons(tab.container).length, 0, "nothing offers a second continue");
+});

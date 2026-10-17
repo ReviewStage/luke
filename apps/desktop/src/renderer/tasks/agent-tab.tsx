@@ -1644,11 +1644,15 @@ export function AgentTab({
           onOpenTarget,
           openGitHub,
         })}
-        // Note that a box closed on an ended agent offers the press itself, carrying its words.
         endTrail={
-          composer.closed === undefined &&
           endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
-            <ContinueAgent agentId={agent.id} control={control} onOpenAgent={openAgent} />
+            // Note that a box closed on an ended agent offers the press itself, carrying its words.
+            <ContinueAgent
+              agentId={agent.id}
+              control={control}
+              onOpenAgent={openAgent}
+              offers={composer.closed === undefined}
+            />
           ) : undefined
         }
         closedRemedy={
