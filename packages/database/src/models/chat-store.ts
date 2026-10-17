@@ -2129,6 +2129,36 @@ export function readTo(
   );
 }
 
+/** How far a member has read each channel it read on that channel's own cursor. */
+const findChannelReads = SqlSchema.findAll({
+  Request: Schema.Struct({ memberId: Schema.String }),
+  Result: Schema.Struct({ channelId: Schema.String, readSeq: Schema.Number }),
+  execute: ({ memberId }) =>
+    Database.use((db) =>
+      db
+        .select({ channelId: chatRead.channelId, readSeq: chatRead.readSeq })
+        .from(chatRead)
+        .where(eq(chatRead.memberId, memberId)),
+    ),
+});
+
+/**
+ * How far the member has read each channel it read on that channel's own
+ * cursor; none where the account is not in the workspace or the member is
+ * not of it.
+ */
+export function channelReads(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+): ChatStoreEffect<readonly { readonly channelId: string; readonly readSeq: number }[]> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return [];
+    return yield* findChannelReads({ memberId: readerId });
+  });
+}
+
 /**
  * How many messages wait unread in each channel the member may see, past
  * its cursor there, others' posts and changes alone; a channel with none

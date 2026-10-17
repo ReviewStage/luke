@@ -1,7 +1,7 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { IconButton } from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
@@ -23,7 +23,7 @@ import { cardTitle } from "./tool-call-model";
  * Inbox has them: split, they move the chosen row and the item beside it;
  * one column wide, the item standing alone, whose bar draws the pager with
  * its up and down arrows, as Mail's message toolbar does while its list is
- * hidden. Once an item is settled, the place its box stood offers the next
+ * hidden. Once an item is settled, the row over its box offers the next
  * item that needs the developer, wrapping round the list, so answering one
  * leads to the next without the list in between; it never moves on by
  * itself, so an answer is seen landing before the developer leaves it.
@@ -70,7 +70,7 @@ export function inboxNext(
   };
 }
 
-/** The row a settled item's foot offers: Next, the item's agent's tile and title, and J where J reaches it. */
+/** The row a settled item offers over its box: Next, the item's agent's tile and title, and J where J reaches it. */
 export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
   return (
     <div className="inbox-next-dock">

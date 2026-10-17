@@ -1,7 +1,8 @@
 import {
   type ComponentType,
-  type HTMLAttributes,
+  type FocusEventHandler,
   type MouseEvent,
+  type PointerEventHandler,
   type ReactElement,
   type ReactNode,
   useCallback,
@@ -24,16 +25,27 @@ import { BUTTON_VARIANT, Button, type ButtonVariant } from "../button/button.js"
  * What is drawn here is the button, and whether its words are folded. The
  * hint, when it shows and goes, is the app's (`hint`): it is handed the
  * words while they are folded and nothing while they are drawn, and wraps
- * the button's box, whose pointer and focus events are the button's own.
+ * the button's box, which hands what the hint gives it on to the button.
  */
 
 /** The value of `--luke-fold` that folds every folding button under it. */
 const FOLDED = "folded";
 
+/** What a hint hands the box it wraps, which the box hands on to its button: when to show and go, and what it says of the button. */
+interface FoldingHintProps {
+  "aria-describedby"?: string | undefined;
+  "aria-keyshortcuts"?: string | undefined;
+  onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  onFocus?: FocusEventHandler<HTMLElement> | undefined;
+  onBlur?: FocusEventHandler<HTMLElement> | undefined;
+}
+
 /** The hint an app hangs from a folding button: `label` while the words are folded, nothing while they are drawn. */
 export type FoldingButtonHint = ComponentType<{
   label: string | undefined;
-  children: ReactElement<HTMLAttributes<HTMLElement>>;
+  children: ReactElement<FoldingHintProps>;
 }>;
 
 /**
@@ -53,6 +65,47 @@ function useFolded(): [(box: HTMLElement | null) => (() => void) | undefined, bo
     return () => observer.disconnect();
   }, []);
   return [measured, folded];
+}
+
+/**
+ * The button's box, measured for its fold. Note that what a hint hands the
+ * box lands on the button inside it, because the button is what takes the
+ * pointer and the focus, and what a reader is told the hint's words and
+ * chord by.
+ */
+function FoldingBox({
+  measured,
+  label,
+  icon,
+  variant,
+  busy,
+  disabled,
+  onClick,
+  ...hinted
+}: FoldingHintProps & {
+  measured: (box: HTMLElement | null) => (() => void) | undefined;
+  label: string;
+  icon: ReactNode;
+  variant: ButtonVariant;
+  busy: string | undefined;
+  disabled: boolean | undefined;
+  onClick: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+}): React.JSX.Element {
+  const busyProps = busy === undefined ? {} : { busy: true, busyLabel: busy };
+  return (
+    <span ref={measured} className="luke-folding-button">
+      <Button
+        icon={icon}
+        variant={variant}
+        disabled={disabled}
+        onClick={onClick}
+        {...busyProps}
+        {...hinted}
+      >
+        {label}
+      </Button>
+    </span>
+  );
 }
 
 /** A labelled toolbar button, its glyph then its words, the words folding away where its toolbar says so. */
@@ -77,13 +130,16 @@ export function FoldingButton({
   hint?: FoldingButtonHint | undefined;
 }): React.JSX.Element {
   const [measured, folded] = useFolded();
-  const busyProps = busy === undefined ? {} : { busy: true, busyLabel: busy };
   const box = (
-    <span ref={measured} className="luke-folding-button">
-      <Button icon={icon} variant={variant} disabled={disabled} onClick={onClick} {...busyProps}>
-        {label}
-      </Button>
-    </span>
+    <FoldingBox
+      measured={measured}
+      label={label}
+      icon={icon}
+      variant={variant}
+      busy={busy}
+      disabled={disabled}
+      onClick={onClick}
+    />
   );
   return Hint === undefined ? box : <Hint label={folded ? label : undefined}>{box}</Hint>;
 }
