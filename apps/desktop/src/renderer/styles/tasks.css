@@ -842,6 +842,44 @@
   scroll-padding-top: calc(var(--checkpoint-height) + var(--scroll-fade));
 }
 
+/* A divider across a log (../ai-elements/checkpoint.tsx): its words at the
+   left in the muted ink, a hairline running on from them, and what the
+   caller puts at the right, stuck to the log's top on the well's own ground
+   so nothing shows through. A standing call's "Live" stands at the right in
+   the developer's colour beside the voice mark (../tasks/call-card.tsx). */
+.checkpoint {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: var(--luke-space-12) 0 var(--luke-space-8);
+  background: var(--desktop-well);
+  color: var(--luke-color-text-muted);
+  font-size: 11.5px; /* off-scale: a divider's quiet words */
+  font-weight: var(--luke-weight-semibold);
+}
+
+.checkpoint-rule {
+  height: 1px;
+  min-width: 0;
+  flex: 1;
+  background: var(--luke-color-border);
+}
+
+.checkpoint-live {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  color: var(--voice-developer);
+}
+
+.checkpoint-live > svg {
+  width: 14px; /* off-scale: the voice mark at the divider's words */
+  height: 14px;
+}
+
 /* One line, as a teammate's heading already keeps (`.call-caller`), so a
    time that would wrap in a narrow panel cannot outgrow the band. */
 .checkpoint-log [data-checkpoint] {

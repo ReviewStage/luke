@@ -1,5 +1,4 @@
-import { cn } from "@luke/ui";
-import type { ComponentProps, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 /**
  * checkpoint.tsx -- AI Elements' Checkpoint: a quiet line across the conversation marking where one stretch of it ends and the next begins.
@@ -15,31 +14,21 @@ import type { ComponentProps, ReactNode } from "react";
  * scroll, on the well's own ground so nothing shows through, which is why
  * a log that holds one has no top padding of its own. The log
  * (`.checkpoint-log` in planning.css) holds it at one height, which its
- * fade starts beneath.
+ * fade starts beneath. Its look is `.checkpoint`'s (tasks.css).
  */
 
-export type CheckpointProps = ComponentProps<"div"> & {
+export interface CheckpointProps {
+  /** The words at the left. */
+  children: ReactNode;
   /** What stands at the right, past the hairline. */
   trailing?: ReactNode;
-};
+}
 
-export function Checkpoint({
-  className,
-  children,
-  trailing,
-  ...props
-}: CheckpointProps): ReactNode {
+export function Checkpoint({ children, trailing }: CheckpointProps): ReactNode {
   return (
-    <div
-      className={cn(
-        "sticky top-0 z-[1] flex items-center gap-2 bg-well pt-3 pb-2 text-[11.5px] font-semibold text-muted-foreground",
-        className,
-      )}
-      data-checkpoint=""
-      {...props}
-    >
+    <div className="checkpoint" data-checkpoint="">
       {children}
-      <span className="h-px min-w-0 flex-1 bg-border" aria-hidden="true" />
+      <span className="checkpoint-rule" aria-hidden="true" />
       {trailing}
     </div>
   );
