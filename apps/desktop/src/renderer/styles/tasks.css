@@ -3173,6 +3173,88 @@ ol.transcript-list {
   color: var(--luke-color-text);
 }
 
+/* A plan's card (../ai-elements/task.tsx), and what else a transcript opens
+   on drawn as one: a card on the raised ground inside a hairline, clipped to
+   its corners so the header's hover fill follows them and what is in it
+   rings inside itself. The header is the one line a closed card shows, its
+   chevron and icon in the muted ink and the title cut to the line behind
+   its quieter label; open, the plan stands under a hairline in the body
+   type, its words running or, for a replay, its blocks stacked. */
+.plan-card {
+  --focus-ring-offset: var(--focus-ring-inset);
+
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+  font-size: 12.5px; /* off-scale: a call's line, which it sits among */
+}
+
+.plan-card-head {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-12);
+  border-radius: inherit;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.plan-card-head:hover {
+  background: var(--luke-color-fill-strong);
+}
+
+.plan-card[open] > .plan-card-head {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.plan-card-icon {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.plan-card-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.plan-card-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-card-label {
+  color: var(--luke-color-text-muted);
+}
+
+.plan-card-name {
+  font-weight: var(--luke-weight-medium);
+}
+
+.plan-card-body {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+}
+
+.plan-card-body[data-layout="stack"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+}
+
 /* A model's reasoning (../ai-elements/reasoning.tsx): one line, a call's
    line's height and type, the brain in the 16px seat a call's icon stands
    in, "Thought" in the full ink and the preview after it in the muted one,

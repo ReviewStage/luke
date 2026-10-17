@@ -29,7 +29,7 @@ import {
 } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
-import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/task";
+import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/task";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
@@ -212,11 +212,7 @@ interface TranscriptLead {
 /** An agent's transcript: the plan it was handed, and the agent starting; the brain's turns on the Call tab, which open on no card, alike. */
 export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
-  icon: (
-    <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">
-      <DocumentIcon />
-    </span>
-  ),
+  icon: <DocumentIcon />,
   startingLine: "The agent is starting.",
 };
 
@@ -229,14 +225,14 @@ const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
 /** A worker's transcript: the subagent task it was handed, and the worker starting. */
 const WORKER_LEAD: TranscriptLead = {
   label: "Subagent task",
-  icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
+  icon: <BotIcon />,
   startingLine: "The worker is starting.",
 };
 
 /** An automation's run: the prompt it handed the agent, and the agent starting. */
 const AUTOMATION_LEAD: TranscriptLead = {
   label: "Prompt",
-  icon: <ZapIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
+  icon: <ZapIcon />,
   startingLine: "The agent is starting.",
 };
 
@@ -690,9 +686,9 @@ function PlanCard({
   const words = <TranscriptWords text={text} />;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
-      <Plan data-task-card="" aria-label={lead.label} className="agent-origin-card">
+      <Plan data-task-card="" aria-label={lead.label}>
         <PlanHeader>
-          {lead.icon}
+          <PlanIcon>{lead.icon}</PlanIcon>
           <PlanTitle label={lead.label}>{title}</PlanTitle>
         </PlanHeader>
         <PlanContent>
