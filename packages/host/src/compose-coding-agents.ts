@@ -12,7 +12,9 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAccountInboxParamsSchema,
@@ -97,7 +99,9 @@ export type CodingAgentClient = Pick<
   | "agentInbox"
   | "pullRequest"
   | "changes"
-  | "overview"
+  | "overviewPullRequest"
+  | "overviewChecks"
+  | "overviewConversation"
   | "githubImage"
   | "readProviderKeys"
   | "saveProviderKey"
@@ -388,15 +392,35 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.changes(agentId));
         return carried<CodingAgentChangesAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW]: (params) =>
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(
           codingAgentPullRequestParamsSchema,
           params,
           "reading an agent's pull request names one agent",
         );
-        const answer = yield* asked(client.overview(agentId));
-        return carried<CodingAgentOverviewAnswerView>(answer);
+        const answer = yield* asked(client.overviewPullRequest(agentId));
+        return carried<CodingAgentOverviewPullRequestAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's pull request's checks names one agent",
+        );
+        const answer = yield* asked(client.overviewChecks(agentId));
+        return carried<CodingAgentOverviewChecksAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's pull request's conversation names one agent",
+        );
+        const answer = yield* asked(client.overviewConversation(agentId));
+        return carried<CodingAgentOverviewConversationAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE]: (params) =>
       Effect.gen(function* () {

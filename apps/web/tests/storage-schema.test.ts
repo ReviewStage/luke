@@ -52,6 +52,7 @@ const DECLARED_TABLES = [
   "chat_channel",
   "chat_member",
   "chat_message",
+  "chat_read",
   "coding_agent",
   "coding_agent_delegation",
   "conversation_attachment",

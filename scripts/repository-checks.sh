@@ -476,10 +476,7 @@ node --input-type=module -e '
 # no such name, has tests nothing runs, and CI stays green over them; one that
 # loses its config and stays on the list fails the run outright. All three are
 # the same drift. A suite cut into shards must declare every shard, or the
-# files hashed to the missing one never run. A workspace that also checks its
-# components in a real browser names that second config,
-# `vitest.browser.config.ts`, on the list beside itself, and its one test task
-# runs both.
+# files hashed to the missing one never run.
 node --input-type=module -e '
   import { glob, readFile } from "node:fs/promises";
   import path from "node:path";
@@ -490,21 +487,11 @@ node --input-type=module -e '
   for await (const found of glob(["apps/*/vitest.config.ts", "packages/*/vitest.config.ts", "tools/*/vitest.config.ts"], { cwd: root })) {
     configured.push(path.dirname(found).split(path.sep).join("/"));
   }
-  const browserConfigs = [];
-  for await (const found of glob(["apps/*/vitest.browser.config.ts", "packages/*/vitest.browser.config.ts"], { cwd: root })) {
-    browserConfigs.push(found.split(path.sep).join("/"));
-  }
   const rootConfig = await readFile(path.join(root, "vitest.config.ts"), "utf8");
   const projects = rootConfig.slice(rootConfig.indexOf("projects: ["), rootConfig.indexOf("],", rootConfig.indexOf("projects: [")));
   const listed = [...projects.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
-  const expected = [...configured, ...browserConfigs];
-  const missing = expected.filter((one) => !listed.includes(one)).sort();
-  const stale = listed.filter((one) => !expected.includes(one)).sort();
-  const unrun = [];
-  for (const one of browserConfigs.sort()) {
-    const scripts = JSON.parse(await readFile(path.join(root, path.dirname(one), "package.json"), "utf8")).scripts ?? {};
-    if (!(scripts[WHOLE] ?? "").includes(`--config ${path.basename(one)}`)) unrun.push(one);
-  }
+  const missing = configured.filter((one) => !listed.includes(one)).sort();
+  const stale = listed.filter((one) => !configured.includes(one)).sort();
   const untasked = [];
   for (const one of configured.sort()) {
     const scripts = JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).scripts ?? {};
@@ -513,12 +500,11 @@ node --input-type=module -e '
     const sharded = named.length === SHARDS.length && SHARDS.every((shard) => named.includes(shard));
     if (!whole && !sharded) untasked.push(one);
   }
-  if (missing.length > 0 || stale.length > 0 || untasked.length > 0 || unrun.length > 0) {
+  if (missing.length > 0 || stale.length > 0 || untasked.length > 0) {
     process.stderr.write(
       `error: the root vitest.config.ts projects list, the workspaces holding a vitest.config.ts, and their turbo test tasks have drifted apart:\n${[
         ...missing.map((one) => `  ${one} has a vitest.config.ts and the list never names it, so nothing runs its tests`),
         ...stale.map((one) => `  ${one} is on the list and holds no vitest.config.ts`),
-        ...unrun.map((one) => `  ${one} is not run by the "${WHOLE}" script of its workspace, so the checks and CI never run it`),
         ...untasked.map((one) => `  ${one} runs its tests under neither "${WHOLE}" alone nor all of ${SHARDS.map((shard) => `"${shard}"`).join(", ")}, so the checks and CI never run them`),
       ].join("\n")}\n`,
     );

@@ -565,9 +565,19 @@ export function agentChangesPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/changes`;
 }
 
-/** One agent's pull request as its Pull request tab draws it (GET): its description, checks, reviewers, and conversation as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/overview`;
+/** One agent's pull request itself as its overview draws it (GET): its description, branches, mergeability, author, and the reviewers it asks for; `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewPullRequestPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview/pull-request`;
+}
+
+/** The checks on one agent's pull request's head as its overview draws them (GET); `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewChecksPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview/checks`;
+}
+
+/** One agent's pull request's conversation as its overview draws it (GET): its comments, reviews, threads, and where its reviewers stand; `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewConversationPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview/conversation`;
 }
 
 /** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */

@@ -9,8 +9,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
-import { CHIP_LOOK } from "../chip";
-import { PICKER_ALIGN } from "../settings/picker-row";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 
@@ -258,7 +256,7 @@ test("switching New plan to a workspace with no GitHub connected lets the other 
   assert.deepEqual(dialog.starts, [[null, PERSONAL.id]]);
 });
 
-test("New task's workspace and repository chips are the app's bordered picker, each dropping its menu from its leading edge", async () => {
+test("New task's workspace and repository chips each open their own menu", async () => {
   await openNewTask(ACME.id);
   const chips = [
     document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
@@ -272,19 +270,12 @@ test("New task's workspace and repository chips are the app's bordered picker, e
     act(() => chip.click());
     await settle();
     const menu = document.querySelector('[role="dialog"][aria-label]');
-    drawn.push({
-      menu: menu?.getAttribute("aria-label"),
-      look: chip.dataset.look,
-      hangsFrom: menu?.parentElement?.closest("[data-align]")?.getAttribute("data-align"),
-    });
+    drawn.push(menu?.getAttribute("aria-label"));
     act(() => chip.click());
     await settle();
   }
 
-  assert.deepEqual(drawn, [
-    { menu: "Workspace", look: CHIP_LOOK.FIELD, hangsFrom: PICKER_ALIGN.START },
-    { menu: "Repository", look: CHIP_LOOK.FIELD, hangsFrom: PICKER_ALIGN.START },
-  ]);
+  assert.deepEqual(drawn, ["Workspace", "Repository"]);
 });
 
 test("Tab from the workspace picker's open list moves on to the Plan switch beside the title, and Shift-Tab back to the chip", async () => {

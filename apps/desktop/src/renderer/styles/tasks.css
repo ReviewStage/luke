@@ -1580,8 +1580,8 @@ button.file-ref:hover .file-ref-path {
   padding-inline: var(--content-inset) var(--column-inset);
 }
 
-/* The view the switch shows fills the room under the bar, the other kept
-   drawn but hidden, so switching back draws what it last read. */
+/* The tab shown fills the room under the header and the tabs, the others
+   kept drawn but hidden, so switching back draws what each last read. */
 .pull-request-view {
   display: flex;
   min-height: 0;
@@ -1593,8 +1593,167 @@ button.file-ref:hover .file-ref-path {
   display: none;
 }
 
-.pull-request-bar .segmented {
-  flex: 0 0 auto;
+/* The fixed header under the bar: the title, the branches, who opened it
+   and its reviewers, and whether it merges, standing put while the tab
+   under it scrolls. */
+.pull-request-header {
+  flex: none;
+  padding: var(--space-8) var(--column-inset) var(--space-12);
+}
+
+/* The row of tabs under the header, as stage-cli's pull request page draws
+   them: each its glyph, its name, and a quiet count, the chosen one
+   underlined on the row's hairline; its words stand at the content inset,
+   as the header's do. */
+.pull-request-tabs {
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+  padding-inline: var(--column-inset);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--hairline);
+  container: pull-request-tabs / inline-size;
+  align-self: stretch;
+  scrollbar-width: none;
+}
+
+/* Narrower than the three need, a tab other than the chosen one keeps its
+   glyph and its count, its name left to a reader who cannot see it, as a
+   narrow tab of the strip keeps its glyph. */
+@container pull-request-tabs (width < 520px) {
+  .pull-request-tab-button[aria-selected="false"] .pull-request-tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.side-panel-content :is(.pull-request-header, .pull-request-tabs) {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+.pull-request-tab-button {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  gap: var(--glyph-gap);
+  margin-bottom: -1px;
+  padding: 0 var(--row-inset);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 560;
+  white-space: nowrap;
+  transition:
+    color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease;
+}
+
+.pull-request-tab-button:hover {
+  color: var(--text-primary);
+}
+
+.pull-request-tab-button[aria-selected="true"] {
+  border-bottom-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.pull-request-tab-icon {
+  display: inline-flex;
+}
+
+.pull-request-tab-icon > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pull-request-tab-count {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.pull-request-tab-count[data-check-summary] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pull-request-tab-glyph {
+  display: inline-flex;
+}
+
+.pull-request-tab-glyph > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pull-request-tab-count[data-check-summary="failing"] {
+  color: var(--danger-text);
+}
+
+.pull-request-tab-count[data-check-summary="pending"] {
+  color: var(--state-attention);
+}
+
+.pull-request-tab-count[data-check-summary="passing"] {
+  color: var(--state-complete);
+}
+
+.pull-request-tab-added {
+  color: var(--state-complete);
+}
+
+.pull-request-tab-removed {
+  color: var(--danger-text);
+}
+
+/* The Conversation's filters, Hide resolved and Hide bots, at the end of a
+   row that stays put over the conversation as it scrolls, each its word,
+   the quiet count of what it leaves out, and its switch; the word and the
+   count press it too. */
+.pull-request-filters {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-6) var(--space-16);
+  padding: var(--space-8) var(--column-inset) 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.side-panel-content .pull-request-filters {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+.pull-request-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  user-select: none;
+}
+
+.pull-request-filter > label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+/* A tab's page has the header above it, so it starts close under the row. */
+.pull-request-view > .pull-request-page {
+  padding-top: var(--space-4);
+}
+
+.pull-request-view > .pull-request-page > .pull-request-section:first-child {
+  margin-top: var(--space-12);
 }
 
 .pull-request-state {
@@ -1639,6 +1798,7 @@ button.file-ref:hover .file-ref-path {
    inset. */
 .pull-request-title,
 .pull-request-page .pull-request-branches,
+.pull-request-header .pull-request-branches,
 .changes-people.pull-request-people,
 .pull-request-heading,
 .pull-request-none,
@@ -1728,6 +1888,30 @@ button.file-ref:hover .file-ref-path {
 .pull-request-none {
   margin: 0;
   font-size: 12.5px;
+}
+
+/* A part of the overview still being read: its blocks in the type its
+   words will stand in, at the content inset; under the title, the branches'
+   and the people's two lines; in the checks, rows as boxed as theirs will
+   be. A part whose read failed says so in the same place, with its Retry. */
+.pull-request-skeleton,
+.pull-request-failure {
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-skeleton > .skeleton + .skeleton {
+  margin-top: var(--space-6);
+}
+
+.pull-request-head-skeleton,
+.pull-request-title + .pull-request-failure {
+  margin-top: var(--space-8);
+}
+
+.pull-request-checks-skeleton {
+  padding: var(--space-8) var(--boxed-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
 }
 
 /* The checks, one boxed list, each row opening the check's page. */
@@ -1947,22 +2131,7 @@ button.pull-request-check:hover {
   line-height: 16px;
 }
 
-/* A preview's rows (diff-rows.tsx) on the diff colours Files changed draws
-   in: the tint of a line added or removed, and git's note on a line. */
-.pull-request-thread-lines > .code-line[data-diff="added"] {
-  background: var(--diff-added-ground);
-}
-
-.pull-request-thread-lines > .code-line[data-diff="removed"] {
-  background: var(--diff-removed-ground);
-}
-
-.pull-request-thread-lines > .code-line[data-diff="note"] .code-line-text {
-  color: var(--code-line-number);
-  font-style: italic;
-}
-
-/* The preview stands in the box rather than filling a tab, on a File tab's ground. */
+/* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
 .pull-request-thread-lines {
   flex: none;
   overflow-y: visible;

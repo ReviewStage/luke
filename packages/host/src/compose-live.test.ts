@@ -9,7 +9,7 @@ import {
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
-import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
+import { DEFAULT_VIDEO_AVATAR, VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_METHOD,
@@ -214,13 +214,9 @@ function avatarSends(socket: FakeLiveSocket) {
     .filter((frame) => String(frame.type).startsWith("avatar."));
 }
 
-/** The start `requestId` names, with the avatar it asks for where that is not the default. */
-function start(requestId: string, avatar?: VideoAvatar) {
-  return {
-    type: VOICE_SERVICE_FRAME.AVATAR_START,
-    requestId,
-    ...(avatar === undefined ? undefined : { avatar }),
-  };
+/** The start `requestId` names, with the avatar it asks for: the default where Settings holds no choice. */
+function start(requestId: string, avatar: VideoAvatar = DEFAULT_VIDEO_AVATAR) {
+  return { type: VOICE_SERVICE_FRAME.AVATAR_START, requestId, avatar };
 }
 
 function stop(requestId: string, reason: AvatarStopReason) {
