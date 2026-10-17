@@ -395,7 +395,8 @@
 .workspace-identity,
 .workspace-member,
 .workspace-invite-row,
-.workspace-github {
+.workspace-github,
+.workspace-linear {
   display: flex;
   flex-direction: column;
 }
@@ -418,7 +419,8 @@
 .workspace-identity > .error-message,
 .workspace-member > .error-message,
 .workspace-invite-row > .error-message,
-.workspace-github > .error-message {
+.workspace-github > .error-message,
+.workspace-linear > .error-message {
   margin-top: calc(-1 * var(--luke-space-4));
   padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
 }

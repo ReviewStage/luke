@@ -117,6 +117,8 @@ let refuseLaterReads = false;
 let inviteHeld: Promise<void> | undefined;
 /** Whether the browser could not be opened on GitHub's page. */
 let refuseGitHubOpen = false;
+/** Where the next Linear sign-in waits before the browser is sent, so a test can hold it on the wire. */
+let linearConnectHeld: Promise<void> | undefined;
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
@@ -226,6 +228,13 @@ function answer(request: Act): Promise<ActOutcome> {
     case ACT_KIND.WORKSPACE_INVITATION_CANCEL:
       invitations = invitations.filter((one) => one.id !== request.payload.invitationId);
       return Promise.resolve(done(invitations));
+    case ACT_KIND.WORKSPACE_LINEAR_CONNECT:
+      if (linearConnectHeld !== undefined) {
+        const held = linearConnectHeld;
+        linearConnectHeld = undefined;
+        return held.then(() => done(undefined));
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
       if (refuseGitHubOpen) {
         return Promise.resolve({
@@ -329,6 +338,7 @@ beforeEach(() => {
   refuseLaterReads = false;
   inviteHeld = undefined;
   refuseGitHubOpen = false;
+  linearConnectHeld = undefined;
   refuseRename = false;
   refusePhoto = false;
   refuseRole = false;
@@ -1734,6 +1744,27 @@ test("an admin's Linear row in Integrations connects Linear for the workspace at
   assert.deepEqual(before, ["Linear", "Not connected."]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(linearSent(), [[ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId: ACME.id }]]);
+});
+
+test("an admin's Linear Connect is named Connecting while the browser is sent, and Connect again once it is", async () => {
+  let release: () => void = () => undefined;
+  linearConnectHeld = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const connect = button(rowNamed(githubGroup(page), "Linear"), "Connect");
+
+  act(() => connect.click());
+  const during = [connect.getAttribute("aria-label"), connect.getAttribute("aria-busy")];
+  release();
+  await settle();
+
+  assert.deepEqual(during, ["Connecting", "true"]);
+  assert.deepEqual(
+    [connect.getAttribute("aria-label"), connect.getAttribute("aria-busy")],
+    [null, null],
+  );
+  assert.equal(page.querySelector('[role="alert"]'), null);
 });
 
 test("a connected workspace's Linear reads connected for everyone and stands quiet, its ⋯ disconnects after asking, and a member sees it read only", async () => {
