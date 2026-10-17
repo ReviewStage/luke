@@ -135,6 +135,8 @@ function drawn(
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
   const started: PlanCommentStartRequest[] = [];
+  /** Each time the plan's own tab was asked to be shown. */
+  const plansShown: true[] = [];
   const control: PlanCommentsControl = {
     planId: PLAN.id,
     threads,
@@ -159,7 +161,7 @@ function drawn(
     view === "tab"
       ? createElement(PlanCommentsTab, {
           doors: { agents: undefined, me: "u-dean" },
-          onShowPlan: () => undefined,
+          onShowPlan: () => plansShown.push(true),
         })
       : createElement(PlanBody, {
           task: plan,
@@ -180,7 +182,7 @@ function drawn(
     }),
   );
   act(() => root.render(mentions === undefined ? tree : onRegistry(registry, tree)));
-  return { container, asked, started };
+  return { container, asked, started, plansShown };
 }
 
 /** What `draw` drew with the column stood wide enough for its margin, since jsdom lays nothing out. */
@@ -262,19 +264,11 @@ test("a thread whose words were deleted stays in the margin, saying so over its 
   );
 });
 
-test("the Comments tab's view menu lists the resolved thread under Resolved, where Reopen brings it back", async () => {
+test("the Comments tab's Resolved toggle lists the resolved thread whole, where Reopen brings it back", async () => {
   const { container, asked } = drawn("tab");
 
-  act(() =>
-    container.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click(),
-  );
-  const resolved = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find((each) =>
-    each.textContent?.startsWith("Resolved (1)"),
-  );
-  assert.ok(resolved, "the view menu offers Resolved with how many it holds");
-  act(() => resolved.click());
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
   assert.ok(container.querySelector(".comments-head")?.textContent?.startsWith("Resolved"));
-  act(() => container.querySelector<HTMLButtonElement>(".comment-open")?.click());
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="Reopen"]')?.click();
   });
@@ -282,6 +276,22 @@ test("the Comments tab's view menu lists the resolved thread under Resolved, whe
   assert.deepEqual(asked, [
     { thread: ID.RESOLVED, action: { action: PLAN_COMMENT_ACTION.REOPEN } },
   ]);
+});
+
+test("the Comments tab lists each open thread whole, its reply field under its comments", () => {
+  const { container } = drawn("tab");
+
+  const cards = [...container.querySelectorAll<HTMLElement>(".comments-list .comment-card")];
+  assert.deepEqual(
+    cards.map((card) => [card.dataset.thread, card.dataset.open]),
+    [
+      [ID.OPEN, "true"],
+      [ID.GONE, "true"],
+    ],
+  );
+  assert.ok(
+    cards.every((card) => card.querySelector(".comment-field[data-variant='reply']") !== null),
+  );
 });
 
 test("a page that is not the plan's own marks no comment", () => {
@@ -738,4 +748,18 @@ test("on a plan's page a comment's field offers dictation, and the plain field n
     );
   assert.ok(dictate(withMentions.container), "the editor's field takes a dictation");
   assert.equal(dictate(plain.container), null, "the plain field does not");
+});
+
+test("in the Comments tab a thread's quote shows its words in the plan, and a deleted thread's quote where they stood", () => {
+  const { container, plansShown } = drawn("tab");
+  const quote = (thread: string) =>
+    container.querySelector<HTMLButtonElement>(
+      `.comment-card[data-thread="${thread}"] button.comment-quote-link`,
+    );
+
+  act(() => quote(ID.OPEN)?.click());
+  act(() => quote(ID.GONE)?.click());
+
+  assert.ok(quote(ID.OPEN) && quote(ID.GONE), "both quotes are presses");
+  assert.equal(plansShown.length, 2);
 });
