@@ -52,6 +52,7 @@ import { MAIN_TAB } from "./use-main-tabs";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 import {
   AUTOMATIONS_PAGE,
+  ISSUES_PAGE,
   type LeaveAsk,
   type TasksControl,
   useLeaveGuard,
@@ -952,6 +953,24 @@ test("a Luke link to a person opens their page in the workspace its slug names, 
   assert.equal(tab.control().inboxView.open, false);
   assert.equal(tab.control().personView.userId, "user-charles");
   assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
+});
+
+test("a Luke link to an issue opens its page in the workspace its slug names, in the place of the Inbox", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const issueId = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+  act(() => tab.control().inboxView.onOpen());
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.ISSUE, issueId },
+    }),
+  );
+
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.control().issuesView.open, true);
+  assert.deepEqual(tab.control().issuesView.place, { kind: ISSUES_PAGE.ISSUE, issueId });
 });
 
 test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {

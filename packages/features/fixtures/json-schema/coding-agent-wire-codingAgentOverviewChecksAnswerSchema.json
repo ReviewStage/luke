@@ -82,6 +82,47 @@
                 "additionalProperties": false
               },
               "maxItems": 100
+            },
+            "deployments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "environment": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "pending",
+                      "failed",
+                      "inactive"
+                    ]
+                  },
+                  "url": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "avatarUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "environment",
+                  "state",
+                  "url"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 10
             }
           },
           "required": [

@@ -2051,6 +2051,13 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-primary);
 }
 
+/* A deployment's door to the address it serves, quiet at its row's end. */
+.pull-request-deployment-open > svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
 /* The App that runs a check, by its square logo as GitHub draws an App. */
 .pull-request-check-avatar {
   display: block;

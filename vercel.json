@@ -469,7 +469,7 @@
           "dest": "/admin.html"
         },
         {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|issue)(?:/[^/]+)*/?",
           "dest": "/open.html"
         }
       ]
