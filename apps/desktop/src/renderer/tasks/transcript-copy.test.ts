@@ -7,6 +7,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
+import { REPLAY_PAGE } from "./replay-card-model";
 import {
   agentTranscript,
   LATEST_ACTIVITY,
@@ -217,4 +218,70 @@ test("an agent started from another that has done nothing yet previews no step, 
     chatOn: true,
   });
   assert.equal(latestActivity(copied), undefined);
+});
+
+test("a summary Luke wrote of the source's oldest steps is copied under its line, as his words, and its steps are not counted as left out", () => {
+  const first = firstMessageText(
+    "Fix the tile.",
+    {
+      agentId: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
+      preamble: "This is the work you continue from.",
+      summary: { text: "Read the tile code.\n\nFound the radius bug.", steps: 40 },
+      steps: [{ kind: REPLAY_STEP_KIND.SAID, summary: "Said: Fixed.", words: "Fixed." }],
+      totalSteps: 41,
+    },
+    undefined,
+  );
+  const copied = agentTranscript({
+    title: "Tile (2)",
+    messages: [said("first", MESSAGE_ROLE.USER, first)],
+    brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
+  });
+  assert.equal(
+    transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Tile (2)",
+      "## Prompt",
+      "Fix the tile.",
+      "## Continued from an earlier agent · 1 of 41 steps",
+      "**Summary of 40 earlier steps (written by Luke)**",
+      "> Read the tile code.\n>\n> Found the radius bug.",
+      "- **Agent:** Fixed.",
+    ].join("\n\n") + "\n",
+  );
+});
+
+test("a replay longer than the card draws at first is copied whole, every kept step in order, whatever the card shows", () => {
+  const count = REPLAY_PAGE * 3 + 5;
+  const steps = Array.from({ length: count }, (_, at) => ({
+    kind: REPLAY_STEP_KIND.SAID,
+    summary: `Said: Step ${at + 1}.`,
+    words: `Step ${at + 1}.`,
+  }));
+  const first = firstMessageText(
+    "Fix the tile.",
+    {
+      agentId: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
+      preamble: "This is the work you continue from.",
+      steps,
+      totalSteps: count,
+    },
+    undefined,
+  );
+  const copied = agentTranscript({
+    title: "Tile (2)",
+    messages: [said("first", MESSAGE_ROLE.USER, first)],
+    brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
+  });
+  for (const copy of [TRANSCRIPT_COPY.CONCISE, TRANSCRIPT_COPY.FULL]) {
+    const markdown = transcriptMarkdown(copied, copy);
+    const copiedSteps = [...markdown.matchAll(/Step (\d+)\./gu)].map((match) => Number(match[1]));
+    // The full copy says each step twice, its line and its words.
+    assert.deepEqual(
+      [...new Set(copiedSteps)],
+      Array.from({ length: count }, (_, at) => at + 1),
+    );
+  }
 });

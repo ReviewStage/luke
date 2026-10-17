@@ -25,6 +25,7 @@ import {
 import type { LiveAvatarState } from "@luke/voice/live-session";
 import { Context, Data, Deferred, Effect, Layer, Ref, type Scope, type Stream } from "effect";
 import type { Composer } from "../composer.js";
+import type { HostConcern } from "../host-concerns.js";
 import { layersInOrder } from "./composer.js";
 
 /** The drain's steps did not run to their end; what they could not settle is what the next launch marks interrupted. */
@@ -103,6 +104,8 @@ export interface HostAssembly {
   readonly gateway: GatewayHost;
   /** Where the client offers this machine's native capabilities and the host asks for them. */
   readonly nodes: NodeRegistry;
+  /** The concerns this host runs: every one but the platform concerns it was built without. */
+  readonly concerns: ReadonlySet<HostConcern>;
   /** The composers in the order the launch has to keep; the quit is this order reversed. */
   readonly startOrder: readonly Composer[];
   /**

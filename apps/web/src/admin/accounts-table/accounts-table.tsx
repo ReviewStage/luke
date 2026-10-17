@@ -1,3 +1,4 @@
+import { BADGE_TONE, Badge, Inline, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import {
   ACCOUNTS_SORT_KEY,
@@ -25,6 +26,12 @@ export const ACCOUNTS_TABLE_MIN_WIDTH = {
   ROSTER: "min-w-[760px]",
 } as const;
 
+/** A cell's room around its words, the same in the heading row and the rows under it. */
+const TABLE_CELL = "px-5 py-3";
+
+/** A count's or a date's cell, right-aligned in figures of one width. */
+const NUMERIC_CELL = `${TABLE_CELL} text-right tabular-nums`;
+
 type AccountsTableMinWidth =
   (typeof ACCOUNTS_TABLE_MIN_WIDTH)[keyof typeof ACCOUNTS_TABLE_MIN_WIDTH];
 
@@ -47,21 +54,34 @@ function AccountsHeader({
   onSort: ((key: AccountsSortKey) => void) | undefined;
   numeric?: boolean;
 }): React.JSX.Element {
-  const cell = `px-5 py-3 font-medium ${numeric ? "text-right" : ""}`;
-  if (!onSort) return <th className={cell}>{label}</th>;
+  const cell = numeric ? NUMERIC_CELL : TABLE_CELL;
+  if (!onSort) {
+    return (
+      <th className={cell}>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
+          {label}
+        </Text>
+      </th>
+    );
+  }
   const direction = sort?.key === sortKey ? sort.direction : undefined;
   return (
     <th className={cell} aria-sort={direction}>
       <button
         type="button"
-        className="inline-flex cursor-pointer items-baseline gap-1 font-medium uppercase transition-colors duration-150 outline-offset-2 hover:text-foreground data-[sorted=true]:text-foreground"
-        data-sorted={direction !== undefined}
+        className="inline-flex cursor-pointer items-baseline outline-offset-2"
         onClick={() => onSort(sortKey)}
       >
-        {label}
-        {direction ? (
-          <span aria-hidden="true">{direction === SORT_DIRECTION.ASCENDING ? "▲" : "▼"}</span>
-        ) : null}
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.LABEL}
+          tone={direction === undefined ? TEXT_TONE.MUTED : TEXT_TONE.DEFAULT}
+        >
+          {label}
+          {direction ? (
+            <span aria-hidden="true">{direction === SORT_DIRECTION.ASCENDING ? " ▲" : " ▼"}</span>
+          ) : null}
+        </Text>
       </button>
     </th>
   );
@@ -125,8 +145,8 @@ export function AccountsTable<Row extends AccountsTableRow>({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
-        {emptyText}
+      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center">
+        <Text tone={TEXT_TONE.MUTED}>{emptyText}</Text>
       </div>
     );
   }
@@ -134,9 +154,12 @@ export function AccountsTable<Row extends AccountsTableRow>({
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="overflow-x-auto">
-        <table className={`w-full ${minWidth} text-sm`}>
+        {/* Note that every cell keeps to one line, because the type roles break
+            words anywhere: a narrow table would otherwise split a count or an
+            email mid-word rather than hand the width to this scroller. */}
+        <table className={`w-full ${minWidth} whitespace-nowrap`}>
           <thead>
-            <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
+            <tr className="border-b border-border text-left">
               {favorite ? (
                 <th className="w-0 py-3 pr-0 pl-5">
                   <span className="sr-only">Favorite</span>
@@ -185,7 +208,7 @@ export function AccountsTable<Row extends AccountsTableRow>({
             {sorted.map((row) => (
               <tr
                 key={row.id}
-                className="group cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
+                className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
                 onClick={() => onOpen(row.id)}
               >
                 {favorite ? (
@@ -205,7 +228,7 @@ export function AccountsTable<Row extends AccountsTableRow>({
                     </button>
                   </td>
                 ) : null}
-                <td className="px-5 py-3">
+                <td className={TABLE_CELL}>
                   <a
                     href={accountHref(row.id)}
                     className="flex items-center gap-3 outline-offset-2"
@@ -216,37 +239,54 @@ export function AccountsTable<Row extends AccountsTableRow>({
                       onOpen(row.id);
                     }}
                   >
-                    <AccountAvatar
-                      account={{ name: row.name, email: row.email, image: row.image ?? undefined }}
-                    />
+                    <span className="flex shrink-0">
+                      <AccountAvatar
+                        account={{
+                          name: row.name,
+                          email: row.email,
+                          image: row.image ?? undefined,
+                        }}
+                      />
+                    </span>
                     <div>
-                      <div className="flex items-center gap-2 font-medium">
-                        {accountLabel(row)}
-                        {row.admin ? (
-                          <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
-                            Admin
-                          </span>
-                        ) : null}
-                      </div>
+                      <Inline>
+                        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+                          {accountLabel(row)}
+                        </Text>
+                        {row.admin ? <Badge tone={BADGE_TONE.NEUTRAL}>Admin</Badge> : null}
+                      </Inline>
                       {accountLabel(row) === row.email ? null : (
-                        <div className="text-xs text-muted-foreground">{row.email}</div>
+                        <Text
+                          as={TEXT_ELEMENT.DIV}
+                          variant={TEXT_VARIANT.CAPTION}
+                          tone={TEXT_TONE.MUTED}
+                        >
+                          {row.email}
+                        </Text>
                       )}
                     </div>
                   </a>
                 </td>
                 {detailColumns.map((column) => (
-                  <td key={column.key} className="px-5 py-3 text-right tabular-nums">
-                    {column.cell(row)}
+                  <td key={column.key} className={NUMERIC_CELL}>
+                    <Text as={TEXT_ELEMENT.SPAN}>{column.cell(row)}</Text>
                   </td>
                 ))}
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {formatNumber(row.activeDays)}
-                  <span className="text-muted-foreground"> of {formatNumber(windowDays)}</span>
+                <td className={NUMERIC_CELL}>
+                  <Text as={TEXT_ELEMENT.SPAN}>{formatNumber(row.activeDays)}</Text>
+                  <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+                    {" "}
+                    of {formatNumber(windowDays)}
+                  </Text>
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {row.lastActiveDay === null ? "—" : formatDayTick(row.lastActiveDay)}
+                <td className={NUMERIC_CELL}>
+                  <Text as={TEXT_ELEMENT.SPAN}>
+                    {row.lastActiveDay === null ? "—" : formatDayTick(row.lastActiveDay)}
+                  </Text>
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">{formatNumber(row.calls)}</td>
+                <td className={NUMERIC_CELL}>
+                  <Text as={TEXT_ELEMENT.SPAN}>{formatNumber(row.calls)}</Text>
+                </td>
               </tr>
             ))}
           </tbody>

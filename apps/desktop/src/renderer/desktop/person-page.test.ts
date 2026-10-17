@@ -27,6 +27,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
@@ -200,46 +202,38 @@ beforeEach(() => {
   automationsRefused = false;
   inboxHeld = false;
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        const inbox =
-          request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
-          request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
-        if (inbox && inboxHeld) return new Promise(() => undefined);
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-          const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST && !automationsRefused) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { automations: AUTOMATIONS },
-          });
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
-          const value: CodingAgentInboxAnswerView = {
-            items: INBOXES.get(request.payload.taskId) ?? [],
-            cursor: "1",
-          };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      },
+  fakeAppBridge({
+    act: (request: Act) => {
+      const inbox =
+        request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
+        request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
+      if (inbox && inboxHeld) return new Promise(() => undefined);
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+        const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST && !automationsRefused) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { automations: AUTOMATIONS },
+        });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
+        const value: CodingAgentInboxAnswerView = {
+          items: INBOXES.get(request.payload.taskId) ?? [],
+          cursor: "1",
+        };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
   });
 });
