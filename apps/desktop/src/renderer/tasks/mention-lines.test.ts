@@ -8,6 +8,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   installEditorBundle,
@@ -45,13 +46,9 @@ installEditorBundle();
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (_request: Act): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-      recordSurfaceEvent: ignore,
-    },
+  fakeAppBridge({
+    act: (_request: Act): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
 });
 
@@ -164,8 +161,8 @@ function cardOn(element: Element | undefined): (string | null | undefined)[] {
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-note")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-note")?.textContent,
   ];
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));

@@ -67,7 +67,8 @@ import { steerCodingAgent } from "./steer.js";
  * nothing is stamped, since each can be undone: its session and transcript
  * are its starter's, and workspace chat reaches no one outside it; one whose session eve no longer runs has left for good and
  * is stamped so, and hears nothing more. A notice that could not be handed
- * over is let go, so the next one is told. A post sent again under its key
+ * over is let go, so the next one is told; one the deployment reaches no eve
+ * for is held for the agent's next read. A post sent again under its key
  * is told again: the notice's key and the one outstanding notice keep that
  * from steering anyone twice, and it finishes a telling the first send did
  * not. A plan's planner and a person are handed to doors of
@@ -98,12 +99,12 @@ export type NoticeOutcome = (typeof NOTICE_OUTCOME)[keyof typeof NOTICE_OUTCOME]
  * What a post's poster reads back: the handles told now, held, and left, and the handles mentioned that name no member.
  * @public
  */
-export interface ChatReceipt {
+export type ChatReceipt = {
   readonly told: readonly string[];
   readonly held: readonly string[];
   readonly left: readonly string[];
   readonly unresolved: readonly string[];
-}
+};
 
 /**
  * A message as a door tells it: the message, the line that tells it, and who posted it.
@@ -129,11 +130,11 @@ export const HELD_DOORS: ChatNoticeDoors = {
 
 /**
  * What a door's caller needs to steer a coding agent: eve as the account an
- * agent was started by, which each notice is minted for, the writer, and
- * the account posting.
+ * agent was started by, which each notice is minted for, or nothing where
+ * the deployment reaches no eve, the writer, and the account posting.
  */
 export interface ChatTelling {
-  readonly eveFor: (starterUserId: string) => EveSessions;
+  readonly eveFor: (starterUserId: string) => EveSessions | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   readonly userId: string;
   readonly organizationId: string;
@@ -268,28 +269,25 @@ function tellAgent(
     // An agent whose starter has not turned Chat on has no chat tools to answer with, so it is steered nothing.
     const chatOn = yield* hostedStoreOrUnavailable(chatEnabledFor(agent.value.userId));
     if (!chatOn) return NOTICE_OUTCOME.HELD;
+    // A deployment that reaches no eve steers nothing, so the agent reads the message when it next reads.
+    const eve = telling.eveFor(agent.value.userId);
+    if (eve === undefined) return NOTICE_OUTCOME.HELD;
     const claimed = yield* hostedStoreOrUnavailable(
       markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
     );
     if (!claimed) return NOTICE_OUTCOME.HELD;
     // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
-    const steered = yield* steerCodingAgent(
-      telling.eveFor(agent.value.userId),
-      telling.writer,
-      userId,
-      agent.value,
-      {
-        text: notice.text,
-        clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
-        sender: senderOf(notice.from),
-        metadata: {
-          author: AUTHOR_OF_KIND[notice.from.kind],
-          channel: MESSAGE_CHANNEL.CHAT,
-          chat_seq: notice.message.seq,
-          from: notice.from.handle,
-        },
+    const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
+      text: notice.text,
+      clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
+      sender: senderOf(notice.from),
+      metadata: {
+        author: AUTHOR_OF_KIND[notice.from.kind],
+        channel: MESSAGE_CHANNEL.CHAT,
+        chat_seq: notice.message.seq,
+        from: notice.from.handle,
       },
-    ).pipe(Effect.result);
+    }).pipe(Effect.result);
     if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
     yield* hostedStoreOrUnavailable(releaseNotice(userId, organizationId, member.id, place));
     if (steered.failure.error === HOSTED_REFUSAL.AGENT_RETIRED.error) {
@@ -367,7 +365,7 @@ export function tellMessage(
 }
 
 /** The refusal a chat store's post answers, in the route's words. */
-const HOSTED_OF_CHAT_REFUSAL = {
+export const HOSTED_OF_CHAT_REFUSAL = {
   [CHAT_REFUSAL.NOT_FOUND]: HOSTED_REFUSAL.NOT_FOUND,
   [CHAT_REFUSAL.NAME_TAKEN]: HOSTED_REFUSAL.INVALID_REQUEST,
   [CHAT_REFUSAL.TOO_MANY_TOPICS]: HOSTED_REFUSAL.INVALID_REQUEST,

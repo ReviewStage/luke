@@ -12,7 +12,6 @@
  * client does not reach yet is added when one arrives.
  */
 export type { HostSeams } from "./host-kernel.js";
-export { jsonStateFile } from "./json-state-file.js";
 export {
   HOST_NATIVE_NODE_ID,
   HOST_NODE_CAPABILITY,
@@ -21,4 +20,3 @@ export {
 } from "./node-capabilities.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
 export { highlightSnippet } from "./task-code.js";
-export { openSocketOverWs } from "./voice/socket-over-ws.js";

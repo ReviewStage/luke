@@ -407,8 +407,8 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the row hangs a tab's card");
   return [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-corner")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-corner")?.textContent,
   ];
 }
 

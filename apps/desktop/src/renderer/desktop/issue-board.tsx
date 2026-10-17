@@ -1,10 +1,10 @@
 import { ISSUE_STATUS_WORDS, issueColumns, issueIdentifier } from "@luke/features/issue-list-model";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
+import { useMenu } from "@luke/ui";
 import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";
-import { useActionMenu } from "./action-menu";
 import { IssueActions } from "./issue-actions";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
 import type { IssueChange } from "./use-issues";
@@ -151,7 +151,7 @@ function IssueCard({
   onOpen: () => void;
   onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const identifier = issueIdentifier(workspaceName, issue.number);
   const card = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {

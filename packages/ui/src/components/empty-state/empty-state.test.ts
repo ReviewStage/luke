@@ -10,7 +10,8 @@ import { EmptyState, type EmptyStateAction } from "./empty-state.js";
  * empty-state.test.ts -- an empty place shows its heading and its line, its
  * glyph hidden from a reader; its one way on is a button named by its words
  * that answers a press; and a place with a line alone offers neither a
- * heading nor a button.
+ * heading nor a button; a place a failure left empty is one alert holding
+ * its line and its way on, and an empty one is no alert.
  */
 
 declare global {
@@ -29,7 +30,12 @@ afterEach(() => {
 });
 
 /** Draws an empty state on the page and hands back what it was drawn into. */
-function draw(props: { title?: string; action?: EmptyStateAction; children: string }): HTMLElement {
+function draw(props: {
+  title?: string;
+  action?: EmptyStateAction;
+  alert?: boolean;
+  children: string;
+}): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -63,4 +69,29 @@ test("an empty place with a line alone shows no heading and no button", () => {
   const container = draw({ children: "No agents at work" });
   expect(container.textContent).toBe("No agents at work");
   expect(container.querySelector("h1, h2, h3, h4, h5, h6, button")).toBeNull();
+});
+
+test("a place a failure left empty is one alert, its way on a press within it", () => {
+  const pressed: string[] = [];
+  const container = draw({
+    alert: true,
+    action: {
+      label: "Retry",
+      icon: createElement(SearchIcon),
+      onClick: () => pressed.push("retry"),
+    },
+    children: "The changes could not be read.",
+  });
+  const alerts = container.querySelectorAll("[role='alert']");
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0]?.textContent).toBe("The changes could not be read.Retry");
+  const retry = alerts[0]?.querySelector("button");
+  expect(retry?.textContent).toBe("Retry");
+  act(() => retry?.click());
+  expect(pressed).toEqual(["retry"]);
+});
+
+test("an empty place no failure left is no alert", () => {
+  const container = draw({ children: "No agents at work" });
+  expect(container.querySelector("[role='alert']")).toBeNull();
 });

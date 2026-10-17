@@ -1,4 +1,5 @@
-import type { KeyboardEvent, Ref } from "react";
+import type { ClipboardEvent, KeyboardEvent, Ref } from "react";
+import { cssCustomProperties } from "../../css.js";
 import type { FieldControl } from "../form-field/form-field.js";
 
 /**
@@ -56,6 +57,8 @@ type TextEntryProps = Named & {
   autoFocus?: boolean | undefined;
   name?: string | undefined;
   maxLength?: number | undefined;
+  /** Whether the system's spell check marks the words; off for a name, an identifier, or code. */
+  spellCheck?: boolean | undefined;
 };
 
 /** The attributes a text entry carries for its field, or its own name where it has none. */
@@ -71,6 +74,7 @@ function entryAttributes(props: TextEntryProps) {
     autoFocus: props.autoFocus,
     name: props.name,
     maxLength: props.maxLength,
+    spellCheck: props.spellCheck,
     value: props.value,
   };
 }
@@ -110,13 +114,23 @@ export function TextField({
   );
 }
 
-/** Many lines of text, `rows` tall to start, growing a scroll of its own past that. */
+/**
+ * Many lines of text, `rows` tall to start, growing a scroll of its own past
+ * that, or, where it may `grow`, growing with its words up to the profile's
+ * tallest note before it scrolls, with no handle to size it by.
+ */
 export function TextArea({
   rows = 4,
+  grow = false,
+  onPaste,
   ref,
   ...props
 }: TextEntryProps & {
   rows?: number;
+  /** Whether it grows with its words from `rows` tall, rather than standing at that height. */
+  grow?: boolean;
+  /** What a paste does before the text arrives, for a caller that takes pasted files itself. */
+  onPaste?: ((event: ClipboardEvent<HTMLTextAreaElement>) => void) | undefined;
   ref?: Ref<HTMLTextAreaElement> | undefined;
 }): React.JSX.Element {
   return (
@@ -124,8 +138,13 @@ export function TextArea({
       ref={ref}
       className="luke-text-field"
       rows={rows}
+      data-grow={grow}
+      // Note that a growing note sizes to its words, which the browser does
+      // without reading `rows`, so its rows reach its stylesheet as its least height.
+      style={grow ? cssCustomProperties({ "--luke-text-area-rows": rows }) : undefined}
       {...entryAttributes(props)}
       onChange={(event) => props.onChange(event.target.value)}
+      onPaste={onPaste}
     />
   );
 }

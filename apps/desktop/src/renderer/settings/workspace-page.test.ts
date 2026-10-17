@@ -34,6 +34,8 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -304,7 +306,6 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done(undefined));
     }
     case ACT_KIND.WORKSPACE_LEAVE:
-    case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
@@ -334,10 +335,7 @@ beforeEach(() => {
   automations = undefined;
   macRepositories = [];
   githubRepositories = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ act: answer });
 });
 
 afterEach(() => {
@@ -793,8 +791,8 @@ test("while the members are being read the page holds itself back, and a read th
 
   assert.equal(heldBack, true);
   assert.equal(
-    container.querySelector('[role="alert"] .failure-note-words')?.textContent,
-    "The members could not be read.",
+    container.querySelector('[role="alert"]')?.textContent,
+    "The members could not be read.Retry",
   );
   refuseMembersRead = false;
   act(() => button(container, "Retry").click());
@@ -1433,6 +1431,8 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
 }
 
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
@@ -1470,15 +1470,12 @@ test("the owner invites an address as a role, sees it pending with its link to c
       ],
       [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
       [
-        ACT_KIND.WINDOW_COPY_TEXT,
-        { words: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com" },
-      ],
-      [
         ACT_KIND.WORKSPACE_INVITATION_CANCEL,
         { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },
       ],
     ],
   );
+  assert.deepEqual(copied, ["https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com"]);
 });
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
@@ -1654,8 +1651,8 @@ test("a workspaces read that failed says so with Retry, which asks for them agai
   act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
 
   assert.equal(
-    container.querySelector('[role="alert"] .failure-note-words')?.textContent,
-    "Your workspaces could not be read.",
+    container.querySelector('[role="alert"]')?.textContent,
+    "Your workspaces could not be read.Retry",
   );
   assert.equal(container.querySelector(".settings-reading"), null);
   act(() => button(container, "Retry").click());
@@ -1676,8 +1673,8 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
   assert.equal(
-    [...page.querySelectorAll('[role="alert"] .failure-note-words')].some(
-      (each) => each.textContent === "The invitations could not be read.",
+    [...page.querySelectorAll('[role="alert"]')].some(
+      (each) => each.textContent === "The invitations could not be read.Retry",
     ),
     true,
   );

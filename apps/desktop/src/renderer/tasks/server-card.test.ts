@@ -29,6 +29,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   installEditorBundle,
   installEditorLayout,
@@ -100,12 +101,8 @@ beforeEach(() => {
   linear = INTEGRATION_STATUS.CONNECTED;
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: ignore,
-      act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
   });
 });
 
@@ -113,7 +110,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   window.localStorage.clear();
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });
 
 /** What the main process answers the panel: where the integrations stand and Linear's tools; nothing else here. */
@@ -266,12 +263,12 @@ async function cardOf(chip: Element | null | undefined) {
     name: card.querySelector(".task-compose-menu-name")?.textContent,
     count: card.querySelector(".agent-servers-count")?.textContent,
     on: drawnSwitch === null ? undefined : drawnSwitch.dataset.checked,
-    note: card.querySelector(".agent-servers-row + .card-note")?.textContent,
+    note: card.querySelector(".agent-servers-row + .luke-hover-card-note")?.textContent,
     tools: [...card.querySelectorAll(".integration-tool")].map((tool) => [
       tool.querySelector(".integration-tool-title")?.textContent,
       tool.querySelector(".integration-tool-description")?.textContent,
     ]),
-    more: card.querySelector(".integration-tool-list ~ .card-note")?.textContent,
+    more: card.querySelector(".integration-tool-list ~ .luke-hover-card-note")?.textContent,
     presses: card.querySelectorAll("button, [role=switch]").length,
   };
   act(() => {

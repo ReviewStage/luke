@@ -1,7 +1,7 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { EllipsisIcon } from "@luke/ui";
+import { EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { useRef } from "react";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -16,7 +16,8 @@ import { Tooltip } from "../tooltip";
  * act that cannot be taken back asks first through the confirm dialog, which
  * hands focus back to the ⋯ the menu returned it to.
  *
- * Its acts may come in groups, a rule between each.
+ * Its acts may come in groups, a rule between each. The ⋯ is `@luke/ui`'s
+ * quiet `IconButton`.
  */
 
 /** A row's acts: one list, or lists drawn with a rule between each. */
@@ -52,7 +53,7 @@ export function MenuRow({
 }): React.JSX.Element {
   // The page is drawn whenever the row is, so the menu needs no surface of
   // its own to close with: it closes with the row unmounting.
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   const groups = groupsOf(actions);
   const acting = groups.length > 0;
@@ -67,15 +68,7 @@ export function MenuRow({
         {children}
         {!acting ? null : (
           <Tooltip label="More">
-            <button
-              ref={door}
-              type="button"
-              className="icon-button"
-              aria-label={label}
-              {...menu.trigger()}
-            >
-              <EllipsisIcon />
-            </button>
+            <IconButton ref={door} icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
           </Tooltip>
         )}
       </div>

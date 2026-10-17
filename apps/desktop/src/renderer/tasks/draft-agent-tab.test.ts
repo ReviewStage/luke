@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
@@ -19,6 +20,7 @@ import type { SettingsLink } from "@luke/settings/settings-views";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   installEditorBundle,
@@ -32,7 +34,7 @@ import { OpenSettingsProvider } from "../open-settings";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
-import type { AgentDraft } from "./use-coding-agents";
+import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * A draft agent's first message through the bridge the host answers: a
@@ -80,44 +82,40 @@ beforeEach(() => {
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: {
-              integrations: {
-                ...UNAVAILABLE,
-                [INTEGRATION_PROVIDER.SLACK]: slack,
-                [INTEGRATION_PROVIDER.GITHUB]: github,
-              },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            integrations: {
+              ...UNAVAILABLE,
+              [INTEGRATION_PROVIDER.SLACK]: slack,
+              [INTEGRATION_PROVIDER.GITHUB]: github,
             },
-          });
+          },
+        });
+      }
+      // A Connect stands Slack pending at the service, and a Cancel disconnects it.
+      if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
+        if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
+          slack = INTEGRATION_STATUS.PENDING;
         }
-        // A Connect stands Slack pending at the service, and a Cancel disconnects it.
-        if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
-          if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
-            slack = INTEGRATION_STATUS.PENDING;
-          }
-          return Promise.resolve(
-            refuseConnect
-              ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
-              : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
-          );
-        }
-        if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
-          slack = INTEGRATION_STATUS.DISCONNECTED;
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { status: INTEGRATION_STATUS.DISCONNECTED },
-          });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      },
-      recordSurfaceEvent: () => undefined,
+        return Promise.resolve(
+          refuseConnect
+            ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
+            : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
+        );
+      }
+      if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
+        slack = INTEGRATION_STATUS.DISCONNECTED;
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { status: INTEGRATION_STATUS.DISCONNECTED },
+        });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
   });
 });
@@ -134,7 +132,11 @@ async function settle(): Promise<void> {
 }
 
 /** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
-function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
+function mount(
+  answers: (Failure | undefined)[],
+  draft: AgentDraft = DRAFT,
+  extra: Partial<CodingAgentsControl> = {},
+) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
   const settings = { integrationsOpened: false };
@@ -146,6 +148,7 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
     onOpenIntegrations: () => {
       settings.integrationsOpened = true;
     },
+    ...extra,
   });
   const github = { connects: 0 };
   /** What each repository remedy's door was asked, in order. */
@@ -451,4 +454,57 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
   await tab.press("Try again");
   await tab.press("Cancel");
   assert.deepEqual(slackRow(), { words: undefined, buttons: ["Connect"] });
+});
+
+test("a fork's draft names its source and the message over the box, starts on the source's model, sends an empty box as the fork alone, and its × lets the fork go", async () => {
+  const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
+  const fork = { agentId: SOURCE, messageId: MESSAGE, opening: "I moved the invite email…" };
+  const source: CodingAgentSummary = {
+    id: SOURCE,
+    planId: TASK_ID,
+    model: "openai/gpt-6.1-sol",
+    effort: "xhigh",
+    title: "Queue the invite email",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const forks: unknown[] = [];
+  let dropped = 0;
+  const tab = mount(
+    [],
+    { ...DRAFT, prompt: "", fork },
+    {
+      agents: [source],
+      startFork: (draftId, forked, words, choice, attachments) => {
+        forks.push({ draftId, forked, words, choice, attachments });
+        return Promise.resolve(undefined);
+      },
+      onDropFork: () => {
+        dropped += 1;
+      },
+    },
+  );
+  await settle();
+
+  const chip = document.querySelector("[data-fork-chip]");
+  assert.equal(
+    chip?.textContent?.replace(/\s+/gu, " "),
+    `Fork ofQueue the invite emailat“${fork.opening}”`,
+  );
+  assert.equal(
+    document.querySelector(".agent-model-chip")?.textContent,
+    "GPT 6.1 Sol Extra high",
+    "the model chip starts on the source's model and effort",
+  );
+
+  await tab.send();
+  assert.deepEqual(forks, [
+    { draftId: DRAFT.id, forked: fork, words: "", choice: undefined, attachments: [] },
+  ]);
+  assert.deepEqual(tab.starts, [], "a fork is never started as a prompt");
+
+  await tab.press("Drop the fork");
+  assert.equal(dropped, 1);
 });

@@ -83,13 +83,27 @@
   }
 
   /* A quiet or outlined button lights under the pointer, while its menu is
-     open, and while a toggle stands on; a filled one brightens. */
+     open, and while a toggle stands on; a filled one brightens. Its
+     translucent fill, lit or pressed, is laid over `--luke-button-ground`,
+     which is nothing unless a container sets it: one whose buttons stand
+     still while something slides beneath them, as a window's title bar
+     does over its panes, names the opaque ground they rest on, so what
+     passes beneath never shows through the fill. */
   .luke-button:is([data-variant="quiet"], [data-variant="outline"]):where(
     :hover:not(:disabled, [aria-disabled="true"]),
     [aria-expanded="true"],
     [aria-pressed="true"]
   ) {
     --luke-button-fill: var(--luke-color-fill-selected);
+    --luke-button-ink: var(--luke-color-text);
+    background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
+      var(--luke-button-ground, transparent);
+  }
+
+  /* A button that goes to the page on show reads in the full ink, as one
+     under the pointer does, without a fill: the page is where it stands,
+     not a state it holds. */
+  .luke-button:is([data-variant="quiet"], [data-variant="outline"])[aria-current="page"] {
     --luke-button-ink: var(--luke-color-text);
   }
 
@@ -102,6 +116,8 @@
     [aria-disabled="true"]
   ) {
     --luke-button-fill: var(--luke-color-fill-pressed);
+    background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
+      var(--luke-button-ground, transparent);
   }
 
   .luke-button:is([data-variant="primary"], [data-variant="danger"]):hover:not(

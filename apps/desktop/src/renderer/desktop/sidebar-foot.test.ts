@@ -9,6 +9,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand } from "../app-commands";
 import { OpenPersonProvider } from "../person-door";
@@ -34,14 +35,10 @@ let sent: { kind: string }[] = [];
 
 beforeEach(() => {
   sent = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: { kind: string }) => {
-        sent.push({ kind: request.kind });
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: { kind: string }) => {
+      sent.push({ kind: request.kind });
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
   });
 });
@@ -68,6 +65,8 @@ function mount(
     ran?: string[];
     openPerson?: (userId: string) => void;
     update?: UpdateSnapshot;
+    settingsOpen?: boolean;
+    onSettings?: () => void;
   } = {},
 ): HTMLButtonElement {
   const container = document.createElement("div");
@@ -99,8 +98,8 @@ function mount(
                 onOpenLatest: () => undefined,
               },
               shown: true,
-              settingsOpen: false,
-              onSettings: () => undefined,
+              settingsOpen: options.settingsOpen ?? false,
+              onSettings: options.onSettings ?? (() => undefined),
               onSignOut: options.onSignOut ?? (() => Promise.resolve()),
             }),
             createElement(HelpOffers, { ran: options.ran ?? [] }),
@@ -151,7 +150,7 @@ function accountItem(label: string): HTMLButtonElement {
   const item = [...(accountMenu()?.children ?? [])].find(
     (line): line is HTMLButtonElement =>
       line instanceof HTMLButtonElement &&
-      line.querySelector(".task-menu-label")?.textContent === label,
+      line.querySelector(".luke-menu-item-label")?.textContent === label,
   );
   return item ?? assert.fail(`the account's menu offers ${label}`);
 }
@@ -330,4 +329,20 @@ test("in the window, the account's menu opens with the reader's own profile, onc
   assert.equal(accountMenuLines()[2], "Your profile");
   act(() => accountItem("Your profile").click());
   assert.deepEqual(opened, ["user-dean"]);
+});
+
+test("the gear goes to Settings, and marks itself the page while Settings shows", () => {
+  let opened = 0;
+  mount(DEAN, { onSettings: () => opened++ });
+  const gear = (): HTMLButtonElement =>
+    document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]') ??
+    assert.fail("the foot draws the gear");
+  assert.equal(gear().getAttribute("aria-current"), null);
+  act(() => gear().click());
+  assert.equal(opened, 1);
+
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  mount(DEAN, { settingsOpen: true });
+  assert.equal(gear().getAttribute("aria-current"), "page");
 });

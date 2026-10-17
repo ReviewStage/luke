@@ -7,6 +7,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { ActorRef } from "./actor-ref";
 import { MemberDirectory } from "./member-directory";
@@ -49,13 +51,11 @@ beforeEach(() => {
   names = [];
   workspaces = [];
   github = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) github.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) github.push(request.payload.url);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
 });
@@ -92,7 +92,9 @@ function cardOf(view: HTMLElement): Element {
   act(() => {
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return document.querySelector(".luke-tooltip-card .card") ?? assert.fail("a card hangs");
+  return (
+    document.querySelector(".luke-tooltip-card .luke-hover-card") ?? assert.fail("a card hangs")
+  );
 }
 
 function press(element: Element | null | undefined): void {

@@ -1,4 +1,12 @@
-import { CloseIcon, SearchIcon } from "@luke/ui";
+import {
+  CloseIcon,
+  IconButton,
+  SearchIcon,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
@@ -219,25 +227,17 @@ function BarButton({
   command,
   disabled,
   onPress,
-  children,
+  icon,
 }: {
   label: string;
   command?: typeof APP_COMMAND.FIND_NEXT | typeof APP_COMMAND.FIND_PREVIOUS;
   disabled?: boolean;
   onPress: () => void;
-  children: React.ReactNode;
+  icon: React.ReactNode;
 }): React.JSX.Element {
   return (
     <Tooltip label={label} {...(command === undefined ? {} : { command })}>
-      <button
-        type="button"
-        className="icon-button find-bar-button"
-        aria-label={label}
-        disabled={disabled}
-        onClick={onPress}
-      >
-        {children}
-      </button>
+      <IconButton icon={icon} label={label} disabled={disabled} onClick={onPress} />
     </Tooltip>
   );
 }
@@ -295,7 +295,9 @@ function FindBar({
         />
         {line.length === 0 ? null : (
           <span className="find-bar-tally" aria-live="polite">
-            {line}
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {line}
+            </Text>
           </span>
         )}
       </label>
@@ -304,20 +306,16 @@ function FindBar({
         command={APP_COMMAND.FIND_PREVIOUS}
         disabled={tally.count === 0}
         onPress={() => onStep(FIND_STEP.PREVIOUS)}
-      >
-        <ChevronUpIcon aria-hidden="true" />
-      </BarButton>
+        icon={<ChevronUpIcon aria-hidden="true" />}
+      />
       <BarButton
         label="Next match"
         command={APP_COMMAND.FIND_NEXT}
         disabled={tally.count === 0}
         onPress={() => onStep(FIND_STEP.NEXT)}
-      >
-        <ChevronDownIcon aria-hidden="true" />
-      </BarButton>
-      <BarButton label="Close find" onPress={onClose}>
-        <CloseIcon />
-      </BarButton>
+        icon={<ChevronDownIcon aria-hidden="true" />}
+      />
+      <BarButton label="Close find" onPress={onClose} icon={<CloseIcon />} />
     </search>
   );
 }
@@ -439,16 +437,19 @@ export function PageFind({
   page,
   at,
   active,
+  hidden,
   children,
 }: {
   page: FindPage;
   at?: string | undefined;
   /** Whether the page holds the window's keys: the window's Plans tab on screen. */
   active: boolean;
+  /** Whether the page is hidden under a side panel filling the window beside it, as the Inbox's is. */
+  hidden?: boolean | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <FindScope className="page-find" active={active} subject={{ page, at }}>
+    <FindScope className="page-find" active={active} subject={{ page, at }} hidden={hidden}>
       {children}
     </FindScope>
   );

@@ -5,7 +5,8 @@ import { CatalogSection } from "../section";
 
 /**
  * text-fields.tsx -- a TextField empty with a placeholder, filled, invalid,
- * unavailable, and as a secret; a TextArea; and both in a narrow column.
+ * unavailable, and as a secret; a TextArea, standing and growing with its
+ * words; and both in a narrow column.
  */
 
 /** A field the example holds the value of, as a caller would. */
@@ -71,6 +72,22 @@ function TextFields(): React.JSX.Element {
               <FormField label="Prompt" description="What the automation asks its agent each run.">
                 {(field) => <TextArea field={field} value={value} onChange={onChange} rows={3} />}
               </FormField>
+            )}
+          </Held>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="text-area-grow" title="Many lines, growing">
+        <div className="catalog-column">
+          <Held start="">
+            {(value, onChange) => (
+              <TextArea
+                label="Feedback"
+                placeholder="What happened, and what did you expect?"
+                value={value}
+                onChange={onChange}
+                rows={5}
+                grow
+              />
             )}
           </Held>
         </div>

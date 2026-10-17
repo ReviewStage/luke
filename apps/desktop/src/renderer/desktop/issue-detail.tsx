@@ -1,7 +1,7 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { ConfirmDialog, useConfirmDialog } from "@luke/ui";
+import { ConfirmDialog, useConfirmDialog, useMenu } from "@luke/ui";
 import { ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -14,7 +14,7 @@ import { usePerson } from "../member-directory";
 import { RelativeTime } from "../tasks/relative-time";
 import { useMinute } from "../tasks/task-time";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import {
   archiveAnswered,
   archiveItem,
@@ -48,7 +48,7 @@ export function IssueCrumbs({
 }): React.JSX.Element {
   return (
     <nav className="automation-crumbs" aria-label="Path">
-      <FoldingButton label="Issues" glyph={<ListTodoIcon />} onClick={onBack} />
+      <FoldingButton label="Issues" icon={<ListTodoIcon />} onClick={onBack} />
       {identifier === undefined ? null : (
         <>
           <ChevronRightIcon aria-hidden="true" />
@@ -71,7 +71,7 @@ function DetailToolbar({
   onBack: () => void;
   onArchive: () => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId });
   const archive = archiveItem(onArchive);
   return (

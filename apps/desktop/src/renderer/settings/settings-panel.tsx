@@ -123,8 +123,9 @@ export function SettingsPanel({
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, microphone, account });
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+  // The shared settings page frames these, spacing them as sections.
   return (
-    <div className="settings">
+    <>
       {view === SETTINGS_VIEW.ACCOUNT ? (
         signedIn ? (
           <AccountSection
@@ -189,6 +190,6 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.SHORTCUTS ? (
         <WindowShortcutSections experiments={settings?.experiments ?? NO_EXPERIMENTS} />
       ) : null}
-    </div>
+    </>
   );
 }

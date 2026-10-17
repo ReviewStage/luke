@@ -119,3 +119,18 @@ test("an empty description and error say nothing, so the control is neither desc
   expect(button?.hasAttribute("aria-describedby")).toBe(false);
   expect(container.textContent).toBe("Sign outSign out");
 });
+
+test("a leading mark stands in the row but names nothing: the label alone names the control", () => {
+  const container = mount(
+    createElement(SettingsRow, {
+      label: "ada@example.com",
+      leading: createElement("span", null, "A"),
+      children: (control) =>
+        createElement("input", { type: "checkbox", "aria-labelledby": control.labelId }),
+    }),
+  );
+  const box = container.querySelector('input[type="checkbox"]');
+  if (box === null) throw new Error("no checkbox");
+  expect(container.textContent).toContain("A");
+  expect(wordsOf(box, "aria-labelledby")).toBe("ada@example.com");
+});

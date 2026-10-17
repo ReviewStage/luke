@@ -3,11 +3,14 @@ import {
   CloseIcon,
   CopyIcon,
   EllipsisIcon,
+  IconButton,
   PencilIcon,
   PinIcon,
   PlusIcon,
   UnpinIcon,
+  useMenu,
 } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ListXIcon, PlayIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -23,8 +26,7 @@ import {
 } from "../tasks/transcript-copy";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { MenuTab } from "./tab-strip";
 
 /**
@@ -220,7 +222,7 @@ function ToolbarTabActions({
   groups: MenuAction[][];
   slot: HTMLElement;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const named = `${label} actions`;
   return createPortal(
     <>
@@ -374,11 +376,10 @@ export function AddTabButton({
   return (
     <div ref={root} className="tab-add-anchor" data-side={side}>
       <Tooltip label={label} command={APP_COMMAND.NEW_TAB}>
-        <button
+        <IconButton
           ref={opener}
-          type="button"
-          className="icon-button tab-add"
-          aria-label={label}
+          icon={<PlusIcon />}
+          label={label}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
@@ -391,9 +392,7 @@ export function AddTabButton({
             setOpen(true);
             onOpen?.();
           }}
-        >
-          <PlusIcon />
-        </button>
+        />
       </Tooltip>
       {drawn.mounted ? (
         <SearchableMenu

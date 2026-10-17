@@ -18,6 +18,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { conversationOf, toolCall, words, worker, workerCall, workTurn } from "#testing/task-work";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -305,8 +306,8 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
     assert.ok(card, "the row hangs a tab's card");
     return [
-      card.querySelector(".card-name")?.textContent,
-      card.querySelector(".card-corner")?.textContent,
+      card.querySelector(".luke-hover-card-name")?.textContent,
+      card.querySelector(".luke-hover-card-corner")?.textContent,
     ];
   };
   assert.deepEqual(cardOn(page.querySelector("button[data-subagent-row]")), [
@@ -366,8 +367,8 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.deepEqual(
     [
-      card?.querySelector(".card-name")?.textContent,
-      card?.querySelector(".card-note")?.textContent,
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      card?.querySelector(".luke-hover-card-note")?.textContent,
     ],
     [ref.path, note],
   );
@@ -409,17 +410,13 @@ function seen(ref: Element | null): readonly (string | undefined)[] | undefined 
 }
 
 test("a teammate's call is headed with their face and name, their lines carry it and Luke's carry his, and the reader's own call names nobody", async () => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        ),
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      ),
   });
   const drawn = async (caller: PlanEditor | undefined) => {
     const page = mounted(
@@ -476,5 +473,5 @@ test("a teammate's call is headed with their face and name, their lines carry it
   assert.equal(own.heading, undefined);
   assert.doesNotMatch(own.line, /call/u);
   assert.deepEqual(own.senders, []);
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });

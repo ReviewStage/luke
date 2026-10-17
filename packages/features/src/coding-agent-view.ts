@@ -1,6 +1,8 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
+import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from "./chat-wire.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
@@ -20,12 +22,7 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
-import {
-  inboxAnsweredSchema,
-  inboxAnswerRequestSchema,
-  inboxAnswerSchema,
-  inboxImageTypeSchema,
-} from "./inbox-wire.js";
+import { inboxAnsweredSchema, inboxAnswerRequestSchema, inboxAnswerSchema } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -467,14 +464,15 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
 
 /**
- * The image, as the window hears it: its bytes in base64 under the media
- * type the service sniffed and kept, which the window draws from a `data:`
- * URL of its own making, or why there is none. The host fetched it under
+ * The image, or the file an inbox answer carried, as the window hears it:
+ * its bytes in base64 under the media type the service sniffed and kept, or
+ * the type the file travelled as, which the window draws or opens from a
+ * `data:` URL of its own making, or why there is none. The host fetched it under
  * the account, so the window holds no bearer and no address.
  */
 export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: inboxImageTypeSchema,
+    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
     base64: EffectSchema.String,
   }),
   failed,
@@ -510,3 +508,32 @@ export const codingAgentGitHubImageViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema.Type;
+
+/** A workspace's chat past a cursor, as the window asks it: the workspace, and the cursor the service last handed back or the start. */
+export const codingAgentChatParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  after: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentChatParams = typeof codingAgentChatParamsSchema.Type;
+
+/** A workspace's chat past a cursor, as the window hears it: the roster, the channels, the messages past it, and the cursor to read on from, or why there is none. */
+export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
+
+export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
+
+/** A write to a workspace's chat, as the window asks it: the workspace, and the write the service takes, its key the window's own where it carries one. */
+export const codingAgentChatPostParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  write: chatWriteRequestSchema,
+});
+
+export type CodingAgentChatPostParams = typeof codingAgentChatPostParamsSchema.Type;
+
+/** A write to a workspace's chat, as the window hears it: what the write came to, or why there is no answer. */
+export const codingAgentChatWriteAnswerViewSchema = EffectSchema.Union([
+  chatWriteAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentChatWriteAnswerView = typeof codingAgentChatWriteAnswerViewSchema.Type;
