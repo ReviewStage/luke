@@ -68,23 +68,23 @@ export type LiveBrainRunEvent =
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED;
       readonly runId: string;
-      /** A question the planning model queued for the developer, and the answer it recommends. */
+      /** A question the brain queued for the developer, and the answer it recommends. */
       readonly question: string;
       readonly recommendation: string;
     }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN;
       readonly runId: string;
-      /** The words of a queued question the planning model took back, so the voice is never handed it. */
+      /** The words of a queued question the brain took back, so the voice is never handed it. */
       readonly question: string;
     }
-  // Code of the plan's repository the planning model put on screen, with its
+  // Code of the task's repository the brain put on screen, with its
   // lines, for Luke's next words, under the call and turn that showed it.
   | ({
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CODE_SHOWN;
       readonly runId: string;
     } & TaskShownCode)
-  // The developer said they are done and the planning model asked to end
+  // The developer said they are done and the brain asked to end
   // the call; the service decides whether this run may still end it.
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CALL_ENDING; readonly runId: string }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
@@ -121,7 +121,7 @@ export interface LiveBrainAsk {
   question: string;
   /** The voice session the delegation came in on, so a later connection to it can find the ask again. */
   sessionId: string;
-  /** The ask's task revision in that session's order of delegations: a higher one supersedes a lower. */
+  /** The ask's revision in that session's order of delegations: a higher one supersedes a lower. */
   revision: number;
 }
 

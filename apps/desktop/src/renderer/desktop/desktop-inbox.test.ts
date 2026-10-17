@@ -67,7 +67,7 @@ const BILLING: TaskSummary = {
   createdAt: 1,
   updatedAt: 2,
   repository: "acme/relay",
-  // The sidebar's list names the plan's agent, as the service sums a plan's agents up.
+  // The sidebar's list names the task's agent, as the service sums a task's agents up.
   agents: {
     total: 1,
     working: 1,
@@ -140,17 +140,17 @@ const HOLDING: readonly AppInboxTaskHolding[] = [
 ];
 
 let root: Root | undefined;
-/** The plan's agents as the service lists them, archived ones among them. */
+/** The task's agents as the service lists them, archived ones among them. */
 let listedAgents: readonly CodingAgentSummary[] = [AGENT];
-/** Each plan's inbox as the service answers a read of it from the start. */
+/** Each task's inbox as the service answers a read of it from the start. */
 let inboxes = new Map<string, readonly InboxItem[]>();
-/** Moves main's list of the plans holding items, as its read of the account would. */
+/** Moves main's list of the tasks holding items, as its read of the account would. */
 let setHolding: (holding: readonly AppInboxTaskHolding[]) => void = () => undefined;
-/** Moves the account's list of plans, as an archive on another Mac would. */
+/** Moves the account's list of tasks, as an archive on another Mac would. */
 let setTasks: (tasks: readonly TaskSummary[]) => void = () => undefined;
 /** Chooses an item from outside the list, as a notification's click does. */
 let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
-/** Moves main's read of what waits on the agents with no plan, as main does when an item opens or is answered. */
+/** Moves main's read of what waits on the agents with no task, as main does when an item opens or is answered. */
 let setTaskless: (taskless: readonly AppInboxTasklessItem[]) => void = () => undefined;
 /** Whether an agent's own inbox read answers that it could not be read. */
 let agentReadFails = false;
@@ -158,17 +158,17 @@ let agentReadFails = false;
 let agentListHeld = false;
 /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
 let holdAgentRead: ((respond: () => void) => void) | undefined;
-/** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
+/** A read of a task's inbox as the act answers it: done, carrying the view the service answered. */
 interface ReadOutcome {
   readonly status: typeof ACT_OUTCOME_STATUS.DONE;
   readonly value: CodingAgentInboxAnswerView;
 }
 
-/** How the next held read of a plan, one past the cursor, answers: held open while nothing changes unless a test says. */
+/** How the next held read of a task, one past the cursor, answers: held open while nothing changes unless a test says. */
 let heldRead: (taskId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
-/** How a read of a plan from the start answers, where a test holds it in its own hands. */
+/** How a read of a task from the start answers, where a test holds it in its own hands. */
 let startRead: ((taskId: string) => Promise<ReadOutcome> | undefined) | undefined;
-/** Each agent with no plan's items, as its own inbox read answers them. */
+/** Each agent with no task's items, as its own inbox read answers them. */
 let agentInboxes = new Map<string, readonly InboxItem[]>();
 /** Every agent whose own inbox was read from the start, in order. */
 let agentReads: string[] = [];
@@ -298,7 +298,7 @@ interface Asked {
   closed: number;
 }
 
-/** The Inbox over the two plans, and the items of agents with no plan given, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
+/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded. */
 function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
   const asked: Asked = { shownTasks: [], shownAgents: [], shownAutomations: [], closed: 0 };
   function Page() {
@@ -540,7 +540,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   act(() => {
     answerer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-actor-card='person']");
+  const card = document.querySelector(".luke-tooltip-card [data-actor-card='person']");
   assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
 
@@ -659,7 +659,7 @@ test("an image that lands before its item's own read does is drawn all the same"
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
-  const standing = document.querySelector(`.tooltip-card ${card}`);
+  const standing = document.querySelector(`.luke-tooltip-card ${card}`);
   assert.ok(standing, "a card is hung");
   return [...standing.querySelectorAll("button")]
     .map((button) => button.textContent ?? "")
@@ -667,7 +667,7 @@ function openings(card: string): string[] {
 }
 
 function standingCard(): readonly [string | null | undefined, string | null | undefined] {
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "an agent's card is hung");
   return [
     card.querySelector(".card-name")?.textContent,
@@ -765,7 +765,7 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
   });
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
   // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
-  const card = document.querySelector<HTMLElement>(".tooltip-card [data-tab-card]");
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card [data-tab-card]");
   act(() => {
     card?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     card?.click();
@@ -786,7 +786,7 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
 
 test("an item's mark hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-  /** The words of the card the row's mark hangs, the plan's row naming its agent as started by `starter`. */
+  /** The words of the card the row's mark hangs, the task's row naming its agent as started by `starter`. */
   const markCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
     const { page } = mount();
     await settle();
@@ -799,7 +799,7 @@ test("an item's mark hangs a card naming the teammate who started its agent, as 
     act(() => {
       mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const words = wordsOf(document.querySelector(".tooltip-card [data-tab-card]"));
+    const words = wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]"));
     act(() => root?.unmount());
     root = undefined;
     document.body.innerHTML = "";
@@ -884,7 +884,7 @@ test("Needs you's glyph wears the rows' dot while anything needs you, the filter
   act(() => button.click());
   assert.deepEqual(worn(), { pressed: "true", dot: false, tooltip: "Show all" });
 
-  // Another plan's agent asks again, as main says that plan changed.
+  // Another task's agent asks again, as main says that task changed.
   inboxes.set(INVITES.id, [{ ...EXPIRY, updatedAt: 6_000 }]);
   act(() =>
     setHolding([
@@ -1593,7 +1593,7 @@ test("an answer to a plan's read that a newer one overtook moves nothing: the ne
   );
 });
 
-/** An agent with no plan an automation started, and the question it asked. */
+/** An agent with no task an automation started, and the question it asked. */
 const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
 const QUARANTINE: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-000000000009", "Quarantine the flaky test?", 6_000),
@@ -1631,7 +1631,7 @@ test("an item of an agent with no plan stands under the automation that started 
   assert.deepEqual(asked.shownTasks, [], "the automation's crumb opens no plan");
 });
 
-/** The automation that started the agent with no plan, as its workspace's list reads it. */
+/** The automation that started the agent with no task, as its workspace's list reads it. */
 const SWEEP: AutomationSummary = {
   id: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
   planId: null,
@@ -1649,7 +1649,7 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** An agent with no plan no automation the reader may read names, and its question. */
+/** An agent with no task no automation the reader may read names, and its question. */
 const STRAY_AGENT = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d";
 const BUMP: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-00000000000c", "Bump the Node image?", 1_500),
@@ -1670,7 +1670,7 @@ function hoveredCard(control: Element, card: string): string | null {
   act(() => {
     control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return wordsOf(document.querySelector(`.tooltip-card ${card}`));
+  return wordsOf(document.querySelector(`.luke-tooltip-card ${card}`));
 }
 
 test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
@@ -1700,7 +1700,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.deepEqual(openings('[data-actor-card="automation"]'), [], "no Open automation");
   const name = document.querySelector<HTMLButtonElement>(
-    '.tooltip-card [data-actor-card="automation"] .card-name button',
+    '.luke-tooltip-card [data-actor-card="automation"] .card-name button',
   );
   assert.equal(name?.textContent, "Nightly flake sweep", "the card's name is a button");
   act(() => name?.click());
@@ -1729,7 +1729,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.equal(
-    document.querySelector('.tooltip-card [data-actor-card="automation"] button')?.textContent,
+    document.querySelector('.luke-tooltip-card [data-actor-card="automation"] button')?.textContent,
     undefined,
     "the crumb's card offers nothing to press, since the crumb opens the automation",
   );
@@ -1750,7 +1750,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   );
 });
 
-/** Another agent with no plan the same automation started, whose two questions wait. */
+/** Another agent with no task the same automation started, whose two questions wait. */
 const SECOND_AGENT = "6f708192-a3b4-4c5d-8e6f-708192a3b4c5";
 const SECOND_ASK: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-00000000000a", "Skip the slow suite?", 2_000),
@@ -1761,7 +1761,7 @@ const THIRD_ASK: InboxItem = {
   agentId: SECOND_AGENT,
 };
 
-/** One waiting item of an agent with no plan, as main's read lists it. */
+/** One waiting item of an agent with no task, as main's read lists it. */
 function waitingTaskless(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,

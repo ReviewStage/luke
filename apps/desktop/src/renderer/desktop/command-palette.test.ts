@@ -83,7 +83,7 @@ function WindowPalette({
   );
 }
 
-/** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
+/** The palette over a window on its Tasks tab, opened by ⌘K's command, every page it opens recorded. */
 function openPalette(
   tasks: TasksControl = tasksControl(),
   readFiles: (taskId: string) => Promise<TasksTreeAnswer> = () =>
@@ -409,7 +409,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.equal(card?.querySelector(".card-name")?.textContent, "Invoice export");
   assert.equal(card?.querySelector(".card-corner")?.textContent, "Working…");
   press("Invoice export · Billing usage alerts");
@@ -561,7 +561,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() => {
       row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const words = document.querySelector(".tooltip-card .actor-words .actor-ref")?.textContent;
+    const words = document.querySelector(".luke-tooltip-card .actor-words .actor-ref")?.textContent;
     act(() => root.unmount());
     document.body.innerHTML = "";
     return words;
@@ -762,7 +762,7 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
   act(() => {
     row?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-file-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.deepEqual(
     [
       card?.querySelector(".card-name")?.textContent,

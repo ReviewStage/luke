@@ -20,7 +20,7 @@ import { task } from "./task.js";
  * data in and one fewer to delete it from; the bound is a check on the
  * column, so no row can hold more than a block may carry. The media type
  * is what the service sniffed the bytes to be, never the file's name, and
- * is what the bytes are served under. The account and the plan stand on
+ * is what the bytes are served under. The account and the task stand on
  * the row beside the item, as they do on the item, so an attachment goes
  * with any of the three, and a read names the account beside the item.
  * A row no block names any longer, once the agent posted its item again
@@ -33,7 +33,7 @@ export const inboxAttachment = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The item's plan; null for an item of an agent with no plan. */
+    /** The item's task; null for an item of an agent with no task. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     /** The item's workspace. */
     organizationId: text("organization_id")

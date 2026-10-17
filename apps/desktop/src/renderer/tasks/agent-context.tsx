@@ -1,7 +1,6 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
-import { CloseIcon } from "@luke/ui";
+import { AnchoredPopover, CloseIcon, POPOVER_ALIGN } from "@luke/ui";
 import { useEffect, useId, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { Tooltip } from "../tooltip";
 import {
   contextFullLine,
@@ -25,7 +24,7 @@ import { useMinute } from "./task-time";
  * (`agent-context-model.ts`); its hover says the share in words. A press
  * opens a popover right above the ring, the model menu's width, from the
  * ring's trailing edge as the model menu hangs from its chip, since both
- * stand at the foot's right (`../anchored-popover.tsx`). It says the
+ * stand at the foot's right (`@luke/ui`'s `AnchoredPopover`). It says the
  * share and the total, draws the parts on one segmented bar, names each
  * part with its count beside a square of its colour, and under them the
  * cache, the step's answer, where eve compacts, and when it last did. The

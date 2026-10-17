@@ -28,7 +28,7 @@ import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 
 /**
  * One turn's run seams as the voice session hears them while the turn runs:
- * a slow step began, a planning call queued a question, every action
+ * a slow step began, a brain call queued a question, every action
  * settled, one sentence of the reply, the turn ended. They are not rows of
  * their own: the store keeps the turn row and the turn's journal, the
  * assistant message the writer opens under the turn's id and amends as each
@@ -83,7 +83,7 @@ function replyTextOf(parts: readonly JournalPart[]): string {
 }
 
 /**
- * What one call tells while the turn runs: a question a planning call queued
+ * What one call tells while the turn runs: a question a brain call queued
  * or withdrew, code it showed, its ask to end the call, or a repository
  * command, the one slow step. A queued or withdrawn question or an end is told
  * once its input is whole, never while it streams, and
@@ -119,7 +119,7 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
 /**
  * The turn's events as the record now stands, numbered from one, walked
  * step by step: a step's sentences, then what its calls tell. The slow step
- * and the end of the call, once per run each, every question a planning call
+ * and the end of the call, once per run each, every question a brain call
  * queued, and all the code it showed, are told the
  * moment their call is on the journal, the code once its call has answered. A sentence is
  * told while the turn still runs once every call journaled ahead of its step

@@ -4,11 +4,11 @@ import { Schema as EffectSchema, Result } from "effect";
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "./board-vocabulary.js";
 
 /**
- * board-wire.ts -- a plan's whiteboard: the Excalidraw scene on it, and Luke's latest drawing for it, as the service stores them and the Plans tab reads them.
+ * board-wire.ts -- a task's whiteboard: the Excalidraw scene on it, and Luke's latest drawing for it, as the service stores them and the Tasks tab reads them.
  *
- * A board is two things. The scene is the Excalidraw elements the Plans tab
+ * A board is two things. The scene is the Excalidraw elements the Tasks tab
  * shows, written whole by the Mac, the last write winning. Luke's drawing is
- * the diagram the planning model last drew (`draw_on_board`), kept in the
+ * the diagram the brain last drew (`draw_on_board`), kept in the
  * small vocabulary below rather than as Excalidraw's own records, because
  * only the Mac's canvas can measure text and lay out what Excalidraw makes of
  * it. Each drawing is numbered, and the scene says which drawing it holds:
@@ -219,7 +219,7 @@ export const drawingElementsSchema = describeWire(
   "The whole diagram, every shape, text, zone, and arrow in it.",
 );
 
-/** A plan's board as it stands: the empty scene and no drawing before anything was drawn. */
+/** A task's board as it stands: the empty scene and no drawing before anything was drawn. */
 export const boardSchema = EffectSchema.Struct({
   elements: boardElementsSchema,
   /** The number of Luke's drawing the scene holds; 0 before it holds any. */
@@ -241,7 +241,7 @@ export const boardAnswerSchema = EffectSchema.Struct({ board: boardSchema });
 /**
  * The Mac's write (PUT): the whole scene, and the number of Luke's drawing it
  * holds; with the scene drawn as a PNG, base64, when this write is the first
- * to hold that drawing, so the planning model can look at what it drew.
+ * to hold that drawing, so the brain can look at what it drew.
  */
 export const boardSaveRequestSchema = EffectSchema.Struct({
   elements: boardElementsSchema,

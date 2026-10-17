@@ -120,7 +120,6 @@ export function ConfirmDialog({
   return (
     <ModalShell
       role={MODAL_ROLE.ALERT_DIALOG}
-      className="confirm-dialog"
       labelledBy={titleId}
       {...(question.body ? { describedBy: bodyId } : undefined)}
       busy={acting}

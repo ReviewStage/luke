@@ -4,7 +4,7 @@ import { wireUuidSchema } from "./service-wire.js";
 /**
  * terminal-wire.ts -- a coding agent's terminals, as the desktop lists, names, and ends them, and how its sandbox stands.
  *
- * A Terminal tab belongs to one coding agent's sandbox, never to the plan.
+ * A Terminal tab belongs to one coding agent's sandbox, never to the task.
  * Each of its shells is a tmux session in that sandbox, which outlives any
  * connection to it, so the list is read from the sandbox itself: one row
  * per shell, its name, what it is running, and where. The list never wakes a

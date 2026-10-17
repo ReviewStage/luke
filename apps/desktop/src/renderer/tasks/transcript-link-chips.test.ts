@@ -17,7 +17,7 @@ import { TranscriptWords } from "./transcript-blocks";
  * names wherever a transcript's words are drawn: an agent's reply, a
  * subagent's, the Call tab, and an Inbox item's Markdown, which all draw
  * through `TranscriptWords`. A link that names nothing stays a link, and
- * code stays code. Synthetic plan and repository.
+ * code stays code. Synthetic task and repository.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -57,7 +57,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What a plan's page hands its places, each plan and file a chip opened kept. */
+/** What a task's page hands its places, each task and file a chip opened kept. */
 function taskPage(
   opened: Mention[],
   files: { path: string; lines: MentionLines | undefined }[],
@@ -78,7 +78,7 @@ function taskPage(
   };
 }
 
-/** The words drawn as a transcript draws them, on the plan's page given or off any. */
+/** The words drawn as a transcript draws them, on the task's page given or off any. */
 function drawn(page: PlanMentionsValue | undefined, text: string = WORDS): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

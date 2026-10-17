@@ -18,7 +18,7 @@ export function FailureNote({
   className: string;
   /** Retry's press. */
   onRetry?: (() => void) | undefined;
-  /** Opens the API keys, reconnects the integration, or mends the plan's repository, as the reason says. */
+  /** Opens the API keys, reconnects the integration, or mends the task's repository, as the reason says. */
   onRemedy?: (() => void) | undefined;
 }): React.JSX.Element {
   const label = remedyLabel(failure);

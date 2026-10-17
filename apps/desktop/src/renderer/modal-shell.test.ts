@@ -152,8 +152,7 @@ function open({ Owner, role }: Dialog) {
   act(() => opener.click());
   const card = () => document.querySelector<HTMLElement>(`[role="${role}"][aria-modal="true"]`);
   assert.ok(card(), "the dialog opens");
-  const backdrop =
-    document.querySelector<HTMLElement>(".confirm-dialog-backdrop") ?? assert.fail("no backdrop");
+  const backdrop = card()?.parentElement ?? assert.fail("no backdrop");
   const key = (key: string, shiftKey = false) =>
     act(() => {
       (document.activeElement ?? document.body).dispatchEvent(

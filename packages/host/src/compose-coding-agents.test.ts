@@ -65,7 +65,7 @@ const AGENT: CodingAgentSummary = {
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
-/** The agent as its own page reads it, with no plan, as an automation's run leaves one. */
+/** The agent as its own page reads it, with no task, as an automation's run leaves one. */
 const PAGE: CodingAgentPage = {
   ...AGENT,
   planId: null,

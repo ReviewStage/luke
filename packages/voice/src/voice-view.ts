@@ -38,7 +38,7 @@ interface VoiceCallLine {
 
 /**
  * Everything said on the standing call so far: the store's id for its
- * session, which the plan's stored transcript names the call by once it
+ * session, which the task's stored transcript names the call by once it
  * ends, and its lines in the order they opened.
  */
 interface VoiceCallTranscript {
@@ -59,7 +59,7 @@ export interface VoiceView extends VoiceSpeakers {
   lukeCaptions: readonly string[] | undefined;
   /** The developer's own words still being said, drawn only under the captions preference. */
   developerCaptions: readonly string[] | undefined;
-  /** The plan the standing call is about, where the panel's open plan opened it; none for no call. */
+  /** The task the standing call is about, where the panel's open task opened it; none for no call. */
   callTaskId: string | undefined;
   /** What was said on the standing call so far, whatever the captions preference; none for no call or before its first line. */
   callTranscript: VoiceCallTranscript | undefined;
@@ -77,7 +77,7 @@ export interface VoiceView extends VoiceSpeakers {
 export const VOICE_COMMAND = {
   STOP_SPEAKING: "stop-speaking",
   END_CALL: "end-call",
-  /** The standing call's microphone muted, or heard again, whatever plan the panel has open. */
+  /** The standing call's microphone muted, or heard again, whatever task the panel has open. */
   TOGGLE_MICROPHONE: "toggle-microphone",
   /** Luke's voice silenced on this Mac for the call standing, and heard again; the session is told nothing. */
   MUTE_SPEAKER: "mute-speaker",
@@ -107,7 +107,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   speakerMuted: false,
 };
 
-/** The statuses of a call still in progress, the ones a planning call holds the panel open through. */
+/** The statuses of a call still in progress, the ones a task call holds the panel open through. */
 const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
   LIVE_STATUS.CONNECTING,
   LIVE_STATUS.MUTED,
@@ -116,7 +116,7 @@ const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * Whether a planning call is in progress: the developer is talking a plan
+ * Whether a task call is in progress: the developer is talking a task
  * through, whatever the panel shows. A call closing or failed is not in
  * progress. The panel's call bar, the mute chords, and the floating call
  * window all answer to it.

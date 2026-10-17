@@ -16,10 +16,10 @@ import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
- * A plan's sections' links on its own page: a mention of a section drawn as
+ * A task's sections' links on its own page: a mention of a section drawn as
  * the chip that opens it, one of a heading the plan no longer holds struck
- * through and opening the plan at its top, a section's ⋯ copying its link,
- * the title's ⋯ copying the plan's, an ask to show a section scrolling the document to it, and nothing a
+ * through and opening the task at its top, a section's ⋯ copying its link,
+ * the title's ⋯ copying the task's, an ask to show a section scrolling the document to it, and nothing a
  * mention names riding on an attribute. Mentions are read in the form
  * written before the link was settled as well as the settled one.
  * Synthetic plan.
@@ -27,7 +27,7 @@ import { PlanBody, type SectionLinks } from "./plan-body";
 
 const TASK_ID = DOCUMENT_TASK.id;
 
-/** The slug of the workspace the plan's links are written under. */
+/** The slug of the workspace the task's links are written under. */
 const WORKSPACE = "acme";
 
 const PLACE = { workspace: WORKSPACE, repository: "acme/relay" } as const;
@@ -79,7 +79,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The plan's page drawn with its sections' links, the mentions it was asked to open kept. */
+/** The task's page drawn with its sections' links, the mentions it was asked to open kept. */
 function drawn(links: Partial<SectionLinks> = {}) {
   const opened: Mention[] = [];
   const container = document.createElement("div");
@@ -242,7 +242,7 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
   ]);
 });
 
-/** The plan's page drawn editable, as a plan's own page is. */
+/** The task's page drawn editable, as a task's own page is. */
 function drawnEditable(): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -367,7 +367,7 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
 
   act(() => chipNamed(container, "session-store.ts").click());
   act(() => chipNamed(container, "session-store.ts:3").click());
-  // Another repository's file is no file of the plan's, but GitHub's own page, which opens no tab.
+  // Another repository's file is no file of the task's, but GitHub's own page, which opens no tab.
   act(() => chipNamed(container, "other.ts").click());
 
   assert.deepEqual(opened, [
@@ -464,7 +464,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
-/** The plan's page drawn as a plan's own page is, its title renamed and its versions opened, each kept. */
+/** The task's page drawn as a task's own page is, its title renamed and its versions opened, each kept. */
 function drawnTitled() {
   const renamed: string[] = [];
   const histories: (number | undefined)[] = [];

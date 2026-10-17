@@ -21,8 +21,8 @@ import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model";
  * worth showing. An answer the service could not give leaves what was
  * drawn standing; another agent's tab starts from nothing of this one's.
  *
- * The plan keeps every answer beside its agents (`useTaskPullRequests`), so
- * the side panel's "+", the plan's summary, and ⌘K offer an agent's Changes
+ * The task keeps every answer beside its agents (`useTaskPullRequests`), so
+ * the side panel's "+", the task's summary, and ⌘K offer an agent's Changes
  * tab exactly while it has a pull request, its tab open or not.
  */
 
@@ -99,7 +99,7 @@ export function useAgentPullRequest(input: {
   return held.agentId === agentId ? held.published : undefined;
 }
 
-/** The plan's agents' pull requests, and the reader that keeps them as its answers land. */
+/** The task's agents' pull requests, and the reader that keeps them as its answers land. */
 export interface TaskPullRequests {
   /** Each agent's pull request, by agent, of those whose latest read named one. */
   readonly pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
@@ -110,7 +110,7 @@ export interface TaskPullRequests {
 /** No agent has a pull request, one map so a render that has none hands down the same one. */
 const NO_PULL_REQUESTS: ReadonlyMap<string, CodingAgentPullRequest> = new Map();
 
-/** What one visit to a plan has read: each agent's pull request, and the asks behind them. */
+/** What one visit to a task has read: each agent's pull request, and the asks behind them. */
 interface Visit {
   readonly taskId: string | undefined;
   /** Each agent read on its own, by whether it had ended when it was asked. */
@@ -120,13 +120,13 @@ interface Visit {
 }
 
 /**
- * Which of the plan's agents have a pull request, as the side panel's "+",
- * the plan's summary, and ⌘K offer its Changes tab by: every answer `read`
+ * Which of the task's agents have a pull request, as the side panel's "+",
+ * the task's summary, and ⌘K offer its Changes tab by: every answer `read`
  * lands is kept, an agent's own tab's reads included, and each agent is
  * read once as the list first holds it and once more as it ends, since that
  * is when what it published settles. Nothing reads on a clock. An answer the
  * service could not give leaves what was kept standing. Note that what is
- * kept is the visit's: opening the plan again reads every agent afresh, an
+ * kept is the visit's: opening the task again reads every agent afresh, an
  * answer to an ask made on an earlier visit is let go, and of two asks of
  * one agent out at once only the later one's answer is kept, so an earlier
  * read landing late never takes back a pull request a later one found.

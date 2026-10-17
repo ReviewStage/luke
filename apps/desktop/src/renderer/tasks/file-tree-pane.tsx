@@ -11,7 +11,7 @@ import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
 import { entriesOf } from "./folder-listings";
 
 /**
- * file-tree-pane.tsx -- the tree beside a File tab: the plan's repository a folder at a time, drawn by the file tree bundle, the tab's file marked in it.
+ * file-tree-pane.tsx -- the tree beside a File tab: the task's repository a folder at a time, drawn by the file tree bundle, the tab's file marked in it.
  *
  * The tree is drawn by the file tree bundle (`../file-tree/`), loaded the
  * first time a tree is shown and kept for the window's life
@@ -23,7 +23,7 @@ import { entriesOf } from "./folder-listings";
  * paths holding what is typed, over the whole repository listed in one read
  * the first time the field is used, or over the folders listed so far where
  * that read did not land or was cut short, as the empty field then says; and a filter, which shows only the files
- * Luke showed on the plan; ⌘F anywhere in the pane takes the caret to the
+ * Luke showed on the task; ⌘F anywhere in the pane takes the caret to the
  * field. Every name here is the repository's, so the pane is left out of the
  * screen recording (`ph-no-capture`).
  *
@@ -119,7 +119,7 @@ export function FileTreePane({
 }: {
   /** The File tab's file, revealed in the tree. */
   file: string;
-  /** The files of the repository Luke showed on the plan, which the filter narrows the tree to; none draws no filter. */
+  /** The files of the repository Luke showed on the task, which the filter narrows the tree to; none draws no filter. */
   shown?: readonly string[] | undefined;
   /** The only files the tree shows, every folder open, in the filter's place: a change set's. */
   only?: readonly string[] | undefined;
