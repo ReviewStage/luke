@@ -468,7 +468,7 @@ function forkCaveat(forked: boolean, edited: readonly string[] | undefined): str
   const lead =
     " That code is the source's work as it stands now, which may be ahead of the message you were forked at.";
   if (edited === undefined) {
-    return `${lead} Which files it edited after that message could not be read, so mind that its edits and the commands it ran may have changed files since.`;
+    return `${lead} Which files it edited after that message could not all be read, so mind that its edits and the commands it ran may have changed files since.`;
   }
   if (edited.length === 0) {
     return `${lead} Its file tools edited no file after that message, though a command it ran may have changed some.`;
@@ -540,8 +540,9 @@ function editedFiles(part: StoredToolPart): readonly string[] {
  * The files the source's file tools edited after the message a fork is
  * taken at, each once, in the order first edited, read forward from the
  * cut's sequence up to `REPLAY_BOUNDS.MAX_ROWS` rows. Note that a page that
- * does not read answers nothing rather than refusing the fork, because the
- * fork replays none of those rows and only its caveat names them.
+ * does not read, or rows past the cap, answer nothing rather than refusing
+ * the fork or naming some of the files as all of them, because the fork
+ * replays none of those rows and only its caveat names them.
  */
 const editedAfter = (source: CodingAgent, cutSeq: number) =>
   Effect.gen(function* () {
@@ -563,10 +564,11 @@ const editedAfter = (source: CodingAgent, cutSeq: number) =>
           if (isStoredToolPart(part)) for (const file of editedFiles(part)) files.add(file);
         }
       }
-      if (past.read.value.length < PAGE_ROWS) break;
+      if (past.read.value.length < PAGE_ROWS) return [...files];
       cursor = { seq: past.cursor.seq, revision: Number.MAX_SAFE_INTEGER };
     }
-    return [...files];
+    // More rows stand past the cap, so the files named would pass for all of them.
+    return undefined;
   });
 
 /** The steps a source's transcript replays, cut after the message named: refused where that message is none of its journals. */

@@ -4879,6 +4879,13 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
         assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
 
+        // A fork with more rows after it than are read names no files as if they were all it edited.
+        yield* startFrom({ agentId: source.id, messageId: ids[10] ?? "" });
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Which files it edited after that message could not all be read/u,
+        );
+
         // A row past the cut that does not read refuses a continue, but not a fork that needs none of it.
         yield* transcriptRow(stored, turns + 2, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
         assert.deepEqual(
@@ -4892,7 +4899,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
         assert.match(
           openedParts(eve).parts.replay?.preamble ?? "",
-          /Which files it edited after that message could not be read/u,
+          /Which files it edited after that message could not all be read/u,
         );
       }),
   );
