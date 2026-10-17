@@ -34,7 +34,12 @@ import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { openTaskConversation, savePlanText, updateTask } from "@luke/database/models/task-store";
+import {
+  openTaskConversation,
+  readTask,
+  savePlanText,
+  updateTask,
+} from "@luke/database/models/task-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { member, user } from "@luke/database/schemas/auth";
@@ -1264,6 +1269,62 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(archived.archivedBy?.agent, undefined);
         const back = yield* changed(false);
         assert.deepEqual([back.archivedAt, back.archivedBy], [undefined, undefined]);
+      }),
+  );
+
+  it.effect(
+    "a member's archive of a plan stops its running agent first and archives it with the plan, a message to it is refused as the plan's, and the plan's unarchive brings it back",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, agent, ask, eve, sessionId } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        yield* joinWorkspace(task.workspaceId, other);
+        const marked = (archived: boolean) =>
+          Effect.map(
+            ask(request(TASK, other, { method: "PATCH", id: task.id, body: { archived } })),
+            (answered) => answered.status,
+          );
+        const archiveNow = () =>
+          Effect.map(readCodingAgent(owner, agent.id), (read) => {
+            const stored = Option.getOrThrow(read);
+            return { archived: stored.archivedAt !== null, by: stored.archivedBy };
+          });
+
+        assert.equal(yield* marked(true), HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(yield* archiveNow(), {
+          archived: true,
+          by: { by: CODING_AGENT_ARCHIVER.MEMBER, userId: other, withTask: true },
+        });
+        assert.deepEqual(
+          yield* ask(messageAs(owner, agent.id, { text: "Carry on.", clientKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+        );
+
+        assert.equal(yield* marked(false), HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(yield* archiveNow(), { archived: false, by: null });
+      }),
+  );
+
+  it.effect(
+    "a plan's archive is refused as not ready while one of its agents holds a message awaiting its turn, which no Stop can name yet, before any Stop is sent, and leaves the plan and the agent standing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, agent, ask, sent, eve } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        yield* sent("Rename the subject line too.");
+
+        assert.deepEqual(
+          yield* ask(
+            request(TASK, owner, { method: "PATCH", id: task.id, body: { archived: true } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        assert.equal(Option.getOrThrow(yield* readTask(owner, task.id)).task.archivedAt, undefined);
+        assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, agent.id)).archivedAt, null);
+        assert.deepEqual(eve.cancelled, []);
       }),
   );
 

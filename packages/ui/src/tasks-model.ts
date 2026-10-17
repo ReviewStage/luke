@@ -326,6 +326,15 @@ export function archiveTasksFailedNote(refused: number): string {
     : "The tasks could not be archived. Try again.";
 }
 
+/**
+ * Whether archiving the plans asks first: any of them has a coding agent
+ * not yet archived, which the archive stops and archives with it. A plan
+ * whose agents the list has yet to read asks nothing, as one with none.
+ */
+export function archiveAsks(tasks: readonly Pick<TaskSummary, "agents">[]): boolean {
+  return tasks.some((task) => (task.agents?.total ?? 0) > 0);
+}
+
 /** A plan's pin and archive as the list carries them, each only where it stands. */
 type MarkStamps = Pick<TaskSummary, "pinnedAt" | "archivedAt">;
 

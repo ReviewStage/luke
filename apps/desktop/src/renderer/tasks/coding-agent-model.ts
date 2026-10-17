@@ -183,7 +183,7 @@ const ACTOR_STATE_OF_GLYPH = {
 
 /** Who archived an agent, and why, as its card and its archived banner say it. */
 export interface ArchivedByReading {
-  /** "Archived by Dean", "Archived by Luke for you", "Archived by Bill by seat for Dean". */
+  /** "Archived by Dean", "Archived by Luke for you", "Archived by Bill by seat for Dean", "Archived with its task by Dean". */
   readonly words: string;
   readonly reason: string | undefined;
 }
@@ -195,7 +195,7 @@ const UNNAMED_ARCHIVER = "another agent";
  * Who archived an agent, as the reader reads it: the member who did, or
  * Luke or the archiving agent and the member they acted for, "you" for the
  * reader's own account, the member left out once their account is gone;
- * and the reason they gave.
+ * and the reason they gave. An agent archived along with its task says so.
  */
 export function archivedByReading(
   by: CodingAgentArchivedBy,
@@ -210,8 +210,9 @@ export function archivedByReading(
       : by.by === CODING_AGENT_ARCHIVER.LUKE
         ? `Luke${forMember}`
         : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
+  const archived = by.withTask === true ? "Archived with its task" : "Archived";
   return {
-    words: archiver === undefined ? "Archived" : `Archived by ${archiver}`,
+    words: archiver === undefined ? archived : `${archived} by ${archiver}`,
     reason: by.reason,
   };
 }

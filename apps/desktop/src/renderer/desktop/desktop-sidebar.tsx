@@ -37,8 +37,9 @@ import {
   taskRowsCreatedBy,
   taskRowTime,
 } from "@luke/ui/task-list-model";
-import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { archiveAsks, repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   FactoryIcon,
   HouseIcon,
@@ -58,6 +59,12 @@ import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
+import {
+  ConfirmDialog,
+  DIALOG_TONE,
+  type DialogQuestion,
+  useConfirmDialog,
+} from "../settings/confirm-dialog";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
@@ -464,23 +471,24 @@ function PinnedSection({
  * have no pin, since they always stand last, and no page to open. A group of
  * archived plans offers no Archive, since its plans are already away, so the
  * plans with no repository offer nothing there.
+ * Archive plans runs through `onArchive`, which asks first where any of the
+ * plans has coding agents the archive would stop and archive with it.
  */
 function repositoryActionGroups(
   group: RepositoryGroup,
   tasks: TasksControl,
   archived: boolean,
+  onArchive: () => void,
 ): MenuAction[][] {
   const { repository } = group;
-  // Note that only the group's plans are archived from here, because an agent is archived from its own page.
-  const taskIds = group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.plan.id] : []));
   const archive: MenuAction[] =
-    archived || taskIds.length === 0
+    archived || groupPlans(group).length === 0
       ? []
       : [
           {
             label: "Archive tasks",
             icon: <ArchiveIcon />,
-            onSelect: () => tasks.onArchiveTasks(taskIds),
+            onSelect: onArchive,
           },
         ];
   if (repository === null) return archive.length === 0 ? [] : [archive];
@@ -501,6 +509,22 @@ function repositoryActionGroups(
 
 /** Pinned holds tabs as well as plans, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
+
+/** The plans under a repository's header; an agent with no plan under it is archived from its own page. */
+function groupPlans(group: RepositoryGroup): readonly TaskSummary[] {
+  return group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.plan] : []));
+}
+
+/** What a repository's Archive tasks asks where a plan under it has coding agents, which the archive stops and archives with them. */
+function archiveTasksQuestion(named: string, count: number): DialogQuestion {
+  return {
+    title: count === 1 ? "Archive task?" : `Archive ${count} tasks?`,
+    body: `Archiving the tasks in ${named} will stop and archive all their agents. Unarchiving a task brings its agents back.`,
+    verb: "Archive",
+    running: "Archiving",
+    tone: DIALOG_TONE.PRIMARY,
+  };
+}
 
 /**
  * One repository's plans under a header in the headings' voice, which folds
@@ -540,7 +564,19 @@ function RepositorySection({
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useActionMenu(context.tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived);
+  const plans = groupPlans(group);
+  const archiveAll = () => context.tasks.onArchiveTasks(plans.map(({ id }) => id));
+  const archiving = useConfirmDialog(
+    { subject: plans.length > 0, surfaceOpen: context.tasks.shown },
+    () => {
+      archiveAll();
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
+  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived, () => {
+    if (archiveAsks(plans)) archiving.ask();
+    else archiveAll();
+  });
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
@@ -608,6 +644,7 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
+      <ConfirmDialog confirm={archiving} question={archiveTasksQuestion(named, plans.length)} />
       {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );
