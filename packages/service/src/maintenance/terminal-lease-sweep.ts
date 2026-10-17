@@ -10,7 +10,8 @@
  * the sandbox, and stops the sandbox, its filesystem kept for a later resume,
  * then lets the lease go. A lease whose agent still runs a turn is left for
  * that turn's own end, and for a later sweep once the turn is over however it
- * ended. A stop Vercel did not confirm, or a sweep that ended before it
+ * ended; a turn past the bounds the abandoned-turn sweep settles it by holds
+ * nothing, so a turn whose end never comes cannot strand the sandbox. A stop Vercel did not confirm, or a sweep that ended before it
  * heard, leaves the lease claimed, and a sweep after `RETRY` tries again
  * behind the leases not yet tried. What is asked of Vercel is a session's
  * tag, and what is logged of a failure is its status.
@@ -95,6 +96,7 @@ export const sweepTerminalLeases = /* @__PURE__ */ Effect.fn("web/sweepTerminalL
     lapsedBefore,
     triedBefore,
     TERMINAL_LEASE_SWEEP.MAX_LEASES,
+    now,
   );
   const window = { lapsedBefore, triedBefore, now };
   const endings = yield* Effect.forEach(leases, (lease) => endLease(lease, window), {

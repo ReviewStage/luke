@@ -1,18 +1,33 @@
 import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
+import {
+  BADGE_TONE,
+  Badge,
+  GAP,
+  Inline,
+  Stack,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { SectionHeading, StatCard } from "../charts/stat-card";
+import { BackLink } from "../chrome/back-link";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, RefreshFailureNotice } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
-import { AccountAvatar, PageHeader, type ViewerAccount } from "../chrome/page-header";
+import { AccountAvatar, AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { accountHref, dayReadPath, plainLeftClick, tabHref } from "../routing";
+import { accountHref, dayReadPath, plainLeftClick } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 const DAY_ERROR = "The day endpoint did not answer.";
+
+/** A cell's room around its words, the same in the heading row and the rows under it. */
+const TABLE_CELL = "px-5 py-3";
 
 // SAFETY: a 200 from the admin day endpoint is an AdminDayDetail body by its contract.
 const readDayDetail: AdminReader<AdminDayDetail> = async (response) =>
@@ -49,19 +64,27 @@ function DayAccountsTable({
 }): React.JSX.Element {
   if (accounts.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
-        No hosted-tier calls recorded on this day.
+      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center">
+        <Text tone={TEXT_TONE.MUTED}>No hosted-tier calls recorded on this day.</Text>
       </div>
     );
   }
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
+        <table className="w-full min-w-[520px]">
           <thead>
-            <tr className="border-b border-border text-left font-mono text-xs text-muted-foreground uppercase">
-              <th className="px-5 py-3 font-medium">Account</th>
-              <th className="px-5 py-3 text-right font-medium">Calls</th>
+            <tr className="border-b border-border text-left">
+              <th className={TABLE_CELL}>
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
+                  Account
+                </Text>
+              </th>
+              <th className={`${TABLE_CELL} text-right`}>
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
+                  Calls
+                </Text>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -71,7 +94,7 @@ function DayAccountsTable({
                 className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
                 onClick={() => onOpen(row.id)}
               >
-                <td className="px-5 py-3">
+                <td className={TABLE_CELL}>
                   <a
                     href={accountHref(row.id)}
                     className="flex items-center gap-3 outline-offset-2"
@@ -85,22 +108,28 @@ function DayAccountsTable({
                     <AccountAvatar
                       account={{ name: row.name, email: row.email, image: row.image ?? undefined }}
                     />
-                    <div>
-                      <div className="flex items-center gap-2 font-medium">
-                        {accountLabel(row)}
-                        {row.admin ? (
-                          <span className="rounded-full border border-border px-1.5 py-px font-mono text-[10px] tracking-[0.2px] text-muted-foreground uppercase">
-                            Admin
-                          </span>
-                        ) : null}
-                      </div>
+                    <div className="min-w-0">
+                      <Inline>
+                        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+                          {accountLabel(row)}
+                        </Text>
+                        {row.admin ? <Badge tone={BADGE_TONE.NEUTRAL}>Admin</Badge> : null}
+                      </Inline>
                       {accountLabel(row) === row.email ? null : (
-                        <div className="text-xs text-muted-foreground">{row.email}</div>
+                        <Text
+                          as={TEXT_ELEMENT.DIV}
+                          variant={TEXT_VARIANT.CAPTION}
+                          tone={TEXT_TONE.MUTED}
+                        >
+                          {row.email}
+                        </Text>
                       )}
                     </div>
                   </a>
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">{formatNumber(row.calls)}</td>
+                <td className={`${TABLE_CELL} text-right tabular-nums`}>
+                  <Text as={TEXT_ELEMENT.SPAN}>{formatNumber(row.calls)}</Text>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -169,14 +198,12 @@ export function DayScreen({
       const soFar = stillFilling ? "so far today" : undefined;
 
       return frame(
-        <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
-          <PageHeader
-            title="Day"
-            account={account}
-            onSignOut={signOut}
-            controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
-          />
-
+        <AdminPage
+          title="Day"
+          account={account}
+          onSignOut={signOut}
+          controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
+        >
           <RefreshFailureNotice
             failure={state.refreshFailure}
             refreshing={refreshing}
@@ -188,39 +215,38 @@ export function DayScreen({
             data-busy={refreshing}
             aria-busy={refreshing}
           >
-            <a
-              href={tabHref("dashboard")}
-              className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
-              onClick={(event) => {
-                if (!plainLeftClick(event)) return;
-                event.preventDefault();
-                onBack();
-              }}
-            >
-              <span aria-hidden="true">←</span> Dashboard
-            </a>
+            <BackLink tab="dashboard" label="Dashboard" onBack={onBack} />
 
             <div className="mt-6">
-              <h1 className="text-2xl font-semibold tracking-[-0.01em]">
-                {formatDayHeading(detail.day)}
-              </h1>
-              <div className="mt-1 text-sm text-muted-foreground">
-                One UTC day of hosted-tier calls{stillFilling ? " — still filling" : ""}
-              </div>
+              <Stack gap={GAP.TIGHT}>
+                <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
+                  {formatDayHeading(detail.day)}
+                </Text>
+                <Text tone={TEXT_TONE.MUTED}>
+                  One UTC day of hosted-tier calls{stillFilling ? " — still filling" : ""}
+                </Text>
+              </Stack>
             </div>
 
             <SectionHeading>Hosted tier · this day</SectionHeading>
-            <div className="grid grid-cols-2 gap-3">
-              <StatCard
-                label="Active accounts"
-                value={formatNumber(detail.totals.accounts)}
-                hint={soFar}
-              />
-              <StatCard
-                label="Hosted calls"
-                value={formatNumber(detail.totals.calls)}
-                hint={soFar}
-              />
+            {/* Note that each card shares the row from nothing up but never
+            shrinks below its own figure, so the pair stacks once a figure
+            needs the room rather than overflowing its card. */}
+            <div className="flex flex-wrap gap-3">
+              <div className="flex-1">
+                <StatCard
+                  label="Active accounts"
+                  value={formatNumber(detail.totals.accounts)}
+                  hint={soFar}
+                />
+              </div>
+              <div className="flex-1">
+                <StatCard
+                  label="Hosted calls"
+                  value={formatNumber(detail.totals.calls)}
+                  hint={soFar}
+                />
+              </div>
             </div>
 
             <SectionHeading>Accounts active this day</SectionHeading>
@@ -236,7 +262,7 @@ export function DayScreen({
               />
             ) : null}
           </div>
-        </main>,
+        </AdminPage>,
       );
     }
   }

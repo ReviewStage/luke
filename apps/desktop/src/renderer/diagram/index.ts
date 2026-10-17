@@ -1,14 +1,14 @@
-import mermaid, { type MermaidConfig } from "mermaid";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
   type DiagramAppearance,
   type DiagramDrawing,
   type DiagramModule,
-} from "./contract";
+} from "@luke/ui/diagram-contract";
+import mermaid, { type MermaidConfig } from "mermaid";
 
 /**
- * index.ts -- the diagram bundle: Mermaid drawing a plan's fence as a picture the panel's policy admits, set on `window` for the panel (`./contract.ts`).
+ * index.ts -- the diagram bundle: Mermaid drawing a plan's fence as a picture the panel's policy admits, imported by the panel (`@luke/ui/diagram-contract`).
  *
  * The panel's policy is `style-src 'self'` (`../index.html`), and Mermaid's
  * SVG carries its theme in a `<style>` element, which the policy refuses:
@@ -162,4 +162,4 @@ function draw(code: string, appearance: DiagramAppearance): Promise<DiagramDrawi
   return drawn;
 }
 
-window.lukeDiagram = { draw } satisfies DiagramModule;
+export const diagram: DiagramModule = { draw };

@@ -33,8 +33,6 @@ beforeEach(() => {
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
       act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
     },
   });
@@ -64,7 +62,10 @@ function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTM
       tasks: tasksControl({
         chatView: {
           open: true,
+          available: true,
           chat,
+          failed: false,
+          onRetry: () => undefined,
           place,
           onOpen: () => undefined,
           onClose: () => undefined,

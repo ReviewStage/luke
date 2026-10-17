@@ -44,10 +44,13 @@ import { agentPublished } from "./published.js";
  * the agent is told, so it can tell the developer. A refusal of the pull
  * request itself, such as one already open from the branch, is the agent's
  * to read and opens nothing. Every description ends on the line saying Luke
- * made it, since its author may be a person. Once GitHub opens it, its
- * branch and the pull request are written on the agent's row at once rather
- * than only as the turn ends, so a comment on it finds the agent
- * (`github/agent-wakes.ts`); a refused call moves nothing.
+ * made it, since its author may be a person. It merges into the
+ * repository's default branch unless the agent names another base, such as
+ * the branch of the pull request it stacks on; a base GitHub does not know
+ * is refused like any other. Once GitHub opens it, its branch and the pull
+ * request are written on the agent's row at once rather than only as the
+ * turn ends, so a comment on it finds the agent (`github/agent-wakes.ts`);
+ * a refused call moves nothing.
  */
 
 /** GitHub's own bounds on what a pull request carries. */
@@ -75,6 +78,12 @@ const openPullRequestInputSchema = Schema.Struct({
     Schema.isMaxLength(PULL_REQUEST_BOUNDS.MAX_BODY_CHARS - PULL_REQUEST_FOOTER.length - 2),
   ),
   draft: Schema.optionalKey(Schema.Boolean),
+  base: Schema.optionalKey(
+    Schema.Trim.check(
+      Schema.isNonEmpty(),
+      Schema.isMaxLength(PULL_REQUEST_BOUNDS.MAX_BRANCH_CHARS),
+    ),
+  ),
 });
 
 type OpenPullRequestInput = typeof openPullRequestInputSchema.Type;
@@ -92,8 +101,9 @@ interface PullRequestAsked {
 export const OPEN_PULL_REQUEST_TOOL = {
   name: AGENT_TOOL.OPEN_PULL_REQUEST,
   description:
-    "Open the pull request for a branch you pushed, against the repository's default branch. head is the branch's name, " +
-    "title its title, body its description in Markdown, and draft whether it opens as a draft. Use this rather than " +
+    "Open the pull request for a branch you pushed. head is the branch's name, title its title, body its description in " +
+    "Markdown, draft whether it opens as a draft, and base the branch it merges into: the repository's default branch " +
+    "where left out, or another branch on GitHub, such as the parent's branch for a stacked pull request. Use this rather than " +
     "`gh pr create`: the service opens it as the developer who started you where you write as them, and as Luke's GitHub " +
     `App otherwise, and ends the description with the line "${PULL_REQUEST_FOOTER}". Where GitHub refuses the developer's ` +
     "own access, it is opened as the App instead and the answer says so; tell the developer, who can sign in with GitHub " +
@@ -160,7 +170,15 @@ const OpenedSchema = Schema.Struct({ number: Schema.Int, html_url: Schema.String
 /** GitHub's words on a request it refused, as far as the agent is told them. */
 const RefusalSchema = Schema.Struct({
   message: Schema.String,
-  errors: Schema.optional(Schema.Array(Schema.Struct({ message: Schema.optional(Schema.String) }))),
+  errors: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        message: Schema.optional(Schema.String),
+        field: Schema.optional(Schema.String),
+        code: Schema.optional(Schema.String),
+      }),
+    ),
+  ),
 });
 
 /** How one attempt to open the pull request ended. */
@@ -181,11 +199,17 @@ type Attempt =
 /** An attempt that ended other than with its token refused. */
 type Settled = Exclude<Attempt, { readonly kind: typeof ATTEMPT.TOKEN_REFUSED }>;
 
-/** GitHub's refusal of the pull request in its own words, cut to the bound. */
+/**
+ * GitHub's refusal of the pull request in its own words, cut to the bound.
+ * An error GitHub gives no message for, such as a base it does not know,
+ * is said by the field it names and its code (`base invalid`).
+ */
 function refusalWords(refusal: typeof RefusalSchema.Type): string {
-  const details = (refusal.errors ?? []).flatMap((error) =>
-    error.message === undefined ? [] : [error.message],
-  );
+  const details = (refusal.errors ?? []).flatMap((error) => {
+    if (error.message !== undefined) return [error.message];
+    const named = [error.field, error.code].filter((word) => word !== undefined).join(" ");
+    return named === "" ? [] : [named];
+  });
   const words = [refusal.message, ...details].join(" ");
   return `Not opened: GitHub said: ${words.slice(0, PULL_REQUEST_BOUNDS.MAX_REFUSAL_CHARS)}`;
 }
@@ -283,12 +307,12 @@ const attemptAsDeveloper = /* @__PURE__ */ Effect.fn("web/openPullRequestAsDevel
   );
 });
 
-/** The pull request GitHub is asked to open: the agent's branch against the default branch, its description ending on Luke's line. */
-function pullRequestOf(input: OpenPullRequestInput, base: string): PullRequestAsked {
+/** The pull request GitHub is asked to open: the agent's branch against the base it named or the default branch, its description ending on Luke's line. */
+function pullRequestOf(input: OpenPullRequestInput, defaultBranch: string): PullRequestAsked {
   const body = input.body.trimEnd();
   return {
     head: input.head,
-    base,
+    base: input.base ?? defaultBranch,
     title: input.title,
     body: body.endsWith(PULL_REQUEST_FOOTER) ? body : `${body}\n\n${PULL_REQUEST_FOOTER}`.trim(),
     draft: input.draft ?? false,

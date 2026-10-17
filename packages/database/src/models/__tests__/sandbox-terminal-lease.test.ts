@@ -9,6 +9,7 @@ import { user } from "../../schemas/auth.js";
 import { conversations, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
+import { TURN_ABANDON } from "../abandoned-turns.js";
 import {
   claimCredentialRenewal,
   claimLapsedLease,
@@ -53,7 +54,24 @@ const openAgent = (turn?: TurnStatus) =>
         .insert(turns)
         .values({ userId, conversationId: row.id, origin: TURN_ORIGIN.TYPED, status: turn });
     }
-    return { conversationId: row.id, sessionId };
+    return { userId, conversationId: row.id, sessionId };
+  });
+
+/** A coding agent's conversation whose one turn has run since the instant given, a Stop asked of it at the instant given where one is. */
+const runningAgent = (startedAt: Date, cancelRequestedAt: Date | null = null) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const agent = yield* openAgent();
+    yield* db.insert(turns).values({
+      userId: agent.userId,
+      conversationId: agent.conversationId,
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.RUNNING,
+      queuedAt: startedAt,
+      startedAt,
+      cancelRequestedAt,
+    });
+    return agent;
   });
 
 /** The lapsed leases the sweep would take before the instant given, narrowed to the conversations named; a claim before `triedBefore` is taken up again. */
@@ -62,7 +80,7 @@ const lapsedAmong = (
   conversationIds: readonly string[],
   triedBefore: Date = lapsedBefore,
 ) =>
-  Effect.map(lapsedSandboxLeases(lapsedBefore, triedBefore, 1_000), (leases) =>
+  Effect.map(lapsedSandboxLeases(lapsedBefore, triedBefore, 1_000, lapsedBefore), (leases) =>
     leases.filter((lease) => conversationIds.includes(lease.conversationId)),
   );
 
@@ -106,6 +124,43 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
         assert.deepEqual(lapsed, [
           { conversationId: idle.conversationId, sessionId: idle.sessionId, heldUntil: at(1) },
         ]);
+      }),
+  );
+
+  it.effect(
+    "a running turn past its bounds holds no lease: one past a coding agent's day and an hour, or one whose Stop went unconfirmed past its bound",
+    () =>
+      Effect.gen(function* () {
+        const now = at(10);
+        const minutesBeforeNow = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
+        const cancelBoundMinutes = TURN_ABANDON.CANCEL_AFTER_MS / 60_000;
+        const runDayMinutes = TURN_ABANDON.CODING_AGENT_AFTER_MS / 60_000;
+        const working = yield* runningAgent(minutesBeforeNow(60));
+        const stopping = yield* runningAgent(
+          minutesBeforeNow(60),
+          minutesBeforeNow(cancelBoundMinutes - 1),
+        );
+        const stopLost = yield* runningAgent(
+          minutesBeforeNow(60),
+          minutesBeforeNow(cancelBoundMinutes + 1),
+        );
+        const runLost = yield* runningAgent(minutesBeforeNow(runDayMinutes + 1));
+        const agents = [working, stopping, stopLost, runLost];
+        for (const { conversationId } of agents) yield* holdSandbox(conversationId, at(1));
+        const ids = agents.map((agent) => agent.conversationId);
+
+        const lapsed = yield* Effect.map(lapsedSandboxLeases(at(5), at(5), 1_000, now), (leases) =>
+          leases.filter((lease) => ids.includes(lease.conversationId)),
+        );
+        const claimedWorking = yield* claimLapsedLease(working.conversationId, at(5), at(5), now);
+        const claimedStopLost = yield* claimLapsedLease(stopLost.conversationId, at(5), at(5), now);
+
+        assert.deepEqual(
+          lapsed.map((lease) => lease.conversationId).sort(),
+          [stopLost.conversationId, runLost.conversationId].sort(),
+          "a turn inside its bounds, its Stop's too, still holds its sandbox",
+        );
+        assert.deepEqual([claimedWorking, claimedStopLost], [false, true]);
       }),
   );
 
