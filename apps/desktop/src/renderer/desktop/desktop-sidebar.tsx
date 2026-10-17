@@ -10,6 +10,7 @@ import {
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
@@ -64,7 +65,6 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useRef } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
@@ -1600,8 +1600,8 @@ function SidebarColumn({
         disabled={!tasks.signedIn}
         onOpen={chosen(openInbox)}
       />
-      {/* Chat's row stands only while the account has it on and a chat is read, which only a fixture run stages yet. */}
-      {chatOn && tasks.signedIn && tasks.chatView.chat !== undefined ? (
+      {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
+      {chatOn && tasks.signedIn && tasks.chatView.available ? (
         <SidebarChatRow
           waiting={waitingMessages(tasks)}
           current={inChat}

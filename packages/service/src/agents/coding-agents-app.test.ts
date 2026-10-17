@@ -5542,11 +5542,6 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           readSeq: asked.message.seq,
         });
         assert.deepEqual(yield* chat.wrote({ readTo: 0 }), { readSeq: asked.message.seq });
-        // One channel's read is refused while the store keeps one cursor per member.
-        assert.deepEqual(
-          yield* chat.write({ readTo: asked.message.seq, channelId: chat.channel.id }),
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
         assert.equal((yield* chat.read).readSeq, asked.message.seq);
 
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
@@ -5566,6 +5561,35 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.deepEqual(
           yield* chat.write({ readTo: 1 }, "no-such-bearer"),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+      }),
+  );
+
+  it.effect(
+    "a read naming the channel shown moves that channel's own cursor alone, which the write's answer and the chat's read both carry, and a channel the person may not see is refused",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        // The window's read moves its cursor to the head, so the ask comes after it.
+        const floor = (yield* chat.read).readSeq;
+        const asked = yield* chat.agentAsks("Ship it?");
+        const { channelId, seq } = asked.message;
+
+        assert.deepEqual(yield* chat.wrote({ readTo: seq, channelId }), {
+          readSeq: floor,
+          reads: [{ channelId, readSeq: seq }],
+        });
+        const read = yield* chat.read;
+        assert.equal(read.readSeq, floor, "the cursor everywhere stays where it was");
+        assert.deepEqual(read.reads, [{ channelId, readSeq: seq }]);
+
+        // Every channel read past it leaves no channel's own cursor ahead to say.
+        assert.deepEqual(yield* chat.wrote({ readTo: seq }), { readSeq: seq });
+        assert.equal((yield* chat.read).reads, undefined);
+
+        assert.deepEqual(
+          yield* chat.write({ readTo: seq, channelId: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
       }),
   );

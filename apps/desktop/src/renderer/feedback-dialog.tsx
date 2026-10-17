@@ -35,6 +35,7 @@ import {
 } from "@luke/features/feedback";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
@@ -53,7 +54,6 @@ import {
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { encodeImage, imageFiles } from "./feedback-images";
 import { Shortcut } from "./shortcut";
