@@ -967,6 +967,8 @@ svg.working-mark[viewBox] {
   --duration-hover: 0s;
   --duration-pane: 0s;
   --row-stagger: 0s;
+  /* A late state shows at once, so a capture never waits on its delay. */
+  --late-delay: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
      first frame, he is the same face in every PNG. The working rows' spinners

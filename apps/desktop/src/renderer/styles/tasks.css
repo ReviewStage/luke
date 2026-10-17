@@ -4139,7 +4139,7 @@ button.attached-file-face:hover img {
    is already making again, shows only once it has held a second, so a blip
    is never seen. */
 .terminal-bar[data-late="true"] {
-  animation: terminal-bar-late 0s linear 1s both;
+  animation: terminal-bar-late 0s linear var(--late-delay) both;
 }
 
 @keyframes terminal-bar-late {
@@ -5141,11 +5141,6 @@ button.picture-frame {
   font-size: 13px;
 }
 
-.picture-describe-field:focus {
-  border-color: var(--focus-ring);
-  outline: none;
-}
-
 /* A picture waiting on its upload: the Mac's own bytes at half strength,
    and the wait said where its caption will stand with the window's own
    spinner; a failed upload says so there, as every failure does. */
@@ -5240,8 +5235,8 @@ button.picture-frame {
   inset: 0;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, #000 52%, transparent);
-  color: #fff;
+  background: var(--picture-veil);
+  color: var(--picture-veil-ink);
   font-size: 17px;
   font-weight: 600;
 }
