@@ -4,6 +4,7 @@ import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
 import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -343,6 +344,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onArchiveTasks: ignore,
     pinnedRepositories: [],
     onPinRepository: ignore,
+    taskSections: NO_TASK_SECTIONS,
+    onWriteSections: ignore,
     onPinAgent: ignore,
     onMovePins: ignore,
     onDeleteTask: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),

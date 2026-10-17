@@ -97,6 +97,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   REPOSITORY_PINS: "/api/repository-pins",
   /**
+   * The sections the account made in its sidebars and the tasks it keeps in
+   * them: read them (GET), or make, change, move, or delete one, or put a
+   * task in one (PUT), answered with them all as they then stand.
+   * `task-section-wire.ts` declares both.
+   */
+  TASK_SECTIONS: "/api/task-sections",
+  /**
    * The repositories the signed-in account reaches through the Luke GitHub
    * App, most recently updated first (GET), with whether the App is
    * installed anywhere for them and where to install it.

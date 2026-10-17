@@ -18,6 +18,8 @@ export const EXPERIMENT = {
   VIDEO_CALLS: "video-calls",
   /** A workspace's issues, each a title, a status, a priority, and a description, listed on their own page. */
   ISSUES: "issues",
+  /** Sections of your own in the sidebar, each a title and an icon, that tasks are dragged into. */
+  SECTIONS: "sections",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -41,6 +43,13 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.SECTIONS,
+    name: "Sections",
+    detail: "Keep tasks in sections of your own in the sidebar, each with a title and an icon.",
+    owner: "Charles",
+    since: "2026-10-16",
+  },
   {
     key: EXPERIMENT.ISSUES,
     name: "Issues",

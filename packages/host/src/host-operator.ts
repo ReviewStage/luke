@@ -189,6 +189,7 @@ import {
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceTransferParams,
+  type TasksWriteSectionParams,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
@@ -370,6 +371,7 @@ export interface HostOperator {
   tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
+  tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
   /** One task archived or brought back; answers whether the service changed it. */
   tasksArchive(params: TasksArchiveParams): Effect.Effect<boolean>;
   /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
@@ -990,6 +992,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           repository: params.repository,
           pinned: params.pinned,
         }),
+        (answer) => record(answer)?.changed === true,
+      ),
+    tasksWriteSection: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_WRITE_SECTION, params),
         (answer) => record(answer)?.changed === true,
       ),
     tasksArchive: (params) =>
