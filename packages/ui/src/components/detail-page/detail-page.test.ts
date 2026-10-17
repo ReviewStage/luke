@@ -53,6 +53,15 @@ function nameOf(element: Element): string | null {
   return element.getAttribute("aria-label");
 }
 
+/** The one element `selector` finds in `container` whose words include `words`, failing the test if there is none. */
+function find(container: Element, selector: string, words = ""): HTMLElement {
+  const found = [...container.querySelectorAll(selector)].find(
+    (element) => element instanceof HTMLElement && (element.textContent ?? "").includes(words),
+  );
+  if (!(found instanceof HTMLElement)) throw new Error(`no ${selector} with "${words}"`);
+  return found;
+}
+
 const FACTS: DetailSecondary = {
   label: "Details",
   content: createElement("p", null, "Owner: Ada Lovelace"),
@@ -60,17 +69,15 @@ const FACTS: DetailSecondary = {
 
 test("the page is a region named by its title, and its secondary column a landmark named by its label", () => {
   const container = draw({ secondary: FACTS });
-  const region = container.querySelector("section");
-  expect(region).not.toBeNull();
-  expect(nameOf(region as Element)).toBe("Launch checklist");
+  const region = find(container, "section");
+  expect(nameOf(region)).toBe("Launch checklist");
   expect(container.querySelector("h1")?.textContent).toBe("Launch checklist");
 
-  const asides = container.querySelectorAll("aside");
-  expect(asides).toHaveLength(1);
-  const details = asides[0] as Element;
+  expect(container.querySelectorAll("aside")).toHaveLength(1);
+  const details = find(container, "aside");
   expect(nameOf(details)).toBe("Details");
   expect(details.textContent).toBe("Owner: Ada Lovelace");
-  expect(region?.contains(details)).toBe(true);
+  expect(region.contains(details)).toBe(true);
 });
 
 test("a page with no secondary column has no complementary landmark, and shows its main content", () => {
@@ -87,12 +94,10 @@ test("an empty description draws no paragraph under the title", () => {
 
 test("the main content and the secondary column each take the keyboard's focus", () => {
   const container = draw({ secondary: FACTS });
-  const main = [...container.querySelectorAll("[tabindex]")].find((element) =>
-    element.textContent?.includes("Step 1"),
-  ) as HTMLElement | undefined;
-  const details = container.querySelector("aside") as HTMLElement | null;
-  main?.focus();
+  const main = find(container, "[tabindex]", "Step 1");
+  const details = find(container, "aside");
+  main.focus();
   expect(document.activeElement).toBe(main);
-  details?.focus();
+  details.focus();
   expect(document.activeElement).toBe(details);
 });
