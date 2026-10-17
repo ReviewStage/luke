@@ -188,6 +188,18 @@ const LATEST_MESSAGES = sql`(select * from ${inboxMessage} where ${inboxMessage.
  */
 const MESSAGES = sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${LATEST_MESSAGES})`;
 
+/** Whether the item is settled: answered, or closed by its agent. */
+const SETTLED = sql`${inboxItem.status} <> ${INBOX_STATUS.OPEN}`;
+
+/**
+ * When a settled item was settled, in epoch milliseconds: the instant kept,
+ * or, on an item settled before it was kept, its last change, which no
+ * message has moved yet, since the first one keeps that instant first.
+ */
+const SETTLED_AT = sql<
+  number | null
+>`floor(extract(epoch from coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)) * 1000)::float8`;
+
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const INBOX_COLUMNS = {
   id: inboxItem.id,
@@ -215,6 +227,7 @@ const INBOX_COLUMNS = {
   closedReason: inboxItem.closedReason,
   messages: MESSAGES,
   postedAt: inboxItem.postedAt,
+  settledAt: SETTLED_AT,
   updatedAt: inboxItem.updatedAt,
 };
 
@@ -271,6 +284,7 @@ const InboxRowSchema = Schema.Struct({
   closedReason: Schema.NullOr(Schema.String),
   messages: Schema.Array(MessageRowSchema),
   postedAt: InstantColumnSchema,
+  settledAt: Schema.NullOr(Schema.Number),
   updatedAt: InstantColumnSchema,
 });
 
@@ -301,6 +315,7 @@ function storedItem(row: InboxRow): StoredInboxItem {
       ...(row.closedReason === null ? undefined : { closedReason: row.closedReason }),
       ...(row.messages.length === 0 ? undefined : { messages: row.messages.map(storedMessage) }),
       postedAt: row.postedAt.getTime(),
+      ...(row.settledAt === null ? undefined : { settledAt: row.settledAt }),
       updatedAt: row.updatedAt.getTime(),
     },
     answerKey: row.answerKey,
@@ -498,12 +513,23 @@ const insertMessageFile = SqlSchema.void({
     ),
 });
 
-/** The item's last change moved to now, and nothing else of it: what a message on its thread does to the item. */
+/**
+ * The item's last change moved to now, and nothing else of it: what a
+ * message on its thread does to the item. Note that a settled item settled
+ * before the instant was kept keeps its last change as that instant first,
+ * because the change is what a read took it for until now.
+ */
 const touchItem = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, now: Schema.Date }),
   execute: ({ itemId, now }) =>
     Database.use((db) =>
-      db.update(inboxItem).set({ updatedAt: now }).where(eq(inboxItem.id, itemId)),
+      db
+        .update(inboxItem)
+        .set({
+          settledAt: sql`case when ${SETTLED} then coalesce(${inboxItem.settledAt}, ${inboxItem.updatedAt}) end`,
+          updatedAt: now,
+        })
+        .where(eq(inboxItem.id, itemId)),
     ),
 });
 
@@ -574,6 +600,7 @@ const upsertItem = SqlSchema.findOne({
       answerKey: null,
       answeredBy: null,
       closedReason: null,
+      settledAt: null,
       updatedAt: write.now,
     };
     return Database.use((db) =>
@@ -615,6 +642,7 @@ const closeItem = SqlSchema.findOneOption({
           status: INBOX_STATUS.CLOSED,
           closedReason: reason,
           revision: sql`${inboxItem.revision} + 1`,
+          settledAt: now,
           updatedAt: now,
         })
         .where(
@@ -999,6 +1027,7 @@ const answerItem = SqlSchema.findOneOption({
           answer,
           answerKey,
           answeredBy: userId,
+          settledAt: now,
           updatedAt: now,
         })
         .where(
@@ -1198,6 +1227,7 @@ const withdrawAnswer = SqlSchema.findOneOption({
           answer: null,
           answerKey: null,
           answeredBy: null,
+          settledAt: null,
           updatedAt: now,
         })
         .where(
@@ -1287,10 +1317,65 @@ type InboxMessageWriter =
     }
   | { readonly author: typeof INBOX_MESSAGE_AUTHOR.AGENT };
 
-/** What a message came to: the item as it then stands, and whether this write wrote it, which it did not where its key found one already written. */
+/** What a member's message under its key came to. */
+export const INBOX_MESSAGE_OUTCOME = {
+  /** This write wrote it. */
+  WRITTEN: "written",
+  /** The key found the same message written already, by the same member, with the same words and files. */
+  REPEATED: "repeated",
+  /** The key found another message written already, by another member or with other words or files; nothing was written. */
+  KEY_REUSED: "key-reused",
+} as const;
+
+type InboxMessageOutcome = (typeof INBOX_MESSAGE_OUTCOME)[keyof typeof INBOX_MESSAGE_OUTCOME];
+
+/** What a message came to: the item as it then stands, and what this write did. */
 export interface InboxMessageWritten {
   readonly item: InboxItem;
-  readonly written: boolean;
+  readonly outcome: InboxMessageOutcome;
+}
+
+const KeyedMessageSchema = Schema.Struct({
+  userId: Schema.NullOr(Schema.String),
+  text: Schema.String,
+  files: Schema.Array(Schema.Struct({ name: Schema.String, mediaType: Schema.String })),
+});
+
+/** The message standing under a member's key on the item: who wrote it, its words, and its files by name and type in order. */
+const findKeyedMessage = SqlSchema.findOneOption({
+  Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
+  Result: KeyedMessageSchema,
+  execute: ({ itemId, clientKey }) =>
+    Database.use((db) =>
+      db
+        .select({
+          userId: inboxMessage.userId,
+          text: inboxMessage.text,
+          files: sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('name', ${inboxAttachment.name}, 'mediaType', ${inboxAttachment.contentType}) order by ${inboxAttachment.position}), '[]'::jsonb) from ${inboxAttachment} where ${inboxAttachment.messageId} = ${MESSAGE.id})`,
+        })
+        .from(inboxMessage)
+        .where(and(eq(inboxMessage.itemId, itemId), eq(inboxMessage.clientKey, clientKey))),
+    ),
+});
+
+/** Whether the message standing under the key is the one sent again: the same member, the same words, and the same files by name and type. */
+function sameMessage(
+  standing: typeof KeyedMessageSchema.Type,
+  sent: {
+    readonly userId: string;
+    readonly text: string;
+    readonly files: readonly CodingAgentAttachment[];
+  },
+): boolean {
+  return (
+    standing.userId === sent.userId &&
+    standing.text === sent.text &&
+    standing.files.length === sent.files.length &&
+    standing.files.every(
+      (file, at) =>
+        file.name === sent.files[at]?.name && file.mediaType === sent.files[at]?.mediaType,
+    )
+  );
 }
 
 /**
@@ -1299,7 +1384,9 @@ export interface InboxMessageWritten {
  * last change moved to now, all in one write: the item's status, answer,
  * and revision are left as they stand. A member's message sent again under
  * its key is the one already written, which writes nothing and moves
- * nothing. The caller has read the item as the writer may reach it, so the
+ * nothing; another message under a key already taken, by another member or
+ * with other words or files, is refused as the key reused, so the thread
+ * never names one message while the agent hears another. The caller has read the item as the writer may reach it, so the
  * item named is one that stands.
  */
 function writeInboxMessage(
@@ -1337,13 +1424,28 @@ function writeInboxMessage(
           );
           yield* touchItem({ itemId, now });
         }
+        const outcome = Option.isSome(written)
+          ? INBOX_MESSAGE_OUTCOME.WRITTEN
+          : yield* repeatOutcome(itemId, member, text, files);
         const found = yield* findItemOf({ itemId });
-        return Option.map(found, (row) => ({
-          item: storedItem(row).item,
-          written: Option.isSome(written),
-        }));
+        return Option.map(found, (row) => ({ item: storedItem(row).item, outcome }));
       }),
     ),
+  );
+}
+
+/** What a member's message whose key found one standing came to: the same message sent again, or another under a key reused. */
+function repeatOutcome(
+  itemId: string,
+  member: { readonly userId: string; readonly clientKey: string } | undefined,
+  text: string,
+  files: readonly CodingAgentAttachment[],
+): InboxStoreEffect<InboxMessageOutcome> {
+  if (member === undefined) return Effect.succeed(INBOX_MESSAGE_OUTCOME.KEY_REUSED);
+  return Effect.map(findKeyedMessage({ itemId, clientKey: member.clientKey }), (standing) =>
+    Option.isSome(standing) && sameMessage(standing.value, { userId: member.userId, text, files })
+      ? INBOX_MESSAGE_OUTCOME.REPEATED
+      : INBOX_MESSAGE_OUTCOME.KEY_REUSED,
   );
 }
 

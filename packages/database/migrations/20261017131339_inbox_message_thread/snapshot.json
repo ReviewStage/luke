@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ea11f9da-8788-4a03-9df3-492ee5325114",
+  "id": "d5111632-c260-4497-8d2f-b6a5a08f9ca1",
   "prevIds": ["34cb0d36-98ce-43f7-9c02-aebb81368759", "86140e0b-e825-4025-8b49-660207288765"],
   "ddl": [
     {
@@ -4888,6 +4888,19 @@
       "generated": null,
       "identity": null,
       "name": "posted_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "inbox_item"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "settled_at",
       "entityType": "columns",
       "schema": "public",
       "table": "inbox_item"

@@ -39,6 +39,7 @@ import {
   accountWaitingItems,
   answerInboxItem,
   closeInboxItem,
+  INBOX_MESSAGE_OUTCOME,
   type InboxAgent,
   type InboxFile,
   postInboxItem,
@@ -566,7 +567,10 @@ it.layer(getTestDB())("the inbox store", (it) => {
           yield* write(teammate, settled.success.id, "One more thing on this."),
         );
 
-        assert.ok(onOpen.written && onSettled.written);
+        assert.deepEqual(
+          [onOpen.outcome, onSettled.outcome],
+          [INBOX_MESSAGE_OUTCOME.WRITTEN, INBOX_MESSAGE_OUTCOME.WRITTEN],
+        );
         assert.deepEqual(
           onOpen.item.messages?.map((message) => [
             message.author,
@@ -610,7 +614,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "a message's files are kept in the order attached and served to every member, and stay with the thread when the agent posts the item again; a message sent again under its key is written once and moves nothing, and one withdrawn goes with its files",
+    "a message's files are kept in the order attached and served to every member, and stay with the thread when the agent posts the item again; a message sent again under its key is written once and moves nothing, other words under its key are refused as the key reused, and one withdrawn goes with its files",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -632,8 +636,23 @@ it.layer(getTestDB())("the inbox store", (it) => {
           yield* postInboxMessage(agent.userId, id, { text: "", clientKey: key, files }),
         );
 
-        assert.deepEqual([first.written, again.written], [true, false]);
+        const reused = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, id, {
+            text: "Other words.",
+            clientKey: key,
+            files,
+          }),
+        );
+        assert.deepEqual(
+          [first.outcome, again.outcome, reused.outcome],
+          [
+            INBOX_MESSAGE_OUTCOME.WRITTEN,
+            INBOX_MESSAGE_OUTCOME.REPEATED,
+            INBOX_MESSAGE_OUTCOME.KEY_REUSED,
+          ],
+        );
         assert.deepEqual(again.item, first.item, "a repeat writes nothing and moves nothing");
+        assert.deepEqual(reused.item, first.item, "a key reused writes nothing either");
         const [message] = first.item.messages ?? [];
         assert.deepEqual(
           message?.files?.map((file) => [file.name, file.mediaType]),
@@ -661,6 +680,57 @@ it.layer(getTestDB())("the inbox store", (it) => {
           undefined,
         );
         assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
+      }),
+  );
+  it.effect(
+    "an item answered or closed is stamped settled at that instant, which a message on its thread leaves while moving the last change; one settled before the stamp was kept reads its last change as settled and keeps it through the first message; a post that opens it again clears it",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        const closing = yield* postInboxItem(agent, { ...SETTINGS, key: "closing" });
+        assert.ok(Result.isSuccess(posted) && Result.isSuccess(closing));
+        const { id } = posted.success;
+        assert.equal(posted.success.settledAt, undefined, "an open item is not settled");
+        const say = (itemId: string) =>
+          Effect.gen(function* () {
+            yield* TestClock.adjust(Duration.seconds(1));
+            const said = yield* postInboxMessage(agent.userId, itemId, {
+              text: "Following up.",
+              clientKey: randomUUID(),
+            });
+            return Option.getOrThrow(said).item;
+          });
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(agent.userId, id, 1, DONE, randomUUID()),
+        );
+        const messaged = yield* say(id);
+        assert.equal(answered.settledAt, answered.updatedAt);
+        assert.equal(messaged.settledAt, answered.settledAt, "a message leaves when it settled");
+        assert.ok(messaged.updatedAt > answered.updatedAt, "and moves when it last changed");
+
+        const closed = Option.getOrThrow(yield* closeInboxItem(agent, "closing", "Not needed."));
+        assert.equal(closed.settledAt, closed.updatedAt);
+        // As an item settled before the stamp was kept stands.
+        yield* Database.use((db) =>
+          db.update(inboxItem).set({ settledAt: null }).where(eq(inboxItem.id, closed.id)),
+        );
+        const legacy = Option.getOrThrow(yield* readInboxItem(agent.userId, closed.id)).item;
+        assert.equal(legacy.settledAt, closed.updatedAt);
+        const first = yield* say(closed.id);
+        const second = yield* say(closed.id);
+        assert.deepEqual([first.settledAt, second.settledAt], [closed.updatedAt, closed.updatedAt]);
+
+        const reopened = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(reopened));
+        assert.equal(reopened.success.settledAt, undefined);
+        assert.equal(
+          (yield* say(id)).settledAt,
+          undefined,
+          "a message on an open item settles nothing",
+        );
       }),
   );
 });

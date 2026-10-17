@@ -588,6 +588,12 @@ export const inboxItemSchema = EffectSchema.Struct({
   messages: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
   /** When the agent first posted the item under its key. */
   postedAt: countedNumber,
+  /**
+   * When the item was last answered or closed, on a settled item; absent on
+   * an open one, and from a service before it was kept, which a reader takes
+   * as `updatedAt`. A message on the thread never moves it.
+   */
+  settledAt: EffectSchema.optionalKey(countedNumber),
   /** When the item last changed, by the agent or the developer, a message on its thread included. */
   updatedAt: countedNumber,
 });

@@ -3235,6 +3235,12 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
 
         yield* message(id, body);
         assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
+        assert.deepEqual(
+          yield* message(id, { ...body, text: "Something else." }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "other words under a key already taken are refused, so the agent never hears what the thread does not show",
+        );
+        assert.equal(eve.sent.length, before + 1);
 
         assert.deepEqual(
           yield* message(id, { text: "Before I joined.", clientKey: randomUUID() }, other),

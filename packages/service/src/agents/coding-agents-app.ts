@@ -105,6 +105,7 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 import {
   answerInboxItem,
+  INBOX_MESSAGE_OUTCOME,
   postInboxMessage,
   readInboxAttachment,
   readInboxItem,
@@ -1344,9 +1345,10 @@ const MAXIMUM_INBOX_MESSAGE_BODY_BYTES =
  * (`coder-host/steer.ts`), which opens a turn for an agent that stopped as
  * a message typed in its tab does. A hand-off that fails, is interrupted,
  * or dies takes the message back off the thread, so the thread never shows
- * a message the agent was not told; a message sent again under its key is
- * the one already written and handed off again, which the steer's own key
- * makes reach the agent once. An agent whose session has ended for good can
+ * a message the agent was not told, where this send wrote it; a message sent again under its key is the one already
+ * written and handed off again, which the steer's own key makes reach the
+ * agent once, and another message under a key already taken, by another
+ * member or with other words or files, is refused. An agent whose session has ended for good can
  * hear nothing again, so its item keeps the message.
  */
 const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint")(function* (
@@ -1368,7 +1370,15 @@ const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint
     postInboxMessage(userId, itemId, { text, clientKey, files: attachments }),
   );
   if (Option.isNone(posted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { item } = posted.value;
+  const { item, outcome } = posted.value;
+  if (outcome === INBOX_MESSAGE_OUTCOME.KEY_REUSED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  // Note that a repeat leaves the message standing on failure, because the write that wrote it decides whether it stays.
+  const unheard =
+    outcome === INBOX_MESSAGE_OUTCOME.WRITTEN
+      ? withdrawInboxMessage(userId, itemId, clientKey)
+      : Effect.void;
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
@@ -1382,12 +1392,7 @@ const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint
   });
   yield* handedOver.pipe(
     Effect.catchIf(retiredRefusal, () => Effect.void),
-    Effect.onError(() =>
-      withdrawInboxMessage(userId, itemId, clientKey).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.ignore,
-      ),
-    ),
+    Effect.onError(() => unheard.pipe(Effect.tapError(logStoreFailure), Effect.ignore)),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item });
 });

@@ -8,8 +8,10 @@ CREATE TABLE IF NOT EXISTS "inbox_message" (
 	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
--- A nullable column with no default is written to the catalog alone, so no row of the table is rewritten.
+-- A nullable column with no default is written to the catalog alone, so no row of the table is rewritten; the same holds below.
 ALTER TABLE "inbox_attachment" ADD COLUMN IF NOT EXISTS "message_id" uuid;--> statement-breakpoint
+-- No backfill: a read takes a settled item's last change for a null settled_at, and the first message on its thread keeps that instant here before moving the change (`inbox-store.ts`).
+ALTER TABLE "inbox_item" ADD COLUMN IF NOT EXISTS "settled_at" timestamp with time zone;--> statement-breakpoint
 -- The table holds a few rows per item, their bytes stored out of line, and the column is null on every one, so the build reads little under its lock.
 CREATE INDEX IF NOT EXISTS "inbox_attachment_message" ON "inbox_attachment" ("message_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "inbox_message_item_created" ON "inbox_message" ("item_id","created_at");--> statement-breakpoint

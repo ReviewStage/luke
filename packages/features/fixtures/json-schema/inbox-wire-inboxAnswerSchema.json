@@ -564,6 +564,10 @@
             "type": "number",
             "minimum": 0
           },
+          "settledAt": {
+            "type": "number",
+            "minimum": 0
+          },
           "updatedAt": {
             "type": "number",
             "minimum": 0
