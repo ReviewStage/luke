@@ -139,6 +139,9 @@ import {
  * drawn, and a version viewed is not restored (`../tasks/archived-task.tsx`).
  */
 
+/** How wide the block standing in the plan's tab is while the plan is read: a typical tab's width. */
+const TAB_SKELETON_WIDTH = "120px";
+
 /**
  * The strip across the top of the work column, which is also the window's
  * drag handle: the column's tabs at its left and the task's actions at its right.
@@ -172,9 +175,6 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   useAppCommand(APP_COMMAND.NEW_TAB, onNewTab);
   return null;
 }
-
-/** How wide the block standing in the plan's tab is while the plan is read: a typical tab's width. */
-const TAB_SKELETON_WIDTH = "120px";
 
 /** The plan's own Inbox lists one plan's items in one run, so nothing in it folds. */
 const NO_FOLDS = () => false;
