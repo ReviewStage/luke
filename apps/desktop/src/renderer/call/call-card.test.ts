@@ -15,8 +15,9 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput, CallWindowCard } from "./call-card";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "./call-card";
 import { CALL_VIDEO_LABEL } from "./call-video-tile";
+import { CallWindowCard } from "./call-window-card";
 import { CallTabVideo, useCallCardVideo } from "./panel-avatar";
 
 /**
