@@ -154,6 +154,8 @@ let agentsOpened: string[] = [];
 let defaultRefused = false;
 /** How many times the model catalog was read. */
 let catalogReads = 0;
+/** Whether the account's tasks were about no repository lately, so a new automation starts with none. */
+let noRecent = false;
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -193,6 +195,7 @@ beforeEach(() => {
   defaultRefused = false;
   catalogReads = 0;
   changeRefusal = undefined;
+  noRecent = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -630,7 +633,11 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
           repositoriesIn: () => ({
             ...base.repositoriesIn(listed.id),
             scope: listed.id,
-            recent: listed.id === WORKSPACE.id ? ["acme/ledger", "acme/web"] : ["beta/app"],
+            recent: noRecent
+              ? []
+              : listed.id === WORKSPACE.id
+                ? ["acme/ledger", "acme/web"]
+                : ["beta/app"],
           }),
         },
       },
@@ -1455,6 +1462,30 @@ test("a refresh that fails while an automation's page stands keeps the page and 
     "Sweep",
   );
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+});
+
+test("a new automation with no repository is not created, and the refusal describes the repository chip", async () => {
+  noRecent = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.deepEqual(creates, [], "nothing is created without a repository");
+  assert.ok(announced("Choose the repository it works in."), "the refusal is announced");
+  const chip =
+    page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
+    assert.fail("no repository chip");
+  const ids = chip.getAttribute("aria-describedby")?.split(" ") ?? [];
+  assert.ok(
+    ids.some(
+      (id) => document.getElementById(id)?.textContent === "Choose the repository it works in.",
+    ),
+    "the refusal describes the chip it is about",
+  );
+  assert.equal(chip.getAttribute("aria-invalid"), "true");
 });
 
 test("the repository chosen first is not said again among the others its runs work in", async () => {

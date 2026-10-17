@@ -2449,11 +2449,6 @@ ul.actor-stack {
   color: var(--text-tertiary);
 }
 
-.luke-chip[data-look="field"] .chip-name {
-  flex: 1;
-  text-align: left;
-}
-
 /* The way off a thumbnail, on its corner: an attached file's chip or a
    feedback screenshot. Note that the disc is 18px but the button is 24px,
    because the corner of a thumbnail carries no more disc than that and the
@@ -5282,7 +5277,7 @@ button.integration-tool-head:hover,
   max-width: 100%;
 }
 
-.automation-form .settings-picker-chip,
+.automation-form .repository-chip > .luke-chip,
 .automation-form .settings-picker > .luke-chip,
 .automation-form .agent-model-chip .luke-chip,
 .automation-form .automation-model-picker > .luke-chip,
@@ -8453,7 +8448,7 @@ button.automation-run:hover {
   flex-shrink: 1;
 }
 
-:is(.new-task-dialog, .new-task) .settings-picker-chip,
+:is(.new-task-dialog, .new-task) .repository-chip > .luke-chip,
 :is(.new-task-dialog, .new-task) .settings-picker > .luke-chip {
   width: auto;
   max-width: 100%;
