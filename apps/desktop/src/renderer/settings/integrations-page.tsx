@@ -26,6 +26,7 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ChevronRightIcon,
   CloseIcon,
@@ -46,7 +47,6 @@ import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { type ActHandle, useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { type NameEdit, TaskNameField } from "../desktop/task-name-field";

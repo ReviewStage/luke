@@ -24,8 +24,8 @@ import {
   PromptInputTools,
   submitPromptInput,
 } from "../ai-elements/prompt-input";
+import { useSideBundles } from "../bundle-loader";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { editorBundleAtom } from "../editor-bundle";
 import { FailureNote } from "../failure-note";
 import { imageFiles } from "../feedback-images";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
@@ -330,7 +330,7 @@ export function AgentComposer({
   const held = composer.sending || closed;
   const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
-  const bundle = useAtomValue(editorBundleAtom);
+  const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const statuses = useIntegrationStatuses();
   const grant = useIntegrationGrant(statuses);
