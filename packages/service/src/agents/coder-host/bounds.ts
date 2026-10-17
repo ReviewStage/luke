@@ -1,3 +1,4 @@
+import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/coding-agent-status";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
 
@@ -84,7 +85,7 @@ export const CODER = {
    * agent still without one past this is read as failed, so nothing reads
    * starting forever and no transcript read is held for it.
    */
-  STARTING_GRACE: Duration.minutes(5),
+  STARTING_GRACE: Duration.millis(STARTING_GRACE_MILLIS),
   /**
    * How long a line of the developer's may stand with no turn to take it
    * while none runs, and still read the agent as running. eve opens the
@@ -95,7 +96,7 @@ export const CODER = {
    * written. It is read as failed rather than running forever, so the
    * developer is offered Continue on it.
    */
-  LINE_GRACE: Duration.minutes(5),
+  LINE_GRACE: Duration.millis(LINE_GRACE_MILLIS),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

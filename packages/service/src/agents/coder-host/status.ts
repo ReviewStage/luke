@@ -6,9 +6,13 @@ import type {
 import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import {
+  codingAgentStatusAt,
+  type StatusTurn,
+  lineAwaitsTurn as sharedLineAwaitsTurn,
+} from "@luke/features/coding-agent-status";
+import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
-  CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
   type CodingAgentFailure,
@@ -17,10 +21,9 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { Duration } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
-import { CODER, CODER_REFUSAL } from "./bounds.js";
+import { CODER_REFUSAL } from "./bounds.js";
 
 /**
  * status.ts -- where a coding agent stands, read from its newest turn.
@@ -32,14 +35,14 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * ended after. A turn still running that carries a Stop stamp
  * reads as cancelled already, since the Stop is on its way to eve and
  * nothing the turn still does changes where it ends. An agent with no turn
- * row long past its Start (`CODER.STARTING_GRACE`) reads as failed rather
+ * row long past its Start (`STARTING_GRACE_MILLIS`) reads as failed rather
  * than starting forever, as one that never started: eve took the session,
  * and its first turn lands in seconds or not at all. A line that awaits its
  * turn reads as running whatever the newest turn says, because the session
  * took the message and the turn it opens is on its way
  * (`@luke/database/models/message-reads`'s `awaitingLinesOf` is where a
  * line is counted as waiting), but only for so long: a line that has
- * waited past `CODER.LINE_GRACE` with no turn running reads as failed, as
+ * waited past `LINE_GRACE_MILLIS` with no turn running reads as failed, as
  * one whose turn is not coming, so the developer is offered Continue on it
  * rather than watching it run forever. Failed rather than as the newest
  * turn says, because the line went unanswered, and a settled agent would
@@ -55,21 +58,6 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * line says Failed alone. Nothing of the detail itself leaves here.
  */
 
-/** The status a turn row's own status word reads as. */
-const STATUS_OF_TURN = {
-  [TURN_STATUS.QUEUED]: CODING_AGENT_STATUS.RUNNING,
-  [TURN_STATUS.RUNNING]: CODING_AGENT_STATUS.RUNNING,
-  [TURN_STATUS.SETTLED]: CODING_AGENT_STATUS.COMPLETED,
-  [TURN_STATUS.CANCELLED]: CODING_AGENT_STATUS.CANCELLED,
-  [TURN_STATUS.FAILED]: CODING_AGENT_STATUS.FAILED,
-} as const satisfies Record<string, CodingAgentStatus>;
-
-const STATUS_WORDS: ReadonlySet<string> = new Set(Object.keys(STATUS_OF_TURN));
-
-function isTurnStatusWord(status: string): status is keyof typeof STATUS_OF_TURN {
-  return STATUS_WORDS.has(status);
-}
-
 /** When the agent was started, when it is being read, which is what an agent with no turn is judged by, and when the newest line of the developer's still awaiting its turn was written. */
 export interface AgentStanding {
   readonly createdAt: Date;
@@ -79,55 +67,17 @@ export interface AgentStanding {
   readonly awaitingLineAt?: Date | undefined;
 }
 
-/** Whether an agent with no turn row is still inside the grace its first turn may land in. */
-function withinStartingGrace(standing: AgentStanding): boolean {
-  return standing.now - standing.createdAt.getTime() <= Duration.toMillis(CODER.STARTING_GRACE);
-}
-
-/** Where a line of the developer's with no turn stands: none, awaiting the turn it opens, or unanswered past the grace. */
-const LINE_STANDING = {
-  NONE: "none",
-  AWAITS: "awaits",
-  UNANSWERED: "unanswered",
-} as const;
-
-type LineStanding = (typeof LINE_STANDING)[keyof typeof LINE_STANDING];
-
-/** Whether a turn row still runs, or is queued to: what takes a line at its next step, however long the step it is on runs. */
-function turnRuns(turn: CodingAgentLatestTurn): boolean {
-  return (
-    isTurnStatusWord(turn.status) && STATUS_OF_TURN[turn.status] === CODING_AGENT_STATUS.RUNNING
-  );
-}
-
-/**
- * Where the newest line awaiting a turn stands. A turn still running takes
- * it, so it awaits. With none running, a line written before the newest
- * turn was queued was that turn's opener, written under the lock before
- * eve's first write of the turn (`steer.ts`), and the turn ended without the
- * store hearing it received, so it awaits nothing; a line written once the
- * turn was queued was a steer to it and still counts. Else it awaits for
- * the grace, counted from when it was written or the newest turn ended,
- * whichever came later, since that is how long it has stood with nothing
- * running to take it, and is unanswered past it. A turn failed because its
- * session ended for good leaves every line awaiting nothing, since the
- * session that would have taken one is gone and no message reopens it.
- */
-function lineStandingOf(
-  turn: CodingAgentLatestTurn | undefined,
-  standing: Pick<AgentStanding, "now" | "awaitingLineAt">,
-): LineStanding {
-  const line = standing.awaitingLineAt?.getTime();
-  if (line === undefined) return LINE_STANDING.NONE;
-  if (turn?.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED) return LINE_STANDING.NONE;
-  if (turn !== undefined && turnRuns(turn)) return LINE_STANDING.AWAITS;
-  if (turn !== undefined && line < turn.queuedAt.getTime()) {
-    return LINE_STANDING.NONE;
-  }
-  const since = Math.max(line, turn?.settledAt?.getTime() ?? 0);
-  return standing.now - since <= Duration.toMillis(CODER.LINE_GRACE)
-    ? LINE_STANDING.AWAITS
-    : LINE_STANDING.UNANSWERED;
+/** What of the newest turn the shared rule reads (`@luke/features/coding-agent-status`), each instant in epoch milliseconds. */
+function statusTurnOf(turn: CodingAgentLatestTurn | undefined): StatusTurn | undefined {
+  return turn === undefined
+    ? undefined
+    : {
+        status: turn.status,
+        cancelRequested: turn.cancelRequestedAt !== null,
+        queuedAt: turn.queuedAt.getTime(),
+        settledAt: turn.settledAt?.getTime() ?? null,
+        sessionEnded: turn.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+      };
 }
 
 /** Whether a line of the developer's awaits the turn it opens, which keeps the agent at work: what an archive or a Stop reads the agent idle by. */
@@ -135,28 +85,22 @@ export function lineAwaitsTurn(
   turn: CodingAgentLatestTurn | undefined,
   standing: Pick<AgentStanding, "now" | "awaitingLineAt">,
 ): boolean {
-  return lineStandingOf(turn, standing) === LINE_STANDING.AWAITS;
+  return sharedLineAwaitsTurn(statusTurnOf(turn), {
+    now: standing.now,
+    awaitingLineAt: standing.awaitingLineAt?.getTime(),
+  });
 }
 
-/** Where an agent stands, from its newest turn; running where a line awaits its turn, failed where one went unanswered past its grace, starting with no turn inside the grace, failed with none past it. */
+/** Where an agent stands, from its newest turn, by the rule the desktop reads it by too (`@luke/features/coding-agent-status`): running where a line awaits its turn, failed where one went unanswered past its grace, starting with no turn inside the grace, failed with none past it. */
 export function codingAgentStatusOf(
   turn: CodingAgentLatestTurn | undefined,
   standing: AgentStanding,
 ): CodingAgentStatus {
-  const line = lineStandingOf(turn, standing);
-  if (line === LINE_STANDING.AWAITS) return CODING_AGENT_STATUS.RUNNING;
-  if (line === LINE_STANDING.UNANSWERED) return CODING_AGENT_STATUS.FAILED;
-  if (turn === undefined) {
-    return withinStartingGrace(standing)
-      ? CODING_AGENT_STATUS.STARTING
-      : CODING_AGENT_STATUS.FAILED;
-  }
-  // A row outside the vocabulary is a write this build does not know, read as the one status that claims nothing.
-  if (!isTurnStatusWord(turn.status)) return CODING_AGENT_STATUS.FAILED;
-  const status = STATUS_OF_TURN[turn.status];
-  return status === CODING_AGENT_STATUS.RUNNING && turn.cancelRequestedAt !== null
-    ? CODING_AGENT_STATUS.CANCELLED
-    : status;
+  return codingAgentStatusAt(statusTurnOf(turn), {
+    createdAt: standing.createdAt.getTime(),
+    now: standing.now,
+    awaitingLineAt: standing.awaitingLineAt?.getTime(),
+  });
 }
 
 /**
