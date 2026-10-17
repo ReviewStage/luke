@@ -1,4 +1,15 @@
-import { DetailPage, Menu, SKELETON_SHAPE, Skeleton, TEXT_TONE, Text, useMenu } from "@luke/ui";
+import {
+  COLLECTION_STATE,
+  CollectionPage,
+  type CollectionState,
+  DetailPage,
+  Menu,
+  SKELETON_SHAPE,
+  Skeleton,
+  TEXT_TONE,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { accountInitials, accountLabel } from "@luke/ui/account-initials";
 import { useState } from "react";
 
@@ -108,6 +119,34 @@ function AccountMenu({
   );
 }
 
+/** The acts every admin page's header ends on: the view's controls, then the account menu. */
+function AdminActions({
+  controls,
+  account,
+  accountSkeleton,
+  onSignOut,
+}: {
+  controls: React.ReactNode;
+  account: ViewerAccount | undefined;
+  accountSkeleton: boolean;
+  onSignOut: () => void;
+}): React.JSX.Element {
+  return (
+    <>
+      {controls}
+      {/* The avatar keeps to the actions' far end, on a phone too, where
+          it wraps under the controls onto a row of its own. */}
+      {account ? (
+        <AccountMenu account={account} avatarSkeleton={accountSkeleton} onSignOut={onSignOut} />
+      ) : accountSkeleton ? (
+        <div className="ml-auto flex size-11 items-center justify-center">
+          <AvatarSkeleton />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * The page every view past the gate stands on: `@luke/ui`'s detail page,
  * titled, with the view's controls and the account menu as its acts and the
@@ -135,26 +174,67 @@ export function AdminPage({
       <DetailPage
         title={title}
         actions={
-          <>
-            {controls}
-            {/* The avatar keeps to the actions' far end, on a phone too, where
-                it wraps under the controls onto a row of its own. */}
-            {account ? (
-              <AccountMenu
-                account={account}
-                avatarSkeleton={accountSkeleton}
-                onSignOut={onSignOut}
-              />
-            ) : accountSkeleton ? (
-              <div className="ml-auto flex size-11 items-center justify-center">
-                <AvatarSkeleton />
-              </div>
-            ) : null}
-          </>
+          <AdminActions
+            controls={controls}
+            account={account}
+            accountSkeleton={accountSkeleton}
+            onSignOut={onSignOut}
+          />
         }
       >
         {children}
       </DetailPage>
+    </main>
+  );
+}
+
+/**
+ * The page a view of many accounts stands on: `@luke/ui`'s collection page,
+ * headed as `AdminPage` heads a view, with the view's filters under its title
+ * and the collection, or what stands in its place while it is read or empty,
+ * under them. The account menu waits as a bone while the page loads, as the
+ * detail page's does.
+ */
+export function AdminCollectionPage({
+  title,
+  controls,
+  account,
+  onSignOut,
+  filters,
+  state,
+  loadingLabel,
+  empty,
+  children,
+}: {
+  title: string;
+  controls: React.ReactNode;
+  account: ViewerAccount | undefined;
+  onSignOut: () => void;
+  filters: React.ReactNode;
+  state: CollectionState;
+  loadingLabel: string;
+  empty?: React.ReactNode;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <main className="flex min-h-0 flex-1 flex-col">
+      <CollectionPage
+        title={title}
+        actions={
+          <AdminActions
+            controls={controls}
+            account={account}
+            accountSkeleton={state === COLLECTION_STATE.LOADING}
+            onSignOut={onSignOut}
+          />
+        }
+        filters={filters}
+        state={state}
+        loadingLabel={loadingLabel}
+        empty={empty}
+      >
+        {children}
+      </CollectionPage>
     </main>
   );
 }
