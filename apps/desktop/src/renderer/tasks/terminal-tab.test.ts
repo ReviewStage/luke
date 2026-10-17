@@ -24,6 +24,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
 import "../terminal/index";
@@ -168,26 +169,23 @@ beforeEach(() => {
       };
     },
   };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        if (main.down.has(request.kind)) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.REFUSED,
-            reason: "Could not reach this agent's sandbox.",
-          });
-        }
-        // A held answer says what main said when it was asked, landing whenever it is let go.
-        if (main.holding.has(request.kind)) {
-          const value = answer(request);
-          return new Promise((resolve) =>
-            main.held.push(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
-          );
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request) });
-      },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      if (main.down.has(request.kind)) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: "Could not reach this agent's sandbox.",
+        });
+      }
+      // A held answer says what main said when it was asked, landing whenever it is let go.
+      if (main.holding.has(request.kind)) {
+        const value = answer(request);
+        return new Promise((resolve) =>
+          main.held.push(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
+        );
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request) });
     },
   });
   // jsdom has neither constructed sheets nor media queries; the window has both.
