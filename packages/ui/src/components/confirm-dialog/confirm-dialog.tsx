@@ -1,3 +1,5 @@
+import type { ActionResult } from "@luke/wire";
+import { useId, useRef } from "react";
 import {
   CONFIRM_STAGE,
   type ConfirmSurroundings,
@@ -5,22 +7,20 @@ import {
   confirmWithdrawable,
   type HeldConfirm,
   useConfirm,
-} from "@luke/ui/confirm-state";
-import type { ActionResult } from "@luke/wire";
-import { useId, useRef } from "react";
-import { MODAL_ROLE, ModalShell } from "../modal-shell";
-import { BusyLabel } from "../spinner";
+} from "../../confirm-state.js";
+import { BUTTON_VARIANT, Button } from "../button/button.js";
+import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
 
 /**
  * confirm-dialog.tsx -- an irreversible act's question as a modal over the window: what goes, then Cancel and the act.
  *
- * The desktop window asks the way every desktop app does: the window dims, a
- * card names what the act takes with it, and the two answers sit at its foot,
- * the safe one first and the act in red last, or in the accent for an act
- * that can be undone, such as restoring a version of a plan. Focus lands on Cancel, so a key
- * already pressed changes nothing; Tab stays inside the card; Escape, a press
- * on the dimmed window, and Cancel all withdraw it, and however it goes,
- * focus goes back to whatever asked if that still stands. Enter is the
+ * The window asks the way every desktop app does: it dims, a card names what
+ * the act takes with it, and the two answers sit at its foot, the safe one
+ * first and the act in red last, or in the accent for an act that can be
+ * undone, such as restoring a version of a plan. Focus lands on Cancel, so a
+ * key already pressed changes nothing; Tab stays inside the card; Escape, a
+ * press on the dimmed window, and Cancel all withdraw it, and however it
+ * goes, focus goes back to whatever asked if that still stands. Enter is the
  * focused button's own, so it acts only from the act's button.
  *
  * The question is `confirm-state.ts`'s, so it withdraws the render its subject
@@ -35,15 +35,15 @@ export const DIALOG_TONE = {
   PRIMARY: "primary",
 } as const;
 
-type DialogTone = (typeof DIALOG_TONE)[keyof typeof DIALOG_TONE];
+export type DialogTone = (typeof DIALOG_TONE)[keyof typeof DIALOG_TONE];
 
-/** The act's button's class, by its tone. */
-const ACT_BUTTON_CLASS = {
-  [DIALOG_TONE.DANGER]: "danger-button",
-  [DIALOG_TONE.PRIMARY]: "primary-button",
+/** The act's button's look, by its tone. */
+const ACT_VARIANT = {
+  [DIALOG_TONE.DANGER]: BUTTON_VARIANT.DANGER,
+  [DIALOG_TONE.PRIMARY]: BUTTON_VARIANT.PRIMARY,
 } as const satisfies Record<DialogTone, string>;
 
-/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs, under the spinner; the act is red unless its tone says otherwise. */
+/** What the dialog says: its title, what the act takes with it if anything needs saying, and the act's word, and what a reader is told while it runs; the act is red unless its tone says otherwise. */
 export interface DialogQuestion {
   title: string;
   body?: string;
@@ -77,7 +77,7 @@ export function useConfirmDialog(
 
 /**
  * The question over the window while it is asked, running, or refused, and
- * nothing otherwise, in the window's one modal frame (`../modal-shell.tsx`).
+ * nothing otherwise, in the shared `Dialog`.
  */
 export function ConfirmDialog({
   confirm,
@@ -88,7 +88,7 @@ export function ConfirmDialog({
   confirm: DialogConfirm;
   question: DialogQuestion;
   /** A field the question asks to be filled, which takes focus in Cancel's place; Enter in it answers. */
-  field?: React.RefObject<HTMLInputElement | null>;
+  field?: React.RefObject<HTMLInputElement | null> | undefined;
   /** What the card holds under its body: the field, where the question asks one. */
   children?: React.ReactNode;
 }): React.JSX.Element | null {
@@ -118,50 +118,43 @@ export function ConfirmDialog({
   };
 
   return (
-    <ModalShell
-      role={MODAL_ROLE.ALERT_DIALOG}
+    <Dialog
+      role={DIALOG_ROLE.ALERT_DIALOG}
       labelledBy={titleId}
-      {...(question.body ? { describedBy: bodyId } : undefined)}
+      describedBy={question.body ? bodyId : undefined}
       busy={acting}
       initialFocus={field ?? cancel}
       onDismiss={dismiss}
       onKeyDown={fieldKey}
     >
-      <h2 id={titleId} className="confirm-dialog-title">
+      <h2 id={titleId} className="luke-confirm-dialog-title">
         {question.title}
       </h2>
       {question.body ? (
-        <p id={bodyId} className="confirm-dialog-body">
+        <p id={bodyId} className="luke-confirm-dialog-body">
           {question.body}
         </p>
       ) : null}
       {children}
       {rejection !== undefined && !acting ? (
-        <p className="error-message" role="alert">
+        <p className="luke-confirm-dialog-refusal" role="alert">
           {rejection}
         </p>
       ) : null}
-      <div className="confirm-dialog-actions">
-        <button
-          type="button"
-          ref={cancel}
-          className="toolbar-button"
-          disabled={acting}
-          onClick={dismiss}
-        >
+      <div className="luke-confirm-dialog-actions">
+        <Button ref={cancel} variant={BUTTON_VARIANT.QUIET} disabled={acting} onClick={dismiss}>
           Cancel
-        </button>
-        <button
-          type="button"
-          className={ACT_BUTTON_CLASS[question.tone ?? DIALOG_TONE.DANGER]}
+        </Button>
+        <Button
+          variant={ACT_VARIANT[question.tone ?? DIALOG_TONE.DANGER]}
           disabled={acting}
+          busy={acting}
+          busyLabel={question.running}
           onClick={() => confirm.run()}
         >
-          <BusyLabel busy={acting} label={question.running}>
-            {question.verb}
-          </BusyLabel>
-        </button>
+          {question.verb}
+        </Button>
       </div>
-    </ModalShell>
+    </Dialog>
   );
 }

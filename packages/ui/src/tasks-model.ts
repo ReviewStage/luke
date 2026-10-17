@@ -1,5 +1,9 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import {
+  LINEAR_BOUNDS,
+  type LinearIssueSummary,
+  linearIssueIdentifierIn,
+} from "@luke/features/linear-wire";
 import {
   type RepositoryPin,
   TASK_BOUNDS,
@@ -16,7 +20,7 @@ import {
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/tasks-view";
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
@@ -136,15 +140,40 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
 /** How many of a workspace's Linear issues New task offers under its name field at once. */
 export const ISSUE_MATCH_LIMIT = 6;
 
+/** What New task asks a workspace's Linear for beyond the issues it listed: the one issue a key or link names, or a search. */
+export type LinearIssuesAsk = Omit<LinearIssuesRequest, "workspaceId">;
+
+/**
+ * What New task asks Linear for, for the name as typed: the one issue a key
+ * or a link to it names, which a search may not find, or a search over
+ * every issue for any other words; nothing for a blank name, which the
+ * issues listed as the card opened answer.
+ */
+export function linearIssuesAskOf(typed: string): LinearIssuesAsk | undefined {
+  const words = typed.trim();
+  if (words === "") return undefined;
+  const identifier = linearIssueIdentifierIn(words);
+  return identifier === undefined
+    ? { query: words.slice(0, LINEAR_BOUNDS.MAX_QUERY_CHARS) }
+    : { identifier };
+}
+
+/** How near an issue Linear found for the words, though neither its title nor its key holds them all, stands: after every one that does. */
+const FOUND_ELSEWHERE = 3;
+
 /**
  * How closely an issue answers what was typed, nearest first: its key or
- * its number typed whole, then every word typed at the start of a word of
- * its title, then every word anywhere in its title or key.
+ * its number typed whole, or a link to it pasted, then every word typed at
+ * the start of a word of its title, then every word anywhere in its title or
+ * key, then words Linear's search found elsewhere in it.
  */
 function issueNearness(
   issue: Pick<LinearIssueSummary, "identifier" | "title">,
   tokens: readonly string[],
+  named: string | undefined,
 ): number {
+  if (issue.identifier === named) return 0;
+  if (!matchesTokens([issue.title, issue.identifier], tokens)) return FOUND_ELSEWHERE;
   const key = issue.identifier.toLowerCase();
   const number = key.slice(key.lastIndexOf("-") + 1);
   if (tokens.some((token) => token === key || token === number)) return 0;
@@ -154,20 +183,32 @@ function issueNearness(
 }
 
 /**
- * The issues New task offers for the name typed so far: those whose title or
- * key holds every word typed, case aside, nearest first and otherwise in the
- * order Linear listed them, at most `ISSUE_MATCH_LIMIT` of them; none for a
- * blank name, which leaves the field a plain name.
+ * The issues New task offers for the name typed so far, at most
+ * `ISSUE_MATCH_LIMIT` of them: those listed whose title or key holds every
+ * word typed, case aside, and every issue Linear answered for the words
+ * (`found`: what its search matched, or the one issue a key or link names),
+ * each once, nearest first and otherwise listed first; none for a blank
+ * name, which leaves the field a plain name.
  */
-export function matchingIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
-  issues: readonly Issue[],
+export function offeredIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
+  listed: readonly Issue[],
   typed: string,
+  found: readonly Issue[] = [],
 ): readonly Issue[] {
   const tokens = searchTokens(typed);
   if (tokens.length === 0) return [];
-  return issues
-    .filter((issue) => matchesTokens([issue.title, issue.identifier], tokens))
-    .map((issue, order) => ({ issue, order, nearness: issueNearness(issue, tokens) }))
+  const named = linearIssueIdentifierIn(typed);
+  const foundKeys = new Set(found.map((issue) => issue.identifier));
+  const once = new Map<string, Issue>();
+  for (const issue of [...listed, ...found]) {
+    if (!once.has(issue.identifier)) once.set(issue.identifier, issue);
+  }
+  return [...once.values()]
+    .filter(
+      (issue) =>
+        foundKeys.has(issue.identifier) || matchesTokens([issue.title, issue.identifier], tokens),
+    )
+    .map((issue, order) => ({ issue, order, nearness: issueNearness(issue, tokens, named) }))
     .sort((first, second) => first.nearness - second.nearness || first.order - second.order)
     .slice(0, ISSUE_MATCH_LIMIT)
     .map(({ issue }) => issue);
