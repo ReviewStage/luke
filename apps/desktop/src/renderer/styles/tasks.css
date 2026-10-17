@@ -3270,12 +3270,19 @@ button.skill-chip:hover,
 }
 
 /* The Inbox's answer box draws the same card and field
-   (`inbox-answer-box.tsx`): its quiet line is cut short before its
+   (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
+   box's does, and its quiet line beside it is cut short before its
    microphone and presses are, and goes once the card is too narrow for
    both, when the microphone goes too and the presses tighten and, still
    too wide, stack at the right rather than run past the card. */
-.inbox-answer-quiet {
+.inbox-answer-tools {
   flex: 1 1 0;
+}
+
+.inbox-answer-quiet {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .inbox-answer-actions {
@@ -3308,8 +3315,9 @@ button.skill-chip:hover,
 }
 
 @container composer (max-width: 299px) {
-  .inbox-answer-foot > .inbox-answer-quiet,
-  .inbox-answer .dictate-button {
+  .inbox-answer-foot .inbox-answer-quiet,
+  .inbox-answer .dictate-button,
+  .inbox-answer:not([data-presses]) .inbox-answer-tools {
     display: none;
   }
 

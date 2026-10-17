@@ -736,9 +736,11 @@ test("an agent with no plan lets go of its own outdated answers as its inbox is 
   const mine = planlessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
   const theirs = planlessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
   const first = await planlessInbox(INVITES.agent.id, [mine]);
-  act(() => first.onDraft(mine, { choices: [], values: [], note: "Only teammates" }));
+  act(() =>
+    first.onDraft(mine, { choices: [], values: [], note: "Only teammates", attachments: [] }),
+  );
   const other = await planlessInbox(BILLING.agent.id, [theirs]);
-  act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly" }));
+  act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly", attachments: [] }));
 
   await planlessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
   const reread = await planlessInbox(INVITES.agent.id, [mine]);
