@@ -1046,8 +1046,9 @@ export function updateTask<E = never, R = never, RA = never>(
         }
         const now = yield* DateTime.nowAsDate;
         const standing = locked.value.archivedAt;
-        if (changes.archived === true && standing === null) {
-          yield* archivedAgents(userId, taskId, now, archiveGuard);
+        // An archive asked again takes in an agent brought back on its own since, under the standing stamp.
+        if (changes.archived === true) {
+          yield* archivedAgents(userId, taskId, standing ?? now, archiveGuard);
         }
         if (changes.archived === false && standing !== null) {
           yield* unarchivedAgents(taskId, standing);

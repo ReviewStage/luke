@@ -261,7 +261,7 @@ const archiveOf = (userId: string, agentId: string) =>
 
 it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
   it.effect(
-    "a plan's archive archives its standing agents with it as the member who archived it, and its unarchive brings back only those",
+    "a plan's archive archives its standing agents with it as the member who archived it, again for one brought back on its own since, and its unarchive brings back only those",
     () =>
       Effect.gen(function* () {
         const { dean, charles, taskId } = yield* openSharedTask;
@@ -277,6 +277,11 @@ it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
           archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId: charles, withTask: true },
         });
         assert.deepEqual(yield* archiveOf(dean, putAway), before);
+
+        // An agent brought back on its own is taken in again by the archive asked again, under its stamp.
+        yield* archiveCodingAgent(dean, working, false);
+        yield* updateTask(charles, taskId, { archived: true });
+        assert.equal((yield* archiveOf(dean, working)).archivedAt, archived.archivedAt);
 
         yield* updateTask(dean, taskId, { archived: false });
         assert.deepEqual(yield* archiveOf(dean, working), {

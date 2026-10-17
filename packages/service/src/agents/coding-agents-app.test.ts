@@ -1308,11 +1308,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a plan's archive is refused as not ready while one of its agents holds a message awaiting its turn, which no Stop can name yet, and leaves the plan and the agent standing",
+    "a plan's archive is refused as not ready while one of its agents holds a message awaiting its turn, which no Stop can name yet, before any Stop is sent, and leaves the plan and the agent standing",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask, sent } = yield* startedAgent(fakeEve(), {
-          running: false,
+        const { owner, task, agent, ask, sent, eve } = yield* startedAgent(fakeEve(), {
+          running: true,
         });
         yield* sent("Rename the subject line too.");
 
@@ -1324,6 +1324,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.equal(Option.getOrThrow(yield* readTask(owner, task.id)).task.archivedAt, undefined);
         assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, agent.id)).archivedAt, null);
+        assert.deepEqual(eve.cancelled, []);
       }),
   );
 

@@ -47,7 +47,13 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { type EveReach, eveFor, standsStopped, stoppedForGood } from "../agents/coder-host/stop.js";
+import {
+  type EveReach,
+  eveFor,
+  standsStopped,
+  stoppedForGood,
+  stopsForGood,
+} from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   CURSOR_START,
@@ -541,6 +547,9 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const archiving = changes.archived === true;
   if (archiving) {
     const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
+    // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
+    const ready = yield* Effect.forEach(agents, stopsForGood);
+    if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
     yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, agent), {
       discard: true,
     });

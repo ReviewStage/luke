@@ -172,6 +172,24 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * Whether `stoppedForGood` would stop the agent rather than refuse it, read
+ * before any Stop is sent: no line awaits the turn it opens, it is past its
+ * start, and a turn still running carries eve's id for a Stop to name or a
+ * Stop already. A caller stopping several agents as one asks this of every
+ * one first, so a refusal cancels nobody's work.
+ */
+export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: CodingAgent) {
+  const { turn, lineAwaits } = (yield* standingsOf([agent.conversationId]))(agent.conversationId);
+  const status = codingAgentStatusOf(turn, {
+    createdAt: agent.createdAt,
+    now: yield* Clock.currentTimeMillis,
+    lineAwaits,
+  });
+  if (lineAwaits || status === CODING_AGENT_STATUS.STARTING) return false;
+  return status !== CODING_AGENT_STATUS.RUNNING || stoppable(turn);
+});
+
+/**
  * Whether an agent a plan's archive stopped still stands stopped, read under
  * its conversation's lock as the archive holds it: neither starting, nor
  * running, nor holding a line awaiting the turn it opens, a turn whose Stop
