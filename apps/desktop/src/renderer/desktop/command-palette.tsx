@@ -48,7 +48,16 @@ import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/featu
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
-import { GearIcon, PinIcon, SearchIcon, UnpinIcon } from "@luke/ui";
+import {
+  GearIcon,
+  PinIcon,
+  SearchIcon,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  UnpinIcon,
+} from "@luke/ui";
 import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
@@ -1124,9 +1133,17 @@ export function CommandPalette({
       <FilterChips filter={filter} onFilter={changeFilter} />
       <Command.List className="command-palette-list scroll-fade" label="Results">
         {notice === undefined ? (
-          <Command.Empty className="command-palette-empty">Nothing matches.</Command.Empty>
+          <Command.Empty className="command-palette-empty">
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              Nothing matches.
+            </Text>
+          </Command.Empty>
         ) : (
-          <div className="command-palette-empty">{notice}</div>
+          <div className="command-palette-empty">
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              {notice}
+            </Text>
+          </div>
         )}
         {sections.map((section) => (
           <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
@@ -1144,7 +1161,13 @@ export function CommandPalette({
             })}
           </Command.Group>
         ))}
-        {cut ? <div className="command-palette-notice">{TRUNCATED_LINE}</div> : null}
+        {cut ? (
+          <div className="command-palette-notice">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {TRUNCATED_LINE}
+            </Text>
+          </div>
+        ) : null}
       </Command.List>
       <PaletteFooter typed={query !== ""} />
     </Command.Dialog>
