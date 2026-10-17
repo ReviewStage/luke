@@ -491,46 +491,28 @@
   flex: none;
 }
 
-/* The handover dialog's admin to make the owner: a field chip leading with
-   their face, wide enough for a name. */
+/* The handover dialog's admin to make the owner: the field chip leading
+   with their face stands in this container, which holds it wide enough for
+   a name and lets it grow with a longer one. */
 .workspace-heir {
+  display: grid;
+  align-self: flex-start;
   min-width: 220px;
-  justify-content: flex-start;
-  gap: var(--space-8);
-}
-
-.workspace-heir .luke-chip-face > svg:last-child {
-  margin-left: auto;
-}
-
-/* A dialog's labelled control under its body, the label over it as a form
-   row's. */
-.dialog-field {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-6);
-  margin-top: var(--space-12);
-}
-
-.dialog-field-label {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  max-width: 100%;
 }
 
 /* What a leave keeps and stops, under the leave dialog's body, in its
    muted words. */
 .leave-consequences {
-  margin: var(--space-12) 0 0;
+  margin: 0;
   padding-left: 18px;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
 }
 
 .leave-consequences li + li {
-  margin-top: var(--space-4);
+  margin-top: var(--luke-space-4);
 }
 
 /* The Keyboard shortcuts page: a reference list more than a form, so the

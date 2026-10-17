@@ -968,6 +968,10 @@ const leaveGroup = (page: HTMLElement) =>
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.LEAVE}"]`,
   );
 
+/** What the leave group's one row says under its name. */
+const leaveLine = (group: HTMLElement) =>
+  rowWords(group.querySelector<HTMLElement>(ROWS) ?? assert.fail("no leave row"))[1];
+
 test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is", async () => {
   const other: WorkspaceMember = {
     ...ADMIN_OLA,
@@ -978,7 +982,7 @@ test("the owner cannot leave until the workspace is handed over: its row says so
   stored = [OWNER, ADMIN_OLA, other, MEMBER];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   const group = leaveGroup(page) ?? assert.fail("no leave");
-  const line = group.querySelector("small")?.textContent;
+  const line = leaveLine(group);
   act(() => button(group, "Transfer ownership").click());
   const chip =
     dialog().querySelector<HTMLButtonElement>('button[aria-label^="New owner"]') ??
@@ -1008,7 +1012,7 @@ test("the owner with no admin is told to make one first and offered no handover,
   const own = await mount({ ...FIRST, role: WORKSPACE_ROLE.OWNER });
 
   assert.equal(
-    group.querySelector("small")?.textContent,
+    leaveLine(group),
     "You're its owner. Make a member an admin, then make them the owner, and you can leave.",
   );
   assert.deepEqual(buttons(group, "Transfer ownership"), []);
@@ -1150,8 +1154,8 @@ test("a removal the account's role does not allow says so in the dialog that ask
 
 test("a member leaves after confirming, which names what stays and what stops, says so in a toast, and lands the window; an owner is offered no Leave", async () => {
   const member = await mount(ACME);
-  const leaveRow = button(member.page, "Leave").closest(".settings-row") ?? assert.fail();
-  const line = leaveRow.querySelector("small")?.textContent;
+  const leaveRow = leaveGroup(member.page) ?? assert.fail("no leave");
+  const line = leaveLine(leaveRow);
   act(() => button(leaveRow, "Leave").click());
   const named = [...dialog().querySelectorAll(".leave-consequences li")].map(
     (li) => li.textContent,

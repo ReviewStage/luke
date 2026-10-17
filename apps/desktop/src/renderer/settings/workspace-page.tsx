@@ -23,7 +23,9 @@ import {
   Button,
   CHIP_LOOK,
   Chip,
+  ChipName,
   ConfirmDialog,
+  FormField,
   ProviderMark,
   SettingsRow,
   SettingsSection,
@@ -50,8 +52,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
-// The heir's chip still wears a class of its own, until the leave flow moves.
-import { Chip as WindowChip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu } from "../desktop/action-menu";
 import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
@@ -262,16 +262,6 @@ function Reading({ label }: { label: string }): React.JSX.Element {
     <div className="settings-card-line settings-reading">
       <SpinnerRegion label={label} />
     </div>
-  );
-}
-
-/** A row's words: what it names, and a line under it. */
-function RowCopy({ name, line }: { name: string; line?: React.ReactNode }): React.JSX.Element {
-  return (
-    <span className="settings-copy">
-      <strong>{name}</strong>
-      {line === undefined ? null : <small>{line}</small>}
-    </span>
   );
 }
 
@@ -557,21 +547,20 @@ function MemberLeave({
         : LEAVE_WORDS.AUTOMATIONS_NAMED(automations.names);
   return (
     <>
-      <div className="settings-row">
-        <RowCopy name={`Leave ${workspace.name}`} line={LEAVE_WORDS.LINE} />
-        <button
-          type="button"
-          className="toolbar-button bordered-button"
-          data-danger="true"
-          disabled={leave.busy}
-          onClick={() => {
-            automations.read();
-            leave.ask();
-          }}
-        >
-          Leave
-        </button>
-      </div>
+      <SettingsRow label={`Leave ${workspace.name}`} description={LEAVE_WORDS.LINE}>
+        {() => (
+          <Button
+            variant={BUTTON_VARIANT.DANGER_OUTLINE}
+            disabled={leave.busy}
+            onClick={() => {
+              automations.read();
+              leave.ask();
+            }}
+          >
+            Leave
+          </Button>
+        )}
+      </SettingsRow>
       <ConfirmDialog
         confirm={leave}
         question={{
@@ -599,29 +588,35 @@ function MemberLeave({
  * field chip, each in the shared menu by face, name, and email.
  */
 function HeirChip({
+  id,
   admins,
   chosen,
   onChoose,
 }: {
+  /** The id the dialog's field names the chip by. */
+  id: string;
   admins: readonly WorkspaceMember[];
   chosen: WorkspaceMember;
   onChoose: (heir: WorkspaceMember) => void;
 }): React.JSX.Element {
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
+  // Note that a container holds the chip wide enough for a name, because width is its place's.
   return (
     <>
-      <WindowChip
-        look={CHIP_LOOK.FIELD}
-        chevron
-        ref={door}
-        className="workspace-heir"
-        aria-label={`New owner: ${chosen.name}`}
-        {...menu.trigger()}
-      >
-        <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
-        <span className="chip-name">{chosen.name}</span>
-      </WindowChip>
+      <div className="workspace-heir">
+        <Chip
+          look={CHIP_LOOK.FIELD}
+          chevron
+          ref={door}
+          id={id}
+          aria-label={`New owner: ${chosen.name}`}
+          {...menu.trigger()}
+        >
+          <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
+          <ChipName>{chosen.name}</ChipName>
+        </Chip>
+      </div>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label="New owner"
@@ -683,25 +678,25 @@ function OwnerLeave({
   );
   return (
     <>
-      <div className="settings-row">
-        <RowCopy
-          name={`Leave ${workspace.name}`}
-          line={heir === undefined ? LEAVE_WORDS.OWNER_NO_ADMIN : LEAVE_WORDS.OWNER}
-        />
-        {heir === undefined ? null : (
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={transfer.busy}
-            onClick={() => {
-              onRefresh();
-              transfer.ask();
-            }}
-          >
-            {TRANSFER_WORDS.VERB}
-          </button>
-        )}
-      </div>
+      <SettingsRow
+        label={`Leave ${workspace.name}`}
+        description={heir === undefined ? LEAVE_WORDS.OWNER_NO_ADMIN : LEAVE_WORDS.OWNER}
+      >
+        {() =>
+          heir === undefined ? null : (
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              disabled={transfer.busy}
+              onClick={() => {
+                onRefresh();
+                transfer.ask();
+              }}
+            >
+              {TRANSFER_WORDS.VERB}
+            </Button>
+          )
+        }
+      </SettingsRow>
       {heir === undefined ? null : (
         <ConfirmDialog
           confirm={transfer}
@@ -712,10 +707,16 @@ function OwnerLeave({
             running: TRANSFER_WORDS.RUNNING,
           }}
         >
-          <div className="dialog-field">
-            <span className="dialog-field-label">New owner</span>
-            <HeirChip admins={admins} chosen={heir} onChoose={(each) => setChosenId(each.userId)} />
-          </div>
+          <FormField label="New owner">
+            {(field) => (
+              <HeirChip
+                id={field.id}
+                admins={admins}
+                chosen={heir}
+                onChoose={(each) => setChosenId(each.userId)}
+              />
+            )}
+          </FormField>
         </ConfirmDialog>
       )}
     </>
@@ -747,18 +748,20 @@ function LeaveGroup({
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   if (owner && workspace.personal === true) return null;
   return (
-    <SettingsGroup anchor={SETTINGS_SECTION.LEAVE}>
-      {owner ? (
-        <OwnerLeave
-          workspace={workspace}
-          members={members}
-          onChanged={onChanged}
-          onRefresh={onRefresh}
-        />
-      ) : (
-        <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
-      )}
-    </SettingsGroup>
+    <div {...searchAnchorProps(SETTINGS_SECTION.LEAVE)}>
+      <SettingsSection>
+        {owner ? (
+          <OwnerLeave
+            workspace={workspace}
+            members={members}
+            onChanged={onChanged}
+            onRefresh={onRefresh}
+          />
+        ) : (
+          <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
+        )}
+      </SettingsSection>
+    </div>
   );
 }
 
