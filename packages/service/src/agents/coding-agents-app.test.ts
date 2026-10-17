@@ -5110,6 +5110,35 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a continue of a source whose pull request is still open is told to carry the copy onto that pull request's branch and open no second one, and the words it is handed bring the branch to the copy",
+    (t) =>
+      Effect.gen(function* () {
+        const { checkout, continued } = yield* copyScenario(t);
+        // The source worked on its pull request's branch, pushed, with its change still uncommitted.
+        checkout.sh(checkout.checkout, "git", "switch", "--quiet", "-c", PUBLISHED.branch);
+        checkout.sh(checkout.checkout, "git", "push", "--quiet", "origin", PUBLISHED.branch);
+
+        const { started, preamble } = yield* continued;
+
+        const copied = started.from?.branch ?? "";
+        assert.ok(preamble.includes("open no new pull request"), preamble);
+        assert.ok(!preamble.includes("open your pull request from it"), preamble);
+        const fresh = fetchedAsHanded(checkout, preamble);
+        const [, carry = ""] = [...preamble.matchAll(/`(git remote set-branches [^`]+)`/gu)].map(
+          (match) => match[1],
+        );
+        const merge = /`(git merge --ff-only [^`]+)`/u.exec(preamble)?.[1] ?? "";
+        checkout.sh(fresh, "sh", "-c", `${carry} && ${merge}`);
+        assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), PUBLISHED.branch);
+        assert.equal(
+          checkout.sh(fresh, "git", "rev-parse", "HEAD"),
+          checkout.sh(fresh, "git", "rev-parse", copied),
+        );
+        assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+      }),
+  );
+
+  it.effect(
     "a sandbox held past the copy's own hold, by a developer's terminal or another Start's copy, is woken for the copy and left up",
     (t) =>
       Effect.gen(function* () {

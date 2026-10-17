@@ -137,6 +137,12 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * rather than the default one, which the agent's row keeps; the branch is
  * read on GitHub through the same installation before anything is made, so
  * one the repository does not hold is refused here rather than at the clone.
+ * A Start from another agent that names no branch is cloned at the branch
+ * that agent was started on, so a continue of an agent started on a stacked
+ * pull request's branch cuts from and opens against that branch as its
+ * source did, rather than the default one; where GitHub no longer holds it,
+ * as once that pull request merged and its branch went, the new agent is
+ * cloned at the default branch rather than refused.
  * The MCP servers the words mention are handed to the agent's first turn
  * whatever its switches say, but an automation's run is handed only those
  * its automation's own prompt mentions, never those of the webhook body or
@@ -348,6 +354,40 @@ const confirmedBranch = Effect.fnUntraced(function* (
     Effect.mapError(() => HOSTED_REFUSAL.GITHUB_UNANSWERED),
   );
   if (head === undefined) return yield* Effect.fail(HOSTED_REFUSAL.BRANCH_NOT_FOUND);
+});
+
+/**
+ * The branch the agent's checkout is cloned at: the one the ask names,
+ * which GitHub must hold; else the one the agent it is started from was
+ * started on, where GitHub still holds it; else none, the default branch.
+ * Note that a retry whose agent already stands is not asked of GitHub
+ * again, because the branch may be gone since and the agent its Start made
+ * is still the answer.
+ */
+const startBranchOf = Effect.fnUntraced(function* (
+  userId: string,
+  ask: StartAsk,
+  inherited: string | null,
+  landing: StartLanding,
+): Effect.fn.Return<
+  string | undefined,
+  HostedRefusal,
+  DatabaseServices | HttpClient.HttpClient | GitHubApp
+> {
+  const branch = ask.branch ?? inherited ?? undefined;
+  if (branch === undefined) return undefined;
+  const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+  if (Option.isSome(made)) return branch;
+  const confirmed = confirmedBranch(landing.workspaceId, landing.repository, branch);
+  if (ask.branch !== undefined) return yield* Effect.as(confirmed, branch);
+  return yield* confirmed.pipe(
+    Effect.as<string | undefined>(branch),
+    Effect.catch((refusal) =>
+      refusal.error === HOSTED_REFUSAL.BRANCH_NOT_FOUND.error
+        ? Effect.succeed(undefined)
+        : Effect.fail(refusal),
+    ),
+  );
 });
 
 /** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one; in a workspace, the prompt. */
@@ -586,14 +626,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         ]);
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
-  // Note that a retry whose agent already stands is not asked of GitHub again, because the
-  // branch may be gone since and the agent its Start made is still the answer.
-  if (ask.branch !== undefined) {
-    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
-    if (Option.isNone(made)) {
-      yield* confirmedBranch(landing.workspaceId, landing.repository, ask.branch);
-    }
-  }
+  // An agent started from another goes on from the branch that one was started on.
+  const branch = yield* startBranchOf(userId, ask, from?.source.startBranch ?? null, landing);
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note
   // alone; never the replay of another agent, whose words name what it read, not what to hand on.
@@ -639,7 +673,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
-      startBranch: ask.branch,
+      startBranch: branch,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
       // The servers those words mention are its first turn's, whatever the switches say.
       mentionedServers:

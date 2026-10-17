@@ -34,6 +34,7 @@ import {
   type CodingAgentAttachmentType,
   type CodingAgentPullRequest,
   type CodingAgentStartFrom,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { isFileUIPart, isTextUIPart } from "ai";
@@ -487,6 +488,28 @@ function pullWords(published: CodingAgentPullRequest | null): string {
     : `, with its pull request #${published.number} (${published.url})`;
 }
 
+/** Whether a pull request is still open, a draft among them, so work that goes on goes on in it. */
+function stillOpen(published: CodingAgentPullRequest | null): boolean {
+  return (
+    published !== null &&
+    (published.state === PULL_REQUEST_STATE.OPEN || published.state === PULL_REQUEST_STATE.DRAFT)
+  );
+}
+
+/**
+ * How a continue carries the copy of its source's work onto the branch of the
+ * source's pull request still open, rather than opening a second one from the
+ * copy: that branch checked out, the copy's commits brought onto it, a
+ * fast-forward where it has not moved since the source's checkout was copied.
+ */
+function carryOntoWords(copied: string, branch: string): string {
+  return (
+    ` Its pull request is still open, so carry on in it rather than open a second one: once the copy is fetched, ${fetchWords(branch)}, ` +
+    `bring the copy's commits onto it with \`git merge --ff-only ${shellQuoted(copied)}\` (a plain merge where it has moved on since), ` +
+    "then work and push there, and open no new pull request."
+  );
+}
+
 /** The work a source that made no branch of its own took up: the agent it came from, that agent's pull request, and the branch that agent's work was copied to for the source, where it was. */
 interface CarriedWork {
   /** None where that agent can no longer be read, and only the copy made of its work stands. */
@@ -519,12 +542,20 @@ function carriedWhere(carried: CarriedWork): string {
   );
 }
 
-/** Where the source's work stands for the new agent: the branch its checkout was copied to, or, where it could not be, the branch and pull request it left, or those of the work it carried where it made no branch of its own. */
+/**
+ * Where the source's work stands for the new agent: the branch its checkout
+ * was copied to, or, where it could not be, the branch and pull request it
+ * left, or those of the work it carried where it made no branch of its own.
+ * A continue of a source whose pull request is still open goes on in that
+ * pull request, the copy carried onto its branch, so the work does not
+ * split across two; a fork, a line of work of its own, opens its own.
+ */
 function whereOf(
   source: CodingAgent,
   published: CodingAgentPullRequest | null,
   copy: SnapshotOutcome,
   carried: CarriedWork | undefined,
+  forked: boolean,
 ): string {
   const pull = pullWords(published);
   if (copy.copied) {
@@ -538,6 +569,12 @@ function whereOf(
         : taken === undefined || taken.branch === null
           ? ""
           : ` It made no branch of its own; the coding agent it took up, ${agentName(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
+    if (!forked && source.branch !== null && stillOpen(published)) {
+      return (
+        `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}.` +
+        `${own}${carryOntoWords(copy.branch, source.branch)}`
+      );
+    }
     return (
       `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}, ` +
       `build on it, and open your pull request from it as usual.${own}`
@@ -585,7 +622,7 @@ function preambleOf(
   const lead = forked.at
     ? `You are a fork of the coding agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
     : `You continue the work of the coding agent ${name}, which stopped before it was done.`;
-  const where = `${whereOf(source, published, copy, carried)}${forkCaveat(forked.at, forked.edited)}`;
+  const where = `${whereOf(source, published, copy, carried, forked.at)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
   const unfit = counts.total - counts.kept;
   // Note that a summary beside steps left out may cover the newest of those that did not fit rather than the oldest, so it names none as the oldest.

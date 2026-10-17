@@ -326,7 +326,8 @@ export const START_CODING_AGENT_REFUSAL = {
   SOURCE_RUNNING:
     "Not started: that agent is still starting or working, and a continue would take over work " +
     "it is still doing. Wait until it ends, message it, or fork it at a messageId to try another " +
-    "direction beside it.",
+    "direction beside it. Where it went quiet and should go on in a new agent, its session dead " +
+    `while it still reads running among them, stop it with ${AGENT_TOOL.STOP_AGENT} and call again.`,
 } as const;
 
 /** Why a list of the models answered none, in words the model can act on. */
