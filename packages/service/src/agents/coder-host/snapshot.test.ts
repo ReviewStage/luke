@@ -52,7 +52,10 @@ function standing({ checkout, sh }: SourceCheckout) {
 }
 
 /** The copy asked of the sandbox over the responder given, the sandbox left up where `keepUp` says so. */
-function copyOver(respond: Parameters<typeof fakeHttpClientLayer>[0], keepUp = false) {
+function copyOver(
+  respond: Parameters<typeof fakeHttpClientLayer>[0],
+  keepUp: Effect.Effect<boolean> = Effect.succeed(false),
+) {
   return Effect.flatMap(
     vercelSandboxApi(async () => fixtureOidcToken()),
     (api) =>
@@ -61,7 +64,7 @@ function copyOver(respond: Parameters<typeof fakeHttpClientLayer>[0], keepUp = f
         branch: BRANCH,
         message: MESSAGE,
         token: Effect.succeed(TOKEN),
-        keepUp: Effect.succeed(keepUp),
+        keepUp,
       }),
   ).pipe(Effect.provide(fakeHttpClientLayer(respond)));
 }
@@ -83,7 +86,7 @@ async function answerOf(sandbox: SourceSandbox, url: string, init: RequestInit):
 
 /** The copy asked of the double. */
 function copy(sandbox: SourceSandbox, keepUp = false) {
-  return copyOver((url, init) => answerOf(sandbox, url, init), keepUp);
+  return copyOver((url, init) => answerOf(sandbox, url, init), Effect.succeed(keepUp));
 }
 
 /** Every warning logged while the effect runs, its words joined, the fibers it forked included. */
@@ -209,6 +212,29 @@ it.effect(
       const sandbox = sourceSandbox(yield* checkoutFor(t), "stopped");
 
       const outcome = yield* copy(sandbox, true);
+
+      assert.ok(outcome.copied);
+      assert.deepEqual([sandbox.state.status, sandbox.stops], ["running", []]);
+    }),
+);
+
+it.effect(
+  "a woken sandbox taken up between the copy's end and its stop, by a terminal, a turn, or another Start, is left running",
+  (t) =>
+    Effect.gen(function* () {
+      const sandbox = sourceSandbox(yield* checkoutFor(t), "stopped");
+      const askedAgain = Deferred.makeUnsafe<void>();
+      let asked = 0;
+      // Free as the copy ends; held by the time the stop behind it has listed the sandbox.
+      const keepUp = Effect.sync(() => {
+        asked += 1;
+        if (asked > 1) Deferred.doneUnsafe(askedAgain, Effect.void);
+        return asked > 1;
+      });
+
+      const outcome = yield* copyOver((url, init) => answerOf(sandbox, url, init), keepUp);
+      yield* Deferred.await(askedAgain);
+      yield* Effect.yieldNow;
 
       assert.ok(outcome.copied);
       assert.deepEqual([sandbox.state.status, sandbox.stops], ["running", []]);

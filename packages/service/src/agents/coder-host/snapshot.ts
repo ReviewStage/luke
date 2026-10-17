@@ -192,11 +192,15 @@ const stopMissed = (why: string) =>
 /**
  * Every sandbox of the session that is up, stopped, within the stop's bound.
  * It lists the sandbox again rather than trusting a session it was handed,
- * so a wake interrupted before it answered is stopped too.
+ * so a wake interrupted before it answered is stopped too, and asks again
+ * whether it must stay up once listed, so a terminal, a turn, or another
+ * Start's copy that took it up since the first ask keeps it.
  */
-const stopUp = (api: VercelSandboxApi, sessionId: string) =>
+const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
-    for (const sandbox of yield* api.listTagged(sessionId)) {
+    const listed = yield* api.listTagged(ask.sessionId);
+    if (yield* ask.keepUp) return;
+    for (const sandbox of listed) {
       if (sandbox.currentSessionId === undefined || !UP_STATUSES.has(sandbox.status ?? "")) {
         continue;
       }
@@ -217,7 +221,7 @@ const stopUp = (api: VercelSandboxApi, sessionId: string) =>
 const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
     if (yield* ask.keepUp) return;
-    yield* Effect.forkDetach(stopUp(api, ask.sessionId));
+    yield* Effect.forkDetach(stopUp(api, ask));
   }).pipe(
     Effect.interruptible,
     Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
