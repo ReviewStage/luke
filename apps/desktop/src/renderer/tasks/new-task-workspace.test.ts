@@ -13,7 +13,7 @@ import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 
 /**
- * new-task-workspace.test.ts -- New plan says where the plan will start,
+ * new-task-workspace.test.ts -- New task says where the task will start,
  * "New task in Acme", and the workspace chip there chooses another: the
  * repository chip then lists that workspace's repositories, and the plan
  * starts there. Both chips are the app's one picker, Settings' bordered chip
@@ -180,7 +180,7 @@ function optionNamed(menu: ParentNode, name: string): HTMLElement {
   );
 }
 
-/** New plan open over the two workspaces, starting in `workspaceId`, each start's repository and workspace written down. */
+/** New task open over the two workspaces, starting in `workspaceId`, each start's repository and workspace written down. */
 async function openNewTask(workspaceId: string, preset?: string) {
   const starts: [string | null, string | undefined][] = [];
   const control = tasksControl();

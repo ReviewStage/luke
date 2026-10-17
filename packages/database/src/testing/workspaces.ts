@@ -13,11 +13,11 @@ import { member, organization } from "../schemas/auth.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 
 /**
- * workspaces.ts -- workspaces for a test, the plugin's write faked over them, and a plan started in one.
+ * workspaces.ts -- workspaces for a test, the plugin's write faked over them, and a task started in one.
  *
- * Every plan belongs to a workspace, a Better Auth `organization` the
+ * Every task belongs to a workspace, a Better Auth `organization` the
  * account is a `member` of. A test that is about something else starts its
- * plans through `startTask`, which puts them in one workspace the account
+ * tasks through `startTask`, which puts them in one workspace the account
  * owns, made the first time it is asked for. The rows are written straight
  * over the plugin's tables, as the plugin would leave them, since a test
  * stands no Better Auth, and `fakeWorkspaceSeams` is the plugin's
@@ -25,7 +25,7 @@ import { githubInstallation } from "../schemas/github-installation.js";
  * is `workspace-store.test.ts`.
  */
 
-/** A plan to start in the account's test workspace: what `createTask` takes, without the workspace. */
+/** A task to start in the account's test workspace: what `createTask` takes, without the workspace. */
 export type TestTask = Omit<NewTask, "organizationId">;
 
 export { WORKSPACE_ROLE };
@@ -134,7 +134,7 @@ export const fakeWorkspaceSeams = Effect.gen(function* () {
   return seams;
 });
 
-/** The workspace the account owns that its test plans start in, made the first time it is asked for. */
+/** The workspace the account owns that its test tasks start in, made the first time it is asked for. */
 const workspaceOf = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -147,7 +147,7 @@ const workspaceOf = (userId: string) =>
     return yield* openWorkspace(userId);
   });
 
-/** Starts a plan under the account in its test workspace. */
+/** Starts a task under the account in its test workspace. */
 export const startTask = (userId: string, started: TestTask) =>
   Effect.flatMap(workspaceOf(userId), (organizationId) =>
     createTask(userId, { ...started, organizationId }),

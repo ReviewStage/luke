@@ -166,7 +166,7 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
   draw(plans);
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
   const redraw = (patch: Partial<TasksControl>) => draw({ ...plans, ...patch });
-  /** The same page drawn again over another read of the plan list. */
+  /** The same page drawn again over another read of the task list. */
   const rerender = (next: readonly TaskSummary[]) =>
     draw({ ...plans, tasks: next, listed: { ...plans.listed, tasks: next } });
   return { page: container, opened, redraw, rerender };

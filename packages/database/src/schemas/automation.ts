@@ -19,9 +19,9 @@ import { codingAgent } from "./coding-agent.js";
 import { task } from "./task.js";
 
 /**
- * automation.ts -- an account's automations, each a trigger and a coding agent to start on one plan, and every run one made.
+ * automation.ts -- an account's automations, each a trigger and a coding agent to start on one task, and every run one made.
  *
- * An automation is its account's and works on one plan: the trigger, the
+ * An automation is its account's and works on one task: the trigger, the
  * action, and the guards are the wire's own JSON
  * (`@luke/features/automation-wire`), so a trigger kind added later is a
  * member of that JSON rather than a column. Two things are columns because a
@@ -32,13 +32,13 @@ import { task } from "./task.js";
  * trigger's address carries, never the secret itself, and null for every
  * other trigger. `enabled` false is turned off, by the developer alone:
  * nothing pauses an automation for its failures. The row goes with its
- * account and its plan alike.
+ * account and its task alike.
  *
  * An automation belongs to a workspace (`organization_id`), as its owner's
  * (`scope` personal) or the workspace's own (`scope` workspace), and works
  * in `repositories`, an ordered list of `owner/name` whose first is where
  * the agent starts; one entry until full multi-repo. `task_id` stands only
- * on the rows made before automations left plans, and goes in the contract
+ * on the rows made before automations left tasks, and goes in the contract
  * step. `target_kind` says where a run lands: a new agent each run, or the
  * agent `target_agent_id` names, which goes null where that agent is
  * deleted. `archive_successful` archives a new agent once its run finishes

@@ -32,7 +32,7 @@ import {
  * it, set in under the words, is the call's input and its answer in two
  * mono blocks of bounded height, the answer cut to its first lines with
  * the rest behind Show more. What the words say is the caller's decision
- * (`planning/tool-call-model.ts`); how a block of each kind is drawn is
+ * (`tasks/tool-call-model.ts`); how a block of each kind is drawn is
  * this file's.
  */
 

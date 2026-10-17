@@ -39,7 +39,7 @@ import { pictureBudgetMiddleware } from "./picture-budget.js";
  * model are handed to the provider as the catalog lists them. Each step
  * also asks for its reasoning in words, so the agent's tab can show what
  * it thought as the Work tab shows Luke's: OpenAI for a summary, as the
- * planning brain does, and Anthropic for its summarized thinking on a
+ * brain does, and Anthropic for its summarized thinking on a
  * model that thinks whether asked or not. A fast version runs as its base
  * model asked for Anthropic's fast speed, the SDK sending the beta header
  * that speed needs, on whichever key the step runs on: Anthropic's fast

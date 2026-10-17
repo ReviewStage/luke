@@ -14,18 +14,18 @@ import { TaskArchived, type TaskStoreEffect, type TaskStoreFailure } from "./tas
 import { reachableTask } from "./workspace-store.js";
 
 /**
- * board-store.ts -- a plan's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
+ * board-store.ts -- a task's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
  *
  * Two writers share a board and never write the same column. The Mac writes
  * the scene with the number of Luke's drawing it holds; Luke writes his
  * drawing, which takes the next number. Each write is whole and the last one
- * wins: the planning call is one conversation, so the two rarely write in the
+ * wins: a task's call is one conversation, so the two rarely write in the
  * same moment, and when they do the cost is one edit of the developer's
  * written over by a scene the Mac read a moment before. Each write runs under
- * the plan row's own lock, so a plan deleted meanwhile reads as gone rather
+ * the task row's own lock, so a task deleted meanwhile reads as gone rather
  * than written back into being. Every statement names the account beside the
- * plan, so a plan of a workspace the account is not in reads and writes as no
- * plan, exactly as in `task-store.ts`, and a board one member saved is read
+ * task, so a task of a workspace the account is not in reads and writes as no
+ * task, exactly as in `task-store.ts`, and a board one member saved is read
  * by the rest.
  *
  * The Mac's first save to hold a new drawing of Luke's carries the scene
@@ -52,7 +52,7 @@ const BOARD_COLUMNS = {
   drawingNumber: taskBoard.drawingNumber,
 };
 
-/** A plan's board row joined to the plan, so a plan with no board yet still answers a row of nulls. */
+/** A task's board row joined to the task, so a task with no board yet still answers a row of nulls. */
 const findBoard = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: BoardRowSchema,
@@ -67,7 +67,7 @@ const findBoard = SqlSchema.findOneOption({
     ),
 });
 
-/** The plan's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account reaches no such plan. */
+/** The task's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account reaches no such task. */
 const lockTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
@@ -153,7 +153,7 @@ function upsertDrawing(drawing: readonly DrawingElement[]) {
   });
 }
 
-/** The board a joined row holds; the empty board where the plan has none yet. */
+/** The board a joined row holds; the empty board where the task has none yet. */
 function boardOf(row: BoardRow): Board {
   const board = { elements: row.elements ?? [], appliedDrawing: row.appliedDrawing ?? 0 };
   if (row.drawing === null || row.drawingNumber === null || row.drawingNumber === 0) return board;
@@ -161,8 +161,8 @@ function boardOf(row: BoardRow): Board {
 }
 
 /**
- * Runs one write under the plan row's lock, handed whether the plan is
- * archived as the lock read it; nothing where the account reaches no such plan.
+ * Runs one write under the task row's lock, handed whether the task is
+ * archived as the lock read it; nothing where the account reaches no such task.
  */
 function underTaskLock<E>(
   userId: string,
@@ -181,7 +181,7 @@ function underTaskLock<E>(
   );
 }
 
-/** The plan's board, the empty board before anything was drawn; nothing where the account reaches no such plan. */
+/** The task's board, the empty board before anything was drawn; nothing where the account reaches no such task. */
 export function readBoard(userId: string, taskId: string): TaskStoreEffect<Option.Option<Board>> {
   return Effect.map(findBoard({ userId, taskId }), Option.map(boardOf));
 }
@@ -189,7 +189,7 @@ export function readBoard(userId: string, taskId: string): TaskStoreEffect<Optio
 /**
  * The image of Luke's latest drawing as the Mac drew it on the board, once a
  * save holding that drawing has carried one; none before, and none where the
- * account reaches no such plan.
+ * account reaches no such task.
  */
 export function readBoardImage(
   userId: string,
@@ -204,7 +204,7 @@ export function readBoardImage(
 
 /**
  * The Mac's scene, written whole with the number of Luke's drawing it holds
- * and any image of it; the board as written. An archived plan takes no scene
+ * and any image of it; the board as written. An archived task takes no scene
  * of the developer's, read under the same lock, while a drawing of Luke's on
  * a call that stood when it was archived still lands.
  */

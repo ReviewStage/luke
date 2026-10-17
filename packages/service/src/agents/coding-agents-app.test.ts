@@ -176,7 +176,7 @@ import { codingAgentsApp } from "./coding-agents-app.js";
  * newest turn, the transcript answers the conversation's rows past a cursor,
  * and a Stop is eve's cancel of the turn under way and the row's stamp. eve
  * is a fake at the client's boundary, GitHub a script, the catalog fixed,
- * and the store PGlite. Synthetic accounts, bearers, plans, and words
+ * and the store PGlite. Synthetic accounts, bearers, tasks, and words
  * throughout.
  */
 
@@ -192,15 +192,15 @@ const AGENT_OVERVIEW = [
   "/api/agents/overview-checks",
   "/api/agents/overview-conversation",
 ] as const;
-/** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
+/** One task, served by the tasks group, whose delete stops the task's agents through the same Stop. */
 const TASK = "/api/plans/plan";
-/** The account's plans, served by the plans group, each naming its agents in brief. */
+/** The account's tasks, served by the tasks group, each naming its agents in brief. */
 const TASKS = "/api/plans";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
-/** The installation ids handed out so far: one installation stands for one workspace, so each plan's workspace connects its own. */
+/** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
 let installationsConnected = 0;
 
 /** A fresh installation reaching the repository, on an account of its own. */
@@ -212,7 +212,7 @@ function freshInstallation(): InstallationFixture {
 const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
 
-/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the plan is handed. */
+/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
 const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
 
 const SOL = "openai/gpt-6.1-sol";
@@ -403,7 +403,7 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a plan's own path and the list land on the plans group. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path and the list land on the tasks group. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const { pathname } = new URL(request.url);
@@ -498,7 +498,7 @@ const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
   });
 
 /**
- * An owner who holds one plan on the repository, its workspace connected to
+ * An owner who holds one task on the repository, its workspace connected to
  * an installation reaching it, another account beside them, and the group
  * over that GitHub and the eve given.
  */
@@ -1673,7 +1673,7 @@ function userTexts(page: {
 }
 
 it.layer(getTestDB())("messaging a coding agent", (it) => {
-  /** An agent started on the owner's plan, its session claimed, and its first turn where asked. */
+  /** An agent started on the owner's task, its session claimed, and its first turn where asked. */
   const startedAgent = (
     eve: ReturnType<typeof fakeEve>,
     turn: { readonly running: boolean } | undefined,
@@ -1952,7 +1952,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, { running: false });
-        // An automation's run leaves an agent so: in its workspace, on no plan.
+        // An automation's run leaves an agent so: in its workspace, on no task.
         yield* Database.use((db) =>
           db
             .update(codingAgent)
@@ -2731,7 +2731,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 });
 
-/** An agent started on the plan, with its conversation as the writer targets it. */
+/** An agent started on the task, with its conversation as the writer targets it. */
 const startedAgent = (
   owner: string,
   taskId: string,
@@ -2764,7 +2764,7 @@ const INBOX_ATTACHMENT = "/api/inbox/attachment";
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
 it.layer(getTestDB())("the developer's inbox", (it) => {
-  /** The owner's plan with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
+  /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
   const openInbox = (eve = fakeEve()) =>
     Effect.gen(function* () {
       const opened = yield* openTask({ eve });
@@ -2775,7 +2775,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       /** An item posted for the agent, as its tool will post one, with the pictures its image blocks name read. */
       const post = (value: InboxPost, images?: readonly InboxImage[]) =>
         postInboxItem(owned, value, images);
-      /** The plan's inbox as the owner reads it past the cursor. */
+      /** The task's inbox as the owner reads it past the cursor. */
       const read = (after?: string) =>
         Effect.map(
           opened.ask(

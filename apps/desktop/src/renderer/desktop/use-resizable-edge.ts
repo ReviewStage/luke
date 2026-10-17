@@ -5,7 +5,7 @@
  * and spreads what comes back onto the element it draws as its edge, a
  * focusable separator that is the pane's own child. The edge decides nothing
  * the pane keeps: every width and every snap is handed back to the pane's
- * owner, so the window's two resizable panes (the plan's side panel at the
+ * owner, so the window's two resizable panes (the task's side panel at the
  * right, the sidebar at the left) drag alike and keep their widths their own
  * ways.
  *

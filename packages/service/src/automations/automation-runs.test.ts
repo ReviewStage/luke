@@ -71,7 +71,7 @@ import { sweepAutomations } from "./automation-sweep.js";
 
 /**
  * An automation's runs acted on, over a real dialect: a due schedule starts
- * one coding agent on the plan's repository as the deployment acting for
+ * one coding agent on the task's repository as the deployment acting for
  * the owner, handed the prompt as its task, and a sweep after it starts
  * nothing; a run past the concurrency guard or the daily cap is skipped and
  * starts nothing, as is a run queued before its automation was paused; one
@@ -82,7 +82,7 @@ import { sweepAutomations } from "./automation-sweep.js";
  * event's; and a failed start records its failure and pauses nothing, so
  * the next firing tries again. eve
  * is a fake at the client's boundary, GitHub a script, the catalog fixed,
- * and the store PGlite. Synthetic accounts, plans, and words throughout.
+ * and the store PGlite. Synthetic accounts, tasks, and words throughout.
  */
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
@@ -149,7 +149,7 @@ function fakeEve() {
 /** What a run reaches beside the store: GitHub reaching the repository, and the catalog. */
 const services = Layer.mergeAll(githubReaching(INSTALLATIONS).layer, modelCatalogOf(CATALOG));
 
-/** An owner, a plan on the repository of its workspace's installation (or none), and an automation on it due a minute ago. */
+/** An owner, a task on the repository of its workspace's installation (or none), and an automation on it due a minute ago. */
 const openAutomation = (
   options: {
     readonly repository?: string | null;

@@ -5,7 +5,7 @@ import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
-/** A window of one file of a plan's repository as GitHub holds it now, for the File tab, by the id its path carries (GET). */
+/** A window of one file of a task's repository as GitHub holds it now, for the File tab, by the id its path carries (GET). */
 export default routeFromHttpRouter(
   tasksApp({
     resolveUserId: resolveHostedUserId,

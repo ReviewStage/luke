@@ -64,7 +64,7 @@ function mount(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** The sidebar on the Plans tab, open, listing what `plans` lists. */
+/** The sidebar on the Tasks tab, open, listing what `tasks` lists. */
 function mountSidebar(tasks: TasksControl): HTMLElement {
   return mount(createElement(DesktopSidebar, sidebarProps(tasks)));
 }

@@ -76,7 +76,7 @@ test("a revision is drawn under its writer: the reader by their account's pictur
     provider: MODEL_PROVIDER.OPENAI,
     state: ACTOR_STATE.REST,
   });
-  // An agent the plan no longer lists, or a line from a service that names none, wears no harness.
+  // An agent the task no longer lists, or a line from a service that names none, wears no harness.
   assert.deepEqual(revisionAuthorOf({ lastEdit: agentEdit }, reader, agents), {
     kind: ACTOR_KIND.AGENT,
     name: "Invite emails",
@@ -107,7 +107,7 @@ test("a revision names its writer as the developer knows them, and says what it 
     "Invite emails",
   );
   assert.equal(named({ actor: PLAN_ACTOR.EARLIER }), "Earlier");
-  // Someone other than the reader, as a shared plan will hold, is named rather than called You.
+  // Someone other than the reader, as a shared task will hold, is named rather than called You.
   assert.equal(named({ actor: PLAN_ACTOR.DEVELOPER, by: CHARLES }), "Charles Pan");
 
   assert.equal(revisionSummary(line()), "14 changes");

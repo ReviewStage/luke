@@ -122,7 +122,7 @@ Spacing in the desktop window comes from one scale, `--space-2` through
 column holds its rows `--column-inset` from its edges, every row holds its
 glyph or words `--row-inset` from its own, so a column's words start at
 `--content-inset` whether a row carries them or not: the sidebar's text, the
-plan's tab, the side panel's first tab, the transcript, and Settings' page list
+task's tab, the side panel's first tab, the transcript, and Settings' page list
 all read down that one edge. Controls in a row stand `--control-gap` apart, a
 glyph `--glyph-gap` from its words, a column's groups `--section-gap`, and a
 page's content `--page-inset` from its column. No pixel of padding, margin, or gap in
@@ -143,7 +143,7 @@ beneath it, the title bar over a sliding pane or the transcript's way back to
 its newest line, sets `--button-ground` and fills over that rather than over
 what passes. What is not one of these is a row, a tab, or a call control and
 says why where it is drawn: the call bar's round mutes, its solid End call
-disc, and its start pill, the new-plan composer's round start, and a tab's ×,
+disc, and its start pill, the new-task composer's round start, and a tab's ×,
 which brightens without a fill.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
@@ -180,7 +180,7 @@ Every menu and popover is one surface, from the menu tokens in `desktop.css`'s
 `--menu-radius` corner and `--menu-shadow` under it, its items `--menu-inset`
 from its edge, each row `--menu-row-height` tall with a `--menu-row-radius`
 highlight and a `--menu-glyph` glyph. The corner is the row's corner plus the
-inset, so a highlighted row follows the menu's curve. A plan's menu, a picker,
+inset, so a highlighted row follows the menu's curve. A task's menu, a picker,
 a submenu, a crumb's tree, the find bar, a tooltip card, and the context
 popover all draw it, and none of them may
 spend its own corner, shadow, ground, or row. The command palette is a
@@ -250,7 +250,7 @@ What follows from this everywhere else:
 - No marketing register on the surface. Luke is not selling to someone who has
   already installed him.
 
-Copy that reaches a model rather than the screen (the brain's planning
+Copy that reaches a model rather than the screen (the brain's own
 instructions, the live session's instructions) obeys a different rule. Verbosity
 there is not slop, but a fact dropped from them is one Luke no longer has, so
 compress the prose and never drop the fact. One rule per line beats three

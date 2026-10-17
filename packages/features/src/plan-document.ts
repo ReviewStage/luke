@@ -20,14 +20,14 @@ import { PLAN_SECTION_BOUNDS, type PlanActor, type PlanEditor } from "./task-wir
  * Who last changed one section of a plan that is one document, and when: the
  * section's heading, the writer (`PLAN_ACTOR`), the coding agent's id where
  * an agent wrote the revision, whether the notetaker wrote it on one of the
- * plan's calls, and the revision's latest save.
+ * task's calls, and the revision's latest save.
  */
 export interface PlanSectionWriter {
   readonly section: string;
   readonly actor: PlanActor;
   /** The coding agent's id, where a coding agent wrote the revision. */
   readonly agentId?: string;
-  /** Present, and true, where the notetaker wrote the revision on one of the plan's calls. */
+  /** Present, and true, where the notetaker wrote the revision on one of the task's calls. */
   readonly duringCall?: boolean;
   /** The member who wrote the revision, where the service can name one (`task-wire.ts`'s `planEditorSchema`). */
   readonly by?: PlanEditor;

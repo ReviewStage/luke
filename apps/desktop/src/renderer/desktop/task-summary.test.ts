@@ -108,7 +108,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The summary of a plan whose running agent opened the pull request, the plan's column showing `shown`; every agent it opens recorded. */
+/** The summary of a task whose running agent opened the pull request, the task's column showing `shown`; every agent it opens recorded. */
 function mount(shown: "agent" | "plan", linkWorkspace?: string) {
   const opened: string[] = [];
   const base = tasksControl();

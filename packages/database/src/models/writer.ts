@@ -372,7 +372,7 @@ interface AwaitingLineTake {
  * The longest the hand-over to eve inside an awaiting line's write may take
  * before it is given up: eve answers a follow-up in well under a second and
  * its own not-ready loop ends at twenty, so one not answered in thirty is
- * not going to; the planning ask's `ASK_DISPATCH_DEADLINE` is the same
+ * not going to; the brain's ask's `ASK_DISPATCH_DEADLINE` is the same
  * figure for the same reason.
  */
 const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
@@ -1949,7 +1949,7 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
  * The developer's lines of the conversation awaiting a turn, oldest first:
  * the user rows no turn owns, of a coding agent's conversation, which is
  * the one kind whose developer lines are written ahead of their turn; a
- * planning conversation's turnless user rows are its spoken asks, attached
+ * task conversation's turnless user rows are its spoken asks, attached
  * by their own writer, and never match here. A line a turn already received
  * under another row awaits nothing and is not offered (`noReceiptOfLine`).
  */
@@ -2045,7 +2045,7 @@ function coalescedRun<Row extends { readonly parts: Parts }>(
  * uninterruptible write: the dispatch is forked as a root fiber of its own,
  * which is interruptible as the write is not, and a second fiber interrupts
  * it at the deadline; one interrupted that way answered nothing. The
- * planning ask's `dispatchedWithinDeadline` is the same shape for the same
+ * brain's ask's `dispatchedWithinDeadline` is the same shape for the same
  * reason.
  */
 function dispatchedWithinDeadline(dispatch: Effect.Effect<boolean>): Effect.Effect<boolean> {

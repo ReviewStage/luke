@@ -124,7 +124,7 @@ export function useAgentTranscript(input: {
   callId?: string | undefined;
   /** The agent's, or the worker's, status as the tab knows it, which the pages read keep current through `onStatus`. */
   status: CodingAgentStatus;
-  /** Whether the tab is on screen: the panel open on it, on the Plans tab. */
+  /** Whether the tab is on screen: the panel open on it, on the Tasks tab. */
   shown: boolean;
   read: TranscriptReader;
   /** A page said where the agent stands now, and since when, which is newer than the list. */

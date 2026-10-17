@@ -13,14 +13,14 @@ import { AgentGlyph, agentEndMark } from "./tasks/tab-look";
 
 /**
  * state-glyph.test.ts -- work that is working or failed wears one mark for
- * it wherever it is drawn: a sidebar plan's row, an agent's tab, and a
+ * it wherever it is drawn: a sidebar task's row, an agent's tab, and a
  * call's row in a transcript draw the same working mark under the same
  * name, and a call that failed wears the failed mark an agent's tab does.
  */
 
 const MODEL = "anthropic/claude-opus-5.5";
 
-/** A plan an agent is working on, as the sidebar's list sums its agents up. */
+/** A task an agent is working on, as the sidebar's list sums its agents up. */
 const WORKED_ON: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",

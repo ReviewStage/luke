@@ -6,7 +6,7 @@
  * summed and how it ended; and whether Anthropic refused a fast step of it,
  * which then ran at standard speed. A tab draws those on the card its "Worked for"
  * line hangs, so the reads that answer a tab's turns carry them beside the
- * turn's span: the Work tab's planning turns and its workers' sessions, and
+ * turn's span: the Work tab's brain turns and its workers' sessions, and
  * a coding agent's journals. A leaf over the row alone, so it reads nothing.
  */
 

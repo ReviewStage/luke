@@ -30,7 +30,7 @@ import { taskReachableBy } from "./workspace-store.js";
  * plan-revisions.ts -- a plan's history: every save kept as a revision under the writer who made it.
  *
  * The plan's one write (`plan-notes.ts`) records each save that changed the
- * plan here, inside the transaction that holds the plan's row, so the plan
+ * plan here, inside the transaction that holds the task's row, so the plan
  * and its history never disagree. A revision is the plan's content after it,
  * its whole text, so reading one or going back to one is a read and never a
  * replay.
@@ -50,11 +50,11 @@ import { taskReachableBy } from "./workspace-store.js";
  * Who last changed each section is read off the newest revisions, each
  * against the one before it, rather than kept beside the plan.
  *
- * A save is recorded for a plan id handed by a caller that already holds the
- * plan's row under its lock; the history is read under the account's
- * membership of the plan's workspace, so every member reads the history any
- * of them wrote, and a plan of a workspace the account is not in reads as a
- * plan with none.
+ * A save is recorded for a task id handed by a caller that already holds the
+ * task's row under its lock; the history is read under the account's
+ * membership of the task's workspace, so every member reads the history any
+ * of them wrote, and a task of a workspace the account is not in reads as a
+ * task with none.
  */
 
 /** How the history is kept. */
@@ -287,7 +287,7 @@ const RevisionContentRowSchema = Schema.Struct({
   document: Schema.String,
 });
 
-/** The content of the plan at each revision named, with the plan's name as it stands now. */
+/** The content of the plan at each revision named, with the task's name as it stands now. */
 const findRevisionContents = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -457,7 +457,7 @@ function writerOf(row: SectionRevisionRow): PlanSectionWriterWho {
  * Records one save that changed the plan: the newest revision moved on where
  * the same writer, for the same member, made it lately, a new revision
  * otherwise, kept under the member. Run inside the
- * transaction that holds the plan's row, so two saves of one plan never take
+ * transaction that holds the task's row, so two saves of one plan never take
  * one number.
  */
 export function recordRevision(
@@ -535,7 +535,7 @@ export function readSectionWriters<E, R>(
  * A page of the plan's revisions, the newest first, before the
  * revision `before` names where it names one, and what the next older page
  * is read before where one stands; no revision for a plan with no history
- * yet, and for a plan id the account does not own.
+ * yet, and for a task id the account does not own.
  */
 export function listRevisions(
   userId: string,
@@ -564,7 +564,7 @@ export function listRevisions(
   });
 }
 
-/** The plan's text at one revision; nothing where it has no such revision, or the account reaches no such plan. */
+/** The plan's text at one revision; nothing where it has no such revision, or the account reaches no such task. */
 export function readRevisionContent(
   userId: string,
   taskId: string,
@@ -579,7 +579,7 @@ export function readRevisionContent(
  * One revision of the plan as the History tab shows it: the plan
  * after it and before it, the first revision having nothing before it, each
  * its text as the document's body; nothing where the plan
- * has no such revision, or the account reaches no such plan.
+ * has no such revision, or the account reaches no such task.
  */
 export function readRevision(
   userId: string,

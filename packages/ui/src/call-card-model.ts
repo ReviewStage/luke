@@ -1,7 +1,7 @@
 /**
  * call-card-model.ts -- what the call card says about the standing call, and where it is drawn.
  *
- * The card draws no words of the conversation: the call's plan by name over
+ * The card draws no words of the conversation: the call's task by name over
  * the call bar's own status and mutes. Everything here is read off the
  * document the card is handed, in the call bar's own terms, so the card and
  * the bar can never disagree about the call they draw.
@@ -19,7 +19,7 @@ import {
 import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
 import { type CallStatus, standingCallStatus } from "./tasks-model.js";
 
-/** The plan's name where the document has none to give, which a plan just started can briefly be. */
+/** The task's name where the document has none to give, which a task just started can briefly be. */
 const CALL_CARD_UNNAMED = "Planning call";
 
 export interface CallCardModel {
@@ -30,7 +30,7 @@ export interface CallCardModel {
   readonly microphoneMuted: boolean;
 }
 
-/** The call's plan by name, from the list or the plan open, whichever holds it. */
+/** The call's task by name, from the list or the task open, whichever holds it. */
 function taskNameOf(tasks: TasksView, taskId: string | undefined): string {
   const open = tasks.document.task;
   const named =
@@ -52,8 +52,8 @@ export function callCard(input: {
 }
 
 /**
- * The plan whose call bar this window has on screen, or none: the Plans tab
- * on a plan's document, unless its version history, the window's Inbox, an
+ * The task whose call bar this window has on screen, or none: the Tasks tab
+ * on a task's document, unless its version history, the window's Inbox, an
  * agent's page, or a side panel filling the window covers the column the
  * call bar stands in.
  */
@@ -73,7 +73,7 @@ export function callBarTaskId(input: {
 
 /**
  * Whether a Luke window draws the card: a call in progress, the window has
- * the keyboard, and the plan it shows is not the call's, where the call bar
+ * the keyboard, and the task it shows is not the call's, where the call bar
  * already is. A window without the keyboard leaves the call to the floating
  * window, so the call is drawn in one place at a time.
  */

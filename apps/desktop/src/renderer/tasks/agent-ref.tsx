@@ -29,16 +29,16 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * agent-ref.tsx -- an agent named anywhere in the window: the card its tab hangs, read from what the place naming it knows, and its mark and name as the one button that hangs that card and opens its tab.
  *
  * An agent is named in many places beside its tab: the Inbox's thread, its
- * crumbs, and its list's rows, a call's row in a transcript, the plan's
+ * crumbs, and its list's rows, a call's row in a transcript, the task's
  * summary. Each hangs the agent's tab's own card (`agent-tab-card.tsx`)
  * while the pointer rests on the name, and a press or Enter opens the
  * agent's tab, as a press on the tab itself would. The card is read from what the place holds of
- * the agent: its summary, where the plan's list holds it, an archived
+ * the agent: its summary, where the task's list holds it, an archived
  * agent's among them, which says it was archived and when; the line the
  * sidebar's list names it by, which says where it stands but holds no
- * transcript; or nothing, where the plan's list was read and holds no such
+ * transcript; or nothing, where the task's list was read and holds no such
  * agent, when the card says so under the name it goes by. A press on an
- * agent whose tab is not drawn, archived or gone, opens its plan, as the
+ * agent whose tab is not drawn, archived or gone, opens its task, as the
  * column does for any tab whose subject is missing (`use-main-tabs.ts`).
  * A name inside a row whose press does something of its own, an Inbox
  * row's mark, hangs the card alone and leaves the press to its row.
@@ -47,13 +47,13 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 /** What a card's corner says of an archived agent, whose tab is gone. */
 const ARCHIVED_WORDS = "Archived";
 
-/** What a card's corner says of an agent the plan's list, once read, does not hold. */
+/** What a card's corner says of an agent the task's list, once read, does not hold. */
 const UNLISTED_WORDS = "Not found";
 
 /** What a place that draws no agent's tab holds of their transcripts: nothing, so its cards preview no step. */
 export const NOTHING_HELD: HeldTranscripts = { agents: new Map(), workers: new Map() };
 
-/** An agent as a place names it: the name it goes by, its tile, what its card says, read as the card is hung, and its summary where the plan's list holds it. */
+/** An agent as a place names it: the name it goes by, its tile, what its card says, read as the card is hung, and its summary where the task's list holds it. */
 export interface AgentSubject {
   readonly name: string;
   /** The agent's tile, as every place naming an actor draws it (`actor-ref.tsx`). */
@@ -68,7 +68,7 @@ export interface AgentSubject {
  * and its latest step; an archived agent's says it was archived, and when.
  * It wears the agent's tile, names the automation whose run started it, or
  * a teammate who did, as the reader `agents.me` tells them apart, and leads its corner with the pull
- * request the plan holds for it. Its tab's card and every other place naming it say it, `chosen` telling
+ * request the task holds for it. Its tab's card and every other place naming it say it, `chosen` telling
  * whether its tab is the one shown, whose transcript follows the run. Note
  * that an agent with no turn finished in what its tab holds last moved
  * when its newest run began, the latest moment its summary knows.
@@ -140,7 +140,7 @@ export function lineSubject(
 }
 
 /**
- * An agent with no plan as main's read of what waits on the developer names
+ * An agent with no task as main's read of what waits on the developer names
  * it: its title, else its automation's name, else its model, its harness's tile at rest, and the
  * automation whose run started it. Note that the line says nothing of
  * where the agent stands, so its card's corner says nothing either.
@@ -181,7 +181,7 @@ export function tasklessSubject(
 }
 
 /**
- * An agent named by id on the plan whose agents `agents` reads, archived
+ * An agent named by id on the task whose agents `agents` reads, archived
  * or not, its card read from what its tab last held; where the list holds
  * no such agent, the name it goes by, and a card saying it is not found
  * once the list has been read, and nothing more before.
