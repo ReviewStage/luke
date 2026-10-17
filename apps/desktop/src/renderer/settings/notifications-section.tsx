@@ -1,8 +1,7 @@
 import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
-import { ExternalIcon } from "@luke/ui";
+import { BUTTON_VARIANT, Button, ExternalIcon, SettingsRow, SettingsSection } from "@luke/ui";
 import { NOTIFICATIONS_STATUS, type NotificationsControl } from "@luke/voice/settings-controls";
 import { SchemaSettingRows } from "./schema-rows";
-import { SettingsGroup } from "./settings-group";
 import type { SettingsWrites } from "./writes";
 
 /** What the test row says of when Luke notifies at all. */
@@ -31,6 +30,9 @@ const NOTIFICATIONS_LINE = {
  * hears, and the test is how the developer asks again. A development
  * build runs inside Electron's own app, so macOS lists it as Electron, and
  * the line names it so.
+ *
+ * The group is `@luke/ui`'s `SettingsSection` and each line its
+ * `SettingsRow`, the test and System Settings presses the outline `Button`.
  */
 export function NotificationsSection({
   view,
@@ -43,39 +45,49 @@ export function NotificationsSection({
 }): React.JSX.Element {
   const line = control.packaged ? NOTIFICATIONS_LINE.packaged : NOTIFICATIONS_LINE.development;
   return (
-    <SettingsGroup>
+    <SettingsSection>
       <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.NOTIFICATIONS} view={view} writes={writes} />
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Test notification</strong>
-          <small>{NOTIFICATIONS_WHEN_NOTE}</small>
-          {control.status === NOTIFICATIONS_STATUS.ON ? (
-            <small className="settings-state" data-state="connected">
-              {line.on}
-            </small>
-          ) : null}
-        </span>
-        <button type="button" className="toolbar-button bordered-button" onClick={control.onTest}>
-          Send test notification
-        </button>
-      </div>
+      <SettingsRow
+        label="Test notification"
+        description={
+          <>
+            {NOTIFICATIONS_WHEN_NOTE}
+            {control.status === NOTIFICATIONS_STATUS.ON ? (
+              <span className="settings-state settings-state-line" data-state="connected">
+                {line.on}
+              </span>
+            ) : null}
+          </>
+        }
+      >
+        {() => (
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={control.onTest}>
+            Send test notification
+          </Button>
+        )}
+      </SettingsRow>
+      {/* Note that the refusal's row is its line alone, with no name of its
+          own, because the test row above already names what it is about. */}
       {control.status === NOTIFICATIONS_STATUS.OFF ? (
-        <div className="settings-row">
-          <span className="settings-copy">
-            <small className="settings-state" data-state="attention">
+        <SettingsRow
+          label={null}
+          description={
+            <span className="settings-state" data-state="attention">
               {line.off}
-            </small>
-          </span>
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            onClick={control.onOpenSettings}
-          >
-            Open System Settings
-            <ExternalIcon />
-          </button>
-        </div>
+            </span>
+          }
+        >
+          {() => (
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<ExternalIcon />}
+              onClick={control.onOpenSettings}
+            >
+              Open System Settings
+            </Button>
+          )}
+        </SettingsRow>
       ) : null}
-    </SettingsGroup>
+    </SettingsSection>
   );
 }

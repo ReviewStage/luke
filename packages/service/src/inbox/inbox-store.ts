@@ -13,7 +13,9 @@ import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
+import { inboxMessage } from "@luke/database/schemas/inbox-message";
 import { task } from "@luke/database/schemas/task";
+import { INBOX_ATTACHMENT_KIND } from "@luke/database/storage-vocabulary";
 import type {
   AccountInboxAutomation,
   AccountInboxEntry,
@@ -21,13 +23,20 @@ import type {
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  type CodingAgentAttachment,
+  type CodingAgentAttachmentType,
+} from "@luke/features/coding-agent-wire";
+import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxBlock,
   type InboxImageType,
   type InboxItem,
+  type InboxMessage,
   type InboxPost,
   type InboxPostBlock,
   type InboxReply,
@@ -36,7 +45,21 @@ import {
   inboxReplySchema,
   inboxResponseSchema,
 } from "@luke/features/inbox-wire";
-import { and, count, desc, eq, isNull, max, ne, notInArray, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  getTableName,
+  isNull,
+  max,
+  ne,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
+import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -66,7 +89,16 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * slip under it. An answer is taken only by the revision it names and only
  * while the item is open, so an answer to an item the agent has since
  * changed is refused rather than taken for what it now asks; an answer sent
- * again under the key it was taken by finds it taken. What waits across
+ * again under the key it was taken by finds it taken. The files an answer
+ * carries are written as the item's answer files in the answer's own
+ * write, so an answer not taken keeps none, and are deleted when the answer
+ * is taken back or the agent posts the item again. A member of the item's
+ * workspace, or the item's agent, writes a message on its thread at any
+ * point, open or settled: the message and its files are written in one
+ * write that moves the item's last change and nothing else of it, so every
+ * read that compares where items stand sees the thread move, and a member's
+ * message sent again under its key finds the one it wrote. A post under the
+ * item's key leaves the thread and its files standing. What waits across
  * the account, every open item on a task it has not archived, is read on
  * its own index, so a desktop can hold that read whichever task is open.
  * Every function is an effect over the ambient `SqlClient` and names no
@@ -115,6 +147,71 @@ export interface InboxImage {
   readonly bytes: Uint8Array;
 }
 
+/** A picture as the agent's message on a thread carries it: its file's own name, the type its bytes were sniffed to be, and the bytes. */
+export interface InboxNamedImage extends InboxImage {
+  readonly name: string;
+}
+
+/** One file of a message's as the store writes it: its own name, its type, and its bytes. */
+interface MessageFile {
+  readonly name: string;
+  readonly contentType: CodingAgentAttachmentType;
+  readonly bytes: Uint8Array;
+}
+
+/** A file an item's answer carried as a read answers it: the type it travelled as, and the bytes; a picture of a block's reads the same way. */
+export interface InboxFile {
+  readonly contentType: CodingAgentAttachmentType;
+  readonly bytes: Uint8Array;
+}
+
+/** The types a file of an item's may be served under: a picture's, or any a message's file travels as. */
+const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** The item's own id, named by its table, since a statement over the item alone spells its columns bare and a bare id inside the files' subquery would be the file's. */
+const ITEM_ID = sql`${sql.identifier(getTableName(inboxItem))}.${sql.identifier(inboxItem.id.name)}`;
+
+/** The files the item's answer carried, in the order they were attached, each named by its attachment, its name, and its type. */
+const ANSWER_FILES = sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('attachmentId', ${inboxAttachment.id}, 'name', ${inboxAttachment.name}, 'mediaType', ${inboxAttachment.contentType}) order by ${inboxAttachment.position}), '[]'::jsonb) from ${inboxAttachment} where ${inboxAttachment.itemId} = ${ITEM_ID} and ${inboxAttachment.kind} = ${INBOX_ATTACHMENT_KIND.ANSWER})`;
+
+/** A column named by its table, for a subquery nested inside another whose own columns would otherwise take the bare name. */
+function qualified(table: AnyPgTable, column: AnyPgColumn): SQL {
+  return sql`${sql.identifier(getTableName(table))}.${sql.identifier(column.name)}`;
+}
+
+const MESSAGE = {
+  id: qualified(inboxMessage, inboxMessage.id),
+  author: qualified(inboxMessage, inboxMessage.author),
+  userId: qualified(inboxMessage, inboxMessage.userId),
+  text: qualified(inboxMessage, inboxMessage.text),
+  createdAt: qualified(inboxMessage, inboxMessage.createdAt),
+};
+
+/** The files one message of the thread carried, in the order they were attached, each named as an answer's file is. */
+const MESSAGE_FILES = sql`(select coalesce(jsonb_agg(jsonb_build_object('attachmentId', ${inboxAttachment.id}, 'name', ${inboxAttachment.name}, 'mediaType', ${inboxAttachment.contentType}) order by ${inboxAttachment.position}), '[]'::jsonb) from ${inboxAttachment} where ${inboxAttachment.messageId} = ${MESSAGE.id})`;
+
+/** The item's latest messages, as many as a read carries, under the table's own name so the columns above name them. */
+const LATEST_MESSAGES = sql`(select * from ${inboxMessage} where ${inboxMessage.itemId} = ${ITEM_ID} order by ${inboxMessage.createdAt} desc, ${inboxMessage.id} desc limit ${sql.raw(String(INBOX_BOUNDS.MAX_MESSAGES_READ))}) as ${sql.identifier(getTableName(inboxMessage))}`;
+
+/**
+ * The item's thread, the latest messages oldest first, each with its
+ * author, the member's name as their account holds it now, its words, its
+ * files, and when it was written in epoch milliseconds.
+ */
+const MESSAGES = sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${LATEST_MESSAGES})`;
+
+/** Whether the item is settled: answered, or closed by its agent. */
+const SETTLED = sql`${inboxItem.status} <> ${INBOX_STATUS.OPEN}`;
+
+/**
+ * When a settled item was settled, in epoch milliseconds: the instant kept,
+ * or, on an item settled before it was kept, its last change, which no
+ * message has moved yet, since the first one keeps that instant first.
+ */
+const SETTLED_AT = sql<
+  number | null
+>`floor(extract(epoch from coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)) * 1000)::float8`;
+
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const INBOX_COLUMNS = {
   id: inboxItem.id,
@@ -132,6 +229,7 @@ const INBOX_COLUMNS = {
     string | null
   >`(select "name" from ${user} where ${user.id} = ${inboxItem.userId})`,
   answer: inboxItem.answer,
+  answerFiles: ANSWER_FILES,
   answerKey: inboxItem.answerKey,
   answeredBy: inboxItem.answeredBy,
   // A scalar read rather than a join, because `returning` projects these too and joins nothing.
@@ -139,9 +237,43 @@ const INBOX_COLUMNS = {
     string | null
   >`(select "name" from ${user} where ${user.id} = ${inboxItem.answeredBy})`,
   closedReason: inboxItem.closedReason,
+  messages: MESSAGES,
   postedAt: inboxItem.postedAt,
+  settledAt: SETTLED_AT,
   updatedAt: inboxItem.updatedAt,
 };
+
+const FileRowSchema = Schema.Struct({
+  attachmentId: Schema.String,
+  name: Schema.String,
+  mediaType: Schema.String,
+});
+
+const MessageRowSchema = Schema.Struct({
+  id: Schema.String,
+  author: Schema.Literals(Object.values(INBOX_MESSAGE_AUTHOR)),
+  userId: Schema.NullOr(Schema.String),
+  name: Schema.NullOr(Schema.String),
+  text: Schema.String,
+  files: Schema.Array(FileRowSchema),
+  createdAt: Schema.Number,
+});
+
+type MessageRow = typeof MessageRowSchema.Type;
+
+/** A message as the wire carries it: the member named where their account stands, and no files where it carried none. */
+function storedMessage(row: MessageRow): InboxMessage {
+  return {
+    id: row.id,
+    author: row.author,
+    ...(row.userId === null || row.name === null
+      ? undefined
+      : { member: { userId: row.userId, name: row.name } }),
+    text: row.text,
+    ...(row.files.length === 0 ? undefined : { files: row.files }),
+    createdAt: row.createdAt,
+  };
+}
 
 const InboxRowSchema = Schema.Struct({
   id: Schema.String,
@@ -157,11 +289,14 @@ const InboxRowSchema = Schema.Struct({
   startedBy: Schema.String,
   startedByName: Schema.NullOr(Schema.String),
   answer: Schema.NullOr(inboxReplySchema),
+  answerFiles: Schema.Array(FileRowSchema),
   answerKey: Schema.NullOr(Schema.String),
   answeredBy: Schema.NullOr(Schema.String),
   answeredByName: Schema.NullOr(Schema.String),
   closedReason: Schema.NullOr(Schema.String),
+  messages: Schema.Array(MessageRowSchema),
   postedAt: InstantColumnSchema,
+  settledAt: Schema.NullOr(Schema.Number),
   updatedAt: InstantColumnSchema,
 });
 
@@ -185,11 +320,14 @@ function storedItem(row: InboxRow): StoredInboxItem {
         ? undefined
         : { startedBy: { userId: row.startedBy, name: row.startedByName } }),
       ...(row.answer === null ? undefined : { answer: row.answer }),
+      ...(row.answerFiles.length === 0 ? undefined : { answerFiles: row.answerFiles }),
       ...(row.answeredBy === null || row.answeredByName === null
         ? undefined
         : { answeredBy: { userId: row.answeredBy, name: row.answeredByName } }),
       ...(row.closedReason === null ? undefined : { closedReason: row.closedReason }),
+      ...(row.messages.length === 0 ? undefined : { messages: row.messages.map(storedMessage) }),
       postedAt: row.postedAt.getTime(),
+      ...(row.settledAt === null ? undefined : { settledAt: row.settledAt }),
       updatedAt: row.updatedAt.getTime(),
     },
     answerKey: row.answerKey,
@@ -275,10 +413,60 @@ const AttachmentWriteSchema = Schema.Struct({
 const insertAttachment = SqlSchema.void({
   Request: AttachmentWriteSchema,
   execute: ({ now, ...attachment }) =>
-    Database.use((db) => db.insert(inboxAttachment).values({ ...attachment, createdAt: now })),
+    Database.use((db) =>
+      db
+        .insert(inboxAttachment)
+        .values({ ...attachment, kind: INBOX_ATTACHMENT_KIND.IMAGE, createdAt: now }),
+    ),
 });
 
-/** The item's attachments no block of its names any longer, deleted. */
+const AnswerFileWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  taskId: Schema.NullOr(Schema.String),
+  organizationId: Schema.String,
+  itemId: Schema.String,
+  name: Schema.String,
+  position: Schema.Number,
+  contentType: inboxFileTypeSchema,
+  bytes: Schema.Uint8Array,
+  now: Schema.Date,
+});
+
+/** One file of the answer's written as a row of the item's, at its place among the answer's files. */
+const insertAnswerFile = SqlSchema.void({
+  Request: AnswerFileWriteSchema,
+  execute: ({ now, ...file }) =>
+    Database.use((db) =>
+      db.insert(inboxAttachment).values({
+        ...file,
+        kind: INBOX_ATTACHMENT_KIND.ANSWER,
+        byteCount: file.bytes.byteLength,
+        createdAt: now,
+      }),
+    ),
+});
+
+/** The item's answer files, deleted: the answer they came with no longer stands. */
+const deleteAnswerFiles = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String }),
+  execute: ({ itemId }) =>
+    Database.use((db) =>
+      db
+        .delete(inboxAttachment)
+        .where(
+          and(
+            eq(inboxAttachment.itemId, itemId),
+            eq(inboxAttachment.kind, INBOX_ATTACHMENT_KIND.ANSWER),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The item's attachments no block of its names any longer, deleted, its
+ * answer's files among them, since a post clears the answer. Note that the
+ * thread's files are kept, because a post leaves the thread standing.
+ */
 const deleteOtherAttachments = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, kept: Schema.Array(Schema.String) }),
   execute: ({ itemId, kept }) =>
@@ -286,21 +474,96 @@ const deleteOtherAttachments = SqlSchema.void({
       db
         .delete(inboxAttachment)
         .where(
-          kept.length === 0
-            ? eq(inboxAttachment.itemId, itemId)
-            : and(eq(inboxAttachment.itemId, itemId), notInArray(inboxAttachment.id, [...kept])),
+          and(
+            eq(inboxAttachment.itemId, itemId),
+            ne(inboxAttachment.kind, INBOX_ATTACHMENT_KIND.MESSAGE),
+            kept.length === 0 ? undefined : notInArray(inboxAttachment.id, [...kept]),
+          ),
         ),
     ),
 });
 
-/** The attachment, where it is the item's and the account reaches the item's task: its type and its bytes. */
+const MessageWriteSchema = Schema.Struct({
+  itemId: Schema.String,
+  author: Schema.Literals(Object.values(INBOX_MESSAGE_AUTHOR)),
+  userId: Schema.NullOr(Schema.String),
+  text: Schema.String,
+  clientKey: Schema.NullOr(Schema.String),
+  now: Schema.Date,
+});
+
+/** The message written on the item's thread; nothing where a message of the item's stands under its key already. */
+const insertMessage = SqlSchema.findOneOption({
+  Request: MessageWriteSchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ now, ...message }) =>
+    Database.use((db) =>
+      db
+        .insert(inboxMessage)
+        .values({ ...message, createdAt: now })
+        .onConflictDoNothing()
+        .returning({ id: inboxMessage.id }),
+    ),
+});
+
+const MessageFileWriteSchema = Schema.Struct({
+  ...AnswerFileWriteSchema.fields,
+  messageId: Schema.String,
+});
+
+/** One file of a message's written as a row of the item's, naming the message, at its place among the message's files. */
+const insertMessageFile = SqlSchema.void({
+  Request: MessageFileWriteSchema,
+  execute: ({ now, ...file }) =>
+    Database.use((db) =>
+      db.insert(inboxAttachment).values({
+        ...file,
+        kind: INBOX_ATTACHMENT_KIND.MESSAGE,
+        byteCount: file.bytes.byteLength,
+        createdAt: now,
+      }),
+    ),
+});
+
+/**
+ * The item's last change moved to now, and nothing else of it: what a
+ * message on its thread does to the item. Note that a settled item settled
+ * before the instant was kept keeps its last change as that instant first,
+ * because the change is what a read took it for until now.
+ */
+const touchItem = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String, now: Schema.Date }),
+  execute: ({ itemId, now }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({
+          settledAt: sql`case when ${SETTLED} then coalesce(${inboxItem.settledAt}, ${inboxItem.updatedAt}) end`,
+          updatedAt: now,
+        })
+        .where(eq(inboxItem.id, itemId)),
+    ),
+});
+
+/** The message the member's client wrote under its key on the item, deleted with its files; nothing else of the thread is. */
+const deleteMessage = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
+  execute: ({ itemId, clientKey }) =>
+    Database.use((db) =>
+      db
+        .delete(inboxMessage)
+        .where(and(eq(inboxMessage.itemId, itemId), eq(inboxMessage.clientKey, clientKey))),
+    ),
+});
+
+/** The attachment, a block's picture or an answer's file, where it is the item's and the account reaches the item's task: its type and its bytes. */
 const findAttachment = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     itemId: Schema.String,
     attachmentId: Schema.String,
   }),
-  Result: Schema.Struct({ contentType: inboxImageTypeSchema, bytes: Schema.Uint8Array }),
+  Result: Schema.Struct({ contentType: inboxFileTypeSchema, bytes: Schema.Uint8Array }),
   execute: ({ userId, itemId, attachmentId }) =>
     Database.use((db) =>
       db
@@ -349,6 +612,7 @@ const upsertItem = SqlSchema.findOne({
       answerKey: null,
       answeredBy: null,
       closedReason: null,
+      settledAt: null,
       updatedAt: write.now,
     };
     return Database.use((db) =>
@@ -390,6 +654,7 @@ const closeItem = SqlSchema.findOneOption({
           status: INBOX_STATUS.CLOSED,
           closedReason: reason,
           revision: sql`${inboxItem.revision} + 1`,
+          settledAt: now,
           updatedAt: now,
         })
         .where(
@@ -720,6 +985,40 @@ const findItem = SqlSchema.findOneOption({
     ),
 });
 
+/** The item by its id alone, read where the caller has reached it already. */
+const findItemOf = SqlSchema.findOneOption({
+  Request: Schema.Struct({ itemId: Schema.String }),
+  Result: InboxRowSchema,
+  execute: ({ itemId }) =>
+    Database.use((db) => db.select(INBOX_COLUMNS).from(inboxItem).where(eq(inboxItem.id, itemId))),
+});
+
+/** The account, task, and workspace an item stands under, which its attachments are written under too. */
+const findItemScope = SqlSchema.findOne({
+  Request: Schema.Struct({ itemId: Schema.String }),
+  Result: Schema.Struct({
+    userId: Schema.String,
+    taskId: Schema.NullOr(Schema.String),
+    organizationId: Schema.String,
+  }),
+  execute: ({ itemId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          userId: inboxItem.userId,
+          taskId: inboxItem.taskId,
+          organizationId: inboxItem.organizationId,
+        })
+        .from(inboxItem)
+        .where(eq(inboxItem.id, itemId)),
+    ),
+});
+
+/** The item's scope, read where the caller has just written the item, so a missing row is a broken contract. */
+function itemScope(request: { readonly itemId: string }) {
+  return findItemScope(request).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
+}
+
 /** The answer written on the item where it is open at the revision named; nothing where it is not. */
 const answerItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -740,6 +1039,7 @@ const answerItem = SqlSchema.findOneOption({
           answer,
           answerKey,
           answeredBy: userId,
+          settledAt: now,
           updatedAt: now,
         })
         .where(
@@ -815,18 +1115,19 @@ export function postInboxItem(
           itemId: row.id,
           kept: attachments.map((attachment) => attachment.id),
         });
-        return Result.succeed(storedItem(row).item);
+        // Note that a post clears the answer, so the files `returning` read before their delete are none.
+        return Result.succeed(storedItem({ ...row, answerFiles: [] }).item);
       }),
     ),
   );
 }
 
-/** The picture, where it is the item's: its type and its bytes; nothing where the account reaches no such item or the item carries no such picture. */
+/** The picture or the answer's file, where it is the item's: its type and its bytes; nothing where the account reaches no such item or the item carries no such attachment. */
 export function readInboxAttachment(
   userId: string,
   itemId: string,
   attachmentId: string,
-): InboxStoreEffect<Option.Option<InboxImage>> {
+): InboxStoreEffect<Option.Option<InboxFile>> {
   return findAttachment({ userId, itemId, attachmentId });
 }
 
@@ -938,6 +1239,7 @@ const withdrawAnswer = SqlSchema.findOneOption({
           answer: null,
           answerKey: null,
           answeredBy: null,
+          settledAt: null,
           updatedAt: now,
         })
         .where(
@@ -952,33 +1254,298 @@ const withdrawAnswer = SqlSchema.findOneOption({
     ),
 });
 
-/** The answer taken under the key withdrawn, the item open again, where it still stands; nothing where it does not. */
+/** The answer taken under the key withdrawn, the item open again and the answer's files deleted, where it still stands; nothing where it does not. */
 export function withdrawInboxAnswer(
   userId: string,
   itemId: string,
   answerKey: string,
 ): InboxStoreEffect<Option.Option<InboxItem>> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      withdrawAnswer({ userId, itemId, answerKey, now }),
-      Option.map((row) => storedItem(row).item),
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const withdrawn = yield* withdrawAnswer({ userId, itemId, answerKey, now });
+        if (Option.isNone(withdrawn)) return Option.none();
+        yield* deleteAnswerFiles({ itemId });
+        // Note that the row is read again, because what `returning` projected still named the files.
+        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+      }),
     ),
   );
 }
 
-/** The developer's answer taken on the item at the revision named, under the key the client sent it with; nothing where the item is no longer open at that revision. */
+/** A file's base64 as the bytes it spells; the wire held it to standard padded base64 already. */
+function bytesOf(file: CodingAgentAttachment): Uint8Array {
+  return new Uint8Array(Buffer.from(file.data, "base64"));
+}
+
+/**
+ * The developer's answer taken on the item at the revision named, under
+ * the key the client sent it with, and the files it carried written as the
+ * item's answer files in the order given, in the same write; nothing, and
+ * no file kept, where the item is no longer open at that revision.
+ */
 export function answerInboxItem(
   userId: string,
   itemId: string,
   revision: number,
   answer: InboxReply,
   answerKey: string,
+  files: readonly CodingAgentAttachment[] = [],
 ): InboxStoreEffect<Option.Option<InboxItem>> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      answerItem({ userId, itemId, revision, answer, answerKey, now }),
-      Option.map((row) => storedItem(row).item),
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const answered = yield* answerItem({ userId, itemId, revision, answer, answerKey, now });
+        if (Option.isNone(answered) || files.length === 0) {
+          return Option.map(answered, (row) => storedItem(row).item);
+        }
+        const scope = yield* itemScope({ itemId });
+        yield* Effect.forEach(files, (file, position) =>
+          insertAnswerFile({
+            ...scope,
+            itemId,
+            name: file.name,
+            position,
+            contentType: file.mediaType,
+            bytes: bytesOf(file),
+            now,
+          }),
+        );
+        // Note that the row is read again, because what `returning` projected was read before the files were written.
+        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+      }),
     ),
+  );
+}
+
+/** Who writes a message on an item's thread: a member of its workspace by their account, under the key their client made, or the item's own agent. */
+type InboxMessageWriter =
+  | {
+      readonly author: typeof INBOX_MESSAGE_AUTHOR.MEMBER;
+      readonly userId: string;
+      readonly clientKey: string;
+    }
+  | { readonly author: typeof INBOX_MESSAGE_AUTHOR.AGENT };
+
+/** What a member's message under its key came to. */
+export const INBOX_MESSAGE_OUTCOME = {
+  /** This write wrote it. */
+  WRITTEN: "written",
+  /** The key found the same message written already, by the same member, with the same words and files. */
+  REPEATED: "repeated",
+  /** The key found another message written already, by another member or with other words or files; nothing was written. */
+  KEY_REUSED: "key-reused",
+} as const;
+
+type InboxMessageOutcome = (typeof INBOX_MESSAGE_OUTCOME)[keyof typeof INBOX_MESSAGE_OUTCOME];
+
+/** What a message came to: the item as it then stands, and what this write did. */
+export interface InboxMessageWritten {
+  readonly item: InboxItem;
+  readonly outcome: InboxMessageOutcome;
+}
+
+const KeyedMessageSchema = Schema.Struct({
+  userId: Schema.NullOr(Schema.String),
+  text: Schema.String,
+  files: Schema.Array(Schema.Struct({ name: Schema.String, mediaType: Schema.String })),
+});
+
+/** The message standing under a member's key on the item: who wrote it, its words, and its files by name and type in order. */
+const findKeyedMessage = SqlSchema.findOneOption({
+  Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
+  Result: KeyedMessageSchema,
+  execute: ({ itemId, clientKey }) =>
+    Database.use((db) =>
+      db
+        .select({
+          userId: inboxMessage.userId,
+          text: inboxMessage.text,
+          files: sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('name', ${inboxAttachment.name}, 'mediaType', ${inboxAttachment.contentType}) order by ${inboxAttachment.position}), '[]'::jsonb) from ${inboxAttachment} where ${inboxAttachment.messageId} = ${MESSAGE.id})`,
+        })
+        .from(inboxMessage)
+        .where(and(eq(inboxMessage.itemId, itemId), eq(inboxMessage.clientKey, clientKey))),
+    ),
+});
+
+/** Whether the message standing under the key is the one sent again: the same member, the same words, and the same files by name and type. */
+function sameMessage(
+  standing: typeof KeyedMessageSchema.Type,
+  sent: {
+    readonly userId: string;
+    readonly text: string;
+    readonly files: readonly MessageFile[];
+  },
+): boolean {
+  return (
+    standing.userId === sent.userId &&
+    standing.text === sent.text &&
+    standing.files.length === sent.files.length &&
+    standing.files.every(
+      (file, at) =>
+        file.name === sent.files[at]?.name && file.mediaType === sent.files[at]?.contentType,
+    )
+  );
+}
+
+/**
+ * The message written on the item's thread, the item standing open or
+ * settled, with the files it carried in the order given, and the item's
+ * last change moved to now, all in one write: the item's status, answer,
+ * and revision are left as they stand. A member's message sent again under
+ * its key is the one already written, which writes nothing and moves
+ * nothing; another message under a key already taken, by another member or
+ * with other words or files, is refused as the key reused, so the thread
+ * never names one message while the agent hears another. The caller has read the item as the writer may reach it, so the
+ * item named is one that stands.
+ */
+function writeInboxMessage(
+  itemId: string,
+  writer: InboxMessageWriter,
+  text: string,
+  files: readonly MessageFile[],
+): InboxStoreEffect<Option.Option<InboxMessageWritten>> {
+  const member = writer.author === INBOX_MESSAGE_AUTHOR.MEMBER ? writer : undefined;
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const written = yield* insertMessage({
+          itemId,
+          author: writer.author,
+          userId: member?.userId ?? null,
+          text,
+          clientKey: member?.clientKey ?? null,
+          now,
+        });
+        if (Option.isSome(written)) {
+          const scope = yield* itemScope({ itemId });
+          yield* Effect.forEach(files, (file, position) =>
+            insertMessageFile({
+              ...scope,
+              itemId,
+              messageId: written.value.id,
+              ...file,
+              position,
+              now,
+            }),
+          );
+          yield* touchItem({ itemId, now });
+        }
+        const outcome = Option.isSome(written)
+          ? INBOX_MESSAGE_OUTCOME.WRITTEN
+          : yield* repeatOutcome(itemId, member, text, files);
+        const found = yield* findItemOf({ itemId });
+        return Option.map(found, (row) => ({ item: storedItem(row).item, outcome }));
+      }),
+    ),
+  );
+}
+
+/** What a member's message whose key found one standing came to: the same message sent again, or another under a key reused. */
+function repeatOutcome(
+  itemId: string,
+  member: { readonly userId: string; readonly clientKey: string } | undefined,
+  text: string,
+  files: readonly MessageFile[],
+): InboxStoreEffect<InboxMessageOutcome> {
+  if (member === undefined) return Effect.succeed(INBOX_MESSAGE_OUTCOME.KEY_REUSED);
+  return Effect.map(findKeyedMessage({ itemId, clientKey: member.clientKey }), (standing) =>
+    Option.isSome(standing) && sameMessage(standing.value, { userId: member.userId, text, files })
+      ? INBOX_MESSAGE_OUTCOME.REPEATED
+      : INBOX_MESSAGE_OUTCOME.KEY_REUSED,
+  );
+}
+
+/**
+ * A member's message on an item of a workspace they are a member of, open
+ * or settled, as `writeInboxMessage` writes one; nothing where the account
+ * reaches no such item.
+ */
+export function postInboxMessage(
+  userId: string,
+  itemId: string,
+  message: {
+    readonly text: string;
+    readonly clientKey: string;
+    readonly files?: readonly CodingAgentAttachment[] | undefined;
+  },
+): InboxStoreEffect<Option.Option<InboxMessageWritten>> {
+  return Effect.flatMap(findItem({ userId, itemId }), (found) =>
+    Option.isNone(found)
+      ? Effect.succeed(Option.none())
+      : writeInboxMessage(
+          itemId,
+          { author: INBOX_MESSAGE_AUTHOR.MEMBER, userId, clientKey: message.clientKey },
+          message.text,
+          (message.files ?? []).map((file) => ({
+            name: file.name,
+            contentType: file.mediaType,
+            bytes: bytesOf(file),
+          })),
+        ),
+  );
+}
+
+/** The agent's own item under the key, as its tools name one, where the member who started the agent is still a member of the item's workspace. */
+const findAgentItem = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId, key }) =>
+    Database.use((db) =>
+      db
+        .select({ id: inboxItem.id })
+        .from(inboxItem)
+        .where(
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.agentId, agentId),
+            eq(inboxItem.key, key),
+            itemReachableBy(userId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The agent's message on the thread of its own item under the key, open or
+ * settled, as `writeInboxMessage` writes one, with the pictures it read from
+ * its sandbox, each named by its file's own name; nothing where it has no
+ * item under the key, or its starter has left the item's workspace, which
+ * writes there as one outside it no longer.
+ */
+export function replyInboxItem(
+  agent: Pick<InboxAgent, "userId" | "agentId">,
+  key: string,
+  text: string,
+  pictures: readonly InboxNamedImage[] = [],
+): InboxStoreEffect<Option.Option<InboxItem>> {
+  return Effect.flatMap(findAgentItem({ ...agent, key }), (found) =>
+    Option.isNone(found)
+      ? Effect.succeed(Option.none())
+      : Effect.map(
+          writeInboxMessage(found.value.id, { author: INBOX_MESSAGE_AUTHOR.AGENT }, text, pictures),
+          Option.map((written) => written.item),
+        ),
+  );
+}
+
+/**
+ * The member's message written under the key taken back off the item's
+ * thread, its files with it, where the account still reaches the item: what
+ * a hand-off to the agent that failed leaves, so the thread never shows a
+ * message the agent was not told. The item's last change stays where the
+ * message moved it.
+ */
+export function withdrawInboxMessage(
+  userId: string,
+  itemId: string,
+  clientKey: string,
+): InboxStoreEffect<void> {
+  return Effect.flatMap(findItem({ userId, itemId }), (found) =>
+    Option.isNone(found) ? Effect.void : deleteMessage({ itemId, clientKey }),
   );
 }
 

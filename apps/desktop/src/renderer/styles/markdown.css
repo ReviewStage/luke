@@ -124,17 +124,25 @@ blockquote.markdown-quote > * + * {
 }
 
 /* A task item keeps the library's own disabled checkbox as its marker, in the
-   green a finished session wears once ticked. */
+   accent every control wears. The box stands in the bullet's gutter, out of
+   the line, so the space after it folds away and the words, wrapped lines
+   included, start where a bullet's would; the plan's editor stands its box in
+   the same place (`tasks.css`), so opening a section moves nothing. Note that
+   the box takes the words' size, because a control's own is the browser's. */
 .markdown li.task-list-item {
+  position: relative;
   list-style: none;
 }
 
 .markdown li.task-list-item input[type="checkbox"] {
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
   width: 0.95em;
   height: 0.95em;
-  margin: 0 0.45em 0 -1.45em;
-  vertical-align: -0.1em;
-  accent-color: var(--state-complete);
+  margin: 0;
+  font: inherit;
+  accent-color: var(--luke-color-accent);
 }
 
 /* A table scrolls sideways rather than widening the bubble; a column's

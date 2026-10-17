@@ -27,7 +27,7 @@ export function SendFeedbackButton({ experiment }: { experiment: Experiment }): 
   return (
     <FoldingButton
       label="Send feedback"
-      glyph={<MessageSquareIcon />}
+      icon={<MessageSquareIcon />}
       onClick={() => openFeedback(experiment)}
     />
   );

@@ -17,9 +17,9 @@ import {
   zoomFactor,
   zoomStepped,
 } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useLayoutEffect, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 
 /** The custom property desktop.css divides the traffic lights' width by, since the page zoom does not scale them. */

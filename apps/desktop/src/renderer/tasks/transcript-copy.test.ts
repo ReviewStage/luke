@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
@@ -6,6 +7,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
+import { REPLAY_PAGE } from "./replay-card-model";
 import {
   agentTranscript,
   LATEST_ACTIVITY,
@@ -18,7 +20,9 @@ import {
  * transcript-copy.test.ts -- a transcript's copy follows the order its tab
  * draws: a message that reached the agent while its turn ran is copied
  * between the turn's work before it and after it, not ahead of the turn,
- * where the service keeps it. Synthetic throughout.
+ * where the service keeps it. An agent started from another is copied as
+ * its tab draws it, with none of the markers its first message holds.
+ * Synthetic throughout.
  */
 
 /** One answered command the agent ran, under its own call id. */
@@ -145,4 +149,139 @@ test("with Chat off, a chat notice is copied as the plain line it is drawn as, u
       "@agent-1 are you changing memberships?",
     ].join("\n\n") + "\n",
   );
+});
+
+/** The first message of an agent forked from another: the brief, two of the source's three steps, and the developer's note. */
+const FORKED_FIRST = firstMessageText(
+  "Fix the tile.",
+  {
+    agentId: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
+    messageId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    preamble: "This is the work you continue from.",
+    steps: [
+      { kind: REPLAY_STEP_KIND.LINE, summary: "Luke: Make it round.", words: "Make it round." },
+      {
+        kind: REPLAY_STEP_KIND.TOOL,
+        summary: "Ran: pnpm test",
+        words: "bash(pnpm test)\n→ exit 1 (output trimmed)",
+      },
+    ],
+    totalSteps: 3,
+  },
+  "Try a square instead.",
+);
+
+test("an agent started from another is copied as its brief, the source's steps it was handed, and the note as the developer's turn, with no marker", () => {
+  const copied = agentTranscript({
+    title: "Tile (2)",
+    messages: [
+      said("first", MESSAGE_ROLE.USER, FORKED_FIRST),
+      said("turn", MESSAGE_ROLE.ASSISTANT, "Squared."),
+    ],
+    brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
+  });
+  const concise = transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE);
+  assert.equal(
+    concise,
+    [
+      "# Tile (2)",
+      "## Prompt",
+      "Fix the tile.",
+      "## Forked from an earlier agent · 2 of 3 steps",
+      "_1 earlier step was left out to keep the replay within its size limit._",
+      "- **Luke:** Make it round.\n- **Agent:** Ran: pnpm test",
+      "## Developer",
+      "Try a square instead.",
+      "## Agent",
+      "Squared.",
+    ].join("\n\n") + "\n",
+  );
+  const full = transcriptMarkdown(copied, TRANSCRIPT_COPY.FULL);
+  assert.ok(
+    full.includes(
+      "**Agent:** Ran: pnpm test\n\n```\nbash(pnpm test)\n→ exit 1 (output trimmed)\n```",
+    ),
+  );
+  for (const copy of [concise, full]) {
+    assert.ok(!copy.includes("<!--"), copy);
+    assert.ok(!copy.includes("This is the work you continue from."), copy);
+    assert.ok(!copy.includes("## Note from the developer"), copy);
+  }
+});
+
+test("an agent started from another that has done nothing yet previews no step, its note being the developer's words", () => {
+  const copied = agentTranscript({
+    title: "Tile (2)",
+    messages: [said("first", MESSAGE_ROLE.USER, FORKED_FIRST)],
+    brief: CODING_AGENT_BRIEF.PLAN,
+    chatOn: true,
+  });
+  assert.equal(latestActivity(copied), undefined);
+});
+
+test("a summary Luke wrote of the source's oldest steps is copied under its line, as his words, and its steps are not counted as left out", () => {
+  const first = firstMessageText(
+    "Fix the tile.",
+    {
+      agentId: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
+      preamble: "This is the work you continue from.",
+      summary: { text: "Read the tile code.\n\nFound the radius bug.", steps: 40 },
+      steps: [{ kind: REPLAY_STEP_KIND.SAID, summary: "Said: Fixed.", words: "Fixed." }],
+      totalSteps: 41,
+    },
+    undefined,
+  );
+  const copied = agentTranscript({
+    title: "Tile (2)",
+    messages: [said("first", MESSAGE_ROLE.USER, first)],
+    brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
+  });
+  assert.equal(
+    transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Tile (2)",
+      "## Prompt",
+      "Fix the tile.",
+      "## Continued from an earlier agent · 1 of 41 steps",
+      "**Summary of 40 earlier steps (written by Luke)**",
+      "> Read the tile code.\n>\n> Found the radius bug.",
+      "- **Agent:** Fixed.",
+    ].join("\n\n") + "\n",
+  );
+});
+
+test("a replay longer than the card draws at first is copied whole, every kept step in order, whatever the card shows", () => {
+  const count = REPLAY_PAGE * 3 + 5;
+  const steps = Array.from({ length: count }, (_, at) => ({
+    kind: REPLAY_STEP_KIND.SAID,
+    summary: `Said: Step ${at + 1}.`,
+    words: `Step ${at + 1}.`,
+  }));
+  const first = firstMessageText(
+    "Fix the tile.",
+    {
+      agentId: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
+      preamble: "This is the work you continue from.",
+      steps,
+      totalSteps: count,
+    },
+    undefined,
+  );
+  const copied = agentTranscript({
+    title: "Tile (2)",
+    messages: [said("first", MESSAGE_ROLE.USER, first)],
+    brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
+  });
+  for (const copy of [TRANSCRIPT_COPY.CONCISE, TRANSCRIPT_COPY.FULL]) {
+    const markdown = transcriptMarkdown(copied, copy);
+    const copiedSteps = [...markdown.matchAll(/Step (\d+)\./gu)].map((match) => Number(match[1]));
+    // The full copy says each step twice, its line and its words.
+    assert.deepEqual(
+      [...new Set(copiedSteps)],
+      Array.from({ length: count }, (_, at) => at + 1),
+    );
+  }
 });

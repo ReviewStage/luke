@@ -1,30 +1,10 @@
-import { SETTING_SIDE_EFFECT, type SettingSideEffectId } from "@luke/settings";
-import type { AppSettings } from "@luke/settings/wire";
+import type { ClientSettingSideEffects } from "@luke/host/act-router";
+import { SETTING_SIDE_EFFECT } from "@luke/settings";
 import type { MediaDuckController } from "../native/media-duck";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
 
-/** What one client-side effect is handed: the snapshot, and whether to wait. */
-interface ClientSettingSideEffectContext {
-  readonly settings: AppSettings;
-  /**
-   * Whether an effect that may be deferred must be waited on. A reset applies
-   * every field in its scope and must not answer before the keys are back.
-   */
-  readonly waitForDeferredEffects: boolean;
-}
-
-type ClientSettingSideEffect = (context: ClientSettingSideEffectContext) => Promise<void> | void;
-
-/**
- * Every side effect a setting can have, over the whole of the id set. Total on
- * purpose: a new effect does not build until this table and the host's both say
- * what it does, where the `switch` this replaces ended in a `default` that
- * silently did nothing.
- */
-type ClientSettingSideEffects = Readonly<Record<SettingSideEffectId, ClientSettingSideEffect>>;
-
 /** An effect this side has nothing to do about, whichever side owns it. */
-const noClientSettingSideEffect: ClientSettingSideEffect = () => {};
+const noClientSettingSideEffect = () => {};
 
 /** What the client's own side effects have hands on. */
 export interface ClientSettingSideEffectDependencies {

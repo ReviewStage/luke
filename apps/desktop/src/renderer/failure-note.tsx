@@ -1,4 +1,5 @@
 import { type Failure, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
+import type { ReactNode } from "react";
 import { RetryButton } from "./retry-button";
 
 /**
@@ -7,12 +8,15 @@ import { RetryButton } from "./retry-button";
  * A remedy is the surface's own (`onRemedy`). One finished where Luke
  * cannot watch, on GitHub or in Settings, keeps Retry beside it
  * (`retriesBesideRemedy`), since the same send is what goes once it is done.
+ * A surface whose remedy is a press of its own hands it in as `children`,
+ * drawn last.
  */
 export function FailureNote({
   failure,
   className,
   onRetry,
   onRemedy,
+  children,
 }: {
   failure: Failure;
   className: string;
@@ -20,6 +24,8 @@ export function FailureNote({
   onRetry?: (() => void) | undefined;
   /** Opens the API keys, reconnects the integration, or mends the task's repository, as the reason says. */
   onRemedy?: (() => void) | undefined;
+  /** A remedy no reason names, drawn after the rest: a closed agent's Continue in new agent. */
+  children?: ReactNode;
 }): React.JSX.Element {
   const label = remedyLabel(failure);
   return (
@@ -37,6 +43,7 @@ export function FailureNote({
       {onRetry !== undefined && (label === undefined || retriesBesideRemedy(failure)) ? (
         <RetryButton onRetry={onRetry} />
       ) : null}
+      {children}
     </p>
   );
 }

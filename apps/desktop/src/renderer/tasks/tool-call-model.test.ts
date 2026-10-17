@@ -342,6 +342,35 @@ test("a post to the inbox is a row naming its item, its blocks and options as th
   assert.deepEqual(closed.input, { kind: TOOL_BLOCK.TEXT, text: "Found it in the README." });
 });
 
+test("an agent's reply on an inbox thread is its own row, naming the item's key and showing the words and pictures it sent, and one refused says why", () => {
+  const view = toolCallView({
+    tool: "reply_inbox",
+    input: {
+      key: "invite-queue",
+      text: "Postgres it is; the migration is in.",
+      images: [{ path: "shots/queue.png" }],
+    },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.equal(view.kind, CALL_KIND.INBOX_REPLY);
+  assert.equal(view.subject, "invite-queue");
+  assert.deepEqual(view.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Postgres it is; the migration is in.\nImage: shots/queue.png",
+  });
+  assert.equal(view.output, undefined);
+
+  const refused = toolCallView({
+    tool: "reply_inbox",
+    input: { key: "gone", text: "Done." },
+    output: { status: "rejected", reason: "No item of yours is under the key gone." },
+  });
+  assert.deepEqual(refused.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "No item of yours is under the key gone.",
+  });
+});
+
 test("an inbox call that did nothing shows why, so a refused post never reads as posted", () => {
   const view = toolCallView({
     tool: "post_to_inbox",
@@ -498,6 +527,36 @@ test("an archive names the agent its answer titles and opens nothing, its tab be
   });
 });
 
+test("a list of the models reads as one, not as a tool this build does not know, and opens nothing", () => {
+  const call = {
+    tool: "list_models",
+    callId: "call-1",
+    input: {},
+    output: { status: "accepted", models: [], default: { model: "openai/gpt-6.1-sol" } },
+  };
+
+  assert.equal(toolCallView(call).kind, CALL_KIND.LIST_MODELS);
+  assert.equal(toolTarget(call), undefined);
+});
+
+test("a stop names the agent its answer titles and opens that agent's tab, which stays; a refused stop opens nothing", () => {
+  const asked = { tool: "stop_agent", callId: "call-1", input: { agentId: "agent-2" } };
+  const stopped = {
+    ...asked,
+    output: {
+      status: "accepted",
+      agent: { id: "agent-2", title: "Bill by seat", onYourTask: true, status: "cancelled" },
+      stopped: true,
+    },
+  };
+
+  const view = toolCallView(stopped);
+  assert.deepEqual([view.kind, view.subject], [CALL_KIND.STOP_AGENT, "Bill by seat"]);
+  assert.deepEqual(toolTarget(stopped), { kind: TOOL_TARGET.AGENT, agent: "agent-2" });
+  const refused = { ...asked, output: { status: "rejected", reason: "Not stopped." } };
+  assert.equal(toolTarget(refused), undefined);
+});
+
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {
   const call = (isYourTask: boolean) => ({
     tool: "read_page",
@@ -536,4 +595,21 @@ test("a pause names how long it waits, and its answer how long it waited or that
     kind: TOOL_BLOCK.TEXT,
     text: "Stopped early: a message arrived.",
   });
+});
+
+test("a post into the plan's own channel opens the plan's Chat tab, and a post elsewhere, a read, or a resolve opens nothing", () => {
+  const target = (tool: string, input: Record<string, string | number>) =>
+    toolTarget({ tool, callId: "call", input, output: { status: "accepted" } });
+  assert.deepEqual(target("post_chat", { text: "hi" }), { kind: TOOL_TARGET.CHAT });
+  assert.deepEqual(
+    [
+      target("post_chat", { text: "hi", to: "@sam" }),
+      target("post_chat", { text: "hi", to: "#launch" }),
+      target("post_chat", { text: "hi", replyTo: 4 }),
+      target("read_chat", {}),
+      target("read_chat", { channel: "@sam" }),
+      target("resolve_ask", { key: "invite", reason: "Settled." }),
+    ],
+    [undefined, undefined, undefined, undefined, undefined, undefined],
+  );
 });

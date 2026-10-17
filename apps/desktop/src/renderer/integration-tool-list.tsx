@@ -3,13 +3,23 @@ import {
   requiredFirst,
   TOOL_BADGE,
   TOOL_HINT,
+  type ToolHint,
   toolBadge,
   toolHints,
   toolHintWords,
   toolSummary,
   toolTitle,
 } from "@luke/features/integration-tool-model";
-import { ArrowLeftIcon, ChevronRightIcon } from "@luke/ui";
+import {
+  ArrowLeftIcon,
+  BADGE_TONE,
+  Badge,
+  type BadgeTone,
+  ChevronRightIcon,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { MarkdownMessage } from "./markdown-message";
 import { Highlighted } from "./search-field";
 import { Tooltip } from "./tooltip";
@@ -36,6 +46,8 @@ import { Tooltip } from "./tooltip";
  * the words a search landed on marked in it, then its parameters, those a
  * call must give first, each its name, its
  * type, what it is, and the values it takes as chips, its default outlined.
+ * The badge and the hints are `@luke/ui`'s Badge, the danger tone for what
+ * destroys.
  * A page whose server said nothing of its tool says so. The page's body is
  * its one scroller, which the owner may hand the focus to, so the arrows
  * scroll it. Where either is drawn, and what the keys do, is the owner's.
@@ -51,17 +63,19 @@ export function keepInView(list: HTMLElement | null, row: Element | null): void 
 }
 
 /** The badge a tool wears on its row and at the head of its page's hints. */
-function Badge({ tool }: { tool: IntegrationTool }): React.JSX.Element | null {
+function ToolBadge({ tool }: { tool: IntegrationTool }): React.JSX.Element | null {
   const badge = toolBadge(tool.annotations);
   if (badge === undefined) return null;
   return (
-    <span
-      className="integration-tool-badge"
-      data-destructive={badge === TOOL_BADGE.DESTRUCTIVE ? "true" : undefined}
-    >
+    <Badge tone={badge === TOOL_BADGE.DESTRUCTIVE ? BADGE_TONE.DANGER : BADGE_TONE.NEUTRAL}>
       {badge}
-    </span>
+    </Badge>
   );
+}
+
+/** The tone a hint is said in: the danger tone for what destroys, the quiet one for the rest. */
+function hintTone(hint: ToolHint): BadgeTone {
+  return hint === TOOL_HINT.DESTRUCTIVE ? BADGE_TONE.DANGER : BADGE_TONE.NEUTRAL;
 }
 
 /** Whether a tool's name stands beside its title, which it does only where the title is not the name. */
@@ -120,7 +134,7 @@ export function IntegrationToolList({
                   <Highlighted text={tool.name} tokens={tokens} />
                 </span>
               ) : null}
-              <Badge tool={tool} />
+              <ToolBadge tool={tool} />
             </span>
             {tool.description !== "" ? (
               <span className="integration-tool-description">
@@ -301,25 +315,16 @@ export function IntegrationToolDetail({
             aria-label={`What ${server}'s server says of this tool`}
           >
             {hints.map((hint) => (
-              <li
-                key={hint}
-                className="integration-tool-hint"
-                data-hint={hint}
-                data-tone={
-                  hint === TOOL_HINT.DESTRUCTIVE
-                    ? "danger"
-                    : hint === TOOL_HINT.OPEN_WORLD || hint === TOOL_HINT.CLOSED_WORLD
-                      ? "quiet"
-                      : undefined
-                }
-              >
-                {toolHintWords(hint, server)}
+              <li key={hint}>
+                <Badge tone={hintTone(hint)}>{toolHintWords(hint, server)}</Badge>
               </li>
             ))}
           </ul>
         ) : null}
         {tool.description === "" ? (
-          <p className="integration-tool-silent">No description.</p>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            No description.
+          </Text>
         ) : (
           <MarkdownMessage
             words={tool.description}

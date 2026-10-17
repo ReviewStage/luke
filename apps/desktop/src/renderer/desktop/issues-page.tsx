@@ -5,7 +5,16 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  BUTTON_VARIANT,
+  Button,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  useMenu,
+} from "@luke/ui";
 import { Schema } from "effect";
 import {
   ListIcon,
@@ -15,17 +24,15 @@ import {
   SquareKanbanIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail } from "./issue-detail";
@@ -180,16 +187,15 @@ function ListPage({
         <div className="desktop-toolbar-actions">
           <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
           <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
+          <Button
+            variant={BUTTON_VARIANT.OUTLINE}
+            icon={<PlusIcon />}
             aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_ISSUE)}
             disabled={onCompose === undefined}
             onClick={onCompose}
           >
-            <PlusIcon />
             New issue
-          </button>
+          </Button>
         </div>
       </header>
       {/* The board scrolls sideways in its own scroller, each column scrolling its cards; a failure is said in the list's. */}
@@ -201,7 +207,9 @@ function ListPage({
         }
       >
         {read === undefined ? null : "failure" in read ? (
-          <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
+          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_LINE}
+          </ErrorState>
         ) : onBoard ? (
           <IssueBoard
             issues={read.issues}
@@ -244,7 +252,7 @@ function ViewOptions({
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const choices: MenuAction[] = [
     {
       label: "Board",
@@ -262,9 +270,7 @@ function ViewOptions({
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
-        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -299,11 +305,9 @@ function DetailFrame({
       </header>
       <div className="automations-scroll scroll-fade-top">
         {failure === undefined ? null : (
-          <ReadFailure
-            line={failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
-            onRetry={onRetry}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
+          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
+          </ErrorState>
         )}
       </div>
     </section>

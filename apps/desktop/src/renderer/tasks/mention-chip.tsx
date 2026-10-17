@@ -16,7 +16,16 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
-import { CallIcon, DocumentIcon, GearIcon, ProviderMark, UserIcon } from "@luke/ui";
+import {
+  CallIcon,
+  DocumentIcon,
+  GearIcon,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  ProviderMark,
+  UserIcon,
+} from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -33,7 +42,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import type { LinkDrawer } from "../markdown-message";
 import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
@@ -47,6 +55,7 @@ import {
   TaskChipCard,
   VersionChipCard,
 } from "./chip-cards";
+import { providerOf } from "./coding-agent-model";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
@@ -87,7 +96,10 @@ import { useOpenLink } from "./use-open-link";
  * and counts (`pull-request-card-notes.tsx`), in its address's place,
  * which it says only while its provider has answered nothing. A page an
  * agent showed on a plan wears its tab's glyph, and one of a plan's coding agents its harness's
- * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
+ * mark, as the place drawing it knows it (`MentionDoors.agentOf`), and any
+ * other agent, one of another task's or of none, or one named where the
+ * place knows no agents, the mark of the harness the window last read it
+ * running on (`useKnownNames`); either
  * opens its tab through the window's opener for a Luke link, as a link
  * copied to it does, and an agent hangs its tab's own card where the place
  * has one, and otherwise the same card read as it is hung, on any task of
@@ -229,6 +241,12 @@ function pressOf(
   }
 }
 
+/** The harness an agent the window holds runs in, read off its model; none for one it holds not. */
+function knownProvider(known: KnownNames, agentId: string) {
+  const model = known.agentModels.get(agentId);
+  return model === undefined ? undefined : providerOf(model);
+}
+
 /** A person as the workspace's members around the chip draw them: their picture, or grayed where they left. */
 function PersonGlyph({ userId, name }: { userId: string; name: string }): React.JSX.Element {
   const person = usePerson({ userId, name });
@@ -239,12 +257,14 @@ function MentionGlyph({
   mention,
   name,
   doors,
+  known,
   standing,
 }: {
   mention: Mention;
   /** The name the chip calls it by, which a person not among the members read is drawn by. */
   name: string;
   doors: MentionDoors;
+  known: KnownNames;
   standing?: LinkStanding | undefined;
 }): React.JSX.Element {
   // A pull request its provider answered for wears its own mark for where it stands, as everywhere the window draws one.
@@ -273,7 +293,7 @@ function MentionGlyph({
     case MENTION_KIND.AGENT: {
       const look = mention.taskId === doors.taskId ? doors.agentOf?.(mention.agentId) : undefined;
       return look === undefined ? (
-        <AgentMark provider={undefined} />
+        <AgentMark provider={knownProvider(known, mention.agentId)} />
       ) : (
         <ActorMark actor={look.actor} size={ACTOR_SIZE.INLINE} />
       );
@@ -322,6 +342,7 @@ function MentionCard({
   name,
   state,
   doors,
+  known,
   standing,
 }: {
   mention: Mention;
@@ -330,6 +351,7 @@ function MentionCard({
   name: string;
   state: MentionState;
   doors: MentionDoors;
+  known: KnownNames;
   standing: LinkStanding | undefined;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
@@ -365,8 +387,16 @@ function MentionCard({
   const note = noteOf(mention, state, doors.taskId, standing);
   const card = (
     <HoverCard data-mention-card="">
-      <CardHead
-        glyph={<MentionGlyph mention={mention} name={name} doors={doors} standing={standing} />}
+      <HoverCardHead
+        glyph={
+          <MentionGlyph
+            mention={mention}
+            name={name}
+            doors={doors}
+            known={known}
+            standing={standing}
+          />
+        }
         name={standing?.title ?? whole}
         sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
       />
@@ -375,9 +405,9 @@ function MentionCard({
       ) : null}
       {standing === undefined ? null : standing.pullRequest === undefined ? (
         <>
-          <CardNote>
+          <HoverCardNote>
             {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
-          </CardNote>
+          </HoverCardNote>
           {standing.opener === undefined ? (
             <OptionalNote words={standing.byline} />
           ) : (
@@ -393,7 +423,7 @@ function MentionCard({
           opener={standing.opener}
         />
       )}
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
+      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
     </HoverCard>
   );
   // A plan, a section, a page, or an agent hangs the card the window hangs for it elsewhere, its own card standing in where the window holds none.
@@ -439,7 +469,7 @@ function MentionCard({
 
 /** A card's note, where there are words for one. */
 function OptionalNote({ words }: { words: string | undefined }): ReactNode {
-  return words === undefined ? null : <CardNote>{words}</CardNote>;
+  return words === undefined ? null : <HoverCardNote>{words}</HoverCardNote>;
 }
 
 /**
@@ -501,7 +531,13 @@ function MentionChip({
   const face = (
     <>
       <span className="mention-chip-glyph">
-        <MentionGlyph mention={mention} name={name} doors={doors} standing={standing} />
+        <MentionGlyph
+          mention={mention}
+          name={name}
+          doors={doors}
+          known={known}
+          standing={standing}
+        />
       </span>
       <span className="mention-chip-label">{name}</span>
       {standing?.state === undefined ? null : (
@@ -516,6 +552,7 @@ function MentionChip({
       name={name}
       state={state}
       doors={doors}
+      known={known}
       standing={standing}
     />
   );
@@ -544,9 +581,9 @@ function MentionChip({
   );
 }
 
-/** The glyph a place in Luke wears, the one its tab or its row in the window wears. */
-function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
-  switch (kind) {
+/** The glyph a place in Luke wears, the one its tab or its row in the window wears: an agent's its harness's mark, where the window holds the agent. */
+function PlaceGlyph({ place, known }: { place: LinkPlace; known: KnownNames }): React.JSX.Element {
+  switch (place.kind) {
     case LINK_PLACE.TASK:
     case LINK_PLACE.VERSION:
     case LINK_PLACE.TURN:
@@ -558,7 +595,7 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
     case LINK_PLACE.CALL:
       return <CallIcon />;
     case LINK_PLACE.AGENT:
-      return <AgentMark provider={undefined} />;
+      return <AgentMark provider={knownProvider(known, place.agentId)} />;
     case LINK_PLACE.WORKER:
       return <BotIcon aria-hidden="true" />;
     case LINK_PLACE.CHANGES:
@@ -605,11 +642,11 @@ function PlaceChip({
   const openLink = useOpenLink();
   const known = useKnownNames("automationId" in place ? place.automationId : undefined);
   const { name, under } = placeChipLook(place, label, known);
-  const glyph = <PlaceGlyph kind={place.kind} />;
+  const glyph = <PlaceGlyph place={place} known={known} />;
   const own = (
     <HoverCard data-mention-card="">
-      <CardHead glyph={glyph} name={name} />
-      {under === undefined ? null : <CardNote>{`In ${under}`}</CardNote>}
+      <HoverCardHead glyph={glyph} name={name} />
+      {under === undefined ? null : <HoverCardNote>{`In ${under}`}</HoverCardNote>}
     </HoverCard>
   );
   const card = <PlaceCard place={place} workspace={workspace} name={name} fallback={own} />;

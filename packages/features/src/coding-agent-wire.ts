@@ -181,6 +181,8 @@ export const CODING_AGENT_FAILURE = {
   FAST_ON_OWN_KEY: "fast_own_key",
   /** The provider refused fast mode for the organization of the key the step ran on. */
   FAST_NOT_ENABLED: "fast_not_enabled",
+  /** The provider refused the step's prompt as longer than the model's context window. */
+  CONTEXT_OVERFLOW: "context_overflow",
   OTHER: "other",
 } as const;
 
@@ -324,6 +326,36 @@ export const disabledServersSchema = EffectSchema.Array(
 );
 
 /**
+ * The agent a Start takes over from, on the same plan: everything it did
+ * where no message is named, which is a continue, or its transcript up to
+ * and including one of its own assistant messages, by that message's id as
+ * its transcript carries it, which is a fork. A fork of a reply still being
+ * written names where the developer saw it end as they pressed Fork: how
+ * many of that message's steps had begun, and how many words and calls the
+ * last of them held, so the cut keeps those and nothing the agent wrote
+ * after; a fork naming none keeps the message whole, as a desktop before
+ * the count asked.
+ */
+const codingAgentStartFromSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  messageId: EffectSchema.optionalKey(wireUuidSchema),
+  messageSteps: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+  messageStepParts: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+  ),
+}).check(
+  EffectSchema.makeFilter(
+    ({ messageId, messageSteps, messageStepParts }) =>
+      (messageSteps === undefined || messageId !== undefined) &&
+      (messageStepParts === undefined || messageSteps !== undefined),
+  ),
+);
+
+export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
+
+/**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
@@ -332,7 +364,12 @@ export const disabledServersSchema = EffectSchema.Array(
  * bounded as a message is: its words, the files the developer attached to
  * it, or both. With none, the agent is handed the plan, and files go only
  * with a prompt. The MCP servers its draft switched off go with it, and none
- * is off where the Start names none.
+ * is off where the Start names none. A Start `from` another agent of the
+ * plan is handed that agent's brief and its transcript replayed after it,
+ * so it names no prompt of its own, and it runs on that agent's choice and
+ * servers where it names none. A note, bounded as a message is, goes only
+ * beside such a source, written after the replay as the developer's, and
+ * files go with it there as they go with a prompt.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -342,17 +379,34 @@ export const codingAgentStartRequestFields = {
   prompt: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
+  from: EffectSchema.optionalKey(codingAgentStartFromSchema),
+  note: EffectSchema.optionalKey(messageWordsSchema),
 };
 
-/** A Start's words or files: none, or words, files, or both, since files go only with a prompt. */
+/** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
+function carriesFiles(
+  words: string | undefined,
+  attachments: readonly CodingAgentAttachment[] | undefined,
+): boolean {
+  return words === undefined ? attachments === undefined : hasWordsOrFiles(words, attachments);
+}
+
+/** A Start's words or files: a prompt and its files afresh, never a note; from another agent, whose brief it is handed, no prompt, and a note and its files. */
 const startBrief = EffectSchema.makeFilter(
   ({
     prompt,
     attachments,
+    from,
+    note,
   }: {
     readonly prompt?: string;
     readonly attachments?: readonly CodingAgentAttachment[];
-  }) => (prompt === undefined ? attachments === undefined : hasWordsOrFiles(prompt, attachments)),
+    readonly from?: CodingAgentStartFrom;
+    readonly note?: string;
+  }) =>
+    from === undefined
+      ? note === undefined && carriesFiles(prompt, attachments)
+      : prompt === undefined && carriesFiles(note, attachments),
 );
 
 /** The Start request as a caller holds it, before it is put on the wire. */
@@ -565,6 +619,44 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * started by hand, and from a service before it.
    */
   automationName: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The agent this one was started from, on the same plan, and the message
+   * of its it was forked at where it was forked rather than continued, and
+   * how many of that message's steps it kept, and of the last of them how
+   * many words and calls, where it was forked while that message was still
+   * written, with
+   * how many of that agent's steps its replay kept of how many there were,
+   * and the branch that agent's work was copied to for this one where it
+   * could be; absent for an agent started afresh, and from a service before it.
+   */
+  from: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      agentId: wireUuidSchema,
+      messageId: EffectSchema.optionalKey(wireUuidSchema),
+      messageSteps: EffectSchema.optionalKey(countedNumber),
+      messageStepParts: EffectSchema.optionalKey(countedNumber),
+      steps: countedNumber,
+      totalSteps: countedNumber,
+      branch: EffectSchema.optionalKey(EffectSchema.String),
+    }),
+  ),
+  /**
+   * The agents started from this one, oldest first, archived ones among
+   * them: each by its id and its title, null where it has none yet, whether
+   * it forked this one at a message rather than continuing it, and that
+   * message where it did; absent where none was, and from a service before
+   * it.
+   */
+  continuedBy: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({
+        agentId: wireUuidSchema,
+        title: EffectSchema.NullOr(EffectSchema.String),
+        forked: EffectSchema.Boolean,
+        messageId: EffectSchema.optionalKey(wireUuidSchema),
+      }),
+    ),
+  ),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
@@ -1280,6 +1372,21 @@ const codingAgentSenderSchema = EffectSchema.Struct({
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
   /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
   agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /**
+   * The catalog id of the model that agent ran on when it sent the line,
+   * which the window reads its harness's mark off; absent for any other
+   * sender, for an agent's line sent before it was kept, and from a service
+   * older than it.
+   */
+  model: EffectSchema.optionalKey(recordedChoice),
+  /**
+   * That agent's id, which the window opens its tab and reads its card by;
+   * absent for any other sender, for an agent's line sent before it was
+   * kept, once that agent is gone, and from a service older than it.
+   */
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** The task that agent works on, where `agentId` is given and it works on one. */
+  taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
