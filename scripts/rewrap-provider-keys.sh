@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Moves every account's stored provider key onto the newest key-encryption
-# key, the second step of a rotation of PROVIDER_KEY_ENCRYPTION_KEYS.
+# Moves every account's stored provider key, and every workspace's environment
+# value, onto the newest key-encryption key, the second step of a rotation of
+# PROVIDER_KEY_ENCRYPTION_KEYS.
 #
 #   CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://tryluke.dev
 #

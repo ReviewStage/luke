@@ -373,6 +373,18 @@
           "dest": "/api/default.js?route=workspaces"
         },
         {
+          "src": "/api/workspaces/environment",
+          "dest": "/api/default.js?route=workspaces/environment"
+        },
+        {
+          "src": "/api/workspaces/environment/remove",
+          "dest": "/api/default.js?route=workspaces/environment/remove"
+        },
+        {
+          "src": "/api/workspaces/environment/save",
+          "dest": "/api/default.js?route=workspaces/environment/save"
+        },
+        {
           "src": "/api/workspaces/github/connect",
           "dest": "/api/default.js?route=workspaces/github/connect"
         },

@@ -28,6 +28,10 @@ import {
   type TaskTool,
   taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
+import {
+  NO_SHELL_ENVIRONMENT,
+  type ShellEnvironment,
+} from "@luke/service/agents/coder-host/workspace-environment";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
   MAC_COMMAND_STATUS,
@@ -49,7 +53,7 @@ import {
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
-import { defineTool } from "eve/tools";
+import { defineTool, type ToolContext } from "eve/tools";
 import { runAgent } from "./runtime.js";
 
 /**
@@ -70,6 +74,31 @@ export const seams: CoderHostSeams = Effect.runSync(
 );
 
 export const host: CoderHost = coderHost(seams);
+
+/**
+ * The workspace's environment for one shell command, read through the
+ * admission given: the agent's own session's, or a worker's, whose
+ * delegated admission is its parent's conversation, since a worker runs in
+ * its parent's sandbox. A session refused, or a read that fails, runs the
+ * command without it, logged.
+ */
+export function shellEnvironmentFor(admit: CoderHost["admit"]) {
+  return (ctx: ToolContext): Promise<ShellEnvironment> =>
+    runAgent(
+      Effect.gen(function* () {
+        const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+        if (Result.isFailure(admitted)) return NO_SHELL_ENVIRONMENT;
+        return yield* host.shellEnvironment(admitted.success);
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.as(
+            Effect.logWarning(`The session's environment was not read: ${failure._tag}`),
+            NO_SHELL_ENVIRONMENT,
+          ),
+        ),
+      ),
+    );
+}
 
 /** What a model resolver reads of eve's `step.started`, which eve hands it unparsed: eve's id for the turn the step is of. */
 const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.String }) });

@@ -4,15 +4,24 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
   type KeyRing,
+  openEnvironmentValue,
   openProviderKey,
   parseKeyRing,
+  sealEnvironmentValue,
   sealProviderKey,
 } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
+import {
+  listWorkspaceEnvironmentRows,
+  saveWorkspaceEnvironmentValue,
+  sealedOf,
+} from "@luke/database/models/workspace-environment-store";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
-import { user } from "@luke/database/schemas/auth";
+import { organization, user } from "@luke/database/schemas/auth";
+import { workspaceEnvironmentVariable } from "@luke/database/schemas/workspace-environment";
 import { getTestDB } from "@luke/database/testing";
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@luke/features/provider-key-wire";
+import { WORKSPACE_ENVIRONMENT_KIND } from "@luke/features/workspace-environment-wire";
 import { Effect, Redacted, Result } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -25,7 +34,8 @@ import {
  * The rotation's rewrap over a real dialect: every stored key wrapped under
  * an older version is moved onto the current one and opens under a ring
  * that no longer holds the old, a key already current or one the ring
- * cannot open is left as it was, and a second pass moves nothing.
+ * cannot open is left as it was, and a second pass moves nothing. A
+ * workspace's environment values move in the same pass on the same terms.
  *
  * Synthetic accounts and keys; the key-encryption keys are fixed bytes
  * written for this file.
@@ -72,8 +82,9 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
-        // A pass walks every account's rows, so each case starts from none.
+        // A pass walks every account's and workspace's rows, so each case starts from none.
         yield* db.delete(accountProviderKey);
+        yield* db.delete(workspaceEnvironmentVariable);
         const [first, second] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
         for (const id of [first, second]) {
           yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
@@ -117,11 +128,70 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
   );
 
   it.effect(
+    "moves a workspace's older environment values onto the current version in the same pass",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        yield* db.delete(accountProviderKey);
+        yield* db.delete(workspaceEnvironmentVariable);
+        const owner = `user-${randomUUID()}`;
+        yield* db
+          .insert(user)
+          .values({ id: owner, name: "Test User", email: `${owner}@luke.test` });
+        const organizationId = randomUUID();
+        yield* db.insert(organization).values({
+          id: organizationId,
+          name: "Acme",
+          slug: `workspace-${organizationId}`,
+          createdAt: new Date(0),
+        });
+        const stored: ReadonlyArray<readonly [KeyRing, string, string]> = [
+          [ring(KEK.ONE), "OLD_SECRET", "old-value"],
+          [ring(KEK.TWO), "NEW_SECRET", "new-value"],
+        ];
+        for (const [keys, name, value] of stored) {
+          const sealed = sealEnvironmentValue(keys, { organizationId, name }, Redacted.make(value));
+          yield* saveWorkspaceEnvironmentValue(
+            organizationId,
+            name,
+            WORKSPACE_ENVIRONMENT_KIND.SECRET,
+            sealed,
+            "",
+            owner,
+            new Date(0),
+          );
+        }
+
+        const pass = yield* rewrapProviderKeys(ring(`${KEK.TWO},${KEK.ONE}`));
+        const rotated = ring(KEK.TWO);
+        const opened = (yield* listWorkspaceEnvironmentRows(organizationId)).map((row) => {
+          const value = openEnvironmentValue(
+            rotated,
+            { organizationId, name: row.name },
+            sealedOf(row),
+          );
+          return [
+            row.name,
+            row.keyVersion,
+            Result.isSuccess(value) ? Redacted.value(value.success) : "unreadable",
+          ];
+        });
+
+        assert.deepEqual(pass, { moved: 1, current: 1, changed: 0, unreadable: 0 });
+        assert.deepEqual(opened, [
+          ["NEW_SECRET", 2, "new-value"],
+          ["OLD_SECRET", 2, "old-value"],
+        ]);
+      }),
+  );
+
+  it.effect(
     "the endpoint rewraps only for a POST under the deployment's secret, and answers the counts and the version they moved onto",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
         yield* db.delete(accountProviderKey);
+        yield* db.delete(workspaceEnvironmentVariable);
         const owner = `user-${randomUUID()}`;
         yield* db
           .insert(user)
