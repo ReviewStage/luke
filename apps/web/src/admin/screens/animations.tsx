@@ -1,5 +1,15 @@
 import type { FaceMotion } from "@luke/brand";
 import {
+  ALIGN,
+  Inline,
+  JUSTIFY,
+  Stack,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
+import {
   ANIMATION_ROSTER,
   ANIMATION_SWATCH,
   ANIMATION_VARIANT,
@@ -54,42 +64,59 @@ const PREVIEW_VARIANTS: readonly AnimationVariant[] = [
   ANIMATION_VARIANT.LIGHT,
 ];
 
+/** A preview's square: a variant's motion, or the word for a missing one. */
+const PREVIEW_FRAME = "aspect-square overflow-hidden rounded-md";
+
+/**
+ * One motion's card: its name and cycle in the shared roles over a preview
+ * per variant, then the parts it draws beyond the face, if any. Note that the
+ * name and the cycle keep the monospace face, because both are the artwork's
+ * own identifiers and figures rather than prose.
+ */
 function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element {
   const variants = MOTION_MARKUP.get(entry.motion);
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="m-0 font-mono text-sm font-semibold">{entry.motion}</h3>
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">
-          {formatCycleSeconds(entry.cycleMs)} cycle
-        </span>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        {PREVIEW_VARIANTS.map((variant) => {
-          const markup = variants?.get(variant);
-          return markup === undefined ? (
-            <div
-              key={variant}
-              className="grid aspect-square place-items-center rounded-md border border-dashed border-border px-2 text-center text-xs text-muted-foreground"
-            >
-              No committed asset
-            </div>
-          ) : (
-            <div
-              key={variant}
-              className="aspect-square overflow-hidden rounded-md [&>svg]:block [&>svg]:size-full"
-              style={{ backgroundColor: ANIMATION_SWATCH[variant] }}
-              aria-hidden="true"
-              dangerouslySetInnerHTML={markup}
-            />
-          );
-        })}
-      </div>
-      {entry.extraParts.length > 0 ? (
-        <p className="mt-3 mb-0 text-xs text-muted-foreground">
-          Also draws: {entry.extraParts.join(", ")}
-        </p>
-      ) : null}
+    <div className="min-w-0 rounded-lg border border-border bg-card p-5">
+      <Stack>
+        <Inline justify={JUSTIFY.BETWEEN} align={ALIGN.BASELINE}>
+          <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION}>
+            <span className="font-mono">{entry.motion}</span>
+          </Text>
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            <span className="font-mono tabular-nums">
+              {formatCycleSeconds(entry.cycleMs)} cycle
+            </span>
+          </Text>
+        </Inline>
+        <div className="grid grid-cols-2 gap-3">
+          {PREVIEW_VARIANTS.map((variant) => {
+            const markup = variants?.get(variant);
+            return markup === undefined ? (
+              <div
+                key={variant}
+                className={`${PREVIEW_FRAME} grid place-items-center border border-dashed border-border px-2 text-center`}
+              >
+                <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                  No committed asset
+                </Text>
+              </div>
+            ) : (
+              <div
+                key={variant}
+                className={`${PREVIEW_FRAME} [&>svg]:block [&>svg]:size-full`}
+                style={{ backgroundColor: ANIMATION_SWATCH[variant] }}
+                aria-hidden="true"
+                dangerouslySetInnerHTML={markup}
+              />
+            );
+          })}
+        </div>
+        {entry.extraParts.length > 0 ? (
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            Also draws: {entry.extraParts.join(", ")}
+          </Text>
+        ) : null}
+      </Stack>
     </div>
   );
 }
