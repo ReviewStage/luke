@@ -22,13 +22,14 @@ import {
   repaint,
   reveal,
   selectedWords,
+  watchText,
 } from "./find-matches";
 import { Tooltip } from "./tooltip";
 
 /**
  * find-in-tab.tsx -- ⌘F inside the tab that holds the window's focus: a find bar at the tab's top right, its matches tinted in the tab's own text and stepped through one at a time.
  *
- * Each column of the plan's page wraps the tab it shows in a scope, which
+ * Each column of the task's page wraps the tab it shows in a scope, which
  * offers Find while the column holds the window's keys (`desktop-tasks.tsx`),
  * so ⌘F finds in the plan's document, an agent's transcript, or whatever
  * the side panel shows, and never in both columns at once, which is why
@@ -77,6 +78,7 @@ export const FIND_PAGE = {
   INBOX: "inbox",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
+  ISSUES: "issues",
   VERSION_HISTORY: "version-history",
   PERSON: "person",
 } as const;
@@ -172,9 +174,7 @@ function useFindMatches(root: HTMLElement | null, query: string): FindMatches {
       if (shown && range !== undefined) reveal(range, root);
     };
     search(true);
-    const watch = new MutationObserver(() => search(false));
-    watch.observe(root, { childList: true, subtree: true, characterData: true });
-    return () => watch.disconnect();
+    return watchText(root, () => search(false));
   }, [root, query, paint]);
 
   // The highlights are the document's, so a tab that goes takes its matches with it.

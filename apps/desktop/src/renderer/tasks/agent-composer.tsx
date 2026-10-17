@@ -84,7 +84,7 @@ import { useKnownNames } from "./use-known-names";
  * and what mends it (`../failure-note.tsx`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
  * once, or, for a repository out of reach, the press its reason names
- * (`repository-remedy.tsx`), a move of the plan sending it again by itself
+ * (`repository-remedy.tsx`), a move of the task sending it again by itself
  * once it lands; an agent that takes no message any more keeps the box,
  * disabled, with the reason under it; a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
@@ -92,7 +92,10 @@ import { useKnownNames } from "./use-known-names";
  * the MCP popover reconnects it; an editor bundle that could not be loaded
  * says so there too. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
- * opening a tab never takes the caret out of the plan. A draft agent's tab
+ * opening a tab never takes the caret out of the plan, and a message sent
+ * from the box, by Enter or by Send, hands the caret back to the box as it
+ * opens again, unless the developer went somewhere else meanwhile, so the
+ * next message is written at once. A draft agent's tab
  * draws the same box over a start rather than a message, asking for the
  * first message of its still empty conversation, and its model chip once
  * the choice it starts on is known.
@@ -121,8 +124,8 @@ import { useKnownNames } from "./use-known-names";
  * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
  * is said in the same note a file's refusal is.
  *
- * An `@` at the start of a word, on a plan's page, opens the list of what
- * the message can mention, the plan's repository's files and folders, the
+ * An `@` at the start of a word, on a task's page, opens the list of what
+ * the message can mention, the task's repository's files and folders, the
  * plan's sections, the pages agents showed on it, its other coding agents,
  * the repository's skills, and the account's connected MCP servers and
  * their tools
@@ -131,7 +134,7 @@ import { useKnownNames } from "./use-known-names";
  * handed to the agent's next turn even where its switch is off, and to that
  * turn alone.
  *
- * A `/` at the start of a word opens the list of the skills the plan's
+ * A `/` at the start of a word opens the list of the skills the task's
  * repository keeps, at the caret, and the one chosen is written into the
  * words as its chip, read as `/name`, which the agent loads before it acts
  * and a press opens the `SKILL.md` of (`skill-picker.tsx`).
@@ -302,6 +305,7 @@ export function AgentComposer({
   replyDoor?: RefObject<((words: string) => void) | undefined> | undefined;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
+  const card = useRef<HTMLDivElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const foot = useRef<HTMLDivElement>(null);
@@ -382,6 +386,28 @@ export function AgentComposer({
           });
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
+  // Note that a held box gives up the caret, because a field that takes no
+  // words, and a Send disabled under the press, can hold none; a send made
+  // from the box hands it back as the box opens again, unless the caret went
+  // somewhere else meanwhile: to another field, or to a press or a menu in
+  // the box's own foot, such as the model chip's search.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (held || !refocus.current) return;
+    refocus.current = false;
+    const active = document.activeElement;
+    const dropped =
+      active === null ||
+      active === document.body ||
+      room.current?.contains(active) === true ||
+      (active instanceof HTMLButtonElement &&
+        active.type === "submit" &&
+        card.current?.contains(active) === true);
+    if (dropped) {
+      editor.current?.focus();
+    }
+  }, [held]);
+
   // The transcript's Reply lays its quote in where the caret stands, for as long as the box stands.
   useEffect(() => {
     if (replyDoor === undefined) return undefined;
@@ -404,7 +430,7 @@ export function AgentComposer({
     onOpen: openSkill,
   });
 
-  // An `@` picks a mention of the plan the box stands on, where it stands on a plan's page.
+  // An `@` picks a mention of the task the box stands on, where it stands on a task's page.
   const planMentions = usePlanMentions();
   // A Luke address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
@@ -454,7 +480,7 @@ export function AgentComposer({
   const handBack = (set: (open: boolean) => void) => (open: boolean) => {
     const more = foot.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
     const returning =
-      !open && (document.activeElement?.closest(".anchored-popover") ?? null) !== null;
+      !open && (document.activeElement?.closest(".luke-anchored-popover") ?? null) !== null;
     set(open);
     if (returning && more !== null && getComputedStyle(more).display !== "none") {
       queueMicrotask(() => more.focus());
@@ -522,6 +548,7 @@ export function AgentComposer({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
+      ref={card}
       className="agent-composer"
       data-status={status}
       data-dropping={dropping ? "" : undefined}
@@ -545,6 +572,7 @@ export function AgentComposer({
       <PromptInput
         onSubmit={() => {
           setRefusal(undefined);
+          refocus.current = card.current?.contains(document.activeElement) === true;
           composer.send();
         }}
       >

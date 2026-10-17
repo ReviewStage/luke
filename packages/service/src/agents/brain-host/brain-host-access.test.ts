@@ -449,13 +449,13 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
     Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR),
   );
 
-  // The opener who leaves the workspace leaves its plan's conversations with it.
+  // The opener who leaves the workspace leaves its task's conversations with it.
   await database.run(leaveWorkspace(started.workspaceId, userA));
   for (const conversationId of [task.conversationId, agent.conversationId, taskChild]) {
     assert.equal(await database.run(conversationReachableBy(userA, conversationId)), false);
   }
   assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
-  // A cleared plan conversation takes the workers' children delegated from it out of reach.
+  // A cleared task conversation takes the workers' children delegated from it out of reach.
   await database.run(
     Database.use((db) =>
       db

@@ -21,13 +21,13 @@ import { isSecretFile } from "./shown-file.js";
 import { reachTaskRepository, refused } from "./task-file.js";
 
 /**
- * task-tree.ts -- one folder of a plan's repository for the File tab's tree, listed from GitHub as it stands now.
+ * task-tree.ts -- one folder of a task's repository for the File tab's tree, listed from GitHub as it stands now.
  *
  * The tree beside a File tab browses the repository its file was read
  * from, a folder at a time as the developer opens one, so it is listed
- * exactly where and as the file is read (`task-file.ts`): the plan is read
- * under the account first, so a plan another account owns reads as no
- * plan, then the Luke GitHub App confirms the account reaches the plan's
+ * exactly where and as the file is read (`task-file.ts`): the task is read
+ * under the account first, so a task another account owns reads as no
+ * task, then the Luke GitHub App confirms the account reaches the task's
  * repository and mints a token for that one repository, used for the one
  * listing and going nowhere else; the listing is of the head of the
  * repository's default branch, and names it. A secret file is listed by
@@ -91,9 +91,9 @@ function insideSecret(path: string): boolean {
 }
 
 /**
- * The folder the request names, of the plan's repository as GitHub holds
+ * The folder the request names, of the task's repository as GitHub holds
  * it now, or why it is not listed; nothing where the account owns no such
- * plan.
+ * task.
  */
 export function readTaskTree(
   userId: string,

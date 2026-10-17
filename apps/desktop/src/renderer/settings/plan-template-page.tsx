@@ -8,7 +8,14 @@ import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wi
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { ERROR_STATE_PLACEMENT, ErrorState, ResetIcon } from "@luke/ui";
+import {
+  ConfirmDialog,
+  type DialogQuestion,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  ResetIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
@@ -20,7 +27,6 @@ import { PlanBody } from "../tasks/plan-body";
 import type { PlanEditDoor } from "../tasks/use-plan-editing";
 import { TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
@@ -38,7 +44,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  * template of its own. The reset asks first, since it replaces every word of
  * the account's, kept since only in the template's history, and waits for a
  * save already out so the default lands last. A quiet note under the
- * title, drawn as an archived plan's banner is, says what the template is
+ * title, drawn as an archived task's banner is, says what the template is
  * for.
  *
  * The template is the account's, kept on the service, so the page reads it
@@ -54,7 +60,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  * neither the words nor the rhythm of the typing.
  */
 
-/** The page's name, which the template is drawn under as a plan's title, and its versions too. */
+/** The page's name, which the template is drawn under as a task's title, and its versions too. */
 export const TEMPLATE_TITLE = "Plan template";
 
 /** What the page says. */
@@ -67,13 +73,13 @@ const PAGE_LINE = {
   RESET_FAILED: "The template could not be reset. Try again.",
 } as const;
 
-/** The id the template is drawn under as a plan's document, which names no plan of the account's. */
+/** The id the template is drawn under as a plan's document, which names no task of the account's. */
 export const TEMPLATE_DOCUMENT_ID = "plan-template";
 
 /** The workspace the template's document names: none, since the template is the account's own and stands in no workspace. */
 const TEMPLATE_WORKSPACE_ID = "plan-template";
 
-/** What the title line's button that opens the template's version history says, as a plan's menu item says it. */
+/** What the title line's button that opens the template's version history says, as a task's menu item says it. */
 const HISTORY_LABEL = "Version history";
 
 /** Where the page stands with the service's template. */
@@ -284,7 +290,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
 }
 
 /**
- * The note under the template's title, drawn as an archived plan's banner
+ * The note under the template's title, drawn as an archived task's banner
  * is: what the template is for. It is what a settings search for the
  * template lands on.
  */

@@ -40,7 +40,7 @@ import { useAutomations } from "./use-automations";
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
  *
- * It stands in the plan's place beside the sidebar, as Factory does, and
+ * It stands in the task's place beside the sidebar, as Factory does, and
  * its sidebar row is marked while it does. Who owns an automation is the
  * one thing the list must never leave in doubt, so the workspace's
  * automations stand first and the account's personal ones after, under a
@@ -378,7 +378,7 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
 }
 
 /**
- * The window's Automations pages, in the plan's place: the list, or one
+ * The window's Automations pages, in the task's place: the list, or one
  * automation's editor, or a new one's. The list is read once for all of
  * them, so an automation opened from it opens as it was listed, and an
  * edit is in the list the moment it lands.

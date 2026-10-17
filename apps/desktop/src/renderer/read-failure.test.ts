@@ -33,10 +33,10 @@ import { AgentChangesTab } from "./tasks/agent-changes-tab";
 
 /**
  * A read that did not land says so alike on every surface that reads: the
- * sidebar's plans, the Inbox's list, a side panel tab, and a Settings
+ * sidebar's tasks, the Inbox's list, a side panel tab, and a Settings
  * page's card each draw one alert, a sentence of the shape "The inbox
  * could not be read.", and one Retry, whose press reads again. Synthetic
- * plans and keys.
+ * tasks and keys.
  */
 
 const ignore = () => undefined;
@@ -212,7 +212,7 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
   assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
 });
 
-test("a side panel tab whose read failed says so alike, centred where its files would stand, and Retry reads them again", async () => {
+test("a side panel tab whose read failed says so alike, and Retry reads them again", async () => {
   let reads = 0;
   const readChanges = (): Promise<CodingAgentChangesAnswerView> => {
     reads += 1;

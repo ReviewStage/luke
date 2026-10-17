@@ -29,7 +29,7 @@ import { useMentionDrop, usePlanMentions } from "./plan-mentions";
 import type { OpenFile } from "./use-side-panel";
 
 /**
- * file-tab.tsx -- a File tab: one whole file of the open plan's repository, opened from a snippet Luke showed, its lines lit and scrolled into view.
+ * file-tab.tsx -- a File tab: one whole file of the open task's repository, opened from a snippet Luke showed, its lines lit and scrolled into view.
  *
  * The Code tab's cards hold the lines a snippet pointed at and a few around
  * them; opening a card's file draws the file whole here, numbered and
@@ -46,7 +46,7 @@ import type { OpenFile } from "./use-side-panel";
  * before its commit was recorded is read: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
  * one the service refuses, says so in the file's place, over the lines Luke
- * showed of it where the plan holds them. Over the first line of each
+ * showed of it where the task holds them. Over the first line of each
  * range Luke showed with a note stands his note on it (`file-note.tsx`),
  * on the file and on those lines alike. The tab draws no heading of its
  * own: the File view's bar over it names the file and offers what is done

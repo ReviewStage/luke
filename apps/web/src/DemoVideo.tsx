@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 /**
- * The hero: a recording of a real planning call, cut in Screen Studio. It
+ * The hero: a recording of a real call on a task, cut in Screen Studio. It
  * starts muted, as a browser only lets a page start a video that way, and
  * the player's own controls pause it, scrub it, and turn the sound on.
  * Under reduced motion it waits on its first frame for a press of play.

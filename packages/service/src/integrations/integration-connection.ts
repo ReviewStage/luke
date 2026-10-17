@@ -1,7 +1,7 @@
 /**
  * integration-connection.ts -- the one connection per integration every agent of Luke's is handed.
  *
- * The planning assistant, the coding agent, and each one's declared worker
+ * The brain, the coding agent, and each one's declared worker
  * are four eve agents, and each is handed this definition for every
  * integration a turn has on (`agent-runtime/connections.ts`), over its
  * provider and that agent's own ownership check, the root's or the
@@ -11,7 +11,7 @@
  * and no approval: a write runs the moment the model calls it, as the plan
  * decided. Its credential is the account's, read from Vercel Connect under
  * the user id the ownership check admitted, never the session's principal:
- * a spoken planning turn runs as the deployment acting for the account, and
+ * a spoken brain turn runs as the deployment acting for the account, and
  * eve's own user-scoped auth would refuse it before reading any token. So
  * the auth here is eve's plain `getToken` form, credentialed as the app, and
  * the account is chosen inside it. That form has no interactive half, so

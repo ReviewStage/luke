@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { useConfirmDialog } from "@luke/ui";
 import { forgetPictures } from "@luke/ui/picture-cache";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -14,7 +15,6 @@ import { lineWords } from "#testing/actor-line";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { MarkdownMessage } from "../markdown-message";
-import { useConfirmDialog } from "../settings/confirm-dialog";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { PlanBody } from "./plan-body";
 import { HISTORY_READ } from "./use-plan-history";
@@ -163,7 +163,7 @@ test("who last changed a picture's section is said in the viewer over the window
 
   assert.deepEqual(
     [...view.querySelectorAll(".plan-unit-byline")].map((line) => lineWords(line)),
-    ["Luke · 2h ago"],
+    ["Luke 2h"],
     "only the section with a heading carries its line in the words",
   );
 

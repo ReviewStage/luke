@@ -38,17 +38,20 @@ import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
 
 /**
- * mention-picker.tsx -- the list an `@` opens: the plan's repository's files and folders, the plan's sections, and the plan, grouped by kind, narrowed as the word is typed, the pick written as its mention.
+ * mention-picker.tsx -- the list an `@` opens: the task's repository's files and folders, the plan's sections, and the task, grouped by kind, narrowed as the word is typed, the pick written as its mention.
  *
  * The list opens the way the `/` list does (`skill-picker.tsx`), at the
  * word an editor reports (`ComposerTrigger`), the caret staying in the
  * editor throughout: ↑ and ↓ move the highlight, Enter or Tab write the
  * highlighted row as its mention, and Escape closes the list until the caret
- * leaves the word. Nothing typed after the `@`, it offers the plan and its
+ * leaves the word. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
  * as ⌘K scores them (cmdk's own filter), files and folders first, each
  * group in a fixed place so a later read never moves the rows above it.
- * The repository's paths are read once per plan, the first time an `@` is
+ * Once the words run past a space and nothing matches them, the list
+ * stands aside, since they are the developer's own words rather than a
+ * mention, and the keys go to the editor as they would anywhere.
+ * The repository's paths are read once per task, the first time an `@` is
  * typed, through the same listing ⌘K finds files with
  * (`ACT_KIND.TASKS_TREE`, the whole tree at the default branch).
  *
@@ -904,9 +907,9 @@ const NO_MEMBERS: readonly WorkspaceMember[] = [];
 export interface MentionSource {
   readonly taskId: string;
   readonly taskName: string;
-  /** The slug of the plan's workspace, which a mention of it is written under. */
+  /** The slug of the task's workspace, which a mention of it is written under. */
   readonly workspace: string;
-  /** The plan's repository, `owner/name`; null before one is chosen. */
+  /** The task's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
   /** The id of the workspace whose installation the repository is read through, where no plan names it. */
   readonly workspaceId?: string | undefined;
@@ -1029,10 +1032,10 @@ function kindsOf(
 }
 
 /**
- * The `@` list for an editor on a plan's page: its rows read from the
+ * The `@` list for an editor on a task's page: its rows read from the
  * plan's words as they stand and the repository's paths, placed by the word
  * in `room`, and a pick handed to `onChoose` as the mention's node; a list
- * that never opens where there is no plan to offer.
+ * that never opens where there is no task to offer.
  */
 export function useMentionPicker({
   source,
@@ -1083,7 +1086,7 @@ export function useMentionPicker({
     setNarrowing(undefined);
   }, [inWord]);
 
-  // The repository's paths are read the first time the list opens on the plan, and again once its repository changes.
+  // The repository's paths are read the first time the list opens on the task, and again once its repository changes.
   const read =
     paths?.planId === planId && paths.workspaceId === workspaceId && paths.repository === repository
       ? paths.paths
@@ -1192,6 +1195,8 @@ export function useMentionPicker({
           kinds,
         );
   const rows = groups.flatMap((group) => group.rows);
+  // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
+  const shown = open && (rows.length > 0 || !/\s/u.test(term.trim()));
   const held =
     highlight !== undefined &&
     trigger !== undefined &&
@@ -1235,7 +1240,7 @@ export function useMentionPicker({
   };
 
   const onKey = (event: KeyboardEvent): boolean => {
-    if (!open) return false;
+    if (!shown) return false;
     if (event.key === "Escape") {
       event.stopPropagation();
       setClosedAt(trigger.start);
@@ -1283,7 +1288,7 @@ export function useMentionPicker({
       : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
   };
   const menu =
-    !open || box === null || placed === undefined ? null : (
+    !shown || box === null || placed === undefined ? null : (
       <MentionMenu
         id={listId}
         crumb={

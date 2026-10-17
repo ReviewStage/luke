@@ -1,0 +1,113 @@
+/* auth-page.css -- one card centred in the window: the OAuth pages' raised
+   surface, its words centred over a body whose controls stretch to the
+   card's inner width. The page queries its own width rather than the
+   viewport's, so a card drawn in a narrow frame narrows its inset as it
+   would on a phone; a container query cannot read a custom property, so the
+   width it narrows under is a literal here. */
+
+@layer components {
+  .luke-auth-page {
+    container-type: inline-size;
+    display: grid;
+    place-items: center;
+    min-height: 100dvh;
+    padding: var(--luke-page-inset);
+    box-sizing: border-box;
+  }
+
+  .luke-auth-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 430px;
+    box-sizing: border-box;
+    padding: var(--luke-space-40) var(--luke-space-32);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-dialog-radius);
+    background: var(--luke-color-surface);
+    box-shadow: 0 24px 80px var(--luke-color-shadow-soft);
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  /* Under a phone's width the card gives its inset back to what it holds. */
+  @container (max-width: 400px) {
+    .luke-auth-card {
+      padding: var(--luke-space-32) var(--luke-space-20);
+    }
+  }
+
+  .luke-auth-mark {
+    display: inline-flex;
+    max-width: 100%;
+  }
+
+  .luke-auth-status {
+    margin: var(--luke-space-16) 0 0;
+    padding: var(--luke-space-2) var(--luke-space-12);
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-complete-tint);
+    color: var(--luke-color-complete);
+    font-family: var(--luke-font-mono);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-semibold);
+    letter-spacing: 0.2px;
+  }
+
+  .luke-auth-status[data-tone="attention"] {
+    background: var(--luke-color-attention-tint);
+    color: var(--luke-color-attention);
+  }
+
+  .luke-auth-title {
+    margin: var(--luke-space-16) 0 0;
+    font-size: var(--luke-type-title-size);
+    line-height: var(--luke-type-title-leading);
+    font-weight: var(--luke-weight-bold);
+  }
+
+  /* The card's first child opens it flush, whichever part that is. */
+  .luke-auth-card > :first-child {
+    margin-top: 0;
+  }
+
+  :is(.luke-auth-description, .luke-auth-footnote) {
+    margin: var(--luke-space-8) 0 0;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-auth-footnote {
+    margin-top: var(--luke-space-16);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* The body is as wide as the card's inside, and so is each thing in it,
+     so a provider's button fills its line and a form's fields stand on the
+     start edge as they do anywhere else. */
+  .luke-auth-body {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    gap: var(--luke-space-12);
+    margin-top: var(--luke-space-32);
+    text-align: start;
+  }
+
+  .luke-auth-error {
+    margin: var(--luke-space-16) 0 0;
+    color: var(--luke-color-attention);
+  }
+
+  /* Empty, it keeps its place in the tree, so its alert region is standing
+     when an error arrives, and gives back the room before it. */
+  .luke-auth-error:empty {
+    margin: 0;
+  }
+}

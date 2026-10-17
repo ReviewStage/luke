@@ -26,9 +26,9 @@ import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**
  * pull-request-people.test.ts -- an agent's Changes tab and its card say
- * who its pull request names as every actor is drawn: Luke's own bot as the
- * agent, a linked teammate as the member, anyone else as themself on
- * GitHub, a person's circle or an App's bot's square; each reviewer's face
+ * who its pull request names as every actor is drawn: a linked teammate as
+ * the member, anyone else as themself on GitHub, a person's circle or an
+ * App's bot's square, Luke's own App's bot among them; each reviewer's face
  * wears where they stand and hangs their card; the reviews that said
  * something fold under their count. Synthetic people throughout.
  */
@@ -52,7 +52,7 @@ const AGENT: CodingAgentSummary = {
   turnId: null,
 };
 
-const LUKE_BOT = { login: "luke[bot]", bot: true, luke: true };
+const LUKE_BOT = { login: "luke-agent[bot]", bot: true };
 const CHARLES_ON_GITHUB = { login: "charlespan", bot: false, userId: CHARLES.userId };
 const OCTOCAT = { login: "octocat", bot: false };
 const DEVIN = { login: "devin-ai-integration[bot]", bot: true };
@@ -63,6 +63,7 @@ const PEOPLE: CodingAgentChangesPeople = {
     { by: CHARLES_ON_GITHUB, state: REVIEW_STATE.APPROVED },
     { by: OCTOCAT, state: REVIEW_STATE.REQUESTED },
     { by: DEVIN, state: REVIEW_STATE.COMMENTED },
+    { by: LUKE_BOT, state: REVIEW_STATE.COMMENTED },
   ],
   commitAuthors: [LUKE_BOT, CHARLES_ON_GITHUB],
   comments: [
@@ -179,12 +180,14 @@ test("the Changes tab says who opened the pull request, its reviewers by where e
     tab.querySelector(".changes-people") ?? assert.fail("the people stand under the bar");
 
   const opener = strip.querySelector(".actor-ref") ?? assert.fail("who opened it is named");
-  assert.equal(
-    opener.textContent,
-    "Expiry job",
-    "Luke's own bot is the agent whose pull request it is",
+  assert.deepEqual(
+    [opener.querySelector(".actor-ref-name")?.textContent, opener.getAttribute("data-kind")],
+    ["luke-agent", "github"],
+    "Luke's own App's bot is an App's bot on GitHub, as any other is",
   );
-  assert.equal(opener.getAttribute("data-kind"), "agent");
+  hover(opener);
+  const opened = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
+  assert.match(opened?.textContent ?? "", /luke-agent.*GitHub app/u);
 
   const reviewers =
     strip.querySelector('[aria-label="Reviewers"]') ?? assert.fail("the reviewers stand");
@@ -200,10 +203,11 @@ test("the Changes tab says who opened the pull request, its reviewers by where e
       ["Charles Pan · Approved", "person", null, "approved"],
       ["octocat · Review requested", "github", null, "requested"],
       ["devin-ai-integration · Commented", "github", "true", "commented"],
+      ["luke-agent · Commented", "github", "true", "commented"],
     ],
   );
   hover(faces[1] ?? assert.fail("octocat's face"));
-  const card = document.querySelector('.tooltip-card [data-actor-card="github"]');
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
   assert.match(card?.textContent ?? "", /@octocat.*GitHub user.*Not in this workspace/u);
 
   const commits =
@@ -212,12 +216,12 @@ test("the Changes tab says who opened the pull request, its reviewers by where e
     [...commits.querySelectorAll(".actor-stack-face")].map((face) =>
       face.getAttribute("aria-label"),
     ),
-    ["Expiry job", "Charles Pan"],
+    ["luke-agent", "Charles Pan"],
   );
 });
 
-test("a pull request the agent opened as its developer names them and Luke among the commit authors, and one it opened as the App says why", async () => {
-  const strip = async (people: CodingAgentChangesPeople) => {
+test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
+  const opener = async (people: CodingAgentChangesPeople) => {
     const tab = await draw(
       createElement(AgentChangesTab, {
         agentId: AGENT.id,
@@ -227,48 +231,27 @@ test("a pull request the agent opened as its developer names them and Luke among
         tree: { open: false, onToggle: () => undefined },
       }),
     );
-    const found =
-      tab.querySelector(".changes-people") ?? assert.fail("the people stand under the bar");
-    const opener = found.querySelector(".actor-words") ?? assert.fail("who opened it is named");
-    const commits = [
-      ...found.querySelectorAll('[aria-label="Commit authors"] .actor-stack-face'),
-    ].map((face) => face.getAttribute("aria-label"));
+    const line = tab.querySelector(".changes-people .actor-words");
+    const named = [
+      line?.querySelector(".actor-ref-name")?.textContent,
+      /as the GitHub App/u.test(line?.textContent ?? ""),
+    ];
     act(() => root?.unmount());
     document.body.innerHTML = "";
-    return {
-      opener: opener.querySelector(".actor-ref-name")?.textContent,
-      line: opener.textContent ?? "",
-      commits,
-    };
+    return named;
   };
 
-  const developer = await strip({
-    author: CHARLES_ON_GITHUB,
-    writtenAs: CODING_AGENT_AUTHOR.DEVELOPER,
-    commitAuthors: [CHARLES_ON_GITHUB, LUKE_BOT],
-  });
-  const unlinked = await strip({
-    author: LUKE_BOT,
-    writtenAs: CODING_AGENT_AUTHOR.APP_UNLINKED,
-    commitAuthors: [LUKE_BOT],
-  });
-
-  assert.equal(developer.opener, "Charles Pan");
-  assert.doesNotMatch(developer.line, /as the GitHub App/u);
-  assert.deepEqual(developer.commits, ["Charles Pan", "Expiry job"]);
-  const lapsed = await strip({
-    author: LUKE_BOT,
-    writtenAs: CODING_AGENT_AUTHOR.DEVELOPER,
-    commitAuthors: [CHARLES_ON_GITHUB, LUKE_BOT],
-  });
-  assert.match(
-    lapsed.line,
-    /Expiry job as the GitHub App, since its starter's GitHub sign-in could not be used$/u,
-  );
-  assert.equal(unlinked.opener, "Expiry job");
-  assert.match(
-    unlinked.line,
-    /Expiry job as the GitHub App, since its starter has no GitHub linked$/u,
+  assert.deepEqual(
+    [
+      await opener({ author: CHARLES_ON_GITHUB, writtenAs: CODING_AGENT_AUTHOR.DEVELOPER }),
+      await opener({ author: LUKE_BOT, writtenAs: CODING_AGENT_AUTHOR.APP_UNLINKED }),
+      await opener({ author: LUKE_BOT, writtenAs: CODING_AGENT_AUTHOR.DEVELOPER }),
+    ],
+    [
+      ["Charles Pan", false],
+      ["luke-agent", false],
+      ["luke-agent", false],
+    ],
   );
 });
 
@@ -291,8 +274,8 @@ test("a Changes card says who opened the pull request and its reviewers once its
   document.body.innerHTML = "";
 
   const read = await card(PEOPLE);
-  assert.match(read.textContent ?? "", /Opened by.*Expiry job/u);
-  assert.equal(read.querySelectorAll('[aria-label="Reviewers"] .actor-stack-face').length, 3);
+  assert.match(read.textContent ?? "", /Opened by luke-agent/u);
+  assert.equal(read.querySelectorAll('[aria-label="Reviewers"] .actor-stack-face').length, 4);
 });
 
 test("a pull request that changes no file still says who it names, over the line saying it changes nothing", async () => {
@@ -343,7 +326,7 @@ test("reviewers past the pile's last face are counted, and the count hangs a car
   assert.equal(more.getAttribute("aria-label"), "reviewer5 · Changes requested");
   hover(more);
   const rest = [
-    ...document.querySelectorAll('.tooltip-card [data-actor-card="more"] .actor-more-row'),
+    ...document.querySelectorAll('.luke-tooltip-card [data-actor-card="more"] .actor-more-row'),
   ];
   assert.deepEqual(
     rest.map((row) => [
@@ -372,7 +355,9 @@ test("the count's card naming many reviewers scrolls within itself and stands, a
     card.querySelector('[aria-label="Reviewers"] .actor-stack-more') ??
       assert.fail("the rest are counted"),
   );
-  const list = document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-list');
+  const list = document.querySelector(
+    '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
+  );
   assert.equal(list?.children.length, 45);
   act(() => {
     list?.dispatchEvent(new Event("scroll"));
@@ -385,7 +370,7 @@ test("the count's card naming many reviewers scrolls within itself and stands, a
     document.dispatchEvent(new Event("scroll"));
   });
   assert.equal(
-    document.querySelector('.tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
+    document.querySelector('.luke-tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
     null,
     "the window scrolling takes it down",
   );
@@ -416,14 +401,18 @@ test("the count's card hung from a Changes card that itself hangs over its tab s
   );
   hover(tab.querySelector("button") ?? assert.fail("the tab stands"));
   hover(
-    document.querySelector('.tooltip-card [aria-label="Reviewers"] .actor-stack-more') ??
+    document.querySelector('.luke-tooltip-card [aria-label="Reviewers"] .actor-stack-more') ??
       assert.fail("the Changes card counts the rest"),
   );
-  const list = document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-list');
+  const list = document.querySelector(
+    '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
+  );
   assert.ok(list, "the count's card hangs over the Changes card");
   act(() => {
     list.dispatchEvent(new Event("scroll"));
   });
-  assert.ok(document.querySelector('.tooltip-card:not([data-leaving]) [data-actor-card="more"]'));
-  assert.ok(document.querySelector(".tooltip-card:not([data-leaving]) [data-tab-card]"));
+  assert.ok(
+    document.querySelector('.luke-tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
+  );
+  assert.ok(document.querySelector(".luke-tooltip-card:not([data-leaving]) [data-tab-card]"));
 });

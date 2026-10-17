@@ -1,13 +1,13 @@
 /**
  * closed-tabs.ts -- the tabs closed in this window, the latest last, which ⇧⌘T opens again one at a time, as a browser's Reopen Closed Tab does.
  *
- * Each close of a tab of either strip, the plan's column's or the side
- * panel's, is kept as what it was: the plan it stood on, the strip, the tab,
+ * Each close of a tab of either strip, the task's column's or the side
+ * panel's, is kept as what it was: the task it stood on, the strip, the tab,
  * its place there, and for a file's tab the file, lines, and history it
  * showed. A reopen takes the latest and opens it through the strip's own
  * open, so it stands where it stood showing what it showed, and the one
  * closed before it is next. A tab its strip would not draw again on the
- * open plan, its agent archived or its page gone since, is passed over for
+ * open task, its agent archived or its page gone since, is passed over for
  * the one before it, so every press opens a tab; every other opens as its
  * strip opens any such tab, a file gone since on the file tab's own word
  * for it. The list is a moment's, kept nowhere, and held to a bound.
@@ -25,7 +25,7 @@ export const CLOSED_TAB_STRIP = {
   SIDE_PANEL: "side-panel",
 } as const;
 
-/** A tab of the plan's column as it stood when closed: `at` its place among the tabs after the plan's. */
+/** A tab of the task's column as it stood when closed: `at` its place among the tabs after the task's. */
 interface ClosedColumnTab {
   readonly strip: typeof CLOSED_TAB_STRIP.COLUMN;
   readonly task: string;
@@ -53,9 +53,9 @@ export function withClosedTab(was: readonly ClosedTab[], closed: ClosedTab): rea
 }
 
 /**
- * The closed tabs without those latest closed on `plan`, the open plan, that
+ * The closed tabs without those latest closed on `task`, the open task, that
  * its strips would not draw again (`draws`), so the latest left is the one a
- * reopen opens. A tab of another plan stops the walk, since what that plan
+ * reopen opens. A tab of another task stops the walk, since what that task
  * draws is read only once it opens.
  */
 export function withUndrawnPassed(

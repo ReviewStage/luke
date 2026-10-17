@@ -3,7 +3,7 @@
  *
  * A toast answers an act whose control is gone by the time it lands: a copy
  * made from a menu that closed with the press, a note sent from a dialog
- * that closed with the send, a plan archived from a menu, a change refused
+ * that closed with the send, a task archived from a menu, a change refused
  * where nothing beside it is left to say so, a coding agent's turn that
  * ended while the developer was looking elsewhere in the window, or an
  * inbox item an agent posted while they were. Each is a
@@ -13,12 +13,18 @@
  * sight; one more pushes the oldest out, unless it waits, as news that
  * arrives in runs does, for one of them to leave. A toast saying what
  * one standing already says takes that one's place rather than stacking a
- * twin above it. The stack stands clear of whatever docks at the window's
- * foot under it, a plan's call bar or an agent's composer, so a toast never
- * covers End call or Send.
+ * twin above it. The stack always stands in the window's bottom-right
+ * corner, over whatever docks at its foot, a plan's call bar or an agent's
+ * composer, for no longer than its hold; one with an action there can be
+ * dismissed to reach End call or Send under it.
  *
  * Each stands for its own hold, paused while the pointer is over it or focus
- * is in it, or, where it persists, until it is dismissed. One with an action
+ * is in it, and leaves by itself once it runs out, the news an agent or an
+ * automation sends among them, since what it reports stands elsewhere too:
+ * an agent's unseen dot, a plan's Inbox, the Automations mark. Only one
+ * whose action is the one way back to something the developer would
+ * otherwise lose, such as words a save left unsaved, persists until it is
+ * dismissed. One with an action
  * may always be dismissed before then, since that is how the developer
  * reaches what it stands over: by its action, by the × it shows under the
  * pointer or focus, by Escape while focus is in it, or by whoever showed it
@@ -60,10 +66,17 @@ const ALERT_TONES: ReadonlySet<ToastTone> = new Set([TOAST_TONE.FAILED]);
 
 type ToastTone = (typeof TOAST_TONE)[keyof typeof TOAST_TONE];
 
-/** How long a toast with no action stands, by what it reports: a change carried, or one refused, which takes longer to read and to act on. */
+/**
+ * How long a toast stands, by what it reports: a change carried, one
+ * refused, which takes longer to read and to act on, or news an agent or an
+ * automation sent while the developer was looking elsewhere in the window,
+ * which has the longest, since it arrives unbidden and carries a View to
+ * reach for.
+ */
 export const TOAST_HOLD = {
   DONE: Duration.seconds(3),
   FAILED: Duration.seconds(6),
+  NEWS: Duration.seconds(8),
 } as const;
 
 /** What a toast's action says when it takes back what the toast reports. */
@@ -78,8 +91,10 @@ interface ToastAction {
 /**
  * A toast to show: its words, an optional second line under them, and its
  * tone, and either how long it stands before it leaves or the action it
- * carries, which sets its own hold or, where it `persists`, stands until it
- * is dismissed. One that `waits` stands only once fewer than three do,
+ * carries, with its own hold, the action's where it names none, or, where
+ * it `persists`, none at all, standing until it is dismissed: kept for an
+ * action that is the one way back to something the developer would
+ * otherwise lose. One that `waits` stands only once fewer than three do,
  * rather than pushing the oldest out, for news that arrives in runs and
  * each piece of which is the developer's to act on. Its `subject` is what it
  * is about, by which whoever showed it may withdraw it once it is stale.
@@ -92,7 +107,8 @@ export type ToastNotice = {
   readonly subject?: string;
 } & (
   | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
-  | { readonly action: ToastAction; readonly hold?: never; readonly persists?: boolean }
+  | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
+  | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
 );
 
 /** How long a toast carrying an action stands while nobody points at it: long enough to reach for the action. */

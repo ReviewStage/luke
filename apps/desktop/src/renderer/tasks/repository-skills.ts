@@ -3,12 +3,12 @@ import type { TasksSkillsAnswer } from "@luke/features/tasks-view";
 import type { SkillSource, SkillsRead } from "./skill-picker";
 
 /**
- * repository-skills.ts -- the skills of the open plan's repository a `/` in an agent's box offers, read once for the plan.
+ * repository-skills.ts -- the skills of the open task's repository a `/` in an agent's box offers, read once for the task.
  *
  * The skills are read the first time a box asks for them, and the read is
  * kept, the one in flight shared by every box that asks meanwhile, for as
- * long as the plan stays open on the same repository, so opening the list
- * again reads nothing; opening the plan again reads the repository as
+ * long as the task stays open on the same repository, so opening the list
+ * again reads nothing; opening the task again reads the repository as
  * GitHub holds it then. A read that did not land or that the service
  * refused is not kept, so the next `/` asks again, and says why in the
  * list's own words.

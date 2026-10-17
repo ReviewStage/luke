@@ -6,9 +6,9 @@ import { Shortcut } from "../shortcut";
 import { useDisclosure } from "../use-disclosure";
 
 /**
- * action-menu.tsx -- the window's own drop-down menu: a plan's actions, a repository's, a side panel tab's, and the account's.
+ * action-menu.tsx -- the window's own drop-down menu: a task's actions, a repository's, a side panel tab's, and the account's.
  *
- * The one menu the plan's ⋯ and right-click, a repository header's ⋯ and
+ * The one menu the task's ⋯ and right-click, a repository header's ⋯ and
  * right-click, a tab's right-click, and the sidebar's account row draw, whose
  * items the empty side panel also lists as buttons of their own. It is
  * drawn here rather than asked of the system so that every door draws it
@@ -158,6 +158,11 @@ export function atPointer(event: React.MouseEvent<HTMLElement>): MenuPlacement {
   return { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
 }
 
+/** Whether a key opens what holds the keyboard's own menu, as a right-click would: the menu key, or ⇧F10. */
+export function opensMenu(event: React.KeyboardEvent): boolean {
+  return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+}
+
 /**
  * One control's menu: where it hangs while it stands open, the door that
  * opens it from an element, which takes focus back when it closes by key,
@@ -166,13 +171,15 @@ export function atPointer(event: React.MouseEvent<HTMLElement>): MenuPlacement {
  * stands on, so it starts leaving in the render that finds the surface off
  * screen.
  *
- * It also hands out the two doors every owner draws, so each opens its menu
+ * It also hands out the doors every owner draws, so each opens its menu
  * the same way: `trigger`, the props of the button the menu drops from,
  * whose press opens it where `place` says (under the button, right edges
  * level, unless told otherwise) and closes it again while it stands; and
  * `contextMenu`, a right-click's handler that hangs it at the pointer and
  * hands focus back to `opener` where one is given, the ⋯ or the row the
- * keyboard reaches the menu from, else to what was clicked.
+ * keyboard reaches the menu from, else to what was clicked; and `keyMenu`,
+ * the same row's key handler, which hangs it under the row from its start
+ * on the menu key or ⇧F10, for a row with no ⋯ to reach it by.
  */
 export function useActionMenu(shown: boolean) {
   const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
@@ -204,7 +211,12 @@ export function useActionMenu(shown: boolean) {
       event.preventDefault();
       show(atPointer(event), opener?.current ?? event.currentTarget);
     };
-  return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu };
+  const keyMenu = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!opensMenu(event)) return;
+    event.preventDefault();
+    show(dropBelowStart(event.currentTarget), event.currentTarget);
+  };
+  return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu, keyMenu };
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -537,7 +549,7 @@ export function ActionMenu({
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // The menu is the nearest open layer, so Escape closes it alone and
-    // leaves the plan behind it open.
+    // leaves the task behind it open.
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -558,6 +570,20 @@ export function ActionMenu({
     onClose(true);
     action.onSelect();
   };
+  // Note that an open submenu draws its entry from this render's groups, because its owner may redraw them while it stands.
+  const submenuNow =
+    submenu === undefined
+      ? undefined
+      : {
+          ...submenu,
+          entry:
+            groups
+              .flat()
+              .find(
+                (entry): entry is MenuSubmenu =>
+                  "items" in entry && entry.label === submenu.entry.label,
+              ) ?? submenu.entry,
+        };
   // Resting on another of the menu's own items closes the submenu, as a
   // system menu's does; resting on the submenu's items keeps it. Note that
   // the submenu is read as it stands now rather than as this render drew it,
@@ -623,7 +649,7 @@ export function ActionMenu({
         : createPortal(
             <Submenu
               key={submenu.entry.label}
-              open={submenu}
+              open={submenuNow ?? submenu}
               layer={layerOf(opener)}
               surface={submenuElement}
               leaving={leaving}

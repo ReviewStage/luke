@@ -27,6 +27,7 @@ import {
   FolderIcon,
   HashIcon,
   InboxIcon,
+  ListTodoIcon,
   MessageSquareIcon,
   ZapIcon,
 } from "lucide-react";
@@ -37,7 +38,6 @@ import type { LinkDrawer } from "../markdown-message";
 import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
-import { LinesChanged } from "./agent-published";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -52,6 +52,7 @@ import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { IssueMark } from "./issue-mark";
 import { MentionedAgentCard } from "./mentioned-agent-card";
+import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes";
 import { PullRequestMark } from "./pull-request-mark";
 import { ServerCard } from "./server-card";
 import { AgentMark } from "./tab-look";
@@ -67,7 +68,7 @@ import { useOpenLink } from "./use-open-link";
  * label starting with `@`, and wherever words are drawn, the link is drawn
  * as this chip: a pill on the words' line, the kind's glyph and the name the
  * mention was written with, cut to the chip's width. A press opens it: a
- * section of a plan, that plan scrolled to the section; a plan, the plan
+ * section of a task, that task scrolled to the section; a task, the task
  * at its top; a file, its tab, through the side panel's one door for a file
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
@@ -82,7 +83,8 @@ import { useOpenLink } from "./use-open-link";
  * and a bare one is called by its key and title, as
  * the workspace's own Linear or GitHub App answers them on the service
  * (`use-link-standing.ts`); its card then says its key and state, and a
- * pull request's the lines it adds and removes, in its address's place,
+ * pull request's its size, who opened it and when, its branches, labels,
+ * and counts (`pull-request-card-notes.tsx`), in its address's place,
  * which it says only while its provider has answered nothing. A page an
  * agent showed on a plan wears its tab's glyph, and one of a plan's coding agents its harness's
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
@@ -106,12 +108,12 @@ import { useOpenLink } from "./use-open-link";
  * A section is known by its heading's anchor, so a section of the plan
  * drawn here whose anchor no heading of the plan spells any longer is gone:
  * its chip keeps the name it was written with, struck through, its card
- * says it is no longer in the plan, and a press opens the plan at its top.
- * A section of another plan is drawn as found, since what that plan holds
+ * says it is no longer in the plan, and a press opens the task at its top.
+ * A section of another task is drawn as found, since what that task holds
  * is not at hand.
  *
  * Nothing the mention names rides on the chip's element: no attribute
- * carries its target, its plan, its heading, or its path, because only the
+ * carries its target, its task, its heading, or its path, because only the
  * attributes that carry words are masked when the panel is recorded
  * (`../session-replay.ts`), and a `data-` attribute is not one of them.
  * The chip's words are a text node, which the recording masks.
@@ -212,7 +214,7 @@ function pressOf(
     case MENTION_KIND.TASK:
       return () => doors.onOpenTask(mention);
     case MENTION_KIND.SECTION:
-      // A gone section opens the plan it was in, at its top.
+      // A gone section opens the task it was in, at its top.
       return () =>
         doors.onOpenTask(
           state === MENTION_STATE.FOUND
@@ -313,7 +315,7 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
   return `${span} at ${shortCommit(lines.commit)}`;
 }
 
-/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's where the place has one, or its glyph and whole name, a provider's page's key and state with a pull request's lines, and why it is gone where it is. */
+/** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's where the place has one, or its glyph and whole name, a provider's page's key and state with what a pull request's notes say, and why it is gone where it is. */
 function MentionCard({
   mention,
   target,
@@ -361,7 +363,6 @@ function MentionCard({
   if (tabCard !== undefined) return tabCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
   const note = noteOf(mention, state, doors.taskId, standing);
-  const lines = standing?.pullRequest?.lines;
   const card = (
     <HoverCard data-mention-card="">
       <CardHead
@@ -372,18 +373,26 @@ function MentionCard({
       {mention.kind === MENTION_KIND.FOLDER ? (
         <OptionalNote words={branchNote(repository)} />
       ) : null}
-      {standing === undefined ? null : (
-        <CardNote>
-          {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
-          {lines === undefined ? null : (
-            <>
-              {" · "}
-              <LinesChanged additions={lines.additions} deletions={lines.deletions} />
-            </>
+      {standing === undefined ? null : standing.pullRequest === undefined ? (
+        <>
+          <CardNote>
+            {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
+          </CardNote>
+          {standing.opener === undefined ? (
+            <OptionalNote words={standing.byline} />
+          ) : (
+            <OpenedNote opener={standing.opener} />
           )}
-        </CardNote>
+        </>
+      ) : (
+        <PullRequestCardNotes
+          heading={
+            standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`
+          }
+          pullRequest={standing.pullRequest}
+          opener={standing.opener}
+        />
       )}
-      <OptionalNote words={standing?.byline} />
       {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
@@ -569,6 +578,8 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
       return <GearIcon />;
     case LINK_PLACE.PERSON:
       return <UserIcon />;
+    case LINK_PLACE.ISSUE:
+      return <ListTodoIcon aria-hidden="true" />;
   }
 }
 

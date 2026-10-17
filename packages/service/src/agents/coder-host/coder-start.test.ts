@@ -23,9 +23,9 @@ import {
 import { type StartAsk, startCodingAgent } from "./start.js";
 
 /**
- * coder-start.test.ts -- an agent started in a workspace with no plan, as an automation's run starts one.
+ * coder-start.test.ts -- an agent started in a workspace with no task, as an automation's run starts one.
  *
- * The Start opens one agent on no plan, in the workspace named, on the
+ * The Start opens one agent on no task, in the workspace named, on the
  * repository named, handed the task, and a retry under its key is that
  * agent and opens nothing again; a member who did not make the workspace
  * starts one as well, an account outside it starts nothing, and a
@@ -88,7 +88,7 @@ const openConnectedWorkspace = Effect.gen(function* () {
   return { owner, workspaceId };
 });
 
-/** A Start in the workspace with no plan, under a fresh key unless one is given. */
+/** A Start in the workspace with no task, under a fresh key unless one is given. */
 function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: string): StartAsk {
   return {
     taskId: null,

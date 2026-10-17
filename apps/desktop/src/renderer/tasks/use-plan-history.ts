@@ -15,7 +15,7 @@ import { revisionOfSave } from "./plan-history-model";
  * developer chooses another, and a save landing meanwhile moves the view on
  * to the new newest; choosing one reads its content and the content before
  * it, and the version history draws what that revision changed until it is
- * left or another plan opens, and opens again on the newest. Opened from a
+ * left or another task opens, and opens again on the newest. Opened from a
  * section's "Edited by", it opens instead on the revision that made the
  * section's last save, reading older pages until one shows it, and on the
  * newest where none can be read. Gone back to, it opens where it stood when
@@ -114,14 +114,14 @@ const RESTORE_REFUSED: ActionResult = {
   reason: "The version could not be restored. Try again.",
 };
 
-/** A list read for one plan. */
+/** A list read for one task. */
 interface HeldList {
   readonly taskId: string;
   readonly list: HistoryList;
 }
 
 /**
- * A version chosen on one plan: its revision, none while the newest is
+ * A version chosen on one task: its revision, none while the newest is
  * followed, so a save landing moves the view onto it; the moment of the save
  * it was opened to find, until the pages read show which revision made it;
  * its content as read and the revision that read was for; how many times
@@ -138,7 +138,7 @@ interface HeldVersion {
   readonly asked: number;
 }
 
-/** The version history opened on a plan: following the newest, seeking a save's revision, or where it stood before, nothing read yet. */
+/** The version history opened on a task: following the newest, seeking a save's revision, or where it stood before, nothing read yet. */
 function openedOn(
   taskId: string,
   seek: number | undefined,
@@ -188,7 +188,7 @@ function versionOf(answer: TasksRevisionAnswer): VersionRead {
 }
 
 /**
- * The open plan's history. `planId` is the open plan, none while no plan is
+ * The open plan's history. `planId` is the open task, none while no task is
  * drawn; `editedAt` its last edit, which reads what is read again; `name`
  * its name, under which a version is formatted, so a rename reads the
  * version drawn again; `shown` whether the plan's version history is on
@@ -216,7 +216,7 @@ export function usePlanHistory(input: {
   const [version, setVersion] = useState<HeldVersion | undefined>(undefined);
   const [retries, setRetries] = useState(0);
   // Note that every read counts itself, because an answer landing after a
-  // newer read was made, or after another plan opened, is not the list's.
+  // newer read was made, or after another task opened, is not the list's.
   const listReads = useRef(0);
   const versionReads = useRef(0);
   // Note that the source is read where it is called rather than named by the
@@ -226,7 +226,7 @@ export function usePlanHistory(input: {
   latest.current = source;
   const reading = shown && taskId !== undefined;
 
-  // A version stands while the version history does, on its own plan.
+  // A version stands while the version history does, on its own task.
   const chosen = reading && version?.taskId === taskId ? version : undefined;
   if (version !== undefined && chosen === undefined) setVersion(undefined);
   const held = list !== undefined && list.taskId === taskId ? list.list : undefined;
@@ -237,7 +237,7 @@ export function usePlanHistory(input: {
     setVersion(openedOn(taskId, seek, returnTo));
   }
   // A save sought is its revision once the pages read show it, kept as chosen
-  // from then on. Note that it is sought only in a list as new as the plan's
+  // from then on. Note that it is sought only in a list as new as the task's
   // last edit, because a list kept from an earlier visit may lack the
   // revision the save made since, and would find the one before it.
   const current =
@@ -377,7 +377,7 @@ export function usePlanHistory(input: {
   // A save or a version gone back to that no page read so far shows is
   // sought on the next older page, and one whose page could not be read gives
   // way to the plan as it stands, unless the view has since been opened on
-  // another plan, another save, or another version.
+  // another task, another save, or another version.
   useEffect(() => {
     if (readBefore === undefined || taskId === undefined) return;
     onLoadEarlier().then((landed) => {

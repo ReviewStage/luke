@@ -4,7 +4,7 @@ import type { FolderEntry, FolderListing } from "../file-tree/contract";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 
 /**
- * folder-listings.ts -- the folders of a plan's repository a File tab's tree and breadcrumbs have listed, so a folder is listed once however many of them ask.
+ * folder-listings.ts -- the folders of a task's repository a File tab's tree and breadcrumbs have listed, so a folder is listed once however many of them ask.
  *
  * A folder is listed once and the listing kept, the one in flight shared by
  * whoever asks meanwhile; a listing that did not land, or that the service

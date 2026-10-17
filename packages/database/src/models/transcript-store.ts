@@ -11,7 +11,7 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { user } from "../schemas/auth.js";
-import { task } from "../schemas/plan.js";
+import { task } from "../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../voice-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -20,21 +20,21 @@ import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask } from "./workspace-store.js";
 
 /**
- * transcript-store.ts -- what was said on a plan's voice calls, read back for the Plans tab.
+ * transcript-store.ts -- what was said on a task's voice calls, read back for the Tasks tab.
  *
  * The voice writer keeps each call's words as timed fragments
- * (`@luke/database/models/voice-writer`); this reads the newest of them for one plan and
+ * (`@luke/database/models/voice-writer`); this reads the newest of them for one task and
  * groups each call's through the ledger the live captions keep, so a call
  * reads back in the lines its captions drew, each line one `UIMessage`
  * whose id is its place on the call and whose metadata names the rows the
- * voice wrote for it in the plan's conversation, found by its call, its
+ * voice wrote for it in the task's conversation, found by its call, its
  * speaker, and where on the call their words began. Beside its words, each call says what
  * its session row recorded of it: when and why it ended, its metered
- * seconds, and its model by the catalog's id (`catalogIdOf`), each only where the row holds it. The plan is read
- * under the account's membership of its workspace, so a plan of a workspace
- * the account is not in reads as no plan, exactly as in `task-store.ts`;
- * past that gate a shared plan's transcript is every member's calls about
- * it, so the calls are gathered by the plan alone. Nothing is written here.
+ * seconds, and its model by the catalog's id (`catalogIdOf`), each only where the row holds it. The task is read
+ * under the account's membership of its workspace, so a task of a workspace
+ * the account is not in reads as no task, exactly as in `task-store.ts`;
+ * past that gate a shared task's transcript is every member's calls about
+ * it, so the calls are gathered by the task alone. Nothing is written here.
  */
 
 const SPEAKER_OF_ROLE = {
@@ -68,7 +68,7 @@ const SegmentRowSchema = Schema.Struct({
 type SegmentRow = typeof SegmentRowSchema.Type;
 
 /**
- * The newest fragments of every member's calls about the plan, newest first:
+ * The newest fragments of every member's calls about the task, newest first:
  * the call by its start, then the fragment by its place. One more than the
  * bound is asked for, so the read can tell whether older words stand.
  */
@@ -215,7 +215,7 @@ function transcriptOf(
   };
 }
 
-/** The rows the voice wrote for the calls named, by call; none where the plan has no conversation yet. */
+/** The rows the voice wrote for the calls named, by call; none where the task has no conversation yet. */
 function spokenRowsOf(
   userId: string,
   conversationId: string | null,
@@ -230,7 +230,7 @@ function spokenRowsOf(
   });
 }
 
-/** What was said on the plan's calls, oldest call first; nothing where the account reaches no such plan. */
+/** What was said on the task's calls, oldest call first; nothing where the account reaches no such task. */
 export function readTranscript(
   userId: string,
   taskId: string,
