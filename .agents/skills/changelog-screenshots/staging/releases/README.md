@@ -42,12 +42,17 @@ adjusting, and capture with the same profile, zoom, and crop.
 | 0.16.0 | `v0.16.0` | `links.png` | `shot-links` | 2 | `580,40,760,507` |
 | 0.16.0 | `v0.16.0` | `agents-that-start-agents.png` | `shot-agents-start` | 2 | `395,350,750,500` |
 | 0.16.0 | `v0.16.0` | `luke-at-any-width.png` | `shot-width` | 1 | `1060,-60,600,1120` |
+| 0.17.0 | `v0.17.0` (`3489acc5`) | `pull-request-tab.png` | `shot-pull-request-tab` | 1 | `690,-60,970,1120` |
+| 0.17.0 | `v0.17.0` (`3489acc5`) | `cards-on-every-chip.png` | `shot-chip-card` | 2 | `395,120,760,507` |
+| 0.17.0 | `v0.17.0` (`3489acc5`) | `issues.png` | `shot-issues` | 1 | whole window |
 
 0.14.0 was shot from `2ec91a61`, the head of its version pull request (#2871) before its pictures landed; `v0.14.0.patch` carries 0.13.0's module onto it, with 0.14.0's five shots beside the earlier ones.
 
 0.15.0 was shot from its tag; `v0.15.0.patch` carries 0.14.0's module onto it, with `team-world.ts` (who created each task and started each agent), `inbox-world.ts` (0.13.0's Inbox items), and `relay-pictures.ts` (Relay mockups rendered with headless Chromium) shared by its five shots.
 
 0.16.0 renamed plans to tasks in the wire, the host's state, and the view; `v0.16.0.patch` carries the module with those names, and hooks `use-link-standing.ts` and `use-known-names.ts` so link chips read the shot's own workspaces.
+
+0.17.0 was shot from its tag, which was moved after the version commit (`59e77c5f`) to `3489acc5`; `v0.17.0.patch` carries the module onto 0.17.0's `tasks/` paths (`TasksControl` aliased as `PlansControl`). Its chip card is held open by dispatching `pointerover` on the chip whenever the card is not drawn.
 
 0.12.0 was shot from `6d47d20f`, the head of its version pull request (#2421), before the tag existed; `v0.12.0` itself is `0dec8cda`.
 

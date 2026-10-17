@@ -81,6 +81,8 @@ request reaches the agent with what it says.
 [#3233](https://github.com/ReviewStage/luke/pull/3233),
 [#3239](https://github.com/ReviewStage/luke/pull/3239))
 
+![#214's Pull request tab in a wide side panel on its Conversation: open and ready to merge, Dana's approving review with her thread on src/members/invite.ts previewed with its diff and your reply, and Vercel's bot comment with its badge.](apps/web/public/changelog/0.17.0/pull-request-tab.png)
+
 ### Cards on every chip
 
 Every chip shows a card of what it names when you point at it. An agent's
@@ -98,6 +100,8 @@ issue's card names its assignee.
 [#3191](https://github.com/ReviewStage/luke/pull/3191),
 [#3234](https://github.com/ReviewStage/luke/pull/3234))
 
+![A coding agent's closing words with its relay#214 chip's card open: Open, +412 −38 in 9 files, opened by dastratakos 31 minutes ago, main ← luke/teammate-invitations, three labels, and its comment and commit counts.](apps/web/public/changelog/0.17.0/cards-on-every-chip.png)
+
 ### Issues
 
 Turn on Settings › Experimental › Issues to track your workspace's issues in
@@ -114,6 +118,8 @@ Markdown description in place.
 [#3168](https://github.com/ReviewStage/luke/pull/3168),
 [#3173](https://github.com/ReviewStage/luke/pull/3173),
 [#3187](https://github.com/ReviewStage/luke/pull/3187))
+
+![The Issues page as a board beside the sidebar: acme's issues under Backlog, Todo, In progress, Done, and Canceled, each with its key, priority, and age.](apps/web/public/changelog/0.17.0/issues.png)
 
 ### Improvements
 
