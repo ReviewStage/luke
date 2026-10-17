@@ -3,7 +3,7 @@ import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
+import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, IconButton, useMenu } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -113,14 +113,7 @@ function AgentPageActions({
   return (
     <>
       <Tooltip label={ACTIONS_LABEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={ACTIONS_LABEL}
-          {...menu.trigger()}
-        >
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
