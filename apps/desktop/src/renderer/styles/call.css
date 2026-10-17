@@ -26,17 +26,17 @@ html.call-window #root {
   display: flex;
   box-sizing: border-box;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--hairline-strong);
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 12px;
-  background: var(--surface-popover);
+  background: var(--luke-color-overlay);
   box-shadow:
-    0 1px 2px var(--shadow-soft),
-    0 6px 18px var(--shadow);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 18px;
+    0 1px 2px var(--luke-color-shadow-soft),
+    0 6px 18px var(--luke-color-shadow);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
   animation:
     call-card-fade var(--duration-quick) var(--motion-exit),
     call-card-rise var(--duration-fast) var(--spring-fast);
@@ -55,20 +55,20 @@ html.call-window #root {
 
 @keyframes call-card-rise {
   from {
-    transform: translateY(var(--space-8));
+    transform: translateY(var(--luke-space-8));
   }
 }
 
 @keyframes call-card-leave {
   to {
     opacity: 0;
-    transform: translateY(var(--space-8));
+    transform: translateY(var(--luke-space-8));
   }
 }
 
 /* Above the account row, edge to edge with the rows' own fills. */
 .call-card[data-surface="sidebar"] {
-  margin-bottom: var(--space-8);
+  margin-bottom: var(--luke-space-8);
 }
 
 /* Where the sidebar's card would stand, as far in from the corner as the
@@ -83,18 +83,18 @@ html.call-window #root {
 .call-card[data-surface="floating"] {
   position: fixed;
   z-index: var(--z-toast);
-  bottom: var(--space-16);
-  left: var(--space-16);
+  bottom: var(--luke-space-16);
+  left: var(--luke-space-16);
   width: calc(var(--sidebar-width-default) - 2 * var(--row-inset));
   translate: 0
     calc(
       -1 *
       min(
-        max(0px, var(--column-dock, 0px) + var(--space-8) - var(--space-16)),
+        max(0px, var(--column-dock, 0px) + var(--luke-space-8) - var(--luke-space-16)),
         100vh -
         var(--floating-card, 0px) -
         2 *
-        var(--space-16)
+        var(--luke-space-16)
       )
     );
   transition: translate var(--duration-fast) var(--spring-fast);
@@ -105,7 +105,7 @@ html.call-window #root {
 .desktop-shell:has(> .call-card[data-surface="floating"])
   :is(.desktop-agent, .side-panel[data-full-screen="true"] .side-panel-content)
   [role="log"] {
-  padding-bottom: calc(var(--space-20) + var(--floating-card, 0px) + var(--space-8));
+  padding-bottom: calc(var(--luke-space-20) + var(--floating-card, 0px) + var(--luke-space-8));
 }
 
 /* Alone in its window, which shows and hides it whole, so it neither rises
@@ -116,7 +116,7 @@ html.call-window #root {
    fixed and a stacked bar would not fit it. */
 .call-card[data-surface="window"] {
   width: 248px;
-  box-shadow: 0 2px 6px var(--shadow);
+  box-shadow: 0 2px 6px var(--luke-color-shadow);
   animation: none;
   -webkit-app-region: drag;
 }
@@ -137,15 +137,21 @@ html.call-window #root {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .call-card-title {
   min-width: 0;
   flex: 1;
   margin: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The way back, named in the floating window by the system's hint its
+   wrapper carries, and no taller than its button. */
+.call-card-return {
+  display: flex;
 }
 
 /* Moved under a still pointer, the buttons take no hover until the pointer
@@ -167,7 +173,7 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 .call-card .call-video-tile {
   width: 100%;
   margin: 0;
-  border-radius: 8px;
+  border-radius: var(--luke-radius-8);
 }
 
 /* At this size the still face makes room for what the tile says, and

@@ -14,7 +14,7 @@
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { ReturnIcon } from "@luke/ui";
+import { IconButton, ReturnIcon } from "@luke/ui";
 import { type CallCardModel, callCard, callCardVideoStatus } from "@luke/ui/call-card-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
@@ -149,18 +149,12 @@ function CallCard({
       {card.taskName}
     </span>
   );
-  // The floating window is too small to hold a tooltip, so there the
-  // system's own hint names the task the button opens.
   const returnButton = (
-    <button
-      type="button"
-      className="icon-button"
-      aria-label={returnLabel(card.taskName)}
-      title={inWindow ? returnLabel(card.taskName) : undefined}
+    <IconButton
+      icon={<ReturnIcon />}
+      label={returnLabel(card.taskName)}
       onClick={controls.onReturn}
-    >
-      <ReturnIcon />
-    </button>
+    />
   );
   // In the floating window a press on a button acts without taking focus,
   // so the next drag never finds a button holding it.
@@ -188,8 +182,12 @@ function CallCard({
         {video?.status === AVATAR_STATUS.OFF ? (
           <VideoToggle on={false} onSetVideo={video.onSetVideo} />
         ) : null}
+        {/* The floating window is too small to hold a tooltip, so there the
+            system's own hint names the task the button opens. */}
         {inWindow ? (
-          returnButton
+          <span className="call-card-return" title={returnLabel(card.taskName)}>
+            {returnButton}
+          </span>
         ) : (
           <Tooltip label={returnLabel(card.taskName)}>{returnButton}</Tooltip>
         )}
