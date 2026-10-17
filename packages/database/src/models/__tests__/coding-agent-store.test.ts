@@ -1076,4 +1076,51 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         assert.deepEqual(yield* continuationsOf(outsider, asked), new Map());
       }),
   );
+
+  it.effect(
+    "a source started from more agents than its summary names keeps its oldest twenty, and hides none of another source's, however many it has",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const startOn = (createdAt: Date, agentId?: string) =>
+          Effect.gen(function* () {
+            const { agent } = Option.getOrThrow(
+              yield* createCodingAgent(starter, {
+                taskId: plan.id,
+                planSnapshot: "# Billing",
+                prompt: null,
+                idempotencyKey: randomUUID(),
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                repository: "acme/api",
+                ...(agentId === undefined
+                  ? undefined
+                  : { startedFrom: { agentId, steps: 1, totalSteps: 1 } }),
+              }),
+            );
+            yield* Database.use((db) =>
+              db.update(codingAgent).set({ createdAt }).where(eq(codingAgent.id, agent.id)),
+            );
+            return agent.id;
+          });
+        const at = (minute: number) => new Date(Date.UTC(2026, 9, 17, 10, minute));
+        const busy = yield* startOn(at(0));
+        const quiet = yield* startOn(at(0));
+        const continues: string[] = [];
+        for (let minute = 1; minute <= 41; minute += 1) {
+          continues.push(yield* startOn(at(minute), busy));
+        }
+        const latest = yield* startOn(at(50), quiet);
+
+        const read = yield* continuationsOf(starter, [busy, quiet]);
+
+        assert.deepEqual(
+          read.get(busy)?.map((each) => each.agentId),
+          continues.slice(0, 20),
+        );
+        assert.deepEqual(read.get(quiet), [{ agentId: latest, title: null }]);
+      }),
+  );
 });

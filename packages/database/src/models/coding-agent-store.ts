@@ -27,6 +27,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lte,
   or,
   type SQL,
   sql,
@@ -931,20 +932,25 @@ const findStartedFrom = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
     agentIds: Schema.Array(Schema.String),
-    limit: Schema.Number,
+    perSource: Schema.Number,
   }),
   Result: Schema.Struct({
     id: Schema.String,
     title: Schema.NullOr(Schema.String),
     startedFrom: StartedFromColumnSchema,
   }),
-  execute: ({ userId, agentIds, limit }) =>
-    Database.use((db) =>
-      db
+  execute: ({ userId, agentIds, perSource }) =>
+    Database.use((db) => {
+      // Each source's own oldest are kept, so a source started from many hides none of another's.
+      const ranked = db
         .select({
           id: codingAgent.id,
           title: codingAgent.title,
           startedFrom: codingAgent.startedFrom,
+          createdAt: codingAgent.createdAt,
+          rank: sql<number>`row_number() over (partition by (${codingAgent.startedFrom}->>'agentId') order by ${codingAgent.createdAt}, ${codingAgent.id})`.as(
+            "rank",
+          ),
         })
         .from(codingAgent)
         .where(
@@ -954,9 +960,13 @@ const findStartedFrom = SqlSchema.findAll({
             agentReachableBy(userId),
           ),
         )
-        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id))
-        .limit(limit),
-    ),
+        .as("ranked");
+      return db
+        .select({ id: ranked.id, title: ranked.title, startedFrom: ranked.startedFrom })
+        .from(ranked)
+        .where(lte(ranked.rank, perSource))
+        .orderBy(asc(ranked.createdAt), asc(ranked.id));
+    }),
 });
 
 const findAgentsOnBranches = SqlSchema.findAll({
@@ -1314,13 +1324,12 @@ export function continuationsOf(
   agentIds: readonly string[],
 ): CodingAgentStoreEffect<ReadonlyMap<string, readonly CodingAgentStartedFromIt[]>> {
   if (agentIds.length === 0) return Effect.succeed(new Map());
-  const limit = agentIds.length * CONTINUATIONS_PER_AGENT;
-  return Effect.map(findStartedFrom({ userId, agentIds, limit }), (rows) => {
+  const perSource = CONTINUATIONS_PER_AGENT;
+  return Effect.map(findStartedFrom({ userId, agentIds, perSource }), (rows) => {
     const bySource = new Map<string, CodingAgentStartedFromIt[]>();
     for (const { id, title, startedFrom } of rows) {
       if (startedFrom === null) continue;
       const each = bySource.get(startedFrom.agentId) ?? [];
-      if (each.length === CONTINUATIONS_PER_AGENT) continue;
       each.push(
         startedFrom.messageId === undefined
           ? { agentId: id, title }
