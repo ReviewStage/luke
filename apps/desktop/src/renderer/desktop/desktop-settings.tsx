@@ -21,7 +21,7 @@ import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
-import { drawnInSettingsPage, settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
+import { settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
@@ -227,13 +227,6 @@ export function DesktopSettings({
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN;
 
-  const panel = (
-    <SettingsPanel
-      {...settings}
-      integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
-    />
-  );
-
   // The template's version history takes the whole window as a plan's does, and leaves for the template,
   // the call card at the foot of its versions as it was at the page list's.
   if (templateHistory) {
@@ -315,19 +308,12 @@ export function DesktopSettings({
         <section className="settings-page" aria-label={title}>
           <div className="desktop-drag-strip" />
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          {drawnInSettingsPage(settings.view) ? (
-            <SettingsPage key={settings.view} title={title} actions={reset}>
-              {panel}
-            </SettingsPage>
-          ) : (
-            <div key={settings.view} className="settings-page-scroll scroll-fade-top">
-              <header className="settings-page-head">
-                <h1 className="settings-page-title">{title}</h1>
-                {reset}
-              </header>
-              {panel}
-            </div>
-          )}
+          <SettingsPage key={settings.view} title={title} actions={reset}>
+            <SettingsPanel
+              {...settings}
+              integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
+            />
+          </SettingsPage>
         </section>
       )}
     </div>

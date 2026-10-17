@@ -1,38 +1,5 @@
 /* The settings tab: pages of rows, credentials, and the controls that write them. */
 
-/* Scrolls on the same terms as the session list: contained, never chaining out
-   to the root, with the tab bar left outside the scrolling box. */
-.settings {
-  /* Named because the pinned header's dissolve band below must span exactly
-     this: the two drifting apart is what would leave a passing row sliced
-     against the header's edge, or the resting page reading faded. */
-  --settings-gap: 14px;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--settings-gap);
-  overflow-x: clip;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  /* Its rows answer the page's width (`@container settings` below), which
-     every card spans, rather than the window's: the column beside the page
-     list is as narrow at a wide nav as a small window makes it. */
-  container: settings / inline-size;
-}
-
-/* A page's own name, at the head of its column: the page list says where
-   Settings is, and this says which page the column holds. Its line is a
-   control tall, so a head with Reset is no taller than one without. */
-.settings-page-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: var(--control-height);
-}
-
 /* A group of a page (`settings-group.tsx`): its name above the card, small
    and muted, as macOS and Linear head a group, and the card holding the rows
    with a hairline between each and the next, edge to edge. The card's corner

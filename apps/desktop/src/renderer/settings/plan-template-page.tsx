@@ -14,6 +14,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   ResetIcon,
+  SettingsPage,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -414,13 +415,7 @@ function TemplateState({
     );
   }
   // While the read is out the page is its name alone, where every page's stands, and the rest arrives whole.
-  return (
-    <div className="settings-page-scroll scroll-fade-top" aria-busy="true">
-      <header className="settings-page-head">
-        <h1 className="settings-page-title">{TEMPLATE_TITLE}</h1>
-      </header>
-    </div>
-  );
+  return <SettingsPage title={TEMPLATE_TITLE}>{null}</SettingsPage>;
 }
 
 /**
@@ -442,7 +437,11 @@ export function PlanTemplatePage({
   const template = useTemplate(signedIn, act);
   const drawn = account !== undefined && template.read === TEMPLATE_READ.READ;
   return (
-    <section className="settings-page" aria-label={TEMPLATE_TITLE}>
+    <section
+      className="settings-page"
+      aria-label={TEMPLATE_TITLE}
+      aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
+    >
       {/* Settings has no top bar: the page's title and its actions stand in the page. */}
       <div className="desktop-drag-strip" />
       {drawn ? (
