@@ -1,9 +1,10 @@
-/* The whiteboard fills the page between the header and the microphone row;
-   Excalidraw draws to the size of the box it is given, so the canvas's box
-   is the page's own. Note that the board isolates its own stacking, because
-   Excalidraw raises its toolbar, hints, and menus by z-index: unisolated they
-   rose through the side panel's tab strip and over the "+" menu dropped from
-   it, while isolated they still layer among themselves as Excalidraw says. */
+/* The whiteboard fills the tab edge to edge, between the header and the
+   microphone row: the panel is its frame. Excalidraw draws to the size of
+   the box it is given, so the canvas's box is the tab's own. Note that the
+   board isolates its own stacking, because Excalidraw raises its toolbar,
+   hints, and menus by z-index: unisolated they rose through the side panel's
+   tab strip and over the "+" menu dropped from it, while isolated they still
+   layer among themselves as Excalidraw says. */
 .task-board {
   position: relative;
   isolation: isolate;
@@ -11,17 +12,8 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  justify-content: center;
-  margin-top: 10px;
   overflow: hidden;
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text-secondary);
-}
-
-.task-board > p {
-  margin: 0;
-  text-align: center;
+  color: var(--luke-color-text-muted);
 }
 
 .task-board-canvas {

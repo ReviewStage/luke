@@ -3,6 +3,7 @@ import { admittedElements } from "@luke/features/board-scene";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";
@@ -165,7 +166,9 @@ export function TaskBoard({
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   return (
     <section className="task-board ph-no-capture" aria-label="Whiteboard">
-      {AsyncResult.isFailure(loaded) ? <p role="alert">{BOARD_LOAD_FAILED}</p> : null}
+      {AsyncResult.isFailure(loaded) ? (
+        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{BOARD_LOAD_FAILED}</ErrorState>
+      ) : null}
       {module !== undefined && board !== undefined ? (
         // Keyed by whether it only shows as well, so an Unarchive mounts an editable canvas.
         <Fragment key={String(viewOnly)}>

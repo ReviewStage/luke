@@ -7141,18 +7141,6 @@ button.automation-run:hover {
   padding-inline: max(var(--luke-space-16), var(--code-reading-room));
 }
 
-/* The board fills the tab edge to edge: the panel is its frame, so its own
-   inset card gives way. */
-.side-panel .task-board {
-  max-height: none;
-  flex: 1;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  background: none;
-}
-
 .side-panel-empty {
   max-width: 260px;
   margin: auto;
