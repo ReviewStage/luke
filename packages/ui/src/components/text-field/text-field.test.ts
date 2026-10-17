@@ -5,6 +5,7 @@ import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { FormField } from "../form-field/form-field.js";
+import { SettingsRow } from "../settings-row/settings-row.js";
 import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_TYPE, TextArea, TextField } from "./text-field.js";
 
 /**
@@ -12,8 +13,8 @@ import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_TYPE, TextArea, TextField } from "
  * hands every change back, answers Enter only when no input method is
  * composing, stays out of spell check and autofill where asked, holds its
  * form back while empty where required, hands a paste to a
- * caller that takes pasted files itself, and inside a field is named, described, and marked invalid by
- * the field's words.
+ * caller that takes pasted files itself, inside a field is named, described, and marked invalid by
+ * the field's words, and standing alone in a settings row is described by the row's words.
  */
 
 declare global {
@@ -97,7 +98,7 @@ test("Enter answers onEnter, except the Enter that commits an input method's com
   assert.equal(page.querySelector("output")?.textContent, "1");
 });
 
-test("Escape answers onEscape and is kept from the page, except the Escape an input method's composition takes", () => {
+test("Escape answers onEscape, except an input method's composing Escape, and every one reaches the window marked taken", () => {
   const escapes: string[] = [];
   const page = render(
     createElement(
@@ -117,20 +118,34 @@ test("Escape answers onEscape and is kept from the page, except the Escape an in
       }),
     ),
   );
-  const pageEscapes: boolean[] = [];
-  const listen = (event: KeyboardEvent) => pageEscapes.push(event.defaultPrevented);
+  const pageEscapes: KeyboardEvent[] = [];
+  const listen = (event: KeyboardEvent) => pageEscapes.push(event);
   window.addEventListener("keydown", listen);
-  try {
-    const area = page.querySelector("textarea") ?? assert.fail("no text area");
-    press(fieldNamed(page, "Name"), { key: "Escape", cancelable: true });
-    press(area, { key: "Escape", cancelable: true });
-    press(area, { key: "Escape", cancelable: true, isComposing: true });
-    press(area, { key: "Escape", cancelable: true, keyCode: 229 });
-  } finally {
-    window.removeEventListener("keydown", listen);
+  const area = page.querySelector("textarea") ?? assert.fail("no text area");
+  const presses: { field: HTMLElement; init: KeyboardEventInit }[] = [
+    { field: fieldNamed(page, "Name"), init: {} },
+    { field: area, init: {} },
+    { field: area, init: { isComposing: true } },
+    { field: area, init: { keyCode: 229 } },
+  ];
+  for (const { field, init } of presses) {
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    });
+    act(() => {
+      field.dispatchEvent(event);
+    });
   }
+  window.removeEventListener("keydown", listen);
   assert.deepEqual(escapes, ["name", "notes"]);
-  assert.deepEqual(pageEscapes, [true, true, false, false]);
+  assert.deepEqual(
+    pageEscapes.map((event) => event.defaultPrevented),
+    [true, true, true, true],
+    "every Escape reaches the window, marked taken",
+  );
 });
 
 test("a text area holds the many lines its caller holds and hands back every change", () => {
@@ -263,6 +278,25 @@ test("inside a field, a text entry is named, described, and marked invalid by th
     .join(" ");
   assert.equal(described, "Everyone sees it. Give it a name.");
   assert.equal(field.getAttribute("aria-invalid"), "true");
+});
+
+test("a text entry standing alone in a settings row is described by the row's description", () => {
+  const page = render(
+    createElement(SettingsRow, {
+      label: "Rules file",
+      description: "Read from the base branch.",
+      children: (control) =>
+        createElement(TextField, {
+          label: "Rules file",
+          describedBy: control["aria-describedby"],
+          value: "",
+          onChange: () => undefined,
+        }),
+    }),
+  );
+  const field = page.querySelector("input") ?? assert.fail("no field");
+  const describedBy = field.getAttribute("aria-describedby") ?? assert.fail("not described");
+  assert.equal(document.getElementById(describedBy)?.textContent, "Read from the base branch.");
 });
 
 test("a text entry is named by its field or by a label of its own, and never by neither", () => {

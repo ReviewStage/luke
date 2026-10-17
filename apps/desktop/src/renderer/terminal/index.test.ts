@@ -3,11 +3,11 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "vitest";
 import type { TerminalHandle } from "./contract";
-import "./index";
+import { terminal } from "./index";
 
 /**
  * The terminal bundle, through the one door a Terminal tab mounts it by
- * (`window.lukeTerminal`): which keys reach the shell, which pass to the
+ * (its entry's `terminal`): which keys reach the shell, which pass to the
  * window, and a palette colour drawn by its class rather than a style
  * attribute.
  */
@@ -53,15 +53,13 @@ afterEach(() => {
 
 /** A terminal mounted in a host of its own, with what it sent the shell and what the window heard. */
 function mountTerminal() {
-  const module = window.lukeTerminal;
-  assert.ok(module, "the bundle sets its module on the window");
   const host = document.createElement("div");
   document.body.append(host);
   const sent: string[] = [];
   const heard: KeyboardEvent[] = [];
   const hear = (event: KeyboardEvent) => heard.push(event);
   window.addEventListener("keydown", hear);
-  mounted = module.mount(host, {
+  mounted = terminal.mount(host, {
     onInput: (data) => sent.push(data),
     onResize: () => undefined,
     onLink: () => undefined,

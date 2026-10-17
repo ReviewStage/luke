@@ -63,50 +63,59 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
 /**
  * Where the build stands against the latest release, and what it changed: the
  * About page's one group, while the sidebar's update row carries the news
- * outside.
+ * outside. A platform that offers no updates draws the changelog alone.
  *
  * The group is `@luke/ui`'s `SettingsSection` and each line its
  * `SettingsRow`, every act the outline `Button`. Note that each row stands
  * in a wrapper wearing its search anchor, because the shared row takes no
  * attribute of a caller's.
  */
-export function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
+export function UpdatesSection({
+  control,
+  offered,
+}: {
+  control: UpdateControl;
+  /** Whether the platform offers updates; where it does not, the changelog stands alone. */
+  offered: boolean;
+}): React.JSX.Element {
   const { tell } = useAct();
   const row = updateRow(control.update, control.build);
   return (
     <SettingsSection>
-      <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.UPDATES)}>
-        <SettingsRow
-          label={
-            <span className="settings-name">
-              {row.title}
-              {row.current ? <CheckIcon /> : null}
-            </span>
-          }
-          description={
-            <>
-              {/* Note that a failure mounts an element of its own, an alert,
+      {offered ? (
+        <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.UPDATES)}>
+          <SettingsRow
+            label={
+              <span className="settings-name">
+                {row.title}
+                {row.current ? <CheckIcon /> : null}
+              </span>
+            }
+            description={
+              <>
+                {/* Note that a failure mounts an element of its own, an alert,
                   so it is announced as it lands; every other detail is read
                   with the row rather than spoken over whatever the reader is
                   on. */}
-              {row.failed ? (
-                <span key="failed" className="error-message" role="alert">
-                  {row.detail}
-                </span>
-              ) : (
-                row.detail
-              )}
-              {row.progress === undefined ? null : (
-                <span className="update-progress" aria-hidden="true">
-                  <span style={{ width: `${row.progress}%` }} />
-                </span>
-              )}
-            </>
-          }
-        >
-          {() => updateButton(row.action, control)}
-        </SettingsRow>
-      </div>
+                {row.failed ? (
+                  <span key="failed" className="error-message" role="alert">
+                    {row.detail}
+                  </span>
+                ) : (
+                  row.detail
+                )}
+                {row.progress === undefined ? null : (
+                  <span className="update-progress" aria-hidden="true">
+                    <span style={{ width: `${row.progress}%` }} />
+                  </span>
+                )}
+              </>
+            }
+          >
+            {() => updateButton(row.action, control)}
+          </SettingsRow>
+        </div>
+      ) : null}
       {/* What the versions the row talks about actually changed — beside the
           version, as a trip to the fixed changelog page in the browser. */}
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.CHANGELOG)}>

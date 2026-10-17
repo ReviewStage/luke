@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode, RefCallback } from "react";
 
 /**
  * list-row.tsx -- a List of rows, each a thing a collection holds: its title, a line under it, its metadata at the end, and the acts it offers beside it.
@@ -17,6 +17,14 @@ import type { ReactNode } from "react";
  * that opens nothing is no control at all. The leading mark is decoration,
  * hidden from a reader, since the title says what the row is. The row owns
  * every length in it and takes no class or style.
+ *
+ * A keyboard-driven list (arrows or j/k between rows, a key to act on the
+ * one focused) reaches a row's press through `ref` and hears the keys
+ * pressed on it through `onKeyDown`; a row that opens nothing takes no
+ * focus, so its `ref` reaches its item, to scroll or measure, and it hears
+ * no keys, which would only be its acts'. `onContextMenu` hears a
+ * right-click anywhere on the row, its acts included, so the app can open
+ * its own menu there.
  */
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -48,6 +56,9 @@ export function ListRow({
   actions,
   onPress,
   current,
+  ref,
+  onKeyDown,
+  onContextMenu,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
   leading?: ReactNode;
@@ -62,6 +73,12 @@ export function ListRow({
   onPress?: (() => void) | undefined;
   /** Whether the row is the one open now, drawn and announced as current. */
   current?: boolean | undefined;
+  /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
+  ref?: RefCallback<HTMLElement> | undefined;
+  /** A key pressed on the row's press; a row that opens nothing hears none. */
+  onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
+  /** A right-click, or the menu key, anywhere on the row. */
+  onContextMenu?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
 }): React.JSX.Element {
   const face = (
     <>
@@ -80,13 +97,20 @@ export function ListRow({
     </>
   );
   return (
-    <li className="luke-list-row" data-current={current === true ? "true" : undefined}>
+    <li
+      ref={onPress ? undefined : ref}
+      className="luke-list-row"
+      data-current={current === true ? "true" : undefined}
+      onContextMenu={onContextMenu}
+    >
       {onPress ? (
         <button
+          ref={ref}
           type="button"
           className="luke-list-row-main"
           aria-current={current === true ? "true" : undefined}
           onClick={onPress}
+          onKeyDown={onKeyDown}
         >
           {face}
         </button>

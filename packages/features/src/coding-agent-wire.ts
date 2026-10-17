@@ -181,6 +181,8 @@ export const CODING_AGENT_FAILURE = {
   FAST_ON_OWN_KEY: "fast_own_key",
   /** The provider refused fast mode for the organization of the key the step ran on. */
   FAST_NOT_ENABLED: "fast_not_enabled",
+  /** The provider refused the step's prompt as longer than the model's context window. */
+  CONTEXT_OVERFLOW: "context_overflow",
   OTHER: "other",
 } as const;
 
@@ -615,6 +617,23 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
       totalSteps: countedNumber,
       branch: EffectSchema.optionalKey(EffectSchema.String),
     }),
+  ),
+  /**
+   * The agents started from this one, oldest first, archived ones among
+   * them: each by its id and its title, null where it has none yet, whether
+   * it forked this one at a message rather than continuing it, and that
+   * message where it did; absent where none was, and from a service before
+   * it.
+   */
+  continuedBy: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({
+        agentId: wireUuidSchema,
+        title: EffectSchema.NullOr(EffectSchema.String),
+        forked: EffectSchema.Boolean,
+        messageId: EffectSchema.optionalKey(wireUuidSchema),
+      }),
+    ),
   ),
 });
 
@@ -1331,6 +1350,21 @@ const codingAgentSenderSchema = EffectSchema.Struct({
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
   /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
   agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /**
+   * The catalog id of the model that agent ran on when it sent the line,
+   * which the window reads its harness's mark off; absent for any other
+   * sender, for an agent's line sent before it was kept, and from a service
+   * older than it.
+   */
+  model: EffectSchema.optionalKey(recordedChoice),
+  /**
+   * That agent's id, which the window opens its tab and reads its card by;
+   * absent for any other sender, for an agent's line sent before it was
+   * kept, once that agent is gone, and from a service older than it.
+   */
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** The task that agent works on, where `agentId` is given and it works on one. */
+  taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
