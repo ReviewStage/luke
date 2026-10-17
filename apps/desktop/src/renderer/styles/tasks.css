@@ -878,7 +878,10 @@
   white-space: nowrap;
 }
 
+/* The card clips at its rounded edge, against which its header's actions
+   stand flush, so a ring inside it is drawn inside its control. */
 .code-card {
+  --focus-ring-offset: var(--focus-ring-inset);
   overflow: hidden;
   border: 1px solid var(--luke-color-border);
   border-radius: 10px; /* off-scale: a card a step rounder than its controls */
