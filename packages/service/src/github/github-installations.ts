@@ -435,7 +435,7 @@ export function installationsOfWorkspace(
 /**
  * The workspace, other than the one given, whose active installation is on
  * the GitHub account given, where the account asking is a member of it:
- * where a plan of the one given could move to reach that account's
+ * where a task of the one given could move to reach that account's
  * repositories. A GitHub account's installation stands for one workspace,
  * so there is at most one.
  */

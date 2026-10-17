@@ -229,9 +229,9 @@ export function composeDesktop(
           again: () => config.quit(),
         }),
       );
-      // The notices read the plans' names from the document and write the
+      // The notices read the tasks' names from the document and write the
       // unseen agents and the waiting inbox items back into it; a click
-      // brings the window forward and asks the panel to open the plan on the
+      // brings the window forward and asks the panel to open the task on the
       // agent's tab or its Inbox, and what the focused window should hear is
       // handed to the panels' toast. Whose inbox is read follows the
       // document's account, which the launch's bootstrap writes as well as

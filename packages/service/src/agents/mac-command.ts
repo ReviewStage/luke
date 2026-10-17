@@ -25,7 +25,7 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
 /**
  * mac-command.ts -- a shell command an agent runs on the developer's own Mac: queued for the account, run by a signed-in Mac that holds the read for it, and its result handed back to the call.
  *
- * Any agent may call it, the planning brain, a coding agent, and either's
+ * Any agent may call it, the brain, a coding agent, and either's
  * workers, and nothing asks the developer first: Dean's call, with the one
  * brake a Settings switch on the Mac (`Let agents run commands on this
  * Mac`), which stops the Mac listening. The call refuses at once where no
@@ -112,7 +112,7 @@ const RUN_ON_MAC_INPUT = Schema.Struct({
 const readInput = readEither(RUN_ON_MAC_INPUT);
 
 /**
- * The tool as every agent is offered it, the planning model, a coding agent,
+ * The tool as every agent is offered it, the brain, a coding agent,
  * and either's workers alike: its name, its words, and its input schema.
  */
 export const RUN_ON_MAC_TOOL = {

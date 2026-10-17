@@ -18,7 +18,7 @@ import {
 } from "../whiteboard/contract";
 
 /**
- * task-board.tsx -- the open plan's whiteboard in the Plans tab: Excalidraw's bundle loaded once, mounted over the board main holds, and its scene saved.
+ * task-board.tsx -- the open task's whiteboard in the Tasks tab: Excalidraw's bundle loaded once, mounted over the board main holds, and its scene saved.
  *
  * The board is drawn by the whiteboard bundle (`../whiteboard/`), which this
  * page loads the first time a board is shown and keeps for the window's
@@ -28,16 +28,16 @@ import {
  * pauses, whole, the last write winning.
  *
  * A save that is the first to hold a new drawing of Luke's carries the scene
- * drawn as a PNG beside it, which is what the planning model looks at
+ * drawn as a PNG beside it, which is what the brain looks at
  * (`look_at_board`). Note that "first" is read off the board main last
  * handed over: until a save holding the drawing lands, main's board still
  * names the drawing before it, so a save that interrupts the first one still
- * carries the image. While the planning model's pending call is a look, the
+ * carries the image. While the brain's pending call is a look, the
  * canvas saves the scene it holds with its image as well, so a look at a
  * board Luke did not just draw on still finds one.
  *
- * An archived plan's board is view-only: it shows, and nothing on it is
- * drawn or saved until the plan is brought back, which mounts the canvas
+ * An archived task's board is view-only: it shows, and nothing on it is
+ * drawn or saved until the task is brought back, which mounts the canvas
  * afresh as an editable one.
  *
  * The board's root is left out of the screen recording (`ph-no-capture`),
@@ -58,7 +58,7 @@ const whiteboardModuleAtom = bundleAtom(
   BOARD_LOAD_FAILED,
 );
 
-/** One save the canvas asked for: the plan, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
+/** One save the canvas asked for: the task, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
 interface BoardSave {
   readonly taskId: string;
   readonly elements: readonly object[];
@@ -91,7 +91,7 @@ const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
   }),
 );
 
-/** The canvas, once its bundle has loaded: mounted for one plan, and handed each board main holds. */
+/** The canvas, once its bundle has loaded: mounted for one task, and handed each board main holds. */
 function BoardCanvas({
   module,
   taskId,
@@ -148,7 +148,7 @@ function BoardCanvas({
 }
 
 /**
- * The board page: the canvas over the open plan's board, or the state that
+ * The board page: the canvas over the open task's board, or the state that
  * stands in its place while the board or its bundle is still on the way.
  */
 export function TaskBoard({
@@ -158,7 +158,7 @@ export function TaskBoard({
 }: {
   taskId: string;
   board: Board | undefined;
-  /** Whether the board only shows, as an archived plan's does. */
+  /** Whether the board only shows, as an archived task's does. */
   viewOnly?: boolean;
 }): React.JSX.Element {
   const loaded = useAtomValue(whiteboardModuleAtom);

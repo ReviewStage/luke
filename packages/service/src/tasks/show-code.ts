@@ -39,13 +39,13 @@ import {
 } from "./shown-file.js";
 
 /**
- * show-code.ts -- the planning model's `show_code` tool: code of the plan's repository put on the developer's screen as Luke talks about it.
+ * show-code.ts -- the brain's `show_code` tool: code of the task's repository put on the developer's screen as Luke talks about it.
  *
- * The call reads the lines itself: from the planning session's sandbox, on
- * the same checkout of the plan's repository `run_in_repository` reads
+ * The call reads the lines itself: from the brain session's sandbox, on
+ * the same checkout of the task's repository `run_in_repository` reads
  * (`repository-shell.ts`), a window of the file around the lines pointed at,
  * cut to `SHOWN_CODE_BOUNDS`. The model writes a note beside them, a
- * sentence or two on what the lines do for the plan and what to notice, so
+ * sentence or two on what the lines do for the task and what to notice, so
  * the Code tab reads as a walkthrough rather than bare code. The lines and
  * the note are the call's answer, so the store journals them with the
  * call, the voice's follow reads them off the journal mid-turn
@@ -184,7 +184,7 @@ const SHOW_CODE_ANSWER = Schema.Struct({
 // Note that a journaled call's output is the stored row's, which the AI SDK types as unknown.
 const readShownCode = Schema.decodeUnknownResult(SHOW_CODE_ANSWER);
 
-/** The tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The tool as the brain is offered it: its name, its words, and its input schema. */
 export const SHOW_CODE_TOOL = {
   name: AGENT_TOOL.SHOW_CODE,
   description:
@@ -203,7 +203,7 @@ export const SHOW_CODE_TOOL = {
  * lines are on the journal. Only an accepted answer reads, so what the
  * checkout refused (a path that leaves it, a missing, binary, or oversized
  * file) is never shown. Note that the secret rule is held to again here,
- * because a plan's work is read back from its journal for as long as the
+ * because a task's work is read back from its journal for as long as the
  * journal stands, under whatever rule this build keeps.
  */
 export function shownCodeOf(part: StoredToolPart): ShownCode | undefined {
@@ -267,7 +267,7 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* (
 });
 
 /**
- * One call of `show_code`: the lines read from the plan's checkout and
+ * One call of `show_code`: the lines read from the task's checkout and
  * answered as shown with the model's note, or `rejected` and why. A reason
  * the checkout could not be reached is the repository's own, worded as
  * nothing shown.

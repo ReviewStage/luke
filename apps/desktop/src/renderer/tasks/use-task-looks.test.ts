@@ -16,7 +16,7 @@ import { DOCUMENT_TASK } from "#testing/document-task";
 import { NO_LOOKS, useReadMarks, useTaskLooks, useUnreadTasks } from "./use-task-looks";
 
 /**
- * use-plan-looks.test.ts -- the sections a reader is shown as changed since
+ * use-task-looks.test.ts -- the sections a reader is shown as changed since
  * they last looked: a teammate's saves, Luke's and an agent's, never the
  * reader's own; and a plan read the moment it opens, its changes still lit
  * for that visit.
@@ -33,7 +33,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** The sections `readerId` is shown as changed on a plan they last looked at before every save here. */
+/** The sections `readerId` is shown as changed on a task they last looked at before every save here. */
 function changedFor(
   readerId: string | undefined,
   edits: readonly Omit<PlanSectionEdit, "at" | "duringCall">[],

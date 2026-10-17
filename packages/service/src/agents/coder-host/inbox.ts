@@ -41,7 +41,7 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  * hand such as a setting on GitHub, and whatever is ready for the developer
  * to look at, review, or test by hand, such as a pull request, goes in the inbox rather
  * than in a message, where it is lost in the transcript: an item of its own
- * on the service (`inbox-store.ts`), drawn on the plan's Inbox tab until the
+ * on the service (`inbox-store.ts`), drawn on the task's Inbox tab until the
  * developer answers it or the agent takes it back. An item is a title, the
  * blocks of context under it, and the response it asks for, each a closed
  * shape the wire declares (`@luke/features/inbox-wire`). An image block
@@ -235,7 +235,7 @@ function formRefusal(form: InboxForm): string | undefined {
 
 /**
  * A code block's own refusal: lines of another repository than the agent's
- * own, which the desktop reads through the plan's repository alone, or a
+ * own, which the desktop reads through the task's repository alone, or a
  * range running backwards or past the bound. Note that GitHub spells a
  * repository's name in any case, so the names are compared without it.
  */

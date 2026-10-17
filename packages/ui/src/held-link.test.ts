@@ -10,7 +10,7 @@ import { useLinkOpener } from "./held-link.js";
 /**
  * A Luke link handed while sign-in stands opens once the account is signed
  * in, the latest one only, and one handed after opens at once. Synthetic
- * plans.
+ * tasks.
  */
 
 const roots: Root[] = [];
@@ -21,7 +21,7 @@ afterEach(() => {
 
 const task = (taskId: string): PlanMention => ({ kind: MENTION_KIND.TASK, taskId });
 
-/** The opener drawn behind a gate that `stand` moves, every plan it opened kept; `arriving` is handed in the commit the gate moves in, before its effects run. */
+/** The opener drawn behind a gate that `stand` moves, every task it opened kept; `arriving` is handed in the commit the gate moves in, before its effects run. */
 function opener() {
   const opened: string[] = [];
   let handTo: ((mention: PlanMention) => void) | undefined;

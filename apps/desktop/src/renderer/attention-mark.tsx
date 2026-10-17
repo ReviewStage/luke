@@ -1,5 +1,5 @@
 /**
- * attention-mark.tsx -- the mark of something about a plan that wants the developer's hand: a white exclamation on a disc of the attention orange.
+ * attention-mark.tsx -- the mark of something about a task that wants the developer's hand: a white exclamation on a disc of the attention orange.
  *
  * The orange alone is the window's word for a temporary state (`base.css`'s
  * `--state-attention`), light in the dark and deep in the light, so a

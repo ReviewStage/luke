@@ -5,7 +5,7 @@ import { test } from "vitest";
 import { noticeTaskTitle } from "./agent-notices.js";
 
 /**
- * notice-title.test.ts -- a notice names the plan it is about, and, once the
+ * notice-title.test.ts -- a notice names the task it is about, and, once the
  * account is in more than one workspace, the workspace first, so a notice from
  * a workspace the window is not listing says whose it is. Synthetic throughout.
  */

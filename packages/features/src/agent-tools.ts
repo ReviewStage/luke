@@ -4,9 +4,9 @@
  * The service's tool registry (`packages/service/src/agents/agent-runtime/tools.ts`)
  * says which roles each of Luke's tools serves; the names themselves are
  * declared here, once, so the desktop reads a call in a transcript by the
- * same name the service offered it under, the planning model's as a coding
+ * same name the service offered it under, the brain's as a coding
  * agent's. Beside them stand the names eve gives tools of its own that a
- * planning transcript carries, and the coding agents' web reads that earlier
+ * brain's transcript carries, and the coding agents' web reads that earlier
  * transcripts still name.
  */
 
@@ -17,7 +17,7 @@ import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
 
 /** Every tool Luke authors or declares for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
-  // The planning model's own, which its hosted resolver declares.
+  // The brain's own, which its hosted resolver declares.
   QUEUE_QUESTION: "queue_question",
   WITHDRAW_QUESTION: "withdraw_question",
   SHOW_CODE: "show_code",
@@ -69,9 +69,9 @@ export const AGENT_TOOL = {
 export type AgentTool = (typeof AGENT_TOOL)[keyof typeof AGENT_TOOL];
 
 /**
- * The tools eve gives a planning session of its own, which its transcript
+ * The tools eve gives a brain session of its own, which its transcript
  * carries: its subagent tool for the worker, which earlier transcripts name
- * where the planning model now calls its own `delegate`, and the two task
+ * where the brain now calls its own `delegate`, and the two task
  * controls it adds beside any task. Note that their names are eve's own and
  * the tasks they name are eve's subagent tasks, not a Luke task.
  */

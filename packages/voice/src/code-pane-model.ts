@@ -79,7 +79,7 @@ export function copiedLines(code: TaskCode): string {
  * none where no call started before it, or where that call's record says
  * it had ended before the turn that showed the code began. Note that the
  * ended call does not take it, because the call closes on its end line
- * (the desktop's `planning/call-card.tsx`), and code drawn above that line would read as shown
+ * (the desktop's `tasks/call-card.tsx`), and code drawn above that line would read as shown
  * before the call ended.
  */
 function callOf(
@@ -134,7 +134,7 @@ export function codeFeedCalls(
 export type ShownFile = CodeRef & { readonly commit?: string | undefined };
 
 /**
- * Each file Luke showed on the plan, once, in the order first shown, under
+ * Each file Luke showed on the task, once, in the order first shown, under
  * the newest reference to it and the commit it was read at: what the "+"
  * offers to open, and what a file's tab is held to.
  */

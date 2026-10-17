@@ -333,7 +333,7 @@ const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () =>
 /**
  * A link in a transcript's words: the chip that opens what it names
  * (`mention-chip.tsx`) where its target names a mention, read against the
- * plan's page it is drawn on, or the window's doors off one; a link as any
+ * task's page it is drawn on, or the window's doors off one; a link as any
  * other is where it names none.
  */
 function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
@@ -890,7 +890,7 @@ export function TranscriptTodos({
  * chat over its log: one line saying how far the list has got and the
  * item it is at, which opens onto the whole list. Closed by default, as
  * VS Code's collapses to the item in progress, so it costs the log one
- * line. It is a card on the plan card's look, since it stands outside the
+ * line. It is a card on the task card's look, since it stands outside the
  * log, and it is drawn by the caller only while the list is worked. It
  * opens upward off the composer, as one sheet (tasks.css).
  */

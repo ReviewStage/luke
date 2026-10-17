@@ -55,15 +55,15 @@ import { Effect } from "effect";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 /**
- * coding-agent-acts.ts -- the Plans tab's coding-agent acts: the panel's asks of the host about a plan's agents.
+ * coding-agent-acts.ts -- the Tasks tab's coding-agent acts: the panel's asks of the host about a task's agents.
  *
- * The one check this process makes is who asked, as for every planning act:
- * only a panel draws a plan's agents, so every row refuses the takeover and
+ * The one check this process makes is who asked, as for every task act:
+ * only a panel draws a task's agents, so every row refuses the takeover and
  * the hidden voice window. What the service answers comes back as the
  * panel's own answer; on its way it is noted by the notices
  * (`@luke/host/agent-notices`), which hold where each agent stands so an end
- * the panel is not looking at is still announced, and which plan's Inbox
- * the panel shows, so an item it is looking at is not. The plan's inbox is
+ * the panel is not looking at is still announced, and which task's Inbox
+ * the panel shows, so an item it is looking at is not. The task's inbox is
  * answered to the panel alone: the notices watch what waits across the
  * account on a read of their own. Nothing else is held here.
  *
@@ -72,7 +72,7 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
  * host once and is noted nowhere. The account's plan template is asked here
  * too, from Settings › Plan template, and is noted nowhere either.
  *
- * So does a clip dictated into an agent's or a new plan's box: only a panel
+ * So does a clip dictated into an agent's or a new task's box: only a panel
  * records one, and it passes through to the host once and is noted nowhere.
  */
 export interface CodingAgentActsDependencies {
@@ -202,7 +202,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT
   | typeof ACT_KIND.CODING_AGENTS_PICTURE;
 
-/** The refusal a window that draws no Plans tab hears, in its kind's own words. */
+/** The refusal a window that draws no Tasks tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
   if (!sender.panel) throw new ActRefused({ message: ACT[kind].refusal });
 }

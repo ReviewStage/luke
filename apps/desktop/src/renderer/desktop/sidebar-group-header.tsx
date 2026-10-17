@@ -5,12 +5,12 @@ import { Tooltip } from "../tooltip";
 /**
  * sidebar-group-header.tsx -- the header a group of rows folds under: the sidebar's repositories and creators, the Inbox's plans, and the summary's archived agents alike.
  *
- * It is a row with the plan rows' own hover, in the headings' voice: the
+ * It is a row with the task rows' own hover, in the headings' voice: the
  * group's glyph, which gives way to the fold's chevron while the header is
  * hovered or reached from the keyboard, pointing down while the group is
  * open and right while it is folded, then the group's name and whatever
  * the group says after it, a repository's pin. Folded, it counts what the
- * group holds after its name, shown with the chevron and read as "n plans",
+ * group holds after its name, shown with the chevron and read as "n tasks",
  * so a header at rest says nothing but its name. A steady count, the
  * Inbox's of what needs the developer, stands at rest too, as a mail app's
  * folder counts its unread mail, and is left out at none.
@@ -36,7 +36,7 @@ const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };
 /**
  * A folded group's count of what it holds, shown after its name while the
  * header is hovered or reached from the keyboard, or at rest too where it
- * is steady, and read as "n plans".
+ * is steady, and read as "n tasks".
  */
 function FoldedCount({
   count,

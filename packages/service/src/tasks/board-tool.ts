@@ -9,7 +9,7 @@ import { logStoreFailure } from "../http/store-failure.js";
 import { layoutFindings } from "./board-layout.js";
 
 /**
- * board-tool.ts -- `draw_on_board`, the planning model's hand on the plan's whiteboard.
+ * board-tool.ts -- `draw_on_board`, the brain's hand on the task's whiteboard.
  *
  * The model sends the whole diagram each time, in the small vocabulary of
  * `board-wire.ts` (labelled boxes, ellipses, and diamonds, text, zones, and
@@ -22,13 +22,13 @@ import { layoutFindings } from "./board-layout.js";
  * layout (`board-layout.ts`), since the model never sees the board and has no
  * other way to learn that two of its boxes overlap.
  *
- * Note that the account and plan it draws on are the binding the service
- * built from the conversation's plan, never an argument, exactly as
+ * Note that the account and task it draws on are the binding the service
+ * built from the conversation's task, never an argument, exactly as
  * `update_plan`'s are. Every outcome is a result the model reads, never a
  * failure of the call.
  */
 
-/** The account and plan a planning conversation draws on, fixed by the service before the model runs. */
+/** The account and task a brain conversation draws on, fixed by the service before the model runs. */
 interface BoardToolBinding {
   readonly userId: string;
   readonly taskId: string;
@@ -65,7 +65,7 @@ const DRAW_ON_BOARD_INPUT = Schema.Struct({ elements: drawingElementsSchema });
 
 const readInput = readEither(DRAW_ON_BOARD_INPUT);
 
-/** The tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The tool as the brain is offered it: its name, its words, and its input schema. */
 export const DRAW_ON_BOARD_TOOL = {
   name: DRAW_ON_BOARD_TOOL_NAME,
   description:
@@ -91,7 +91,7 @@ function refusalOf(elements: readonly DrawingElement[]): string | undefined {
   return ends.every((end) => ids.has(end)) ? undefined : DRAW_ON_BOARD_REFUSAL.NO_END;
 }
 
-/** One call of `draw_on_board` under the plan the service bound, answered as the result the model reads. */
+/** One call of `draw_on_board` under the task the service bound, answered as the result the model reads. */
 export function runDrawOnBoard(
   binding: BoardToolBinding,
   input: UnparsedWireValue,

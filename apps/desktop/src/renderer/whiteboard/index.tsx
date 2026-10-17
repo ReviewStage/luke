@@ -36,7 +36,7 @@ import {
 } from "./contract";
 
 /**
- * index.tsx -- the whiteboard bundle: Excalidraw mounted into the Plans tab, Luke's drawings put on it, and the panel told when the scene changed.
+ * index.tsx -- the whiteboard bundle: Excalidraw mounted into the Tasks tab, Luke's drawings put on it, and the panel told when the scene changed.
  *
  * This is its own bundle, loaded once the first time a board is shown, so
  * the bundle every window parses never carries Excalidraw (`contract.ts`). It
@@ -55,7 +55,7 @@ import {
  * over the shapes it holds.
  *
  * The bundle also draws a scene the canvas reported as a PNG
- * (`renderScene`), for the planning model to look at what it drew: in the
+ * (`renderScene`), for the brain to look at what it drew: in the
  * canvas's own theme, so the model sees what the developer sees.
  *
  * What the board leaves out is everything that could carry a file or a page:
