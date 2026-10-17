@@ -333,6 +333,8 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 .flag { animation: flag 2.2s ease-in-out infinite; transform-origin: left center; }
 @keyframes flag { 0%, 100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(-6deg) scaleX(0.92); } }
 .bubble { animation: bob 2.8s ease-in-out infinite; }
+.belt { animation: belt 0.6s linear infinite; }
+@keyframes belt { to { stroke-dashoffset: -6; } }
 /* One-shot arrivals for what just happened: a building rising, a container set down, a ring from a plot, sparks at a merge. */
 .bldg[data-fresh="rise"] .lift { transform-box: fill-box; transform-origin: 50% 100%; animation: rise calc(var(--duration-shape) * 2) var(--spring) backwards; }
 @keyframes rise { from { transform: scaleY(0.04); opacity: 0.2; } }
@@ -537,7 +539,19 @@ svg.working-mark { display: block; width: 12px; height: 12px; flex: none; fill: 
   <span class="show-chip">Design exploration</span>
   <span class="show-chip" data-tone="illustrative">Illustrative data · nothing is live</span>
   <span class="spacer"></span>
-  <span class="sim-label">Simulated events <span id="sim-step"></span></span>
+  <span class="sim-label">Tasks</span>
+  <div class="segmented" id="town-size">
+    <button type="button" data-town="few">3</button>
+    <button type="button" data-town="sample" aria-pressed="true">7</button>
+    <button type="button" data-town="many">16</button>
+    <button type="button" data-town="lots">30</button>
+  </div>
+  <span class="sim-label">Inside</span>
+  <div class="segmented" id="inside-style">
+    <button type="button" data-inside="desks" aria-pressed="true">Desks</button>
+    <button type="button" data-inside="line">Line</button>
+  </div>
+  <span class="sim-label">Events <span id="sim-step"></span></span>
   <div class="segmented">
     <button type="button" id="sim-toggle" aria-pressed="true">Pause events</button>
     <button type="button" id="sim-restart">Restart</button>
@@ -694,51 +708,111 @@ const MIN = 60_000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const AGENT = { STARTING: "starting", RUNNING: "running", COMPLETED: "completed", FAILED: "failed", CANCELLED: "cancelled" };
 const PR = { OPEN: "open", DRAFT: "draft", MERGED: "merged", CLOSED: "closed" };
 const CHECKS = { PENDING: "pending", PASSING: "passing", FAILING: "failing", NONE: "none" };
-const TASKS = [
+/* Each task as two reads the window can make. Its plan-list row (TaskSummary)
+   carries a bounded summary of its agents: counts of all and of those
+   working, and at most three of them, plus a count of pull requests and at
+   most three of those (TASK_AGENTS_BOUNDS). Opening the task reads its whole
+   agent list (the per-plan list) and each agent's published pull request.
+   The overview draws from the summary; an opened task from the whole lists. */
+const A = (id, title, model, effort, status, at) => ({ id, title, model, effort, status, at });
+const PRL = (number, title, state, checks, additions, deletions) => ({ number, title, state, checks, additions, deletions });
+const SAMPLE_TASKS = [
   {
     id: "switching", name: "Faster workspace switching", repository: "ReviewStage/luke", createdAt: NOW - 9 * DAY,
-    agents: { total: 5, working: 0, named: [
-      { id: "sw-1", model: "Sonnet", effort: "medium", status: AGENT.COMPLETED, at: NOW - 3 * HOUR },
-      { id: "sw-2", model: "Sonnet", effort: "medium", status: AGENT.COMPLETED, at: NOW - 5 * HOUR },
-      { id: "sw-3", model: "Opus", effort: "high", status: AGENT.COMPLETED, at: NOW - 8 * HOUR },
-    ] },
-    pullRequests: { total: 4, named: [
-      { number: 3071, title: "Faster workspace switching", state: PR.MERGED, checks: CHECKS.PASSING, additions: 302, deletions: 118 },
-      { number: 3064, title: "Cache the workspace list", state: PR.MERGED, checks: CHECKS.PASSING, additions: 41, deletions: 12 },
-      { number: 3059, title: "Drop the switcher's second read", state: PR.MERGED, checks: CHECKS.PASSING, additions: 18, deletions: 66 },
-    ] },
+    agentList: [
+      A("sw-1", "Profile the switcher", "Sonnet", "medium", AGENT.COMPLETED, NOW - 3 * HOUR),
+      A("sw-2", "Cache the workspace list", "Sonnet", "medium", AGENT.COMPLETED, NOW - 5 * HOUR),
+      A("sw-3", "Drop the second read", "Opus", "high", AGENT.COMPLETED, NOW - 8 * HOUR),
+      A("sw-4", "Prefetch the next workspace", "Sonnet", "medium", AGENT.COMPLETED, NOW - 2 * DAY),
+      A("sw-5", "Measure the switch", "Opus", "high", AGENT.CANCELLED, NOW - 3 * DAY),
+    ],
+    prList: [
+      PRL(3071, "Faster workspace switching", PR.MERGED, CHECKS.PASSING, 302, 118),
+      PRL(3064, "Cache the workspace list", PR.MERGED, CHECKS.PASSING, 41, 12),
+      PRL(3059, "Drop the switcher's second read", PR.MERGED, CHECKS.PASSING, 18, 66),
+      PRL(3052, "Prefetch the next workspace", PR.MERGED, CHECKS.PASSING, 77, 20),
+    ],
   },
   {
     id: "empty", name: "Polish empty states", repository: "ReviewStage/luke", createdAt: NOW - 7 * DAY,
-    agents: { total: 1, working: 0, named: [{ id: "em-1", model: "Opus", effort: "high", status: AGENT.COMPLETED, at: NOW - 26 * HOUR }] },
-    pullRequests: { total: 1, named: [{ number: 3068, title: "Polish empty states", state: PR.MERGED, checks: CHECKS.PASSING, additions: 156, deletions: 47 }] },
+    agentList: [A("em-1", "Polish empty states", "Opus", "high", AGENT.COMPLETED, NOW - 26 * HOUR)],
+    prList: [PRL(3068, "Polish empty states", PR.MERGED, CHECKS.PASSING, 156, 47)],
   },
   {
     id: "reconnect", name: "Fix reconnect handling", repository: "ReviewStage/luke", createdAt: NOW - 3 * DAY,
-    agents: { total: 1, working: 0, named: [{ id: "rc-1", model: "Opus", effort: "high", status: AGENT.COMPLETED, at: NOW - 18 * MIN }] },
-    pullRequests: { total: 1, named: [{ number: 3081, title: "Fix reconnect handling", state: PR.OPEN, checks: CHECKS.PASSING, additions: 84, deletions: 31 }] },
+    agentList: [A("rc-1", "Fix reconnect backoff", "Opus", "high", AGENT.COMPLETED, NOW - 18 * MIN)],
+    prList: [PRL(3081, "Fix reconnect handling", PR.OPEN, CHECKS.PASSING, 84, 31)],
   },
   {
     id: "search", name: "Improve search ranking", repository: "ReviewStage/luke", createdAt: NOW - 2 * DAY,
-    agents: { total: 1, working: 1, named: [{ id: "se-1", model: "Sonnet", effort: "medium", status: AGENT.RUNNING, at: NOW - 22 * MIN }] },
-    pullRequests: { total: 1, named: [{ number: 3088, title: "Improve search ranking", state: PR.OPEN, checks: CHECKS.FAILING, additions: 212, deletions: 48 }] },
+    agentList: [A("se-1", "Rank by recency", "Sonnet", "medium", AGENT.RUNNING, NOW - 22 * MIN)],
+    prList: [PRL(3088, "Improve search ranking", PR.OPEN, CHECKS.FAILING, 212, 48)],
   },
   {
     id: "shortcuts", name: "Keyboard shortcuts", repository: "ReviewStage/luke", createdAt: NOW - DAY,
-    agents: { total: 1, working: 1, named: [{ id: "ks-1", model: "Opus", effort: "high", status: AGENT.RUNNING, at: NOW - 9 * MIN }] },
-    pullRequests: { total: 0, named: [] },
+    agentList: [A("ks-1", "Shortcut sheet", "Opus", "high", AGENT.RUNNING, NOW - 9 * MIN)],
+    prList: [],
   },
   {
     id: "invite", name: "Invite your teammates", repository: "ReviewStage/luke", createdAt: NOW - 5 * HOUR,
-    agents: { total: 1, working: 0, named: [{ id: "iv-1", model: "Opus", effort: "high", status: AGENT.COMPLETED, at: NOW - 4 * MIN }] },
-    pullRequests: { total: 1, named: [{ number: 3090, title: "Let members invite teammates", state: PR.OPEN, checks: CHECKS.PENDING, additions: 146, deletions: 9 }] },
+    agentList: [A("iv-1", "Invite links", "Opus", "high", AGENT.COMPLETED, NOW - 4 * MIN)],
+    prList: [PRL(3090, "Let members invite teammates", PR.OPEN, CHECKS.PENDING, 146, 9)],
   },
   {
     id: "factory-view", name: "Add another Factory view", repository: "ReviewStage/luke", createdAt: NOW - HOUR,
-    agents: { total: 0, working: 0, named: [] },
-    pullRequests: { total: 0, named: [] },
+    agentList: [],
+    prList: [],
   },
 ];
+/* More illustrative tasks, for seeing the town grow: made up from a seed, so the same each time. */
+const MORE_NAMES = ["Billing export", "Webhook signing", "Audit log", "Faster cold start", "Team avatars", "Retry failed webhooks", "Command palette search", "Onboarding checklist", "CSV import", "Rate limit banner", "Plan templates", "Offline mode", "Mention autocomplete", "Usage dashboard", "Slack digest", "Pin repositories", "Keyboard map", "Session timeouts", "Archive old plans", "Reviewer suggestions", "Diff word wrap", "Bulk archive", "Status page link", "Theme sync"];
+function moreTasks(count) {
+  let k = 7;
+  const rnd = () => { k = (k * 9301 + 49297) % 233280; return k / 233280; };
+  const list = [];
+  for (let i = 0; i < count; i++) {
+    const name = MORE_NAMES[i % MORE_NAMES.length];
+    const id = `more-${i}`;
+    const old = i % 2 === 0;
+    const createdAt = NOW - (old ? (12 + i) * DAY : (i + 2) * HOUR);
+    const agents = [];
+    const n = Math.floor(rnd() * 4);
+    for (let j = 0; j < n; j++) {
+      const r = rnd();
+      const status = old ? (r < 0.9 ? AGENT.COMPLETED : AGENT.FAILED) : r < 0.5 ? AGENT.RUNNING : r < 0.9 ? AGENT.COMPLETED : AGENT.FAILED;
+      agents.push(A(`${id}-a${j}`, `${name} ${["part", "fix", "tests"][j % 3]}`, rnd() < 0.5 ? "Opus" : "Sonnet", rnd() < 0.5 ? "high" : "medium", status, createdAt + (j + 1) * HOUR));
+    }
+    const prs = [];
+    const m = n ? Math.floor(rnd() * Math.min(3, n + 1)) : 0;
+    for (let j = 0; j < m; j++) {
+      const r = rnd();
+      const merged = old || r < 0.3;
+      const checks = merged ? CHECKS.PASSING : [CHECKS.PASSING, CHECKS.PENDING, CHECKS.FAILING][Math.floor(rnd() * 3)];
+      prs.push(PRL(2900 + i * 4 + j, `${name}${j ? ` (${j + 1})` : ""}`, merged ? PR.MERGED : PR.OPEN, checks, 20 + Math.floor(rnd() * 360), 4 + Math.floor(rnd() * 120)));
+    }
+    list.push({ id, name, repository: "ReviewStage/luke", createdAt, agentList: agents, prList: prs });
+  }
+  return list;
+}
+/* How many tasks the town shows: a few of the sample, the sample, or the sample and more. */
+const TOWN = {
+  few: () => SAMPLE_TASKS.filter((t) => ["reconnect", "invite", "factory-view"].includes(t.id)),
+  sample: () => SAMPLE_TASKS,
+  many: () => [...SAMPLE_TASKS, ...moreTasks(9)],
+  lots: () => [...SAMPLE_TASKS, ...moreTasks(23)],
+};
+let townSize = "sample";
+const TASKS = JSON.parse(JSON.stringify(TOWN[townSize]()));
+/* The summary a plan-list row carries, worked out from the whole lists as the service does. */
+const isWorking = (a) => a.status === AGENT.RUNNING || a.status === AGENT.STARTING;
+function summarize(t) {
+  const order = [...t.agentList].sort((a, b) => Number(isWorking(b)) - Number(isWorking(a)) || (b.at || 0) - (a.at || 0));
+  t.agents = { total: t.agentList.length, working: t.agentList.filter(isWorking).length, named: order.slice(0, 3) };
+  const prs = [...t.prList].sort((a, b) => b.number - a.number);
+  t.pullRequests = { total: prs.length, named: prs.slice(0, 3) };
+}
+const summarizeAll = () => { for (const t of TASKS) summarize(t); };
+summarizeAll();
 const INBOX = [
   { id: "ib-1", taskId: "invite", agentId: "iv-1", title: "Should an invite link expire?", postedAt: NOW - 4 * MIN, options: ["After 7 days", "After 30 days", "Never"] },
 ];
@@ -748,13 +822,12 @@ let byId = Object.fromEntries(TASKS.map((t) => [t.id, t]));
 const reindex = () => { byId = Object.fromEntries(TASKS.map((t) => [t.id, t])); };
 const inboxFor = (t) => INBOX.filter((i) => i.taskId === t.id);
 const allPRs = () => TASKS.flatMap((t) => t.pullRequests.named.map((p) => ({ ...p, taskId: t.id })));
-const prByNumber = (n) => TASKS.flatMap((t) => t.pullRequests.named).find((p) => p.number === n);
+const prByNumber = (n) => TASKS.flatMap((t) => t.prList).find((p) => p.number === n);
 const linesOf = (p) => p.additions + p.deletions;
 const awaiting = () => allPRs().filter((p) => p.state === PR.OPEN);
 const merged = () => allPRs().filter((p) => p.state === PR.MERGED);
 const readyPRs = () => awaiting().filter((p) => p.checks === CHECKS.PASSING);
 const unnamedPRs = (t) => Math.max(0, t.pullRequests.total - t.pullRequests.named.length);
-const unnamedAgents = (t) => Math.max(0, t.agents.total - t.agents.named.length);
 const ago = (at) => { const d = NOW - at; if (d < MIN) return "now"; return d < HOUR ? `${Math.round(d / MIN)}m` : d < DAY ? `${Math.round(d / HOUR)}h` : d < 7 * DAY ? `${Math.round(d / DAY)}d` : `${Math.round(d / (7 * DAY))}w`; };
 
 /* What a task shows, read from the fields above. */
@@ -780,13 +853,15 @@ function taskTone(t) {
    x runs down to the right on screen, y down to the left, z up.
    ------------------------------------------------------------------------ */
 const N = 20;
+/* How deep the town runs: it grows a row of plots at a time as tasks are added, and draws in as they go. */
+let NY = 20;
 const DX = 22, DY = 11, DZ = 25;
 let rot = 0;
 const near = (a, b) => Math.abs(a - b) < 1e-6;
 function R(x, y) {
   switch (rot) {
-    case 1: return [N - y, x];
-    case 2: return [N - x, N - y];
+    case 1: return [NY - y, x];
+    case 2: return [N - x, NY - y];
     case 3: return [y, N - x];
     default: return [x, y];
   }
@@ -1020,9 +1095,43 @@ const SLOTS = [
     ],
     roof: [13.9, 18.4, 1.55], stack: null, crane: { at: [15.95, 17.6], h: 3.0, jib: 2.1 } },
 ];
-const NEW_PLOT = [12, 17.4, 4.4, 2.2];
+/* Past the hand-made eight, the town grows rows of four plots, two either side of the avenue, each taking one of the smaller buildings in turn. */
+const ROW0 = 20.6, ROW_STEP = 6.0, CELL_W = 4.4, CELL_D = 5.4;
+const CELL_X = [0.25, 4.55, 11.15, 15.45];
+const EXTRA = [0, 1, 4, 6, 7];
+function shifted(slot, dx, dy) {
+  const mv = (o) => o && { ...o, x: o.x + dx, y: o.y + dy };
+  return {
+    ...slot,
+    plot: [slot.plot[0] + dx, slot.plot[1] + dy, slot.plot[2], slot.plot[3]],
+    hollow: mv(slot.hollow), deck: mv(slot.deck),
+    roof: [slot.roof[0] + dx, slot.roof[1] + dy, slot.roof[2]],
+    stack: slot.stack && [slot.stack[0] + dx, slot.stack[1] + dy, slot.stack[2]],
+    crane: slot.crane && { ...slot.crane, at: [slot.crane.at[0] + dx, slot.crane.at[1] + dy] },
+    parts: (lit) => slot.parts(lit).map((q) => (q.box ? { ...q, box: mv(q.box) } : { ...q, cyl: [q.cyl[0] + dx, q.cyl[1] + dy, ...q.cyl.slice(2)] })),
+  };
+}
+const slotCache = new Map();
+function slotAt(i) {
+  if (i < SLOTS.length) return SLOTS[i];
+  if (slotCache.has(i)) return slotCache.get(i);
+  const k = i - SLOTS.length;
+  const base = SLOTS[EXTRA[k % EXTRA.length]];
+  const x = CELL_X[k % 4] + (CELL_W - base.plot[2]) / 2;
+  const y = ROW0 + Math.floor(k / 4) * ROW_STEP + (CELL_D - base.plot[3]) / 2;
+  const slot = shifted(base, x - base.plot[0], y - base.plot[1]);
+  slotCache.set(i, slot);
+  return slot;
+}
+const extraRows = () => Math.max(0, Math.ceil((TASKS.length + 1 - SLOTS.length) / 4));
 function placed() {
-  return TASKS.slice().sort((a, b) => a.createdAt - b.createdAt).map((task, i) => ({ task, slot: SLOTS[i] }));
+  return TASKS.slice().sort((a, b) => a.createdAt - b.createdAt).map((task, i) => ({ task, slot: slotAt(i) }));
+}
+/* The town's depth: as far as its last plot (and the next, empty one), never shallower than the gate and the lot. */
+function measureTown() {
+  let bottom = LOT.y + LOT.d + 0.6;
+  for (let i = 0; i <= TASKS.length; i++) { const pl = slotAt(i).plot; bottom = Math.max(bottom, pl[1] + pl[3] + 0.6); }
+  NY = Math.max(13.4, Math.ceil(bottom * 2) / 2);
 }
 const slotOf = (id) => placed().find((p) => p.task.id === id)?.slot;
 
@@ -1049,22 +1158,25 @@ function sizeOf(p) {
 function cratePositions() {
   const list = [];
   const push = (pr, x, y, size, where, extra = {}) => list.push({ pr, x, y, ...size, e: Math.max(size.w, size.d), where, z: 0, ...extra });
+  /* A lane holds a row of containers, then stacks the next on top, as a port does. */
   for (const lane of LANES) {
-    let x = YARD.x + 0.9;
+    let x = YARD.x + 0.9, z = 0;
     for (const p of awaiting().filter((q) => q.checks === lane.checks && !q.moving).sort((a, b) => a.number - b.number)) {
       const size = sizeOf(p);
-      push(p, x + size.w / 2, lane.y + LANE_D / 2, size, "gate");
-      x += size.w + 0.4;
+      if (x + size.w > YARD.x + YARD.w - 0.2) { x = YARD.x + 0.9 + z * 0.15; z += 1; }
+      push(p, x + size.w / 2, lane.y + LANE_D / 2, size, "gate", { z: z * CONTAINER_H });
+      x += size.w + 0.25;
     }
   }
   const ship = merged().filter((q) => !q.moving).sort((a, b) => a.number - b.number);
   {
-    let x = LOT.x + 0.5, y = LOT.y + 0.5, rowD = 0;
+    let x = LOT.x + 0.5, y = LOT.y + 0.5, z = 0;
     for (const p of ship) {
       const size = sizeOf(p);
-      if (x + size.w > LOT.x + LOT.w - 0.4) { x = LOT.x + 0.5; y += rowD + 0.6; rowD = 0; }
-      push(p, x + size.w / 2, y + size.d / 2, size, "shipped");
-      x += size.w + 0.5; rowD = Math.max(rowD, size.d);
+      if (x + size.w > LOT.x + LOT.w - 0.4) { x = LOT.x + 0.5; y += CONTAINER_W + 0.35; }
+      if (y + size.d > LOT.y + LOT.d - 0.3) { y = LOT.y + 0.5; x = LOT.x + 0.5; z += 1; }
+      push(p, x + size.w / 2, y + size.d / 2, size, "shipped", { z: z * CONTAINER_H });
+      x += size.w + 0.3;
     }
   }
   for (const { task, slot } of placed()) {
@@ -1087,27 +1199,25 @@ const fresh = new Set();
 let gateOpen = false;
 const movers = [];
 const bursts = [];
-const SNAPSHOT = JSON.stringify({ TASKS, INBOX });
+let SNAPSHOT = JSON.stringify({ TASKS, INBOX });
 const ping = (id) => fresh.add(`ping:${id}`);
-function agentOf(id) { for (const t of TASKS) { const a = t.agents.named.find((x) => x.id === id); if (a) return [t, a]; } return []; }
-function startAgent(taskId, id, model, effort) {
+function agentOf(id) { for (const t of TASKS) { const a = t.agentList.find((x) => x.id === id); if (a) return [t, a]; } return []; }
+function startAgent(taskId, id, model, effort, title) {
   const t = byId[taskId];
-  t.agents.total += 1; t.agents.working += 1;
-  t.agents.named.unshift({ id, model, effort, status: AGENT.RUNNING, at: NOW });
-  t.agents.named.splice(3);
+  t.agentList.push(A(id, title, model, effort, AGENT.RUNNING, NOW));
+  summarize(t);
   ping(taskId);
 }
 function endTurn(agentId) {
   const [t, a] = agentOf(agentId);
   if (!a || a.status !== AGENT.RUNNING) return;
-  a.status = AGENT.COMPLETED; a.at = NOW; t.agents.working -= 1;
+  a.status = AGENT.COMPLETED; a.at = NOW; summarize(t);
   ping(t.id);
 }
 function archive(agentId) {
   const [t, a] = agentOf(agentId);
   if (!a) return;
-  if (a.status === AGENT.RUNNING) t.agents.working -= 1;
-  t.agents.named = t.agents.named.filter((x) => x !== a); t.agents.total -= 1;
+  t.agentList = t.agentList.filter((x) => x !== a); summarize(t);
   ping(t.id);
 }
 /* Checks changing: a forklift carries the container to its new lane. */
@@ -1133,17 +1243,19 @@ function startMerge(n, done) {
   movers.push({ n, kind: "truck", speed: 2.6, path: [[from.x, from.y], [from.x, road], [Math.max(to.x, N + 0.6), road], [to.x, road], [to.x, to.y]].filter((q, i, a) => i === 0 || Math.hypot(q[0] - a[i - 1][0], q[1] - a[i - 1][1]) > 0.01), seg: 0, t: 0, x: from.x, y: from.y, done: () => { p.moving = false; bursts.push({ x: to.x, y: to.y, at: performance.now() }); done(); } });
 }
 const EVENTS = [
-  { say: "Sonnet started", icon: "zap", tone: "--state-working", task: "shortcuts", run: () => startAgent("shortcuts", "ks-2", "Sonnet", "medium") },
+  { say: "Sonnet started", icon: "zap", tone: "--state-working", task: "shortcuts", run: () => startAgent("shortcuts", "ks-2", "Sonnet", "medium", "Shortcut settings page") },
   { say: "Checks running again on #3088", icon: "pr", tone: "--state-attention", task: "search", run: () => setChecks(3088, CHECKS.PENDING) },
   { say: "Sonnet's turn ended", icon: "check", tone: "--text-tertiary", task: "search", run: () => endTurn("se-1") },
   { say: "Checks passed on #3088", icon: "check", tone: "--state-complete", task: "search", run: () => setChecks(3088, CHECKS.PASSING) },
   { say: "#3081 merged", icon: "merge", tone: "--state-merged", task: "reconnect", wait: (done) => startMerge(3081, done) },
   { say: "Opus archived", icon: "x", tone: "--text-tertiary", task: "reconnect", run: () => archive("rc-1") },
   { say: "New task", icon: "plus", tone: "--text-secondary", task: "dark-mode", run: () => {
-    TASKS.push({ id: "dark-mode", name: "Dark mode toggle", repository: "ReviewStage/luke", createdAt: NOW + 1, agents: { total: 0, working: 0, named: [] }, pullRequests: { total: 0, named: [] } });
+    if (byId["dark-mode"]) return;
+    TASKS.push({ id: "dark-mode", name: "Dark mode toggle", repository: "ReviewStage/luke", createdAt: NOW + 1, agentList: [], prList: [] });
+    summarize(TASKS[TASKS.length - 1]);
     reindex(); fresh.add("rise:dark-mode");
   } },
-  { say: "Opus started", icon: "zap", tone: "--state-working", task: "dark-mode", run: () => startAgent("dark-mode", "dm-1", "Opus", "high") },
+  { say: "Opus started", icon: "zap", tone: "--state-working", task: "dark-mode", run: () => startAgent("dark-mode", "dm-1", "Opus", "high", "Theme tokens") },
   { say: "Opus asked a question", icon: "question", tone: "--state-attention", task: "shortcuts", run: () => {
     endTurn("ks-1");
     INBOX.push({ id: "ib-2", taskId: "shortcuts", agentId: "ks-1", title: "Should ⌘K open over a dialog?", postedAt: NOW, options: ["Yes", "No", "Only Search"] });
@@ -1151,8 +1263,8 @@ const EVENTS = [
   } },
   { say: "Opus opened #3093", icon: "pr", tone: "--state-complete", task: "dark-mode", run: () => {
     const t = byId["dark-mode"];
-    t.pullRequests.total += 1;
-    t.pullRequests.named.push({ number: 3093, title: "Dark mode toggle", state: PR.OPEN, checks: CHECKS.PENDING, additions: 188, deletions: 22 });
+    t.prList.push(PRL(3093, "Dark mode toggle", PR.OPEN, CHECKS.PENDING, 188, 22));
+    summarize(t);
     fresh.add("drop:3093"); ping("dark-mode");
   } },
   { say: "#3088 merged", icon: "merge", tone: "--state-merged", task: "search", wait: (done) => startMerge(3088, done) },
@@ -1164,7 +1276,11 @@ function schedule(ms) { clearTimeout(sim.timer); if (sim.on) sim.timer = setTime
 function step() {
   if (!sim.on || sim.busy) return;
   if (sim.i >= EVENTS.length) { resetWork(); notice("Replaying from the start", "--text-tertiary", "Simulated events", "rotate-cw"); schedule(STEP_MS); return; }
-  const ev = EVENTS[sim.i++];
+  let ev = EVENTS[sim.i++];
+  /* A smaller town lacks some of the script's tasks; their events pass it by. */
+  while (ev?.task && ev.task !== "dark-mode" && !byId[ev.task]) ev = EVENTS[sim.i++];
+  if (!ev) { schedule(10); return; }
+  if (ev.task === "dark-mode" && ev.say !== "New task" && !byId["dark-mode"]) { schedule(10); return; }
   renderSimStatus();
   notice(ev.say, ev.tone, ev.where || byId[ev.task]?.name || (ev.task === "dark-mode" ? "Dark mode toggle" : ""), ev.icon);
   if (ev.wait) {
@@ -1180,6 +1296,7 @@ function step() {
 function resetWork() {
   const snap = JSON.parse(SNAPSHOT);
   TASKS.splice(0, TASKS.length, ...snap.TASKS);
+  summarizeAll();
   INBOX.splice(0, INBOX.length, ...snap.INBOX);
   reindex();
   movers.length = 0; bursts.length = 0; sim.i = 0; sim.busy = false; gateOpen = false;
@@ -1290,12 +1407,15 @@ function litFor(task) {
 
 function renderGround() {
   const c = C();
-  let s = boxSVG({ x: 0, y: 0, w: N, d: N, z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
+  let s = boxSVG({ x: 0, y: 0, w: N, d: NY, z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
   s += boxSVG({ x: N, y: LOT.y - 0.3, w: LOT.x + LOT.w - N + 0.3, d: LOT.d + 0.6, z: -0.6, h: 0.6 }, "slab", { topFill: c.lot });
-  s += flat(0, 9, N, 2, c.road, 0.01) + flat(9, 0, 2, N, c.road, 0.01) + flat(N, 9, LOT.x - N + 0.2, 2, c.road, 0.01);
-  for (let i = 0.4; i < N; i += 1.2) {
+  s += flat(0, 9, N, 2, c.road, 0.01) + flat(9, 0, 2, NY, c.road, 0.01) + flat(N, 9, LOT.x - N + 0.2, 2, c.road, 0.01);
+  /* A street before each row the town has grown. */
+  for (let r = 0; r < extraRows(); r++) s += flat(0, ROW0 + r * ROW_STEP - 0.75, N, 0.6, c.road, 0.01);
+  for (let i = 0.4; i < NY; i += 1.2) {
     if (i > 8.6 && i < 11.4) continue;
-    s += flat(i, 9.96, 0.6, 0.08, c.line, 0.02) + flat(9.96, i, 0.08, 0.6, c.line, 0.02);
+    if (i < N) s += flat(i, 9.96, 0.6, 0.08, c.line, 0.02);
+    s += flat(9.96, i, 0.08, 0.6, c.line, 0.02);
   }
   s += flat(9, 9, 2, 2, theme === "dark" ? "#24252c" : "#e2e3e8", 0.015);
   const [px, py] = PR_(10, 10, 0);
@@ -1321,8 +1441,8 @@ function renderPlots() {
       s += `<ellipse cx="${gx}" cy="${gy + 6}" rx="${(slot.hollow.w + slot.hollow.d) * DX * 0.62}" ry="${(slot.hollow.w + slot.hollow.d) * DY * 0.62}" fill="${css(tone)}" opacity="0.07" filter="url(#glow)"/>`;
     }
   }
-  if (TASKS.length < SLOTS.length) {
-  const [x, y, w, d] = NEW_PLOT;
+  {
+  const [x, y, w, d] = slotAt(TASKS.length).plot;
   const edge = [PR_(x, y, 0.03), PR_(x + w, y, 0.03), PR_(x + w, y + d, 0.03), PR_(x, y + d, 0.03)];
   const [mx, my] = PR_(x + w / 2, y + d / 2, 0.03);
   s += `<g class="new-plot" id="new-plot" tabindex="0" role="button" aria-label="New task"><polygon points="${pts(edge)}" fill="transparent"/><polygon class="plot-dash" points="${pts(edge)}"/>` +
@@ -1350,7 +1470,7 @@ function renderShadows() {
     }
   }
   for (const c of cratePositions()) if (!c.z) s += shadowSVG({ x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, d: c.d, z: 0, h: c.h });
-  for (const [x, y] of TREES) s += shadowCyl(x, y, 0.3, 1.1);
+  for (const [x, y] of TREES) if (y < NY - 0.4 && !placed().some(({ slot }) => { const [px, py, pw, pd] = slot.plot; return x > px - 0.3 && x < px + pw + 0.3 && y > py - 0.3 && y < py + pd + 0.3; })) s += shadowCyl(x, y, 0.3, 1.1);
   s += shadowSVG({ ...GATEHOUSE, z: 0, h: 1 });
   $("layer-shadows").innerHTML = s;
 }
@@ -1391,41 +1511,121 @@ function agentTone(agent) {
   if (agent.status === AGENT.FAILED) return "--danger";
   return null;
 }
+/* Inside, with the roof off: the task's whole agent list, as opening it reads
+   it, in one of two layouts the page's header switches between. */
+let insideStyle = "desks";
+const shortTitle = (a) => { const t = a.title || a.model; return t.length > 22 ? `${t.slice(0, 21)}…` : t; };
+function bubble(x, y, z, dx = 16) {
+  const [qx, qy] = PR_(x, y, z);
+  return `<g class="loop bubble"><circle cx="${qx + dx}" cy="${qy - 4}" r="8" fill="${css("--attention-mark-ground")}"/><text x="${qx + dx}" y="${qy}" text-anchor="middle" font-size="11" font-weight="800" fill="#fff">?</text></g>`;
+}
 function insideSVG(task, slot) {
+  const hb = slot.hollow;
+  if (task.id === callTaskId && task.agentList.length === 0) {
+    const cx = hb.x + hb.w / 2, cy = hb.y + hb.d / 2;
+    return cylSVG(cx, cy, 0.5, 0, 0.3, "deskTop") +
+      figure(cx - 0.6, cy + 0.3, css("--workspace-hue-1")) + agentTag(cx - 0.6, cy + 0.3, 1.05, "You") +
+      figure(cx + 0.6, cy - 0.3, theme === "dark" ? "#e8eaf0" : "#2a2a30") + agentTag(cx + 0.6, cy - 0.3, 1.05, "Luke");
+  }
+  if (!task.agentList.length) return "";
+  return insideStyle === "line" ? lineInside(task, slot) : desksInside(task, slot);
+}
+/* Desks: a desk per agent, its screen saying how the agent stands, and the task's pull requests pinned to the back wall. */
+function desksInside(task, slot) {
   const c = C();
   const hb = slot.hollow;
+  const agents = task.agentList;
+  const n = agents.length;
   let s = "";
-  if (task.id === callTaskId && task.agents.total === 0) {
-    const cx = hb.x + hb.w / 2, cy = hb.y + hb.d / 2;
-    s += cylSVG(cx, cy, 0.5, 0, 0.3, "deskTop");
-    s += figure(cx - 0.6, cy + 0.3, css("--workspace-hue-1")) + agentTag(cx - 0.6, cy + 0.3, 1.05, "You");
-    s += figure(cx + 0.6, cy - 0.3, theme === "dark" ? "#e8eaf0" : "#2a2a30") + agentTag(cx + 0.6, cy - 0.3, 1.05, "Luke");
-    return s;
-  }
-  const n = task.agents.total;
-  if (!n) return s;
+  /* The back wall's board: a card per pull request, in its state's colour. */
+  const t = turnBox({ ...hb, z: 0 });
+  task.prList.slice(0, 6).forEach((p, k) => {
+    const u = 0.25 + k * 0.42;
+    if (u + 0.3 > t.x1 - t.x0) return;
+    const tone = p.state === PR.MERGED ? "--state-merged" : p.checks === CHECKS.FAILING ? "--danger" : p.checks === CHECKS.PENDING ? "--state-attention" : "--state-complete";
+    s += poly([P(t.x0 + u, t.y0 + 0.01, hb.h * 0.45), P(t.x0 + u + 0.3, t.y0 + 0.01, hb.h * 0.45), P(t.x0 + u + 0.3, t.y0 + 0.01, hb.h * 0.45 + 0.22), P(t.x0 + u, t.y0 + 0.01, hb.h * 0.45 + 0.22)], css(tone), 'opacity="0.85"');
+  });
   const cols = Math.max(1, Math.ceil(Math.sqrt((n * hb.w) / hb.d)));
   const rows = Math.ceil(n / cols);
   const cw = hb.w / cols, rh = hb.d / rows;
-  const desks = [];
-  for (let i = 0; i < n; i++) desks.push({ i, x: hb.x + cw * ((i % cols) + 0.5), y: hb.y + rh * (Math.floor(i / cols) + 0.4) });
-  desks.sort((a, b) => depthOf(a.x, a.y) - depthOf(b.x, b.y));
+  const desks = agents.map((a, i) => ({ a, x: hb.x + cw * ((i % cols) + 0.5), y: hb.y + rh * (Math.floor(i / cols) + 0.4) }));
+  desks.sort((p, q) => depthOf(p.x, p.y) - depthOf(q.x, q.y));
   const dw = Math.min(0.7, cw * 0.6), dd = Math.min(0.44, rh * 0.35);
-  for (const dsk of desks) {
-    const agent = task.agents.named[dsk.i];
-    const tone = agent ? agentTone(agent) : null;
-    s += boxSVG({ x: dsk.x - dw / 2, y: dsk.y - dd / 2, w: dw, d: dd, z: 0, h: 0.3 }, "deskTop");
-    s += boxSVG({ x: dsk.x - dw * 0.42, y: dsk.y - dd / 2, w: dw * 0.84, d: 0.05, z: 0.3, h: 0.3 }, "metal", { topFill: tone ? css(tone) : c.unlit });
-    const fy = dsk.y + dd / 2 + Math.min(0.3, rh * 0.25);
-    if (!agent) { s += figure(dsk.x, fy, css("--text-tertiary"), true); continue; }
-    s += figure(dsk.x, fy, "#d97757");
-    s += agentTag(dsk.x, fy, 1.05, agent.model);
-    if (INBOX.some((i) => i.agentId === agent.id)) {
-      const [qx, qy] = PR_(dsk.x, fy, 1.6);
-      s += `<g class="loop bubble"><circle cx="${qx + 16}" cy="${qy - 4}" r="8" fill="${css("--attention-mark-ground")}"/><text x="${qx + 16}" y="${qy}" text-anchor="middle" font-size="11" font-weight="800" fill="#fff">?</text></g>`;
-    }
+  for (const { a, x, y } of desks) {
+    const tone = agentTone(a);
+    const done = a.status === AGENT.COMPLETED || a.status === AGENT.CANCELLED;
+    s += boxSVG({ x: x - dw / 2, y: y - dd / 2, w: dw, d: dd, z: 0, h: 0.3 }, "deskTop");
+    s += boxSVG({ x: x - dw * 0.42, y: y - dd / 2, w: dw * 0.84, d: 0.05, z: 0.3, h: 0.32 }, "metal", { topFill: c.unlit });
+    /* The screen: lines scrolling while it works, a mark when it asks or fails, a quiet tick when its turn ended. */
+    const [sx, sy] = PR_(x, y - dd / 2 + 0.06, 0.47);
+    const screen = tone ? css(tone) : theme === "dark" ? "#2c2e36" : "#c5c8d0";
+    s += `<rect x="${sx - 9}" y="${sy - 6}" width="18" height="9" rx="1" fill="${screen}" opacity="${tone ? 0.9 : 0.6}" ${tone && theme === "dark" ? 'filter="url(#glow)"' : ""}/>`;
+    if (a.status === AGENT.RUNNING) for (let k = 0; k < 3; k++) s += `<rect class="loop screen" style="animation-delay:${-k * 0.4}s" x="${sx - 7}" y="${sy - 4.5 + k * 2.6}" width="${8 + ((k * 5) % 7)}" height="1.2" fill="#fff" opacity="0.7"/>`;
+    else if (a.status === AGENT.FAILED) s += `<text x="${sx}" y="${sy + 1.5}" text-anchor="middle" font-size="8" font-weight="800" fill="#fff">!</text>`;
+    else if (done) s += `<path d="M${sx - 3},${sy - 1.5} l2,2 l4,-4" fill="none" stroke="${css("--text-tertiary")}" stroke-width="1.2"/>`;
+    const fy = y + dd / 2 + Math.min(0.3, rh * 0.25);
+    s += `<g opacity="${done ? 0.55 : 1}">${figure(x, fy, "#d97757")}</g>`;
+    /* Only an agent still at it is named over its desk; the rest are in the pane, so a full hall doesn't stack labels. */
+    if (!done) s += agentTag(x, fy, 1.05, shortTitle(a));
+    if (INBOX.some((i) => i.agentId === a.id)) s += bubble(x, fy, 1.6);
   }
   return s;
+}
+/* An assembly line: a belt through the hall, a station per agent along it,
+   moving where its agent works; the task's open pull requests wait packed at
+   the belt's end, by the door they leave through for the gate. */
+function lineInside(task, slot) {
+  const c = C();
+  const hb = slot.hollow;
+  const agents = task.agentList;
+  const alongX = hb.w >= hb.d;
+  const len = (alongX ? hb.w : hb.d) - 0.5;
+  const start = alongX ? hb.x + 0.25 : hb.y + 0.25;
+  const mid = alongX ? hb.y + hb.d / 2 : hb.x + hb.w / 2;
+  const at = (u, v) => (alongX ? [start + u, mid + v] : [mid + v, start + u]);
+  const belt = (u0, u1) => (alongX ? { x: start + u0, y: mid - 0.16, w: u1 - u0, d: 0.32 } : { x: mid - 0.16, y: start + u0, w: 0.32, d: u1 - u0 });
+  const packLen = Math.min(0.9, len * 0.25);
+  const stLen = (len - packLen) / Math.max(1, agents.length);
+  const s = "";
+  const items = [];
+  agents.forEach((a, i) => {
+    const u0 = i * stLen, u1 = (i + 1) * stLen;
+    const tone = agentTone(a);
+    const working = a.status === AGENT.RUNNING;
+    const b = belt(u0, u1);
+    items.push({ d: depthOf(b.x + b.w / 2, b.y + b.d / 2) - 0.2, svg: (() => {
+      let g = boxSVG({ ...b, z: 0, h: 0.2 }, theme === "dark" ? "#2a2c33" : "#9a9eaa");
+      const [p0, p1] = [at(u0 + 0.05, 0), at(u1 - 0.05, 0)];
+      const [ax, ay] = PR_(p0[0], p0[1], 0.21), [bx, by] = PR_(p1[0], p1[1], 0.21);
+      g += `<line class="${working ? "loop belt" : ""}" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${theme === "dark" ? "#6b6f7c" : "#e8e9ee"}" stroke-width="3" stroke-dasharray="3 3"/>`;
+      if (working) { const [px, py] = at((u0 + u1) / 2, 0); g += boxSVG({ x: px - 0.12, y: py - 0.12, w: 0.24, d: 0.24, z: 0.2, h: 0.18 }, "crate"); }
+      return g;
+    })() });
+    const side = i % 2 === 0 ? -1 : 1;
+    const [mx, my] = at((u0 + u1) / 2, side * 0.55);
+    const m = { x: mx - 0.2, y: my - 0.2, w: 0.4, d: 0.4 };
+    let g = boxSVG({ ...m, z: 0, h: 0.5 }, a.status === AGENT.FAILED ? "wall2" : "metal");
+    const [lx, ly] = PR_(mx, my, 0.62);
+    g += `<line x1="${PR_(mx, my, 0.5)[0]}" y1="${PR_(mx, my, 0.5)[1]}" x2="${lx}" y2="${ly}" stroke="${c.metal}" stroke-width="1.4"/>`;
+    g += `<circle class="${working || INBOX.some((q) => q.agentId === a.id) ? "loop pulse" : ""}" cx="${lx}" cy="${ly}" r="3.4" fill="${tone ? css(tone) : c.unlit}" ${tone ? 'filter="url(#glow)"' : ""}/>`;
+    const [bx2, by2] = at((u0 + u1) / 2, side * 0.18);
+    const [ax2, ay2] = PR_(mx, my, 0.45), [tx2, ty2] = PR_(bx2, by2, 0.4);
+    g += `<line x1="${ax2}" y1="${ay2}" x2="${tx2}" y2="${ty2}" stroke="#d97757" stroke-width="2.2" stroke-linecap="round"/>`;
+    g += agentTag(mx, my, 1.15, shortTitle(a));
+    if (INBOX.some((q) => q.agentId === a.id)) g += bubble(mx, my, 1.4, 22);
+    items.push({ d: depthOf(mx, my), svg: g });
+  });
+  /* The end of the line: the task's open pull requests, packed and waiting by the door. */
+  const open = task.prList.filter((p) => p.state === PR.OPEN);
+  const [ex, ey] = at(len - packLen / 2, 0);
+  let pack = boxSVG({ x: ex - 0.35, y: ey - 0.35, w: 0.7, d: 0.7, z: 0, h: 0.06 }, "crate");
+  open.slice(0, 3).forEach((p, k) => {
+    const w = Math.min(0.6, Math.max(0.25, linesOf(p) / 400));
+    pack += containerSVG({ pr: p, x: ex, y: ey, w: alongX ? 0.3 : w, d: alongX ? w : 0.3, h: 0.22, z: 0.06 + k * 0.22, orient: alongX ? "y" : "x" });
+  });
+  items.push({ d: depthOf(ex, ey), svg: pack });
+  items.sort((p, q) => p.d - q.d);
+  return s + items.map((it) => it.svg).join("");
 }
 function cutawaySVG(task, slot) {
   const c = C();
@@ -1535,7 +1735,7 @@ function crateSVG(c) {
   const outline = hull([[t.x0, t.y0, z0], [t.x1, t.y0, z0], [t.x1, t.y1, z0], [t.x0, t.y1, z0], [t.x0, t.y0, z1], [t.x1, t.y0, z1], [t.x1, t.y1, z1], [t.x0, t.y1, z1]].map(([a, bb, z]) => P(a, bb, z)));
   const taskId = c.unknown ? c.taskId : c.pr.taskId;
   const name = c.unknown
-    ? `A pull request of ${byId[taskId].name} its summary doesn't name: state and size unknown`
+    ? `Another pull request of ${byId[taskId].name}, past the three the Factory's list carries; open the task to see it`
     : `Pull request #${c.pr.number}, ${c.pr.title}: ${c.pr.additions} additions, ${c.pr.deletions} deletions`;
   const key = c.unknown ? `u-${taskId}-${c.k}` : String(c.pr.number);
   return `<g class="crate" ${!c.unknown && fresh.has(`drop:${c.pr.number}`) ? 'data-fresh="drop"' : ""} data-crate="${key}" data-card="${c.unknown ? `unknown:${taskId}` : `pr:${c.pr.number}`}" data-task="${taskId}" data-where="${c.where}" tabindex="0" role="button" aria-label="${name}">${s}<polygon class="crate-edge" points="${pts(outline)}"/></g>`;
@@ -1610,9 +1810,12 @@ function renderObjects() {
     const label = `${task.name}: ${statusLine(task)}`;
     list.push({ depth: depthOf(x + w / 2, y + d / 2), svg: `<g class="bldg" data-id="${task.id}" data-card="task:${task.id}" ${fresh.has(`rise:${task.id}`) ? 'data-fresh="rise"' : ""} tabindex="0" role="button" aria-label="${label}" ${openId === task.id ? "data-open" : ""}>${buildingSVG(task, slot)}</g>` });
   }
-  for (const c of cratePositions()) list.push({ depth: depthOf(c.x, c.y) + (c.z ? 0.6 : 0), svg: crateSVG(c) });
-  for (const [x, y] of TREES) list.push({ depth: depthOf(x, y), svg: treeSVG(x, y) });
-  for (const [x, y] of LAMPS) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) });
+  for (const c of cratePositions()) list.push({ depth: depthOf(c.x, c.y) + (c.z || 0) * 0.5, svg: crateSVG(c) });
+  const used = placed().map((p) => p.slot.plot).concat([slotAt(TASKS.length).plot]);
+  const clear = ([x, y]) => y < NY - 0.4 && !used.some(([px, py, pw, pd]) => x > px - 0.3 && x < px + pw + 0.3 && y > py - 0.3 && y < py + pd + 0.3);
+  for (const [x, y] of TREES.filter(clear)) list.push({ depth: depthOf(x, y), svg: treeSVG(x, y) });
+  for (const [x, y] of LAMPS.filter(clear)) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) });
+  for (let r = 0; r < extraRows(); r++) for (const x of [8.7, 11.3]) { const y = ROW0 + r * ROW_STEP - 1.0; if (y < NY) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) }); }
   for (const lane of LANES) list.push({ depth: depthOf(YARD.x + 0.35, lane.y + LANE_D / 2), svg: laneLampSVG(lane) });
   list.push({ depth: depthOf(GATEHOUSE.x + 0.4, GATEHOUSE.y + 0.4), svg: `<g id="gate">${gateSVG(gateOpen)}</g>` });
   list.push({ depth: depthOf(LOT.x + LOT.w - 0.4, LOT.y + 0.4), svg: lotFlagSVG() });
@@ -1647,6 +1850,9 @@ function renderTags() {
     const [rx, ry, rz] = slot.roof;
     const lift = task.id === callTaskId ? 1.6 : asking(task) ? 1.1 : shippedAll(task) ? 1.5 : 0.35;
     const [x, y] = PR_(rx, ry, rz + lift + (underway(task) ? 1.4 : 0));
+    /* A big town names only the buildings where something is happening; the rest answer a hover. */
+    const quiet = ["--text-tertiary", "--state-merged"].includes(taskTone(task));
+    if (TASKS.length > 12 && quiet && openId !== task.id) continue;
     s += tagSVG(task.id, x, y, task.name, taskTone(task));
   }
   const [gx, gy] = PR_(GATEHOUSE.x + GATEHOUSE.w / 2, GATEHOUSE.y + GATEHOUSE.d / 2, 1.5);
@@ -1677,6 +1883,7 @@ function renderRoutes() {
 }
 
 function renderAll() {
+  measureTown();
   gradients.clear();
   queueMicrotask(() => { for (const k of [...fresh]) if (k.startsWith("ping:")) fresh.delete(k); });
   for (const g of document.querySelectorAll("#scene defs linearGradient")) g.remove();
@@ -1690,7 +1897,7 @@ function renderAll() {
 const cam = { x: 0, y: 0, s: 1 };
 let lastSize = null;
 function sceneBounds() {
-  const corners = [[0, 0], [N, 0], [N, N], [0, N], [LOT.x + LOT.w, LOT.y], [LOT.x + LOT.w, LOT.y + LOT.d]].map(([x, y]) => PR_(x, y, 0));
+  const corners = [[0, 0], [N, 0], [N, NY], [0, NY], [LOT.x + LOT.w, LOT.y], [LOT.x + LOT.w, LOT.y + LOT.d]].map(([x, y]) => PR_(x, y, 0));
   const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys) - 4.4 * DZ, y1: Math.max(...ys) + 1.5 * DZ };
 }
@@ -1802,7 +2009,7 @@ function agentRow(t, a, n) {
   const asked = INBOX.some((i) => i.agentId === a.id);
   const glyphNow = a.status === AGENT.RUNNING || a.status === AGENT.STARTING ? workingMark() : harnessMark();
   const end = a.status === AGENT.FAILED ? `<span class="failed-mark">${glyph("circle-alert")}</span>` : asked ? attentionMark() : "";
-  return `<li><button type="button" class="summary-row" data-card="agent:${a.id}" ${n()}><span class="summary-glyph">${glyphNow}</span><span class="label">${modelLabel(a)}</span>${end}<span class="time">${a.at ? ago(a.at) : ""}</span></button></li>`;
+  return `<li><button type="button" class="summary-row" data-card="agent:${a.id}" ${n()}><span class="summary-glyph">${glyphNow}</span><span class="label">${a.title || modelLabel(a)}</span>${end}<span class="time">${a.at ? ago(a.at) : ""}</span></button></li>`;
 }
 function setTab(icon, label) {
   $("insp-tab-icon").innerHTML = glyph(icon);
@@ -1819,7 +2026,7 @@ function renderInspector() {
       h += `<section class="section" ${n()}><p class="section-heading">${lane.label}<span class="count">${prs.length}</span></p>` +
         `<div class="published-rows">${prs.map((p) => prRow(p, byId[p.taskId].name)).join("") || `<div class="summary-row" data-unknown>None</div>`}</div></section>`;
     }
-    h += `<p class="panel-foot" ${n()}>Open pull requests the listed tasks' summaries name, grouped by their checks. Not GitHub's merge queue, and no order; merging happens on GitHub.</p>`;
+    h += `<p class="panel-foot" ${n()}>Open pull requests in the Factory's task list, grouped by their checks. Not GitHub's merge queue, and no order; merging happens on GitHub.</p>`;
   } else if (openId === "shipped") {
     setTab("merge", "Shipped");
     const ship = merged();
@@ -1827,7 +2034,7 @@ function renderInspector() {
     h += `<div class="panel-total" ${n()}><b>${ship.length}</b><span>merged</span><span style="margin-left:auto">${lines({ additions: add, deletions: del })}</span></div>`;
     h += `<section class="section" ${n()}><p class="section-heading">Pull requests</p><div class="published-rows">${ship.map((p) => prRow(p, byId[p.taskId].name)).join("")}</div></section>`;
     const unknown = TASKS.reduce((a, t) => a + unnamedPRs(t), 0);
-    h += `<p class="panel-foot" ${n()}>A sample: the merged pull requests the listed tasks' summaries name, at most three a task${unknown ? `. ${unknown} more not named.` : "."} Not an all-time total.</p>`;
+    h += `<p class="panel-foot" ${n()}>The merged pull requests the Factory's task list carries: up to three a task${unknown ? `, so ${unknown} more stand only in their tasks` : ""}. Not an all-time total.</p>`;
   } else {
     const t = byId[openId];
     if (!t) return;
@@ -1835,18 +2042,17 @@ function renderInspector() {
     h += `<p class="panel-sub" ${n()}>${t.repository}</p>`;
     if (t.id === callTaskId) h += `<div class="summary-row call-row" ${n()}><span class="summary-glyph">${glyph("mic")}</span><span class="label">On this Mac's call</span><span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>`;
     for (const item of inboxFor(t)) {
-      const asker = t.agents.named.find((a) => a.id === item.agentId);
+      const asker = t.agentList.find((a) => a.id === item.agentId);
       h += `<div class="inbox-item" ${n()}><div class="inbox-byline"><button type="button" class="actor-ref" data-card="agent:${item.agentId}"><span class="actor-mark">${harnessMark()}</span>${asker ? asker.model : "An agent"}</button><span>asked <time>${ago(item.postedAt)}</time></span></div>` +
         `<div class="inbox-indent"><h3>${item.title}</h3><div class="inbox-options">${item.options.map((o) => `<button type="button" class="inbox-option" data-answer="${o}" data-item="${item.id}">${o}</button>`).join("")}</div></div></div>`;
     }
-    h += `<section class="section" ${n()}><p class="section-heading">Coding agents<span class="count">${t.agents.total}</span></p><ul class="rows">`;
+    h += `<section class="section" ${n()}><p class="section-heading">Coding agents<span class="count">${t.agentList.length}</span></p><ul class="rows">`;
     if (!t.agents.total) h += `<li class="summary-row" data-unknown>None yet</li>`;
-    for (const a of t.agents.named) h += agentRow(t, a, () => "");
-    if (unnamedAgents(t)) h += `<li class="summary-row" data-unknown><span class="summary-glyph"></span>${unnamedAgents(t)} more not named in the summary</li>`;
+    /* Opened, the pane reads the task's whole agent list and each agent's pull request, not the row's summary. */
+    for (const a of t.agentList) h += agentRow(t, a, () => "");
     h += `</ul></section>`;
-    h += `<section class="section" ${n()}><p class="section-heading">Pull requests<span class="count">${t.pullRequests.total}</span></p><div class="published-rows">`;
-    h += t.pullRequests.named.map((p) => prRow(p)).join("") || `<div class="summary-row" data-unknown>None yet</div>`;
-    if (unnamedPRs(t)) h += `<div class="summary-row" data-unknown>${unnamedPRs(t)} more not named in the summary</div>`;
+    h += `<section class="section" ${n()}><p class="section-heading">Pull requests<span class="count">${t.prList.length}</span></p><div class="published-rows">`;
+    h += [...t.prList].sort((a, b) => b.number - a.number).map((p) => prRow(p)).join("") || `<div class="summary-row" data-unknown>None yet</div>`;
     h += `</div></section>`;
   }
   $("inspector-body").innerHTML = h;
@@ -1871,12 +2077,13 @@ function answer(itemId, choice) {
   INBOX.splice(k, 1);
   /* A reply hands the agent a message, so its turn starts again. */
   const t = byId[item.taskId];
-  const agent = t.agents.named.find((a) => a.id === item.agentId);
-  if (agent) { agent.status = AGENT.RUNNING; agent.at = NOW; t.agents.working += 1; }
+  const agent = t.agentList.find((a) => a.id === item.agentId);
+  if (agent) { agent.status = AGENT.RUNNING; agent.at = NOW; summarize(t); }
   pushToast({ words: `Replied “${choice}”`, detail: byId[item.taskId].name });
   refreshAll();
 }
 function refreshAll() {
+  summarizeAll();
   if (hover.el && !document.contains(hover.el)) hideCard();
   renderAll(); renderSidebar(); renderCensus(); renderKey();
   if (openId) renderInspector();
@@ -1884,7 +2091,7 @@ function refreshAll() {
 }
 
 function taskTime(t) {
-  return Math.max(t.createdAt, ...t.agents.named.map((a) => a.at || 0), ...inboxFor(t).map((i) => i.postedAt));
+  return Math.max(t.createdAt, ...t.agentList.map((a) => a.at || 0), ...inboxFor(t).map((i) => i.postedAt));
 }
 function renderSidebar() {
   $("task-list").innerHTML = `<ul class="task-list">${TASKS.slice().sort((a, b) => b.createdAt - a.createdAt).map((t) => {
@@ -1910,7 +2117,7 @@ function renderKey() {
     k(`<ellipse rx="9" ry="4.5" fill="none" stroke="${css("--voice-developer")}" stroke-width="1.5"/>`, "<b>Rings</b>: on this Mac's call") +
     k(`<line x1="0" y1="8" x2="0" y2="-7" stroke="#e0b42e" stroke-width="2"/><line x1="-8" y1="-7" x2="9" y2="-7" stroke="#e0b42e" stroke-width="2"/>`, "<b>Crane</b>: at work, no pull request yet") +
     k(`<rect x="-10" y="-4" width="20" height="8" fill="${css("--text-tertiary")}"/><rect x="-10" y="-1" width="14" height="2" fill="${ok}"/><rect x="4" y="-1" width="6" height="2" fill="${no}"/>`, "<b>Container</b> per pull request: length is lines changed, linear (150 a tile); the band is its additions and deletions") +
-    k(`<rect x="-6" y="-6" width="12" height="12" fill="none" stroke="${css("--text-tertiary")}" stroke-dasharray="2.5 2"/>`, "<b>Dashed</b>: not named in the summary, size unknown") +
+    k(`<rect x="-6" y="-6" width="12" height="12" fill="none" stroke="${css("--text-tertiary")}" stroke-dasharray="2.5 2"/>`, "<b>Dashed container</b> at a door: a pull request past the three a task carries in the list; open the task to see it") +
     k(`<circle cx="-5" r="3" fill="${no}"/><circle cx="1" r="3" fill="${ask}"/><circle cx="7" r="3" fill="${ok}"/>`, "<b>Gate lanes</b>: checks failing, running, ready. Not a merge queue");
 }
 
@@ -1930,7 +2137,8 @@ function cardFor(key) {
     const asks = inboxFor(t);
     const note = asks.length ? `${t.agents.named.find((a) => a.id === asks[0].agentId)?.model ?? "An agent"} asked: ${asks[0].title}`
       : t.id === callTaskId ? "On this Mac's call" : t.agents.working ? `${t.agents.working} working` : t.agents.total ? "No agent working" : "No agents yet";
-    const rows = t.agents.named.map((a) => `<div class="card-line"><span class="summary-glyph">${a.status === AGENT.RUNNING ? workingMark() : harnessMark()}</span>${modelLabel(a)}<span class="end">${a.at ? ago(a.at) : ""}</span></div>`).join("") +
+    const rows = t.agents.named.map((a) => `<div class="card-line"><span class="summary-glyph">${a.status === AGENT.RUNNING ? workingMark() : harnessMark()}</span><span>${a.title || a.model}</span><span class="end">${a.at ? ago(a.at) : ""}</span></div>`).join("") +
+      (t.agents.total > t.agents.named.length ? `<div class="card-line" style="color:var(--text-tertiary)"><span class="summary-glyph"></span><span>${t.agents.total - t.agents.named.length} more agents</span></div>` : "") +
       t.pullRequests.named.map((p) => `<div class="card-line">${prMark(p)}<span>#${p.number}</span><span class="end">${prWords(p)}</span></div>`).join("");
     return `<div class="card">${cardHead(glyph("factory"), t.name, t.repository, ago(taskTime(t)))}<p class="card-note">${note}</p>${rows ? `<hr class="card-rule">${rows}` : ""}</div>`;
   }
@@ -1941,21 +2149,21 @@ function cardFor(key) {
   }
   if (kind === "unknown") {
     const t = byId[id];
-    return `<div class="card">${cardHead(glyph("pr"), "A pull request not named", t.name, "")}<p class="card-note">${t.name} counts ${t.pullRequests.total} and names ${t.pullRequests.named.length}. Its state and size are unknown.</p></div>`;
+    return `<div class="card">${cardHead(glyph("pr"), "1 more pull request", t.name, "")}<p class="card-note">The Factory's list carries three a task. Open the task to see this one and its size.</p></div>`;
   }
   if (kind === "agent") {
     const [t, a] = agentOf(id);
     if (!a) return "";
     const word = { running: "Working", starting: "Working", failed: "Failed", cancelled: "Stopped", completed: "" }[a.status];
     const asked = INBOX.find((q) => q.agentId === a.id);
-    return `<div class="card">${cardHead(a.status === AGENT.RUNNING ? workingMark() : harnessMark(), t.name, modelLabel(a), [word, a.at ? ago(a.at) : ""].filter(Boolean).join(" · "))}${asked ? `<p class="card-note">Asked: ${asked.title}</p>` : ""}</div>`;
+    return `<div class="card">${cardHead(a.status === AGENT.RUNNING ? workingMark() : harnessMark(), a.title || a.model, `${modelLabel(a)} · ${t.name}`, [word, a.at ? ago(a.at) : ""].filter(Boolean).join(" · "))}${asked ? `<p class="card-note">Asked: ${asked.title}</p>` : ""}</div>`;
   }
   if (kind === "gate") {
     return `<div class="card">${cardHead(glyph("pr"), "Merge gate", `${awaiting().length} open pull requests`, "")}<p class="card-note">Grouped by their checks. Not GitHub's merge queue; merging happens on GitHub.</p><hr class="card-rule">${LANES.map((l) => `<div class="card-line"><span class="dot" style="--tone:var(${l.tone})"></span>${l.label}<span class="end">${awaiting().filter((p) => p.checks === l.checks).length}</span></div>`).join("")}</div>`;
   }
   if (kind === "shipped") {
     const ship = merged();
-    return `<div class="card">${cardHead(glyph("merge"), "Shipped", "A sample, not an all-time total", lines({ additions: ship.reduce((a, p) => a + p.additions, 0), deletions: ship.reduce((a, p) => a + p.deletions, 0) }))}<p class="card-note">${ship.length} merged pull requests the listed tasks' summaries name.</p></div>`;
+    return `<div class="card">${cardHead(glyph("merge"), "Shipped", "A sample, not an all-time total", lines({ additions: ship.reduce((a, p) => a + p.additions, 0), deletions: ship.reduce((a, p) => a + p.deletions, 0) }))}<p class="card-note">${ship.length} merged pull requests in the Factory's task list.</p></div>`;
   }
   if (kind === "needs") {
     const rows = INBOX.map((i) => `<div class="card-line">${attentionMark()}<span>${i.title}</span><span class="end">${ago(i.postedAt)}</span></div>`).join("") +
@@ -2146,6 +2354,27 @@ setTheme(initialTheme);
 for (let i = 0; i < rotParam; i++) turn();
 fitCampus(true);
 if (openParam) select(openParam);
+/* Switching the town's size starts its work over at that size; switching the inside redraws the open building. */
+const SAMPLE_INBOX = JSON.stringify(INBOX);
+function setTown(size) {
+  townSize = size;
+  for (const b of document.querySelectorAll("[data-town]")) b.setAttribute("aria-pressed", String(b.dataset.town === size));
+  closeDetails(false);
+  const fresh = JSON.parse(JSON.stringify(TOWN[size]()));
+  TASKS.splice(0, TASKS.length, ...fresh);
+  reindex();
+  INBOX.splice(0, INBOX.length, ...JSON.parse(SAMPLE_INBOX).filter((i) => byId[i.taskId]));
+  SNAPSHOT = JSON.stringify({ TASKS, INBOX });
+  resetWork();
+  fitCampus(false);
+  schedule(STEP_MS);
+}
+for (const b of document.querySelectorAll("[data-town]")) b.addEventListener("click", () => setTown(b.dataset.town));
+for (const b of document.querySelectorAll("[data-inside]")) b.addEventListener("click", () => {
+  insideStyle = b.dataset.inside;
+  for (const x of document.querySelectorAll("[data-inside]")) x.setAttribute("aria-pressed", String(x === b));
+  refreshAll();
+});
 $("sim-toggle").addEventListener("click", () => { sim.on = !sim.on; renderSimStatus(); if (sim.on) schedule(600); else clearTimeout(sim.timer); });
 $("sim-restart").addEventListener("click", () => { resetWork(); schedule(1200); });
 renderSimStatus();

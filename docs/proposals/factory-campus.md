@@ -37,6 +37,22 @@ click.
     one-word checks, additions and deletions.
 - **The Inbox's open items:** agent, title, `postedAt` and options.
 - **`callTaskId`.**
+- **Opening a task** also reads the task's whole agent list (the per-plan
+  agent list, `GET` a plan's agents) and each agent's published pull request.
+
+### What "summary" means
+
+The Factory, like the sidebar, reads the plan list. Each row of it is a
+`TaskSummary`, and its `agents` field is a *bounded* summary
+(`TASK_AGENTS_BOUNDS` in `task-wire.ts`, cut in the service's
+`task-agents.ts`): counts of every agent and of those working, but only three
+agents in full (working first, then newest) and only three pull requests
+(newest first). Anything past three stands only as a count. The overview draws
+from that row, so a task with five agents shows all five in its window light
+and counts but only three by name, and a fourth pull request shows as a dashed
+container at the task's door. Opening the task reads the whole lists, so the
+interior and the pane show everyone. In the page, `summarize()` derives the row
+from the whole lists exactly so.
 
 The sample is the shared comparison work, with the same seven tasks. The
 illustrative details the gate needs are:
@@ -76,6 +92,35 @@ Exact numbers appear only on hover or selection:
 
 The toolbar names its two kinds of waiting separately ("1 question · 1 ready
 to merge"), and the Inbox badge counts Inbox items only.
+
+## A town that grows and shrinks
+
+The header's Tasks switch shows the town with 3, 7, 16 or 30 tasks (the larger
+ones add seeded, made-up tasks). Plots are filled in start order, oldest at
+the back. The first eight are the hand-made master plan; past them the town
+adds a street and a row of four plots at a time, two either side of the
+avenue, each taking one of the smaller buildings in turn. The ground ends one
+plot past the newest task (where "+ New task" waits), so a small town is short
+and a big one long, and nothing about the layout is stored. Trees and lamps
+stand only where plots don't. The gate's lanes and the shipped lot stack their
+containers in layers once a row is full. In a town past twelve tasks, only
+buildings where something is happening keep a name label; the rest answer a
+hover.
+
+## Inside a building
+
+Opening a task lifts its roof onto one of two interiors, switched in the
+header. Both draw the task's whole agent list, with no cap.
+
+- **Desks:** a desk per agent with a screen that says how it stands (lines
+  scrolling while it runs, "!" when it failed, a tick when its turn ended), a
+  "?" over one with an open question, and the task's pull requests pinned to
+  the back wall in their checks' colours. Only agents still at it are named
+  over their desks.
+- **Line:** an assembly line through the hall, a station per agent with a
+  lamp in its state's colour and a belt that moves while that agent runs. The
+  task's open pull requests wait packed at the end of the line, by the door
+  they leave through for the gate.
 
 ## The chosen styles
 
@@ -151,11 +196,13 @@ Further ideas, not built:
 
 ## Limitations
 
-- **Only named PRs are placed.** At most three agents and three pull requests
-  per task are named, so the lanes and the lot cover only named ones. The rest
-  show as dashed figures and crates.
+- **Only the summary's PRs are placed.** The overview reads the bounded row,
+  so the lanes and the lot cover at most three pull requests a task. The rest
+  show as dashed containers at their task's door until the task is opened.
 - **Some PR states have no spot.** Draft, closed and no-checks pull requests
   would show only in the inspector. The sample has none.
-- **The master plan has eight plots.** More tasks need a rule for growing it.
+- **A very large town gets long.** Thirty tasks already make the fitted view
+  small; past that, the camera would need to start zoomed in on the newest
+  rows, or quiet old tasks fold into a back lot.
 - **Labels can crowd in turned views.** They're placed for the default view.
 - **Shared space.** The studio and the block's crane stand close to the gate.
