@@ -8,6 +8,7 @@ import {
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   type PlanCommentActionRequest,
+  type PlanCommentStartRequest,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { Task } from "@luke/features/task-wire";
@@ -119,8 +120,10 @@ function drawn(
   view: "page" | "tab" | "other",
   threads: readonly PlanCommentThread[] = THREADS,
   landing: () => boolean = () => true,
+  plan: Task = PLAN,
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
+  const started: PlanCommentStartRequest[] = [];
   const control: PlanCommentsControl = {
     planId: PLAN.id,
     threads,
@@ -128,7 +131,10 @@ function drawn(
     failed: false,
     onRetry: () => undefined,
     notes: new Map(),
-    start: async () => ({ note: "not in this test" }),
+    start: async (start) => {
+      started.push(start);
+      return { note: "not in this test" };
+    },
     act: async (thread, action) => {
       asked.push({ thread, action });
       return landing();
@@ -145,7 +151,7 @@ function drawn(
           onShowPlan: () => undefined,
         })
       : createElement(PlanBody, {
-          task: PLAN,
+          task: plan,
           live: false,
           ...(view === "page" ? { sectionLinks: PAGE_LINKS } : undefined),
         });
@@ -158,7 +164,7 @@ function drawn(
       ),
     ),
   );
-  return { container, asked };
+  return { container, asked, started };
 }
 
 /** The words marked for a thread, joined as drawn. */
@@ -360,4 +366,122 @@ test("words a block thread and a word thread both cover keep the word's mark, an
   assert.equal(shared.dataset.block, undefined, "and washed as words, not as a block");
   assert.ok((shared.dataset.blockThreads ?? "").includes(ID.GONE));
   assert.equal(blockOnly?.dataset.block, "true", "the rest of the block reads as the block's");
+});
+
+test("Send to posts the draft standing in the field, then sends the thread to Luke", async () => {
+  const { container, asked } = drawn("page");
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
+  const field = card?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(field, "Luke, should this be in v1?");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  act(() => card?.querySelector<HTMLButtonElement>(".comment-send-to")?.click());
+  const luke = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
+    each.textContent?.startsWith("Luke"),
+  );
+  await act(async () => luke?.click());
+
+  assert.deepEqual(
+    asked.map(({ action }) => [
+      action.action,
+      "words" in action ? action.words : undefined,
+      "to" in action ? action.to : undefined,
+    ]),
+    [
+      [PLAN_COMMENT_ACTION.REPLY, "Luke, should this be in v1?", undefined],
+      [PLAN_COMMENT_ACTION.ASK, undefined, { actor: PLAN_COMMENT_ACTOR.LUKE }],
+    ],
+  );
+});
+
+test("a Send to whose answer was lost is sent again under the same key, and the next one under a new one", async () => {
+  const lands = [false, true, true];
+  const { container, asked } = drawn("page", THREADS, () => lands.shift() ?? true);
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
+  const sendToLuke = async () => {
+    act(() => card?.querySelector<HTMLButtonElement>(".comment-send-to")?.click());
+    const luke = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
+      each.textContent?.startsWith("Luke"),
+    );
+    await act(async () => luke?.click());
+  };
+
+  await sendToLuke();
+  await sendToLuke();
+  await sendToLuke();
+
+  const keys = asked.map(({ action }) => ("clientKey" in action ? action.clientKey : undefined));
+  assert.equal(keys.length, 3);
+  assert.equal(keys[0], keys[1]);
+  assert.notEqual(keys[1], keys[2]);
+});
+
+test("a press away from the open thread closes it, and a press inside it keeps it open", () => {
+  const { container } = drawn("page");
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const card = () =>
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.equal(card()?.dataset.open, "true");
+
+  act(() => card()?.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.equal(card()?.dataset.open, "true", "a press inside keeps it open");
+
+  act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.notEqual(card()?.dataset.open, "true", "a press away closes it");
+});
+
+test("the button beside a list comments on the bullet under the pointer, a parent's own words without the bullets nested under it", async () => {
+  const text = ["## Goal", "- First item\n- Second item\n  - nested one\n  - nested two", ""].join(
+    "\n\n",
+  );
+  const listed: Task = { ...DOCUMENT_TASK, document: { body: text, assumptions: [] } };
+  const { container, started } = drawn("page", [], () => true, listed);
+  const second = [...container.querySelectorAll("li")].find((li) =>
+    li.textContent?.startsWith("Second item"),
+  );
+  const nested = [...container.querySelectorAll("li")].find(
+    (li) => li.textContent === "nested two",
+  );
+  assert.ok(second && nested);
+
+  const commentOn = async (item: Element, words: string) => {
+    act(() => item.dispatchEvent(new Event("pointerover", { bubbles: true })));
+    act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
+    const field = container.querySelector<HTMLTextAreaElement>(".comment-card textarea");
+    assert.ok(field);
+    await post(field, words);
+  };
+  await commentOn(second, "Why second?");
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>(".comment-card button[aria-label='Cancel']")
+      ?.click(),
+  );
+  await commentOn(nested, "And this one?");
+
+  const spans = started.map((start) => [
+    start.scope,
+    start.quote,
+    text.slice(start.anchor.from, start.anchor.to),
+  ]);
+  assert.deepEqual(spans[0], [PLAN_COMMENT_SCOPE.BLOCK, "Second item", "Second item"]);
+  assert.deepEqual(spans.at(-1), [PLAN_COMMENT_SCOPE.BLOCK, "nested two", "nested two"]);
 });

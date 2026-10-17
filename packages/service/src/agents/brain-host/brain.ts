@@ -4,6 +4,7 @@ import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PLAN_COMMENT_ACTOR, type PlanCommentThread } from "@luke/features/plan-comment-wire";
 import {
   NOTE_KIND,
   PLAN_FIELD_BAR,
@@ -25,6 +26,7 @@ import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import { LOOK_AT_BOARD_TOOL, lookModelOutput, runLookAtBoard } from "../../tasks/board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../../tasks/board-tool.js";
+import { COMMENT_TOOLS, openThreadsText, runCommentTool } from "../../tasks/comment-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../../tasks/end-call.js";
 import { runShowPage, SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
@@ -217,6 +219,8 @@ Plan the grid before you draw, because you cannot see the board:
 
 When draw_on_board answers with layout problems, draw again with them fixed. Then call look_at_board and check the image the way Excalidraw's guides ask: every label whole and inside its shape, no shapes overlapping, no arrow crossing a shape it does not join, at least 40px between shapes, and every zone holding its shapes with room to spare. If you see a problem, fix it, draw again, and look again before you return; look at most three times a turn. If the look answers not-looked, go on without it.
 
+The plan's open comment threads are handed to you every turn under [open comment threads], each with its id, the words of the plan it is on, and its comments. Members leave them on the plan between calls: raise one with the user when it bears on what you are discussing. Reply in a thread only where someone sent it to you, which reaches you as a request naming the thread; posting a comment asks you nothing.
+
 The board as it stands is handed to you every turn under [board], with every element's id. Anything the developer drew or moved since your last turn is there: read it as part of what they are telling you, and ask about it when its meaning is unclear.
 
 ### Working in parallel
@@ -259,6 +263,9 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the task's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
 - look_at_picture shows you one of the pictures in the plan, by its address, when its alt text and caption do not tell you enough.
+- read_comments reads the plan's comment threads, open or resolved, with every comment in each.
+- reply_to_comment answers one comment thread by its id, as you, beside the words it is on; use it for a thread someone sent you, and for nothing else.
+- resolve_thread and reopen_thread settle a comment thread once what it asked is decided, or bring a resolved one back.
 - show_page shows the developer an interactive HTML page in the task's side panel, such as a chart, a table to sort, or a mockup of a screen, when it says more than the board or your words; call it again with the page it answered to revise that page rather than making another.
 - read_page reads a page shown on any task of the workspace by its id, its HTML as it stands, before you revise it or tell the developer what it shows.
 - list_agents lists the coding agents of this task's workspace, or of one task of it (this task with thisTask, another by its taskId), each with its id, its title as the developer sees it, its status, what it last did, its task, and whether it is archived.
@@ -419,7 +426,8 @@ function linearIssueText(stored: StoredTask): readonly string[] {
  * document as JSON, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), what was
  * said in the chat since Luke last read it (`chat.ts`), the sections
- * the developer last wrote themselves (so Luke treats them as decided), and the
+ * the developer last wrote themselves (so Luke treats them as decided), the
+ * plan's open comment threads (so Luke can raise what a member asked), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
  * turn so what the notetaker saved and what the developer drew is what the
  * next turn reads. A task that no longer stands gets the heading alone.
@@ -429,6 +437,7 @@ export function brainStandingContext(
   board: Board,
   chat: ChatSince,
   now: number,
+  comments: readonly PlanCommentThread[] = [],
 ): string {
   const heading = `${TASK_MARKER} ${new Date(now).toISOString()}`;
   if (!stored) return heading;
@@ -442,6 +451,7 @@ export function brainStandingContext(
     ...agentEditsText(stored.agentEdits),
     ...chatSinceText(chat),
     ...developerFieldsText(stored),
+    ...openThreadsText(comments),
     boardText(board),
   ].join("\n");
 }
@@ -563,6 +573,18 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
     ...SHOW_PAGE_TOOL,
     run: (call, input) => runShowPage(call.task, input, { kind: PAGE_SHOWER.LUKE }),
   },
+  ...COMMENT_TOOLS.map((tool) => ({
+    ...tool,
+    run: (call: BrainCall, input: UnparsedWireValue) =>
+      runCommentTool(
+        tool.name,
+        {
+          taskId: call.task.taskId,
+          writer: { actor: PLAN_COMMENT_ACTOR.LUKE, userId: call.task.userId },
+        },
+        input,
+      ),
+  })),
   {
     ...LIST_AGENTS_TOOL,
     run: (call, input) => runListAgents(call.agents, input),

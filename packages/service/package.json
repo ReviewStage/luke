@@ -166,6 +166,7 @@
     "./tasks/brain-tool-set": "./src/tasks/brain-tool-set.js",
     "./tasks/child-models": "./src/tasks/child-models.js",
     "./tasks/end-call": "./src/tasks/end-call.js",
+    "./tasks/comment-tools": "./src/tasks/comment-tools.js",
     "./tasks/page-tool": "./src/tasks/page-tool.js",
     "./tasks/plan-comments-app": "./src/tasks/plan-comments-app.js",
     "./tasks/picture-look": "./src/tasks/picture-look.js",

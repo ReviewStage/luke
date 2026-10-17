@@ -204,7 +204,9 @@
             "no-words",
             "not-yours",
             "no-entry",
-            "key-taken"
+            "key-taken",
+            "no-agent",
+            "agent-away"
           ]
         }
       },

@@ -39,6 +39,7 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import { hostedEnvironment } from "@luke/service/environment";
+import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
 import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
@@ -259,6 +260,22 @@ export function lookAtPlanPicture(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return pictureNotLooked(admitted.failure);
       return yield* host.lookAtPicture(admitted.success, input);
+    }),
+  );
+}
+
+/** One call of a comment tool run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
+export function runCommentToolOf(
+  auth: SessionAuth,
+  sessionId: string,
+  name: CommentToolName,
+  input: UnparsedWireValue,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return commentToolRejected(admitted.failure);
+      return yield* host.comment(admitted.success, name, input);
     }),
   );
 }

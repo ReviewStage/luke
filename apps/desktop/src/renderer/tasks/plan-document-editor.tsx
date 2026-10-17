@@ -567,6 +567,7 @@ export function PlanDocumentEditor({
   drawn,
   hostOf,
   mentions,
+  handle,
 }: {
   task: Task;
   editor: DocumentEditor;
@@ -575,6 +576,8 @@ export function PlanDocumentEditor({
   hostOf: (section: number) => EditorHost;
   /** What the plan's mentions open, drawn as their chips in the editor, with `@` picking new ones; none where the text takes no mentions. */
   mentions?: MentionDoors | undefined;
+  /** Where the mounted editor's handle is kept, for the merged answers and for a comment started on its words. */
+  handle: React.RefObject<PlanEditorHandle | undefined>;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
   // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
@@ -587,7 +590,6 @@ export function PlanDocumentEditor({
             ? []
             : [{ thread: thread.id, ...thread.anchor }],
         );
-  const handle = useRef<PlanEditorHandle | undefined>(undefined);
   useMergedAnswers(editor, editing, task, handle);
   const module = useAtomValue(editorBundleAtom);
   const room = useRef<HTMLElement>(null);

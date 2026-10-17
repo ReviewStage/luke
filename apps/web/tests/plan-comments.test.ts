@@ -12,6 +12,9 @@ import {
 } from "@luke/database/testing";
 import {
   PLAN_COMMENT_ACTION,
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
   PLAN_COMMENTS_CURSOR_START,
@@ -22,6 +25,11 @@ import {
   planCommentThreadAnswerSchema,
 } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
+import {
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import { planCommentsApp } from "@luke/service/tasks/plan-comments-app";
@@ -33,7 +41,7 @@ import {
 } from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
+import { Clock, Effect, Layer, Option, Result, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 
@@ -78,6 +86,33 @@ const resolveUserId = (incoming: Request) =>
     Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
   );
 
+/** Every message the fake eve was asked to open a session with, in order. */
+const opened: EveMessage[] = [];
+
+/** eve as the routes reach it under the member's bearer: every open accepted and written down, no other call made. */
+const fakeEve = (): EveSessions => ({
+  open: (message) =>
+    Effect.sync(() => {
+      opened.push(message);
+      return {
+        outcome: EVE_SEND_OUTCOME.ACCEPTED,
+        sessionId: `wrun_01M${String(opened.length).padStart(22, "0")}`,
+      };
+    }),
+  send: (sessionId, message) =>
+    Effect.sync(() => {
+      opened.push(message);
+      return {
+        outcome: EVE_SEND_OUTCOME.ACCEPTED,
+        sessionId,
+        deliveryId: `delivery-${opened.length}`,
+      };
+    }),
+  cancel: () => Effect.die(new Error("this suite cancels nothing")),
+  reset: () => Effect.die(new Error("this suite retires no session")),
+  stream: () => Stream.empty,
+});
+
 /** One route group over the test's own database, answering one request. */
 const answer = (routes: "comments" | "plans", request: Request) =>
   Effect.gen(function* () {
@@ -91,7 +126,7 @@ const answer = (routes: "comments" | "plans", request: Request) =>
     );
     const app =
       routes === "comments"
-        ? planCommentsApp({ resolveUserId })
+        ? planCommentsApp({ resolveUserId, eveOrigin: () => undefined, eve: fakeEve })
         : tasksApp({
             resolveUserId,
             workspaces: yield* fakeWorkspaceSeams,
@@ -283,6 +318,138 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
           yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
         )[0];
         assert.deepEqual(afterUndo?.anchor, { from, to: from + WORDS.length });
+      }),
+  );
+});
+
+it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) => {
+  it.effect(
+    "a thread sent to Luke opens his planning turn on the thread, and the thread says who asked him",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedPlan;
+        const thread = threadIn(
+          yield* answer(
+            "comments",
+            request(COMMENTS, teammate, { id: taskId }, startBody("Is withdrawing in v1?")),
+          ),
+        );
+        const before = opened.length;
+
+        const asked = threadIn(
+          yield* answer(
+            "comments",
+            request(
+              THREAD,
+              owner,
+              { id: taskId, thread: thread.id },
+              {
+                action: PLAN_COMMENT_ACTION.ASK,
+                clientKey: randomUUID(),
+                to: { actor: PLAN_COMMENT_ACTOR.LUKE },
+              },
+            ),
+          ),
+        );
+
+        const [message] = opened.slice(before);
+        assert.ok(message, "Luke's planning turn was opened");
+        // Note that the message is read as eve was handed it, its words wherever its parts hold them.
+        const words = JSON.stringify(message.message);
+        assert.ok(words.includes("Charles Pan: Is withdrawing in v1?"));
+        assert.ok(words.includes("Dean Stratakos sent you a comment thread"));
+        assert.ok(words.includes(thread.id));
+        assert.deepEqual(
+          asked.entries.map((entry) => [entry.kind, entry.asked?.actor]),
+          [
+            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
+            [PLAN_COMMENT_ENTRY.ASKED, PLAN_COMMENT_ACTOR.LUKE],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a thread sent to an agent that is not the plan's is refused, and says nobody was asked",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedPlan;
+        const thread = threadIn(
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("v1?"))),
+        );
+
+        const refused = yield* answer(
+          "comments",
+          request(
+            THREAD,
+            owner,
+            { id: taskId, thread: thread.id },
+            {
+              action: PLAN_COMMENT_ACTION.ASK,
+              clientKey: randomUUID(),
+              to: { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: randomUUID() },
+            },
+          ),
+        );
+
+        assert.deepEqual(JSON.parse(refused.body), { refused: PLAN_COMMENT_REFUSAL.NO_AGENT });
+        const [after] = threadsIn(
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
+        );
+        assert.deepEqual(
+          after?.entries.map((entry) => entry.kind),
+          [PLAN_COMMENT_ENTRY.COMMENT],
+        );
+      }),
+  );
+  it.effect(
+    "a thread sent again by another member names that member, and a key a reply was written under sends nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedPlan;
+        const thread = threadIn(
+          yield* answer(
+            "comments",
+            request(COMMENTS, teammate, { id: taskId }, startBody("Is withdrawing in v1?")),
+          ),
+        );
+        const ask = (userId: string, clientKey: string) =>
+          answer(
+            "comments",
+            request(
+              THREAD,
+              userId,
+              { id: taskId, thread: thread.id },
+              {
+                action: PLAN_COMMENT_ACTION.ASK,
+                clientKey,
+                to: { actor: PLAN_COMMENT_ACTOR.LUKE },
+              },
+            ),
+          );
+        yield* ask(owner, randomUUID());
+        const before = opened.length;
+
+        yield* ask(teammate, randomUUID());
+        const [again] = opened.slice(before);
+        assert.ok(again, "Luke was handed the thread again");
+        assert.ok(JSON.stringify(again.message).includes("Charles Pan sent you a comment thread"));
+
+        const replyKey = randomUUID();
+        yield* answer(
+          "comments",
+          request(
+            THREAD,
+            owner,
+            { id: taskId, thread: thread.id },
+            { action: PLAN_COMMENT_ACTION.REPLY, clientKey: replyKey, words: "Not in v1." },
+          ),
+        );
+        const handed = opened.length;
+        const reused = yield* ask(owner, replyKey);
+
+        assert.deepEqual(JSON.parse(reused.body), { refused: PLAN_COMMENT_REFUSAL.KEY_TAKEN });
+        assert.equal(opened.length, handed, "nothing was handed over under the reply's key");
       }),
   );
 });

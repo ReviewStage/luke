@@ -22,6 +22,7 @@ import {
   type MarkdownEdit,
   MarkdownMessage,
 } from "../markdown-message";
+import type { PlanEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
@@ -638,11 +639,12 @@ function TitleMenu({
 function useCommentedEdit(
   edit: MarkdownEdit | undefined,
   section: PlanSection | undefined,
+  planText: string,
 ): MarkdownEdit | undefined {
   const control = usePlanCommentsControl();
   const { active, pending } = useCommentFocus();
   if (control === undefined || section === undefined) return edit;
-  const spans = commentSpansIn(control.threads, section, active, pending);
+  const spans = commentSpansIn(control.threads, section, active, pending, planText);
   if (spans.length === 0) return edit;
   const comments = spans.map((span) => ({
     from: span.from,
@@ -668,6 +670,7 @@ function DocumentUnit({
   linked,
   anchor,
   entry,
+  planText,
 }: {
   view: UnitView;
   /** Where the unit's words stand in the plan's text, where they stand as drawn, which marks the comments on them; none mid-chase. */
@@ -681,11 +684,13 @@ function DocumentUnit({
   anchor: string;
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
+  /** The plan's text as saved, which `section` stands in and a thread being started is laid over. */
+  planText: string;
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
   const picture = usePlanPictureDrawer();
-  const edit = useCommentedEdit(view.edit, section);
+  const edit = useCommentedEdit(view.edit, section, planText);
   const drawn = (
     <MarkdownMessage
       words={view.words}
@@ -876,6 +881,8 @@ export function PlanBody({
       ? textSections
       : undefined;
   const body = useRef<HTMLDivElement>(null);
+  // The open editor's handle, which a comment started on its words is measured through.
+  const editorHandle = useRef<PlanEditorHandle | undefined>(undefined);
   const edited = lastEditOf(task);
   // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
   const standing =
@@ -905,6 +912,7 @@ export function PlanBody({
           linked={linked}
           anchor={anchors[section] ?? ""}
           entry={entry === view.id}
+          planText={task.document.body}
         />
       </DocumentBlock>
     ) : (
@@ -916,6 +924,7 @@ export function PlanBody({
         link={link}
         linked={linked}
         anchor={anchors[section] ?? ""}
+        planText={task.document.body}
         // Note that a document that cannot be edited has no block Tab stop, so each ⋯ is one.
         entry
       />
@@ -999,6 +1008,7 @@ export function PlanBody({
               drawn={sections}
               hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
               mentions={mentionDoors}
+              handle={editorHandle}
             />
           )}
           {comments === undefined || !commentsHere || drawnSections === undefined ? null : (
@@ -1009,7 +1019,7 @@ export function PlanBody({
               sections={drawnSections}
               text={task.document.body}
               doors={{ control: comments, agents, me: reader.readerId }}
-              editing={editing.editor !== undefined}
+              editor={editing.editor === undefined ? undefined : editorHandle}
             />
           )}
         </div>

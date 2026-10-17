@@ -3,6 +3,12 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
+import {
+  READ_COMMENTS_TOOL,
+  REOPEN_THREAD_TOOL,
+  REPLY_TO_COMMENT_TOOL,
+  RESOLVE_THREAD_TOOL,
+} from "../../tasks/comment-tools.js";
 import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
@@ -155,6 +161,22 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.SHOW_PAGE]: {
     description: SHOW_PAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_COMMENTS]: {
+    description: READ_COMMENTS_TOOL.description,
+    inputSchema: emitJsonSchema(READ_COMMENTS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.REPLY_TO_COMMENT]: {
+    description: REPLY_TO_COMMENT_TOOL.description,
+    inputSchema: emitJsonSchema(REPLY_TO_COMMENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.RESOLVE_THREAD]: {
+    description: RESOLVE_THREAD_TOOL.description,
+    inputSchema: emitJsonSchema(RESOLVE_THREAD_TOOL.inputSchema),
+  },
+  [CODER_TOOL.REOPEN_THREAD]: {
+    description: REOPEN_THREAD_TOOL.description,
+    inputSchema: emitJsonSchema(REOPEN_THREAD_TOOL.inputSchema),
   },
   [CODER_TOOL.READ_PAGE]: {
     description: READ_PAGE_TOOL.description,

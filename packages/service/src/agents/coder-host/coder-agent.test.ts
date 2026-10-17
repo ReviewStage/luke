@@ -136,32 +136,41 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
   });
 });
 
-test("an agent on a task is told of the task's links and pages, and one an automation started with no task of neither", () => {
+test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of none", () => {
   const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
+  const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
     const taskless = coderInstructions("Acme/Relay", brief, true, null);
-    assert.deepEqual([onTask.includes(TASK_LINK), onTask.includes(PAGES)], [true, true], brief);
-    assert.deepEqual(
-      [taskless.includes(TASK_LINK), taskless.includes(PAGES)],
-      [false, false],
-      brief,
-    );
+    const told = (words: string) => [
+      words.includes(TASK_LINK),
+      words.includes(PAGES),
+      words.includes(COMMENTS),
+    ];
+    assert.deepEqual(told(onTask), [true, true, true], brief);
+    assert.deepEqual(told(taskless), [false, false, false], brief);
     assert.ok(taskless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
     assert.ok(!taskless.includes("luke://plan/"), "nor an older message's plan link");
   }
 });
 
-test("an agent handed its task's plan is offered edit_plan and show_page, one handed a prompt on a task show_page alone, and one an automation started with no task neither", () => {
+test("an agent handed its task's plan is offered edit_plan, show_page, and the comment tools, one handed a prompt on a task all but edit_plan, and one an automation started with no task none", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
-  assert.deepEqual(offered({ taskId: "plan-1", prompt: null }), [
-    CODER_TOOL.EDIT_PLAN,
-    CODER_TOOL.SHOW_PAGE,
-  ]);
-  assert.deepEqual(offered({ taskId: "plan-1", prompt: "Fix the flaky test." }), [
-    CODER_TOOL.SHOW_PAGE,
-  ]);
+  const comments = [
+    CODER_TOOL.READ_COMMENTS,
+    CODER_TOOL.REOPEN_THREAD,
+    CODER_TOOL.REPLY_TO_COMMENT,
+    CODER_TOOL.RESOLVE_THREAD,
+  ];
+  assert.deepEqual(
+    offered({ taskId: "plan-1", prompt: null }),
+    [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort(),
+  );
+  assert.deepEqual(
+    offered({ taskId: "plan-1", prompt: "Fix the flaky test." }),
+    [CODER_TOOL.SHOW_PAGE, ...comments].sort(),
+  );
   assert.deepEqual(offered({ taskId: null, prompt: "Sweep the flaky tests." }), []);
 });
 

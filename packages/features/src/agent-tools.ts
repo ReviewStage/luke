@@ -15,6 +15,7 @@ import { CHAT_TOOL } from "./chat-wire.js";
 import { CODING_AGENT_DELEGATE_TOOL, CODING_AGENT_TODOS_TOOL } from "./coding-agent-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
+import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
 
 /** Every tool Luke authors or declares for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
@@ -64,6 +65,11 @@ export const AGENT_TOOL = {
   LOAD_SKILL: "load_skill",
   // An interactive page shown in the plan's side panel, and a read of one by its id.
   SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
+  // The plan's comment threads, read and answered by the planning model and every coding agent on the task.
+  READ_COMMENTS: PLAN_COMMENT_TOOL.READ,
+  REPLY_TO_COMMENT: PLAN_COMMENT_TOOL.REPLY,
+  RESOLVE_THREAD: PLAN_COMMENT_TOOL.RESOLVE,
+  REOPEN_THREAD: PLAN_COMMENT_TOOL.REOPEN,
   READ_PAGE: "read_page",
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",
