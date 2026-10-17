@@ -1,7 +1,8 @@
+import { desktopVersionGateFromEnvironment } from "@luke/service/http/desktop-version-gate";
 import { cookieOriginGuard } from "@luke/service/http/origin-guard";
 import type { Route, WebRoutes } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { runWeb } from "./runtime.js";
 
@@ -27,7 +28,10 @@ type WebHandler = (request: Request) => Promise<Response>;
  * Every request meets the cookie origin guard first, so a state-changing
  * request a browser's cookie carried from a page this deployment does not
  * serve is refused before any route reads the cookie
- * (`packages/service/src/http/origin-guard.ts`).
+ * (`packages/service/src/http/origin-guard.ts`). Past it, every route sits
+ * behind the desktop version gate (`desktop-version-gate.ts`), so a desktop
+ * older than the deployment's minimum is refused the same way whichever
+ * function it reached.
  */
 export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
   const refuseCrossSite = cookieOriginGuard(process.env);
@@ -37,7 +41,10 @@ export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
       const refusal = refuseCrossSite(request);
       if (refusal !== undefined) return refusal;
       building ??= runWeb(Effect.context<WebServices>()).then((context) => {
-        const { handler } = HttpRouter.toWebHandler(routes, { disableLogger: true });
+        const { handler } = HttpRouter.toWebHandler(
+          Layer.merge(routes, desktopVersionGateFromEnvironment),
+          { disableLogger: true },
+        );
         return (incoming: Request) => handler(incoming, context);
       });
       const attempt = building;

@@ -8,14 +8,18 @@ import {
   recordedRequest,
   recordingHttpClient,
 } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import {
   accountBearer,
   accountCall,
+  CALL_FAULT,
   type CallCredential,
   callAnswered,
+  DesktopRelease,
+  desktopRelease,
   NO_CREDENTIAL,
 } from "./account-call.js";
+import { DESKTOP_VERSION_HEADER, HOSTED_API_ERROR } from "./service-wire.js";
 
 const BASE_URL = "https://luke.test";
 const PATH = "/api/account/preferences";
@@ -101,5 +105,38 @@ it.effect(
       assert.ok(callAnswered(answer) && answer.response.status === HTTP_STATUS.UNAUTHORIZED);
       assert.equal(requests.length, 1);
       assert.equal(recordedRequest(requests).authorization, undefined);
+    }),
+);
+
+it.effect("a call made with no desktop release named carries no version", () =>
+  Effect.gen(function* () {
+    const { call, requests, client } = callOn(NO_CREDENTIAL, () => jsonResponse({ ok: true }));
+
+    yield* Effect.provide(call.send({ method: HTTP_METHOD.GET, path: PATH }), client);
+
+    assert.equal(recordedRequest(requests).headers.get(DESKTOP_VERSION_HEADER), null);
+  }),
+);
+
+it.effect(
+  "a desktop names its build on every call, and once refused as too old sends nothing more",
+  () =>
+    Effect.gen(function* () {
+      const release = yield* desktopRelease("0.16.0");
+      const { call, requests, client } = callOn(NO_CREDENTIAL, () =>
+        jsonResponse({ error: HOSTED_API_ERROR.UPDATE_REQUIRED }, HTTP_STATUS.UPGRADE_REQUIRED),
+      );
+      const asked = call
+        .send({ method: HTTP_METHOD.GET, path: PATH })
+        .pipe(Effect.provide(client), Effect.provideService(DesktopRelease, release));
+
+      const refused = yield* asked;
+      const after = yield* asked;
+
+      assert.ok(callAnswered(refused) && refused.response.status === HTTP_STATUS.UPGRADE_REQUIRED);
+      assert.deepEqual(after, { fault: CALL_FAULT.UPDATE_REQUIRED });
+      assert.equal(requests.length, 1);
+      assert.equal(recordedRequest(requests).headers.get(DESKTOP_VERSION_HEADER), "0.16.0");
+      assert.equal(yield* Deferred.isDone(release.updateRequired), true);
     }),
 );
