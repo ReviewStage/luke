@@ -2,7 +2,14 @@ import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/c
 import type { ModelProvider } from "@luke/features/models-wire";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { AppWindowIcon, BotIcon, GitPullRequestIcon, InboxIcon, LaptopIcon } from "lucide-react";
+import {
+  AppWindowIcon,
+  BotIcon,
+  GitPullRequestIcon,
+  GlobeIcon,
+  InboxIcon,
+  LaptopIcon,
+} from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
@@ -40,6 +47,8 @@ export const TAB_KIND = {
   MAC_TERMINAL: "mac-terminal",
   FILE: "file",
   PAGE: "page",
+  /** A Browser tab, named by its page's title once it has one. */
+  BROWSER: "browser",
 } as const;
 
 /** Where an agent stands as its glyph wears it: its model, and where it stands where that is known. */
@@ -81,7 +90,12 @@ export type TabSubject =
     }
   | { readonly kind: typeof TAB_KIND.MAC_TERMINAL }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
-  | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string };
+  | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string }
+  | {
+      readonly kind: typeof TAB_KIND.BROWSER;
+      /** Its page's title, or its address until it has one; none before a page is opened. */
+      readonly title: string | undefined;
+    };
 
 /** A tab's look: its glyph and its name. */
 export interface KindLook {
@@ -188,5 +202,7 @@ export function tabLook(subject: TabSubject): KindLook {
     }
     case TAB_KIND.PAGE:
       return { icon: <AppWindowIcon />, label: subject.title };
+    case TAB_KIND.BROWSER:
+      return { icon: <GlobeIcon />, label: subject.title ?? TAB_WORDS.BROWSER };
   }
 }

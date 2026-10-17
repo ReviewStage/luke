@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { BrowserFocus, BrowserKey } from "@luke/features/browser-acts";
 import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -20,17 +21,21 @@ import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
+import { useAppKeymap } from "../app-commands";
 import { OpenLinkProvider } from "../tasks/use-open-link";
-import { useSidePanel } from "../tasks/use-side-panel";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import type { InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
@@ -156,8 +161,27 @@ function answer(request: Act): Promise<ActOutcome> {
   }
 }
 
+/** Main's events on a Browser tab's page, as the test hears the window subscribe to them. */
+interface MainBrowserEvents {
+  focus?: (focus: BrowserFocus) => void;
+  key?: (key: BrowserKey) => void;
+}
+
 /** The window's Inbox on the plan's item, its side panel the window's own hook held by the chosen item's plan, and every place it was asked to leave for. */
-async function inbox({ pages }: { pages: readonly PageLine[] | undefined } = { pages: [FUNNEL] }) {
+async function inbox(
+  {
+    pages,
+    experiments = NO_EXPERIMENTS,
+  }: {
+    pages: readonly PageLine[] | undefined;
+    experiments?: ExperimentChoices;
+  } = {
+    pages: [FUNNEL],
+  },
+) {
+  let control: SidePanelControl | undefined;
+  // Main's word on a Browser tab's page: that it took the keyboard, and a chord pressed over it.
+  const main: MainBrowserEvents = {};
   const links: ReadLink[] = [];
   const tasks: string[] = [];
   const left = { links, tasks, rereads: 0 };
@@ -165,7 +189,17 @@ async function inbox({ pages }: { pages: readonly PageLine[] | undefined } = { p
     onMenuCommand: () => () => undefined,
     recordSurfaceEvent: () => undefined,
     act: answer,
+    onBrowserState: () => () => undefined,
+    onBrowserKey: (listener: (key: BrowserKey) => void) => {
+      main.key = listener;
+      return () => undefined;
+    },
+    onBrowserFocus: (listener: (focus: BrowserFocus) => void) => {
+      main.focus = listener;
+      return () => undefined;
+    },
   });
+  handState(experiments);
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
@@ -178,6 +212,9 @@ async function inbox({ pages }: { pages: readonly PageLine[] | undefined } = { p
       [FUNNEL.id],
       undefined,
     );
+    control = sidePanel;
+    // The window's keymap, which hears a chord as the window's root mounts it.
+    useAppKeymap(true);
     return createElement(
       OpenLinkProvider,
       { value: (link: ReadLink) => left.links.push(link) },
@@ -208,7 +245,11 @@ async function inbox({ pages }: { pages: readonly PageLine[] | undefined } = { p
   root = createRoot(container);
   act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page))));
   await settle();
-  return { container, left };
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+  return { container, left, panel, main };
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -263,4 +304,50 @@ test("a page the item names whose plan's pages did not answer asks for them agai
   await pressChip(container, "Invite funnel");
   assert.equal(left.rereads, 1);
   assert.equal(left.links.length, 0, "the page is still the panel's to open");
+});
+
+test("a Browser tab chosen on the item's plan stands chosen in the panel beside the Inbox, and draws its page there", async () => {
+  const { container, panel } = await inbox({
+    pages: [FUNNEL],
+    experiments: experimentsOn(EXPERIMENT.BROWSER),
+  });
+  await pressChip(container, "invites.ts");
+  act(() => panel().onOpenBrowser("http://localhost:3000/"));
+  await settle();
+
+  assert.deepEqual(panelTabs(container), ["invites.ts", "▸ Browser"]);
+  const content = container.querySelector('aside[aria-label="Panel"] [role="tabpanel"]');
+  assert.ok(
+    content?.querySelector('section[aria-label="Browser"]'),
+    "the Browser tab's pane is drawn",
+  );
+  assert.equal(content?.textContent?.includes("Loading page"), false);
+});
+
+test("a click into a Browser tab's page beside the Inbox hands the panel the keys, so ⌘W over the page closes that tab", async () => {
+  const { container, panel, main } = await inbox({
+    pages: [FUNNEL],
+    experiments: experimentsOn(EXPERIMENT.BROWSER),
+  });
+  await pressChip(container, "invites.ts");
+  act(() => panel().onOpenBrowser("http://localhost:3000/"));
+  await settle();
+  // The Inbox's own column holds the keys, as a press in its list leaves them.
+  act(() => {
+    container
+      .querySelector(".inbox-view")
+      ?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  await settle();
+  const browserId = panel().browsers[0]?.tab.browser;
+  assert.ok(browserId);
+
+  act(() => main.focus?.({ browserId }));
+  await settle();
+  act(() =>
+    main.key?.({ browserId, key: "w", code: "KeyW", shift: false, alt: false, control: false }),
+  );
+  await settle();
+
+  assert.deepEqual(panelTabs(container), ["▸ invites.ts"]);
 });

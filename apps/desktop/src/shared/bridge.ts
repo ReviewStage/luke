@@ -7,6 +7,14 @@ import {
   productEventFromWire,
 } from "@luke/features/analytics";
 import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
+import {
+  type BrowserFocus,
+  type BrowserKey,
+  type BrowserPage,
+  isBrowserFocus,
+  isBrowserKey,
+  isBrowserPage,
+} from "@luke/features/browser-acts";
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
@@ -378,6 +386,39 @@ export const BRIDGE = {
     channel: "app:show-task",
     args: noArgs,
     result: result<{ taskId: string }>((value) => isRecord(value) && isWireString(value.taskId)),
+  }),
+  /**
+   * How one of this panel's Browser tabs' pages stands now, each time it
+   * moves: loading, loaded, titled, sent elsewhere, or failed. An event
+   * rather than a slice of the document, because a page is this window's
+   * alone and nothing of it is kept (`docs/proposals/browser-tab.md`).
+   */
+  onBrowserState: entry({
+    kind: "subscribe",
+    channel: "app:browser-state",
+    args: noArgs,
+    result: result<BrowserPage>(isBrowserPage),
+  }),
+  /**
+   * A Command chord pressed while a Browser tab's page held the keyboard,
+   * handed back so the panel's keymap answers it as over any tab.
+   */
+  onBrowserKey: entry({
+    kind: "subscribe",
+    channel: "app:browser-key",
+    args: noArgs,
+    result: result<BrowserKey>(isBrowserKey),
+  }),
+  /**
+   * A Browser tab's page took the keyboard, which no focus event of the
+   * panel's own page hears, so the panel hands its keys to the column the
+   * page stands in.
+   */
+  onBrowserFocus: entry({
+    kind: "subscribe",
+    channel: "app:browser-focus",
+    args: noArgs,
+    result: result<BrowserFocus>(isBrowserFocus),
   }),
   /**
    * A Luke link the system handed the app: the panel is to open the place it

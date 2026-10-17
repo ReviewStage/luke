@@ -303,6 +303,7 @@ export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_S
  * bridge, so a new experiment does not build until this set answers for it.
  */
 export const PRODUCT_EXPERIMENT = {
+  BROWSER: "browser",
   CHAT: "chat",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
