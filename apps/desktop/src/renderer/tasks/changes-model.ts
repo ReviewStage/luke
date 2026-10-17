@@ -18,7 +18,7 @@ import {
 } from "../file-tree/contract";
 
 /**
- * changes-model.ts -- an agent's changes as its Files changed view draws them: each file's patch headed as a whole unified diff, or why it has none, and the lines a review thread is on as a patch of their own.
+ * changes-model.ts -- an agent's changes as its Files changed view draws them: each file's patch headed as a whole unified diff, or why it has none, which files a filter keeps and which start collapsed, and the lines a review thread is on as a patch of their own.
  *
  * A file's patch is the hunks of a unified diff from the first `@@` header
  * on, as GitHub sends it. It is drawn whole (`filePatch`), headed as git
@@ -26,6 +26,19 @@ import {
  * same way, so `git apply` takes it as it is. A file with no patch is never
  * drawn as unchanged: it says it is binary, too large to show, or, with an
  * empty patch, that its contents did not change.
+ *
+ * The view draws every file in one list, under a header of its own
+ * (`listPatch` is the file's patch, or its header alone where it has no
+ * hunks to draw), in the order the tree beside it lists them, folders
+ * before files at each level, as Pierre's tree sorts them (`treeOrder`), so
+ * a key stepping to the next file steps to the next row of the tree. A
+ * filter keeps the files whose path holds what is typed,
+ * whatever its case (`filterFiles`), as the tree's search narrows its rows.
+ * A file starts collapsed, its header alone drawn, where reading it is
+ * rarely the point, as GitHub keeps such a diff folded until asked
+ * (`startsCollapsed`): one deleted, one changing more than
+ * `LARGE_FILE_LINES` lines, and a package manager's lockfile, which GitHub
+ * would mark generated.
  *
  * The view draws its files in a File tab's tree and breadcrumbs, which list
  * a folder at a time: the folders here are listed from the changed paths
@@ -120,6 +133,28 @@ export const STATUS_WORDS = {
 
 /** Where git's diff names a side the file does not stand on: before it was added, or after it was deleted. */
 const NO_SIDE = "/dev/null";
+
+/** The most lines a file may add and remove together before it starts collapsed. */
+const LARGE_FILE_LINES = 1000;
+
+/** The names of the lockfiles package managers write, which start collapsed wherever they stand. */
+const LOCKFILE_NAMES = new Set([
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "Cargo.lock",
+  "Gemfile.lock",
+  "composer.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Pipfile.lock",
+  "go.sum",
+  "Package.resolved",
+  "flake.lock",
+]);
 
 /** How many rows a review thread's preview shows above the first line it is on. */
 const THREAD_CONTEXT_ROWS = 3;
@@ -429,4 +464,71 @@ export function filePatch(file: CodingAgentChangedFile): string | undefined {
   const after = file.status === CHANGED_FILE_STATUS.DELETED ? NO_SIDE : `b/${file.path}`;
   const body = file.patch.endsWith("\n") ? file.patch : `${file.patch}\n`;
   return [`diff --git a/${from} b/${file.path}`, `--- ${before}`, `+++ ${after}`, body].join("\n");
+}
+
+/**
+ * What a file's place in the list draws: its patch as a whole unified diff,
+ * or, where it has no hunks to draw, the same header with none under it, so
+ * the file still stands in the list under its header, with why it has none
+ * said there (`fileNotice`).
+ */
+export function listPatch(file: CodingAgentChangedFile): string {
+  const patch = filePatch(file);
+  if (patch !== undefined) return patch;
+  const from = file.previousPath ?? file.path;
+  return [`diff --git a/${from} b/${file.path}`, `--- a/${from}`, `+++ b/${file.path}`, ""].join(
+    "\n",
+  );
+}
+
+/** The files whose path, or the path it moved from, holds `query`, whatever its case; every file for a query of nothing but spaces. */
+export function filterFiles(
+  files: readonly CodingAgentChangedFile[],
+  query: string,
+): readonly CodingAgentChangedFile[] {
+  const asked = query.trim().toLowerCase();
+  if (asked === "") return files;
+  return files.filter(
+    (file) =>
+      file.path.toLowerCase().includes(asked) ||
+      (file.previousPath?.toLowerCase().includes(asked) ?? false),
+  );
+}
+
+/** One step of a path as the tree sorts its rows: folders before files, a dotted name before the rest, then by name whatever its case. */
+function compareStep(a: string, aFolder: boolean, b: string, bFolder: boolean): number {
+  if (aFolder !== bFolder) return aFolder ? -1 : 1;
+  const aDot = a.startsWith(".");
+  if (aDot !== b.startsWith(".")) return aDot ? -1 : 1;
+  return a.toLowerCase().localeCompare(b.toLowerCase());
+}
+
+/** Two paths in the tree's order: at the first folder or name they part at, as `compareStep` sorts them. */
+function compareTreePaths(a: string, b: string): number {
+  const aSteps = a.split("/");
+  const bSteps = b.split("/");
+  for (let at = 0; at < Math.min(aSteps.length, bSteps.length); at += 1) {
+    const aStep = aSteps[at] ?? "";
+    const bStep = bSteps[at] ?? "";
+    if (aStep === bStep) continue;
+    return compareStep(aStep, at < aSteps.length - 1, bStep, at < bSteps.length - 1);
+  }
+  return aSteps.length - bSteps.length;
+}
+
+/** The files in the order the tree lists them, as Pierre's tree sorts its rows. */
+export function treeOrder(
+  files: readonly CodingAgentChangedFile[],
+): readonly CodingAgentChangedFile[] {
+  return files.toSorted((a, b) => compareTreePaths(a.path, b.path));
+}
+
+/** Whether a file starts collapsed: deleted, changing more than `LARGE_FILE_LINES` lines, or a lockfile. Note that a file with no hunks never does, because what stands under its header is why. */
+export function startsCollapsed(file: CodingAgentChangedFile): boolean {
+  if (fileNotice(file) !== undefined) return false;
+  return (
+    file.status === CHANGED_FILE_STATUS.DELETED ||
+    file.additions + file.deletions > LARGE_FILE_LINES ||
+    LOCKFILE_NAMES.has(file.path.split("/").at(-1) ?? "")
+  );
 }

@@ -1403,12 +1403,72 @@ button.file-ref:hover .file-ref-path {
   border-top: 1px solid var(--hairline);
 }
 
-/* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
-   of its own, in the panel's look (diff-view/index.ts); its box fills the
-   File tab's place and scrolls as a File tab's lines do. */
+/* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
+   (file-diff.tsx): Pierre draws each file in a shadow root of its own, in
+   the panel's look (diff-view/index.ts); the list's box fills the File
+   tab's place and scrolls as a File tab's lines do. */
 .diff-view {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Files changed's list of diffs (diff-list.tsx): every file under a header
+   of its own, which Pierre keeps at the top while the file's lines scroll
+   under it, so it is drawn opaque, on the code's ground, at the height the
+   bundle reserves for it (diff-view/index.ts's LIST_HEADER_HEIGHT). The file
+   stage-cli's keys stand on is ringed as a focused control is. */
+.diff-list-head {
+  border-top: 1px solid var(--hairline);
+  background: var(--code-ground);
+  color: var(--text-primary);
+  font-family: var(--luke-font-sans);
+}
+
+.diff-list-head-row {
+  display: flex;
+  box-sizing: border-box;
+  height: 33px;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 0 var(--space-12) 0 var(--space-6);
+  background: var(--section-fill);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.diff-list-head:not([data-collapsed]) > .diff-list-head-row {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.diff-list-head[data-standing] {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-inset);
+}
+
+.diff-list-fold > svg {
+  transform: rotate(90deg);
+  transition: transform var(--duration-quick) ease;
+}
+
+.diff-list-head[data-collapsed] .diff-list-fold > svg {
+  transform: none;
+}
+
+.diff-list-path {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+}
+
+/* Why a file has no hunks to draw, under its header's row in the list. */
+.diff-list-notice {
+  margin: 0;
+  padding: var(--space-12) var(--space-12) var(--space-12) 38px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
 }
 
 /* The tree's search field and its filter, in one row over the tree: the
