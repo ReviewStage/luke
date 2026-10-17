@@ -10,8 +10,8 @@ import type { CSSProperties } from "react";
  * its words dark or white by how light the fill reads (Rec. 709, at
  * GitHub's own threshold), edged a shade darker so a white label still
  * stands on a white ground. In the dark it is a tint of its colour, edged
- * a little stronger, its words in the colour itself, lifted toward white
- * where the colour is too dark to read on a dark ground. A colour GitHub
+ * a little stronger, its words in the colour itself, words and edge lifted
+ * toward white where the colour is too dark to read on a dark ground. A colour GitHub
  * spells any other way draws the pill quiet. `tasks.css` picks between the
  * two by the appearance, so a label follows it without being drawn again.
  */
@@ -71,13 +71,14 @@ function labelColours(color: string): CSSProperties | undefined {
   // Note that the lift is how far toward white the words move for their lightness to reach the bound.
   const lift =
     lightness >= DARK_GROUND_WORDS ? 0 : (DARK_GROUND_WORDS - lightness) / (1 - lightness);
+  const words = hexOf(mixed(rgb, 255, lift));
   return cssCustomProperties({
     "--label-fill-light": fill,
     "--label-edge-light": hexOf(mixed(rgb, 0, EDGE_SHADE)),
     "--label-words-light": lightness > LIGHT_FILL ? DARK_WORDS : LIGHT_WORDS,
     "--label-fill-dark": `${fill}${TINT_ALPHA}`,
-    "--label-edge-dark": `${fill}${EDGE_ALPHA}`,
-    "--label-words-dark": hexOf(mixed(rgb, 255, lift)),
+    "--label-edge-dark": `${words}${EDGE_ALPHA}`,
+    "--label-words-dark": words,
   });
 }
 
