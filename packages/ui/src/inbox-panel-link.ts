@@ -42,7 +42,11 @@ export interface InboxPanelPlace {
 
 /** A page's address without its fragment, its query, or a trailing slash, as two spellings of one pull request's page compare. */
 function pageAddress(href: string): string {
-  return href.replace(/[#?].*$/su, "").replace(/\/+$/u, "");
+  const cuts = [href.indexOf("#"), href.indexOf("?")].filter((at) => at >= 0);
+  let address = cuts.length === 0 ? href : href.slice(0, Math.min(...cuts));
+  // Note that the slashes are taken off one at a time rather than by a pattern, since a pattern anchored at the end backtracks over a long run of them.
+  while (address.endsWith("/")) address = address.slice(0, -1);
+  return address;
 }
 
 /**
