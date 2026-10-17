@@ -255,3 +255,66 @@ test("resting on one submenu's item after another's opens the second's submenu, 
   pointerMove(button("Order by"), button("Name"));
   expect(openMenu("Order by")).not.toBeNull();
 });
+
+/** A menu of one submenu whose choice its owner holds: Group by, `chosen` checked. */
+function GroupBy({ chosen }: { chosen: string }): React.JSX.Element {
+  const menu = useMenu(true);
+  const choice = (label: string) => ({ label, checked: label === chosen, onSelect: () => {} });
+  return createElement(
+    Fragment,
+    null,
+    createElement("button", { type: "button", ...menu.trigger() }, "More"),
+    menu.drawn === undefined
+      ? null
+      : createElement(Menu, {
+          label: "Plan actions",
+          menu: menu.drawn,
+          groups: [[{ label: "Group by", items: [choice("Repository"), choice("None")] }]],
+          onClose: menu.close,
+        }),
+  );
+}
+
+test("a submenu standing open checks what its owner holds now, though the owner draws it again after it opened", () => {
+  mount(createElement(GroupBy, { chosen: "Repository" }));
+  press(button("More"));
+  press(button("Group by"));
+  act(() => roots.at(-1)?.render(createElement(GroupBy, { chosen: "None" })));
+  const checked = [...(openMenu("Group by")?.querySelectorAll('[aria-checked="true"]') ?? [])].map(
+    (item) => item.textContent,
+  );
+  expect(checked).toEqual(["None"]);
+});
+
+test("the menu key or Shift-F10 on a row opens its menu under it on the first item", () => {
+  function Row(): React.JSX.Element {
+    const menu = useMenu(true);
+    return createElement(
+      Fragment,
+      null,
+      createElement("button", { type: "button", onKeyDown: menu.keyMenu }, "Issue"),
+      menu.drawn === undefined
+        ? null
+        : createElement(Menu, {
+            label: "Plan actions",
+            menu: menu.drawn,
+            groups: planGroups([]),
+            onClose: menu.close,
+          }),
+    );
+  }
+  mount(createElement(Row));
+  const row = button("Issue");
+  act(() => row.focus());
+  key("a");
+  expect(openMenu()).toBeNull();
+  key("ContextMenu");
+  expect(openMenu()).not.toBeNull();
+  expect(focused()).toBe("Rename");
+  key("Escape");
+  expect(document.activeElement).toBe(row);
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  expect(openMenu()).not.toBeNull();
+});

@@ -2,8 +2,8 @@ import { and, eq, inArray, isNotNull, lte, notExists, or } from "drizzle-orm";
 import { Duration, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { task } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
+import { task } from "../schemas/task.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
 

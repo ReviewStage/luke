@@ -3,9 +3,10 @@
  *
  * The anchored popover (`anchored-popover.tsx`) measures its anchor, its
  * room, and itself, and asks this where to stand: above its anchor unless
- * only below has room for it, at the edge its owner asked for unless only
- * the other keeps it inside, else pushed back inside, and never wider than
- * the room leaves.
+ * only below has room for it, or, where neither side has, on the side with
+ * more, at the edge its owner asked for unless only the other keeps it
+ * inside, else pushed back inside, never wider than the room leaves, and
+ * told the height its side leaves it.
  */
 
 /** Which side of its anchor a popover hangs on. */
@@ -38,11 +39,12 @@ export interface Box {
   bottom: number;
 }
 
-/** Where a popover stands: its side, how far its asked edge stands in from its anchor's, and its width. */
+/** Where a popover stands: its side, how far its asked edge stands in from its anchor's, its width, and the height that side leaves it. */
 export interface PopoverPlace {
   side: PopoverSide;
   inset: number;
   width: number;
+  room: number;
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -51,8 +53,9 @@ function clamp(value: number, low: number, high: number): number {
 
 /**
  * Where a popover of this width and height stands against its anchor in
- * its room: above unless only below has room for it, at the asked edge
- * unless only the other keeps it inside, else pushed back inside.
+ * its room: above unless only below has room for it, or, where neither
+ * side has, on the side with more, at the asked edge unless only the other
+ * keeps it inside, else pushed back inside.
  */
 export function popoverPlace(input: {
   anchor: Box;
@@ -73,13 +76,20 @@ export function popoverPlace(input: {
   const left = fits(asked) ? asked : fits(other) ? other : clamp(asked, low, high);
   const above = anchor.top - room.top - POPOVER_GAP - POPOVER_MARGIN;
   const below = room.bottom - anchor.bottom - POPOVER_GAP - POPOVER_MARGIN;
-  const side =
-    above < input.height && below >= input.height ? POPOVER_SIDE.BELOW : POPOVER_SIDE.ABOVE;
+  const fitsBelow = above < input.height && below >= input.height;
+  const neither = above < input.height && below < input.height;
+  const side = fitsBelow || (neither && below > above) ? POPOVER_SIDE.BELOW : POPOVER_SIDE.ABOVE;
   const inset = align === POPOVER_ALIGN.START ? left - anchor.left : anchor.right - left - width;
-  return { side, inset, width };
+  return { side, inset, width, room: Math.max(side === POPOVER_SIDE.BELOW ? below : above, 0) };
 }
 
 /** Whether two places draw the layer alike, so a scroll that moves nothing renders nothing. */
 export function samePlace(a: PopoverPlace | undefined, b: PopoverPlace): boolean {
-  return a !== undefined && a.side === b.side && a.inset === b.inset && a.width === b.width;
+  return (
+    a !== undefined &&
+    a.side === b.side &&
+    a.inset === b.inset &&
+    a.width === b.width &&
+    a.room === b.room
+  );
 }

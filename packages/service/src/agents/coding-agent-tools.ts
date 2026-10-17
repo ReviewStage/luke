@@ -212,7 +212,7 @@ export const READ_PAGE_REFUSAL = {
 export const START_CODING_AGENT_REFUSAL = {
   UNREADABLE:
     "Not started: give a prompt as text of at most " +
-    `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, a note ` +
+    `${CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
     "bounded the same or none, and a model with its effort, both or neither.",
   NO_TASK: `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
@@ -289,10 +289,10 @@ const MESSAGE_AGENT_INPUT = Schema.Struct({
   ),
 });
 
-/** A prompt a start may name: bounded as a message to an agent is. */
+/** A prompt or a note a start may name: bounded apart from a message, since a brief to a worker on a long plan is quoted whole. */
 const START_PROMPT = Schema.Trim.check(
   Schema.isNonEmpty(),
-  Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS),
 );
 
 /**

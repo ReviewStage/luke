@@ -1,4 +1,8 @@
-import { ISSUE_CALL_FAILURE, type IssueCallFailure } from "@luke/features/issue-view";
+import {
+  ISSUE_CALL_FAILURE,
+  type IssueCallFailure,
+  type IssueView,
+} from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { useMenu } from "@luke/ui";
@@ -16,6 +20,7 @@ import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { MemberDirectory } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
@@ -88,6 +93,38 @@ interface Composing {
   readonly status: IssueStatus | undefined;
 }
 
+/**
+ * A change's answer as the pages say it: whether it was kept, and a toast
+ * where it was not. Note that a refused archive is said by its own dialog,
+ * which stays up to say it.
+ */
+function useChangeSaid(): (asked: IssueChange, sent: Promise<IssueView>) => Promise<boolean> {
+  const toast = useToast();
+  return (asked, sent) =>
+    sent.then((answer) => {
+      if ("issue" in answer) return true;
+      if (asked.archived === undefined) {
+        toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      }
+      return false;
+    });
+}
+
+/**
+ * Whether the keyboard is still where a change from an issue's menu left it:
+ * on that issue's card or row, or on nothing once the answer moved the card
+ * away. A card a change moved keeps the keyboard only then, so one answered
+ * after the developer went on to another control takes nothing from it.
+ */
+function keyboardLeftWith(issueId: string): boolean {
+  const at = document.activeElement;
+  if (at === null || at === document.body) return true;
+  return (
+    at instanceof HTMLElement &&
+    at.closest<HTMLElement>("[data-issue-id]")?.dataset.issueId === issueId
+  );
+}
+
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
   plans,
@@ -95,14 +132,18 @@ function ListPage({
   focused,
   layout,
   onLayout,
+  onFocus,
   onCompose,
   onComposeIn,
 }: {
   plans: TasksControl;
   issues: ReturnType<typeof useIssues>;
+  /** The issue whose card or row takes the keyboard as it is drawn. */
   focused: string | undefined;
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
+  /** Hands the keyboard to an issue's card or row wherever it is drawn next, or to none. */
+  onFocus: (issueId: string | undefined) => void;
   /** Opens the new issue's card; none while no workspace is listed to file one in. */
   onCompose: (() => void) | undefined;
   /** Opens the card with a board column's status chosen; none while no workspace is listed. */
@@ -118,6 +159,17 @@ function ListPage({
   useRowKeys(root, plans.shown && !onBoard);
   useBoardKeys(root, plans.shown && onBoard);
   const open = (issue: Issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
+  const said = useChangeSaid();
+  const change = (issue: Issue, asked: IssueChange) => {
+    const sent = said(asked, issues.change({ issueId: issue.id, change: asked }));
+    if (asked.archived !== undefined) return sent;
+    // Note that no card takes the keyboard while the change is out, so a card redrawn meanwhile takes it from nothing.
+    onFocus(undefined);
+    return sent.then((kept) => {
+      if (kept && keyboardLeftWith(issue.id)) onFocus(issue.id);
+      return kept;
+    });
+  };
   const workspaceName = workspace?.name ?? "";
   return (
     <section ref={setRoot} className="automations-view" aria-label="Issues">
@@ -157,8 +209,10 @@ function ListPage({
             workspaceName={workspaceName}
             now={now}
             focused={focused}
+            shown={plans.shown}
             onOpen={open}
             onCompose={onComposeIn}
+            onChange={change}
           />
         ) : read.issues.length === 0 ? (
           // Note that an empty board still stands its columns, each saying it holds none, so only the list says there are none yet.
@@ -170,7 +224,9 @@ function ListPage({
               workspaceName={workspaceName}
               now={now}
               focused={focused}
+              shown={plans.shown}
               onOpen={open}
+              onChange={change}
             />
           </div>
         )}
@@ -271,22 +327,14 @@ function DetailPage({
   issues: ReturnType<typeof useIssues>;
   onBack: () => void;
 }): React.JSX.Element {
-  const toast = useToast();
+  const said = useChangeSaid();
   const { read, reload, change } = useIssue(issueId, issues.change);
   const listed =
     issues.read !== undefined && "issues" in issues.read
       ? issues.read.issues.find((each) => each.id === issueId)
       : undefined;
   const issue = read !== undefined && "issue" in read ? read.issue : listed;
-  const onChange = (asked: IssueChange) =>
-    change(asked).then((answer) => {
-      if ("issue" in answer) return true;
-      // Note that a refused archive is said by its own dialog, which stays up to say it.
-      if (asked.archived === undefined) {
-        toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-      }
-      return false;
-    });
+  const onChange = (asked: IssueChange) => said(asked, change(asked));
   // Note that an issue of a workspace other than the one listed is no issue of this page, as a link to one is not.
   const listedElsewhere =
     issue !== undefined &&
@@ -302,12 +350,15 @@ function DetailPage({
   }
 
   return (
-    <IssueDetail
-      issue={issue}
-      workspaceName={plans.workspace?.name ?? ""}
-      onChange={onChange}
-      onBack={onBack}
-    />
+    // The workspace's members, read for the issue's creator: their picture, and You for the reader's own.
+    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+      <IssueDetail
+        issue={issue}
+        workspaceName={plans.workspace?.name ?? ""}
+        onChange={onChange}
+        onBack={onBack}
+      />
+    </MemberDirectory>
   );
 }
 
@@ -383,6 +434,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
             setLayout(chosen);
             writeKept(LAYOUT_KEY, storedLayout, chosen);
           }}
+          onFocus={setCameFrom}
           onCompose={onCompose}
           onComposeIn={onComposeIn}
         />
