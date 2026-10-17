@@ -246,3 +246,37 @@ test("resting on one submenu's item after another's opens the second's submenu, 
   });
   assert.ok(document.querySelector('[role="menu"][aria-label="Order by"]'), "→ opens Order by");
 });
+
+/** A menu of one submenu whose choice its owner holds: Group by, `chosen` checked. */
+function GroupBy({ chosen }: { chosen: string }): React.JSX.Element {
+  const menu = useActionMenu(true);
+  const choice = (label: string) => ({ label, checked: label === chosen, onSelect: ignore });
+  return createElement(
+    Fragment,
+    null,
+    createElement("button", { type: "button", ...menu.trigger() }, "View options"),
+    menu.drawn === undefined
+      ? null
+      : createElement(ActionMenu, {
+          label: "View options",
+          menu: menu.drawn,
+          groups: [[{ label: "Group by", items: [choice("Repository"), choice("None")] }]],
+          onClose: menu.close,
+        }),
+  );
+}
+
+test("a submenu standing open checks what its owner holds now, though the owner draws it again after it opened", () => {
+  const container = mount(createElement(GroupBy, { chosen: "Repository" }));
+  const button = container.querySelector("button");
+  assert.ok(button, "the menu's button is drawn");
+  press(button);
+  act(() => submenuItem("Group by").click());
+
+  act(() => roots.at(-1)?.render(createElement(GroupBy, { chosen: "None" })));
+
+  const checked = [
+    ...document.querySelectorAll('[role="menu"][aria-label="Group by"] [aria-checked="true"]'),
+  ].map((item) => item.textContent);
+  assert.deepEqual(checked, ["None"]);
+});

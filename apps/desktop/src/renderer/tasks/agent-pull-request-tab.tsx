@@ -67,6 +67,8 @@ import {
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
+import { PullRequestReview } from "./pull-request-review";
+import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
 import {
   PullRequestStateMenu,
   PullRequestWriteNote,
@@ -109,7 +111,8 @@ import { useWorkingNow, workingTime } from "./working-time";
  *
  * The header stays put while the tab under it scrolls: a bar like a File
  * tab's, wearing the pull request's mark and the word for where it stands,
- * with its doors (GitHub and the ⋯); its title and number; its branches;
+ * with its doors (Review while it is open, `pull-request-review.tsx`,
+ * then GitHub and the ⋯); its title and number; its branches;
  * who opened it and when, as the Changes tab names them
  * (`pull-request-people.tsx`), with its reviewers' faces wearing where each
  * stands; and, while it is open, whether it would merge as it stands, in
@@ -412,17 +415,21 @@ function reviewersOf(
  * The bar across the top of the fixed header: the pill saying where the
  * pull request stands, in its colour, as last read of what the agent
  * published until the header's own read lands, which opens the changes
- * that may be made from there (`pull-request-writes.tsx`), and GitHub's
- * page and the ⋯ at its end.
+ * that may be made from there (`pull-request-writes.tsx`), and at its end,
+ * while the pull request is open, the Review press
+ * (`pull-request-review.tsx`), then GitHub's page and the ⋯.
  */
 function PullRequestBar({
   published,
   writes,
+  review,
   reading,
   onRefresh,
 }: {
   published: BarPullRequest | undefined;
   writes: PullRequestWrites;
+  /** The review's own change, apart from the pill's, so each says its own answer where it was pressed. */
+  review: PullRequestWrites;
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
@@ -434,6 +441,10 @@ function PullRequestBar({
         <>
           <PullRequestStateMenu pullRequest={published} writes={writes} />
           <div className="file-view-actions">
+            {published.state === PULL_REQUEST_STATE.OPEN ||
+            published.state === PULL_REQUEST_STATE.DRAFT ? (
+              <PullRequestReview writes={review} />
+            ) : null}
             <Tooltip label="Open on GitHub">
               <button
                 type="button"
@@ -802,6 +813,7 @@ function ThreadCard({
               {PULL_REQUEST_WORDS.moreReplies(thread.more)}
             </button>
           )}
+          <ThreadActions thread={thread} />
         </FoldBody>
       </Fold>
     </li>
@@ -1529,69 +1541,82 @@ export function AgentPullRequestTab({
   const title = landed(parts.pullRequest) ?? published;
   const now = useMinute();
   // A change is read back both ways: the tab, and what the agent published, which the plan's own marks draw.
-  const writes = usePullRequestWrites(agentId, () => {
+  const written = () => {
     refresh();
     void control.readPullRequest(agentId).catch(() => undefined);
-  });
+  };
+  const writes = usePullRequestWrites(agentId, written);
+  const review = usePullRequestWrites(agentId, written);
+  // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
-    <div className="file-view pull-request-tab ph-no-capture">
-      <PullRequestBar published={bar} writes={writes} reading={reading} onRefresh={refresh} />
-      <PullRequestWriteNote writes={writes} />
-      {none ? (
-        <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
-      ) : (
-        <>
-          <header className="pull-request-header">
-            <HeaderTitle title={title} />
-            <PullRequestHead parts={parts} now={now} />
-          </header>
-          <PullRequestTabs
-            tabs={tabsOf(parts, published, bar)}
-            view={view}
-            onView={onView}
-            ids={ids}
-          />
-          <div
-            className="pull-request-view"
-            role="tabpanel"
-            id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
-            aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
-            hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
-          >
-            <ConversationView agentId={agentId} parts={parts} url={title?.url} />
-          </div>
-          <div
-            className="pull-request-view"
-            role="tabpanel"
-            id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
-            aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
-            hidden={view !== PULL_REQUEST_VIEW.CHECKS}
-          >
-            <div className="pull-request-page">
-              <ChecksPart
-                agentId={agentId}
-                parts={parts}
-                live={shown && view === PULL_REQUEST_VIEW.CHECKS}
-              />
-            </div>
-          </div>
-        </>
-      )}
-      <div
-        className="pull-request-view"
-        role="tabpanel"
-        id={ids(PULL_REQUEST_VIEW.FILES).panel}
-        aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-        hidden={none || view !== PULL_REQUEST_VIEW.FILES}
-      >
-        <AgentChangesTab
-          agentId={agentId}
-          control={control}
-          shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-          repository={repository}
-          tree={tree}
+    <ThreadWritesProvider value={{ agentId, onWritten: written }}>
+      <div className="file-view pull-request-tab ph-no-capture">
+        <PullRequestBar
+          published={bar}
+          writes={writes}
+          review={review}
+          reading={reading}
+          onRefresh={refresh}
         />
+        <PullRequestWriteNote writes={writes} />
+        {none ? (
+          <EmptyState icon={<GitPullRequestIcon />}>
+            {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
+          </EmptyState>
+        ) : (
+          <>
+            <header className="pull-request-header">
+              <HeaderTitle title={title} />
+              <PullRequestHead parts={parts} now={now} />
+            </header>
+            <PullRequestTabs
+              tabs={tabsOf(parts, published, bar)}
+              view={view}
+              onView={onView}
+              ids={ids}
+            />
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+              hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
+            >
+              <ConversationView agentId={agentId} parts={parts} url={title?.url} />
+            </div>
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+              hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+            >
+              <div className="pull-request-page">
+                <ChecksPart
+                  agentId={agentId}
+                  parts={parts}
+                  live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                />
+              </div>
+            </div>
+          </>
+        )}
+        <div
+          className="pull-request-view"
+          role="tabpanel"
+          id={ids(PULL_REQUEST_VIEW.FILES).panel}
+          aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+          hidden={none || view !== PULL_REQUEST_VIEW.FILES}
+        >
+          <AgentChangesTab
+            agentId={agentId}
+            control={control}
+            shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+            repository={repository}
+            tree={tree}
+          />
+        </div>
       </div>
-    </div>
+    </ThreadWritesProvider>
   );
 }

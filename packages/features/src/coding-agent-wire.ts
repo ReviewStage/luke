@@ -57,6 +57,13 @@ export const CODING_AGENT_BOUNDS = {
   MAX_CHOICE_CHARS: 200,
   /** The most characters one message to an agent may spell, trimmed: room for a pasted failure and the words around it, well inside one model call. */
   MAX_MESSAGE_CHARS: 16_000,
+  /**
+   * The most characters a `start_agent` call's prompt may spell, trimmed, and its note apart:
+   * room for an orchestrator's brief to a worker on a long plan, quoted whole. Both together,
+   * with the headings around them, stay under a task's own bound (`TASK_BOUNDS.MAX_BODY_CHARS`),
+   * which a start on the plan already hands an agent whole as its first message.
+   */
+  MAX_START_WORDS_CHARS: 64_000,
   /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
   MAX_CALL_ID_CHARS: 128,
   /** The most spoken lines one planning turn names as its ask, and the most characters of one line's id, which the voice's ledger mints. */
@@ -965,8 +972,10 @@ const diffSideSchema = EffectSchema.Literals(Object.values(DIFF_SIDE));
  * which its `diffHunk` is counted against, and the side each counts on;
  * the hunk GitHub froze when it was made, ending at its line, empty where
  * GitHub kept none; whether it was resolved, and whether a later push
- * outdated it; its comments, oldest first, up to the bound; and how many
- * more GitHub holds (`more`).
+ * outdated it; its comments, oldest first, up to the bound; how many
+ * more GitHub holds (`more`); and GitHub's own id for it, which a reply,
+ * a resolve, or an unresolve names it by, absent from a service before
+ * those.
  */
 const reviewThreadSchema = EffectSchema.Struct({
   path: EffectSchema.String,
@@ -983,6 +992,7 @@ const reviewThreadSchema = EffectSchema.Struct({
     EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_THREAD_COMMENTS),
   ),
   more: countedNumber,
+  id: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type ReviewThread = typeof reviewThreadSchema.Type;

@@ -3,7 +3,7 @@ import { integer, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { task } from "./plan.js";
+import { task } from "./task.js";
 
 /**
  * plan-revision.ts -- a plan's history, one revision per row.
@@ -23,7 +23,7 @@ import { task } from "./plan.js";
 export const planRevision = pgTable(
   "plan_revision",
   {
-    taskId: uuid("plan_id")
+    taskId: uuid("task_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
     /** The revision's number within its plan, from one. */

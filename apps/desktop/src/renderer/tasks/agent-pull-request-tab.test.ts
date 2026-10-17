@@ -30,6 +30,7 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
+  REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -39,7 +40,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -186,6 +187,8 @@ let previews: DiffViewProps[] = [];
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+/** What the service waits on before it answers a change, where a test holds it; none answers at once. */
+let changeHeld: Promise<void> | undefined;
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -196,6 +199,7 @@ beforeEach(() => {
   previews = [];
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+  changeHeld = undefined;
   // The diff bundle, a script of its own the panel loads, stood in for at its global.
   window.lukeDiffView = {
     mount: (_host, props) => {
@@ -212,7 +216,11 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
         if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
           changes.push([request.payload.agentId, request.payload.request]);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: changeAnswer });
+          const answer = changeAnswer;
+          return (changeHeld ?? Promise.resolve()).then(() => ({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: answer,
+          }));
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
           images.push(request.payload.src);
@@ -1447,4 +1455,314 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
     assert.fail("the line may be dismissed");
   act(() => dismiss.click());
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
+});
+
+/** The bar's Review press. */
+function reviewPress(tab: HTMLElement): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>(".pull-request-review-button") ??
+    assert.fail("an open pull request's bar offers Review")
+  );
+}
+
+/** Opens the review panel from the bar. */
+function openReview(tab: HTMLElement): HTMLElement {
+  act(() => reviewPress(tab).click());
+  return (
+    tab.querySelector<HTMLElement>('[role="dialog"].pull-request-review-panel') ??
+    assert.fail("Review opens the panel")
+  );
+}
+
+/** Writes the review's words as the member would. */
+function writeReview(panel: HTMLElement, words: string): void {
+  const field =
+    panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Review comment"]') ??
+    assert.fail("the panel has a field for the review's words");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Chooses what the review says by its label, and submits it. */
+async function submitReview(panel: HTMLElement, label: string): Promise<void> {
+  const choice =
+    [...panel.querySelectorAll("label")].find((each) => each.textContent?.startsWith(label)) ??
+    assert.fail(`the panel offers ${label}`);
+  act(() => choice.querySelector("input")?.click());
+  const submit =
+    [...panel.querySelectorAll("button")].find((each) => each.textContent === "Submit review") ??
+    assert.fail("the panel submits");
+  act(() => submit.click());
+  await settle();
+}
+
+test("Review opens a panel whose choice and words are submitted for the agent as one review, after which it closes, lets its words go, and the conversation is read again", async () => {
+  let conversationReads = 0;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        conversationReads += 1;
+        return Promise.resolve({ pullRequest: CONVERSATION });
+      },
+    }),
+  );
+  const panel = openReview(tab);
+  assert.deepEqual(words(panel, ".pull-request-review-event-label"), [
+    "Comment",
+    "Approve",
+    "Request changes",
+  ]);
+
+  writeReview(panel, "Ship it once **CI** is green.");
+  await submitReview(panel, "Approve");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
+        event: REVIEW_EVENT.APPROVE,
+        body: "Ship it once **CI** is green.",
+      },
+    ],
+  ]);
+  assert.equal(conversationReads, 2, "the conversation is read again once GitHub took the review");
+  assert.equal(tab.querySelector(".pull-request-review-panel"), null, "the panel closes");
+  const reopened = openReview(tab);
+  assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
+  assert.equal(
+    reopened.querySelector<HTMLInputElement>("input:checked")?.value,
+    REVIEW_EVENT.COMMENT,
+  );
+});
+
+test("a review GitHub refuses says so in GitHub's own words inside the panel, never under the bar, and the words written stand for another try; a merged pull request offers no Review", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Review Can not approve your own pull request",
+  };
+  const tab = await draw(controlAnswering());
+  const panel = openReview(tab);
+
+  writeReview(panel, "LGTM");
+  await submitReview(panel, "Approve");
+
+  assert.equal(
+    panel.querySelector(".pull-request-review-note .failure-note-words")?.textContent,
+    "GitHub said: Review Can not approve your own pull request",
+  );
+  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+  assert.equal(panel.querySelector("textarea")?.value, "LGTM");
+  act(() => root?.unmount());
+  root = undefined;
+
+  const merged = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
+    }),
+  );
+  assert.equal(merged.querySelector(".pull-request-review-button"), null);
+});
+
+test("a press outside the review panel closes it, its words kept, and one on a short window opens it on the side with more room, bounded to that room", async () => {
+  // Note that jsdom lays out nothing, so the press stands low in a 768px window and the panel is taller than either side.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.classList.contains("pull-request-review")) {
+      return DOMRect.fromRect({ x: 600, y: 300, width: 80, height: 28 });
+    }
+    if (this.classList.contains("anchored-popover")) {
+      return DOMRect.fromRect({ x: 0, y: 0, width: 480, height: 600 });
+    }
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  try {
+    const tab = await draw(controlAnswering());
+    const panel = openReview(tab);
+    const layer =
+      tab.querySelector<HTMLElement>(".anchored-popover") ??
+      assert.fail("the panel hangs from Review");
+    assert.equal(layer.dataset.side, "below");
+    assert.equal(layer.style.getPropertyValue("--popover-room"), `${768 - 328 - 4 - 8}px`);
+
+    writeReview(panel, "Half a thought");
+    act(() => {
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+
+    assert.equal(tab.querySelector(".pull-request-review-panel"), null);
+    assert.equal(openReview(tab).querySelector("textarea")?.value, "Half a thought");
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+/** A review carrying the threads given, as the conversation's read answers one. */
+function reviewWith(threads: readonly ReviewThread[]): CodingAgentOverviewConversation {
+  return {
+    ...CONVERSATION,
+    conversation: [
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.COMMENTED,
+        html: null,
+        body: "",
+        at: 2_500,
+        url: `${PAGE}#pullrequestreview-9`,
+        threads,
+      },
+    ],
+  };
+}
+
+/** The press of the words given under the thread. */
+function threadPress(thread: HTMLElement, label: string): HTMLButtonElement {
+  return (
+    [...thread.querySelectorAll<HTMLButtonElement>(".pull-request-thread-actions button")].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the thread offers ${label}`)
+  );
+}
+
+/** Writes a reply on the thread as the member would, the field opened first. */
+function writeReply(thread: HTMLElement, words: string): void {
+  act(() => threadPress(thread, "Reply…").click());
+  const field =
+    thread.querySelector<HTMLTextAreaElement>('textarea[aria-label="Reply"]') ??
+    assert.fail("Reply… opens the reply's field");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The thread as GitHub holds it once the changes asked so far were made: their replies after its comment, and resolved by the last resolve or unresolve. */
+function threadAfterChanges(): ReviewThread {
+  const base = thread({ id: "PRRT_flag" });
+  let resolved = false;
+  const replies: ReviewThread["comments"][number][] = [];
+  for (const [, request] of changes) {
+    if (request.action === PULL_REQUEST_ACTION.REPLY_TO_THREAD) {
+      replies.push({
+        by: CHARLES_ON_GITHUB,
+        html: null,
+        body: request.body,
+        at: 3_000,
+        url: `${PAGE}#discussion_r${10 + replies.length}`,
+      });
+    }
+    if (request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD) resolved = true;
+    if (request.action === PULL_REQUEST_ACTION.UNRESOLVE_THREAD) resolved = false;
+  }
+  return { ...base, resolved, comments: [...base.comments, ...replies] };
+}
+
+test("a thread is replied on, resolved, and opened again from under its comments, each asked of the service for the agent by the thread's id, the thread then drawn as GitHub holds it", async () => {
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => Promise.resolve({ pullRequest: reviewWith([threadAfterChanges()]) }),
+    }),
+  );
+  const card = (): HTMLElement =>
+    tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+  const labels = () => words(card(), ".pull-request-thread-label");
+
+  writeReply(card(), "Renamed in the next push.");
+  act(() => threadPress(card(), "Reply").click());
+  await settle();
+  assert.equal(card().querySelector("textarea"), null, "the field closes once GitHub took it");
+  assert.match(
+    card().querySelector(".pull-request-thread-comments")?.textContent ?? "",
+    /Renamed in the next push\./u,
+    "the reply is drawn under the thread once read again",
+  );
+
+  act(() => threadPress(card(), "Resolve conversation").click());
+  await settle();
+  assert.deepEqual(labels(), ["Resolved"]);
+
+  act(() => threadPress(card(), "Unresolve conversation").click());
+  await settle();
+  assert.deepEqual(labels(), []);
+  assert.ok(threadPress(card(), "Resolve conversation"), "the thread stands open again");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.REPLY_TO_THREAD,
+        threadId: "PRRT_flag",
+        body: "Renamed in the next push.",
+      },
+    ],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.UNRESOLVE_THREAD, threadId: "PRRT_flag" }],
+  ]);
+});
+
+test("while a thread's resolve is out, its reply stands still, neither sent nor let go, so nothing is posted twice", async () => {
+  const held = Promise.withResolvers<void>();
+  changeHeld = held.promise;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => Promise.resolve({ pullRequest: reviewWith([threadAfterChanges()]) }),
+    }),
+  );
+  const card = (): HTMLElement =>
+    tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+
+  writeReply(card(), "Done.");
+  act(() => threadPress(card(), "Resolve conversation").click());
+  const field = card().querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail();
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  assert.equal(threadPress(card(), "Reply").disabled, true);
+  assert.equal(card().querySelector("textarea")?.value, "Done.", "Escape lets nothing go");
+  held.resolve();
+  await settle();
+  assert.deepEqual(
+    changes.map(([, request]) => request.action),
+    [PULL_REQUEST_ACTION.RESOLVE_THREAD],
+  );
+});
+
+test("a reply GitHub refuses says so under its thread in GitHub's own words, its words kept, and a thread read with no id offers nothing to press", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Pull request review thread is locked",
+  };
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: reviewWith([
+            thread({ id: "PRRT_flag" }),
+            thread({ path: "src/other.ts", comments: [] }),
+          ]),
+        }),
+    }),
+  );
+  const [withId, withoutId] = [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")];
+  assert.ok(withId !== undefined && withoutId !== undefined);
+
+  writeReply(withId, "Done.");
+  act(() => threadPress(withId, "Reply").click());
+  await settle();
+
+  assert.equal(
+    withId.querySelector(".pull-request-thread-note .failure-note-words")?.textContent,
+    "GitHub said: Pull request review thread is locked",
+  );
+  assert.equal(withId.querySelector("textarea")?.value, "Done.");
+  assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
 });

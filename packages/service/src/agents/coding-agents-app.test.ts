@@ -98,6 +98,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
@@ -1221,6 +1222,68 @@ function actionAs(bearer: string, agentId: string, action: string): Request {
   });
 }
 
+/** A review submitted on the agent's pull request as the bearer given. */
+function reviewAs(
+  bearer: string,
+  agentId: string,
+  review: { readonly event: string; readonly body: string },
+): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, {
+    method: "POST",
+    id: agentId,
+    body: { action: "submit-review", ...review },
+  });
+}
+
+/**
+ * GitHub answering a review's calls: the pull request's id, the pending
+ * reviews given for its read of them, and each mutation as `mutation`
+ * says, an empty answer by default.
+ */
+function reviewsAnswering(
+  pending: readonly { readonly id: string; readonly viewerDidAuthor: boolean }[],
+  mutation: (call: GraphqlCall) => Response = () => Response.json({ data: {} }),
+): (call: GraphqlCall) => Response {
+  return (call) => {
+    if (call.query.includes("mutation")) return mutation(call);
+    if (call.query.includes("reviews(states: PENDING")) {
+      return Response.json({ data: { node: { reviews: { nodes: pending } } } });
+    }
+    return Response.json({ data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } } });
+  };
+}
+
+/** The review mutations GitHub was sent, each as which (a new review, or a pending one submitted) and its variables. */
+function reviewMutations(calls: readonly GraphqlCall[]) {
+  return calls
+    .filter((call) => call.query.includes("mutation"))
+    .map((call) => [
+      call.query.includes("submitPullRequestReview") ? "submit" : "add",
+      call.variables,
+    ]);
+}
+
+/** A change to one of the pull request's review threads as the bearer given. */
+function threadActionAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
+}
+
+/** GitHub answering a thread's calls: the pull request's id, every thread named as one of the pull request given, and an empty answer to each mutation. */
+function threadsAnswering(threadPullRequestId: string): (call: GraphqlCall) => Response {
+  return (call) => {
+    if (call.query.includes("mutation")) return Response.json({ data: {} });
+    if (call.query.includes("PullRequestReviewThread")) {
+      return Response.json({ data: { node: { pullRequest: { id: threadPullRequestId } } } });
+    }
+    return Response.json({ data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } } });
+  };
+}
+
+/** The GitHub mutation a document makes, by the name its first field spells. */
+function mutationName(query: string): string {
+  return /\{\s*(\w+)\(/u.exec(query)?.[1] ?? "";
+}
+
 it.layer(getTestDB())("changing an agent's pull request", (it) => {
   /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
   const published = (options: {
@@ -1391,6 +1454,184 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
             words: "Could not resolve to a pull request your GitHub account can see.",
           },
         });
+        assert.ok(calls.every((call) => !call.query.includes("mutation")));
+      }),
+  );
+
+  it.effect(
+    "a review is made and submitted at once where the member holds no pending review, on their own token, and GitHub's refusal of it is answered in its words",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: reviewsAnswering([], (call) =>
+            call.variables.event === "APPROVE"
+              ? Response.json({
+                  data: null,
+                  errors: [{ message: "Review Can not approve your own pull request" }],
+                })
+              : Response.json({ data: {} }),
+          ),
+        });
+
+        const commented = yield* ask(
+          reviewAs(other, agent.id, { event: "comment", body: "Looks close; one question." }),
+        );
+        const approved = yield* ask(reviewAs(other, agent.id, { event: "approve", body: "" }));
+
+        assert.deepEqual(commented, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(approved, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Review Can not approve your own pull request" },
+        });
+        assert.deepEqual(reviewMutations(calls), [
+          [
+            "add",
+            {
+              id: PULL_REQUEST_NODE_ID,
+              event: "COMMENT",
+              body: "Looks close; one question.",
+            },
+          ],
+          ["add", { id: PULL_REQUEST_NODE_ID, event: "APPROVE" }],
+        ]);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "the member's own pending review is the one submitted, keeping its words where the press sends none, and nobody else's is touched",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: reviewsAnswering([
+            { id: "PRR_someone_else", viewerDidAuthor: false },
+            { id: "PRR_member_pending", viewerDidAuthor: true },
+          ]),
+        });
+
+        const changes = yield* ask(
+          reviewAs(other, agent.id, { event: "request-changes", body: "Please split this." }),
+        );
+        const kept = yield* ask(reviewAs(other, agent.id, { event: "comment", body: "  " }));
+
+        assert.deepEqual(changes, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(kept, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(reviewMutations(calls), [
+          [
+            "submit",
+            { id: "PRR_member_pending", event: "REQUEST_CHANGES", body: "Please split this." },
+          ],
+          ["submit", { id: "PRR_member_pending", event: "COMMENT" }],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a review naming no event GitHub knows, or longer than GitHub takes, never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, calls, ask } = yield* published({ answer: reviewsAnswering([]) });
+
+        const unnamed = yield* ask(
+          request(AGENT_PULL_REQUEST_ACTION, owner, {
+            method: "POST",
+            id: agent.id,
+            body: { action: "submit-review", event: "dismiss", body: "" },
+          }),
+        );
+        const long = yield* ask(
+          reviewAs(owner, agent.id, {
+            event: "comment",
+            body: "x".repeat(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS + 1),
+          }),
+        );
+
+        for (const answered of [unnamed, long]) {
+          assert.deepEqual(
+            answered,
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "a member replies on a review thread of the pull request, resolves it, and opens it again, each on their own token",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: threadsAnswering(PULL_REQUEST_NODE_ID),
+        });
+
+        const answers = [
+          yield* ask(
+            threadActionAs(other, agent.id, {
+              action: "reply-to-thread",
+              threadId: "PRRT_flag",
+              body: "Renamed in the next push.",
+            }),
+          ),
+          yield* ask(
+            threadActionAs(other, agent.id, { action: "resolve-thread", threadId: "PRRT_flag" }),
+          ),
+          yield* ask(
+            threadActionAs(other, agent.id, { action: "unresolve-thread", threadId: "PRRT_flag" }),
+          ),
+        ];
+
+        for (const answered of answers) {
+          assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        }
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables]),
+          [
+            [
+              "addPullRequestReviewThreadReply",
+              { id: "PRRT_flag", body: "Renamed in the next push." },
+            ],
+            ["resolveReviewThread", { id: "PRRT_flag" }],
+            ["unresolveReviewThread", { id: "PRRT_flag" }],
+          ],
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a thread of another pull request is refused in words saying so and never changed, and a blank reply never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: threadsAnswering("PR_kwDOsomeOtherPull"),
+        });
+
+        const elsewhere = yield* ask(
+          threadActionAs(other, agent.id, { action: "resolve-thread", threadId: "PRRT_elsewhere" }),
+        );
+        const blank = yield* ask(
+          threadActionAs(other, agent.id, {
+            action: "reply-to-thread",
+            threadId: "PRRT_flag",
+            body: " \n ",
+          }),
+        );
+
+        assert.deepEqual(elsewhere, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words: "Could not resolve to a review thread on this pull request.",
+          },
+        });
+        assert.deepEqual(
+          blank,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
         assert.ok(calls.every((call) => !call.query.includes("mutation")));
       }),
   );

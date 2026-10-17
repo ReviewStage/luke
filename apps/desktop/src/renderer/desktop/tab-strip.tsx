@@ -12,6 +12,7 @@ import {
   MENU_DROP,
   type MenuAction,
   type MenuPlacement,
+  opensMenu,
   useActionMenu,
 } from "./action-menu";
 import { type TabMove, useTabDrag } from "./use-tab-drag";
@@ -173,11 +174,6 @@ function within(strip: HTMLElement, target: EventTarget): boolean {
 /** What the strip says aloud of a tab moved: its label and the place it now stands. */
 function movedLine(tab: HTMLElement | undefined, to: number, count: number): string {
   return `${tab?.textContent ?? "Tab"} moved to position ${to + 1} of ${count}`;
-}
-
-/** Whether a key opens a tab's own menu from the keyboard: the menu key, or ⇧F10. */
-function opensMenu(event: React.KeyboardEvent): boolean {
-  return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
 }
 
 /** Where a tab's menu hangs when the keyboard asks for it: under the tab, from its start. */

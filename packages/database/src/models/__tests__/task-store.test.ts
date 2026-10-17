@@ -8,7 +8,7 @@ import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { taskPin } from "../../schemas/plan-pin.js";
+import { taskPin } from "../../schemas/task-pin.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { createTask, deleteTask, listTasks, readTask, updateTask } from "../task-store.js";
 

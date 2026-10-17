@@ -54,7 +54,7 @@ import {
   workspaceChat,
 } from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
-import { task } from "../schemas/plan.js";
+import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import { isWorkspaceMember, taskReachableBy } from "./workspace-store.js";
 
