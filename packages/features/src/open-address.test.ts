@@ -42,6 +42,15 @@ test("a task's address, or a section's, opens that task in the app, whichever ho
   );
 });
 
+test("a comment's address opens its thread, the query it names it by carried to the app", () => {
+  const thread = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
+
+  const target = openTargetOf(`/acme/plan/${TASK_ID}`, "", `?comment=${thread}`);
+
+  assert.equal(target?.kind, LINK_PLACE.COMMENT);
+  assert.equal(target?.appLink, `tryluke://tryluke.dev/acme/plan/${TASK_ID}?comment=${thread}`);
+});
+
 test("a picture's address opens the plan it is of, and nothing else of it", () => {
   const picture = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 

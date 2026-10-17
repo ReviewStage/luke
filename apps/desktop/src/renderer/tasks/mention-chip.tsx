@@ -18,6 +18,7 @@ import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model"
 import { planSections } from "@luke/features/plan-document";
 import {
   CallIcon,
+  CommentsIcon,
   DocumentIcon,
   GearIcon,
   HoverCard,
@@ -561,6 +562,8 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
       return <DocumentIcon />;
     case LINK_PLACE.SECTION:
       return <HashIcon aria-hidden="true" />;
+    case LINK_PLACE.COMMENT:
+      return <CommentsIcon />;
     case LINK_PLACE.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case LINK_PLACE.CALL:

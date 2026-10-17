@@ -470,6 +470,23 @@ export function planAttachmentsPath(planId: string): string {
   return `${taskPath(planId)}/attachments`;
 }
 
+/**
+ * One plan's comment threads: every thread past a cursor (GET), held open
+ * while nothing changed as the inbox is, and one started (POST).
+ * `plan-comment-wire.ts` declares both.
+ */
+export function planCommentsPath(planId: string, after?: string): string {
+  const path = `${taskPath(planId)}/comments`;
+  if (after === undefined) return path;
+  const query = new URLSearchParams({ after });
+  return `${path}?${query}`;
+}
+
+/** One comment thread of one plan: one thing done to it (POST). */
+export function planCommentThreadPath(planId: string, threadId: string): string {
+  return `${planCommentsPath(planId)}/${encodeURIComponent(threadId)}`;
+}
+
 /** One picture of one plan, as its bytes (GET). */
 export function planAttachmentPath(planId: string, attachmentId: string): string {
   return `${planAttachmentsPath(planId)}/${encodeURIComponent(attachmentId)}`;

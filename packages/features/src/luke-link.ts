@@ -50,6 +50,8 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
 export const LINK_PLACE = {
   TASK: "task",
   SECTION: "section",
+  /** One comment thread of a task, written as the task's link with the thread in its `comment` query. */
+  COMMENT: "comment",
   VERSION: "version",
   PAGE: "page",
   CALL: "call",
@@ -92,6 +94,9 @@ const STEP = {
   ISSUE: "issue",
 } as const;
 
+/** The query a task's link names one of its comment threads under. */
+const COMMENT_QUERY = "comment";
+
 /** The steps a task is read under: the one written, and the name the unit of work is taking. */
 const TASK_STEPS: ReadonlySet<string> = new Set([STEP.PLAN, STEP.TASK]);
 
@@ -127,6 +132,11 @@ const linkPlaceSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(LINK_PLACE.SECTION),
     planId: idSchema,
     anchor: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.COMMENT),
+    planId: idSchema,
+    threadId: idSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.VERSION),
@@ -361,6 +371,7 @@ function placePath(place: LinkPlace): readonly string[] {
   switch (place.kind) {
     case LINK_PLACE.TASK:
     case LINK_PLACE.SECTION:
+    case LINK_PLACE.COMMENT:
       return [STEP.PLAN, place.planId];
     case LINK_PLACE.VERSION:
       return [STEP.PLAN, place.planId, STEP.VERSION, String(place.revision)];
@@ -426,6 +437,10 @@ export function linkOf(place: LinkPlace, workspace: string): string {
       where,
     );
   }
+  if (place.kind === LINK_PLACE.COMMENT) {
+    const task = encodeMention({ kind: MENTION_KIND.TASK, taskId: place.planId }, where);
+    return `${task}?${new URLSearchParams({ [COMMENT_QUERY]: place.threadId })}`;
+  }
   return [LINK_ORIGIN, workspace, ...placePath(place)]
     .map((step, index) => (index === 0 ? step : encodedStep(step)))
     .join("/");
@@ -448,10 +463,16 @@ export function readLink(target: string): ReadLink | undefined {
   if (!after.every((step): step is string => step !== undefined && step !== "")) return undefined;
   // A task's own link, or a section's, is read by the codec that writes a mention of either.
   const [step, planId, ...rest] = after;
+  const taskOwn =
+    step !== undefined && TASK_STEPS.has(step) && planId !== undefined && rest.length === 0;
+  // Note that a task's link naming one of its comment threads opens the thread; any other query is the address's own, which the place has no use for.
+  const thread = url.searchParams.getAll(COMMENT_QUERY);
   const place =
-    step !== undefined && TASK_STEPS.has(step) && planId !== undefined && rest.length === 0
-      ? taskLink(workspace, planId, url.hash)
-      : Option.getOrUndefined(readPlace(placeFields(after)));
+    taskOwn && thread.length === 1
+      ? Option.getOrUndefined(readPlace({ kind: LINK_PLACE.COMMENT, planId, threadId: thread[0] }))
+      : taskOwn
+        ? taskLink(workspace, planId, url.hash)
+        : Option.getOrUndefined(readPlace(placeFields(after)));
   return place === undefined ? undefined : { workspace, place };
 }
 

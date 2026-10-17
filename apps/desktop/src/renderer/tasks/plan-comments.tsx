@@ -1,0 +1,1309 @@
+import { LINK_PLACE } from "@luke/features/luke-link";
+import { textChange } from "@luke/features/plan-comment-anchor";
+import {
+  PLAN_COMMENT_ACTION,
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  type PlanCommentEntry,
+  type PlanCommentThread,
+  type PlanCommentWriter,
+} from "@luke/features/plan-comment-wire";
+import type { PlanSection } from "@luke/features/plan-document";
+import {
+  ConfirmDialog,
+  DIALOG_TONE,
+  type DialogQuestion,
+  EllipsisIcon,
+  TrashIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
+import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
+import {
+  marginTops,
+  openThread,
+  PENDING_THREAD,
+  type PendingThread,
+  type PlanCommentsControl,
+  usePlanCommentsControl as usePlanCommentsControlOrUndefined,
+} from "@luke/ui/plan-comments";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import {
+  ArrowUpIcon,
+  CheckIcon,
+  MessageSquareIcon,
+  MessageSquarePlusIcon,
+  PencilIcon,
+  RotateCcwIcon,
+} from "lucide-react";
+import {
+  createContext,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ActorLine, ActorMark, ActorRef } from "../actor-ref";
+import { useCopyLinkItem } from "../copy-link-item";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
+import { usePerson } from "../member-directory";
+import { Tooltip } from "../tooltip";
+import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref";
+import type { EditAgents } from "./edit-ref";
+import { RelativeTime } from "./relative-time";
+import { useMinute } from "./task-time";
+
+/**
+ * plan-comments.tsx -- comments on the open plan, beside its words: each open thread in the margin level with the words it is on, or behind a count at the line's end where the column has no room for a margin, a thread started from words selected or from a block's own button, and each thread answered, resolved, reopened, edited, and deleted where it stands.
+ *
+ * The words a thread is on are marked in the read view (`plan-body.tsx`
+ * draws them through `markdown-message.tsx`'s comment marks), each mark
+ * naming its thread, and the margin stands each card level with its mark,
+ * the open one exactly so and the rest stepped aside so none overlap
+ * (`@luke/ui/plan-comments`'s `marginTops`). A thread whose words were
+ * deleted stands at the top of the section they stood in, saying so over
+ * its quote. Where the document's column is narrower than the plan's
+ * reading width, a margin, and the gap between them, the margin folds: each
+ * line holding marks wears a count at its end, which opens its thread as a
+ * card floating under the words.
+ *
+ * A thread is started from words selected in the read view, with the
+ * bubble that rises over them, or from the button a block shows at its end
+ * under the pointer, which comments on the whole block. Its words are
+ * measured in the plan's Markdown by laying the words drawn over the
+ * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
+ * link, or a chip inside them puts nothing off. Posting a comment asks no
+ * agent anything.
+ */
+
+/** The column's room a margin needs beside the reading width: the gap and the card, as `planning.css` spends them. */
+const MARGIN_ROOM = 48 + 288;
+
+/** The page's inset on each side of the document, as `--page-inset` spends it. */
+const PAGE_INSETS = 2 * 40;
+
+/** The reading width, as `--reading-width` spends it. */
+const READING_WIDTH = 720;
+
+/** The class the words a thread is on wear in the read view (`markdown-message.tsx`'s comment mark). */
+const COMMENT_MARK_CLASS = "plan-comment-mark";
+
+/** How far below the scroller's top a thread asked to be shown lands. */
+const REVEAL_ROOM = 96;
+
+/** How far apart two cards of the margin stand. */
+const CARD_GAP = 8;
+
+/** The words a thread's controls are named by. */
+const COMMENT_WORDS = {
+  COMMENT: "Comment",
+  ADD: "Add a comment",
+  REPLY: "Reply",
+  RESOLVE: "Resolve",
+  REOPEN: "Reopen",
+  MORE: "More",
+  EDIT: "Edit",
+  DELETE: "Delete",
+  DELETE_THREAD: "Delete thread",
+  SAVE: "Save",
+  CANCEL: "Cancel",
+  GONE: "Original content deleted",
+  RESOLVED_BY: "Resolved by",
+  REOPENED_BY: "Reopened by",
+  ASKED: "asked",
+  EDITED: "edited",
+} as const;
+
+/** Which thread is open, and the one being started, shared by the marks that open them and the margin that draws them. */
+interface CommentFocus {
+  readonly active: string | undefined;
+  readonly onActive: (thread: string | undefined) => void;
+  readonly pending: PendingThread | undefined;
+  /** Opens a thread and asks the plan to scroll to its words, as the Comments tab and a link to it do. */
+  readonly reveal: (thread: string) => void;
+  /** The last ask to scroll to a thread, counted so the same thread asked twice scrolls twice. */
+  readonly revealed: { readonly thread: string; readonly ask: number } | undefined;
+}
+
+const CommentFocusContext = createContext<CommentFocus>({
+  active: undefined,
+  onActive: () => undefined,
+  pending: undefined,
+  reveal: () => undefined,
+  revealed: undefined,
+});
+
+/** Where the plan's comments are drawn: which thread is open, and the one being started. */
+export function useCommentFocus(): CommentFocus {
+  return useContext(CommentFocusContext);
+}
+
+/** Who wrote an entry, as every place naming an actor draws them. */
+function WriterRef({
+  writer,
+  agents,
+}: {
+  writer: PlanCommentWriter;
+  agents: EditAgents | undefined;
+}): ReactNode {
+  const person = usePerson(writer.by);
+  if (writer.actor === PLAN_COMMENT_ACTOR.LUKE) return <ActorRef actor={LUKE_ACTOR} />;
+  if (
+    writer.actor === PLAN_COMMENT_ACTOR.AGENT &&
+    writer.agentId !== undefined &&
+    agents !== undefined
+  ) {
+    const { agentId } = writer;
+    const subject = agentSubject(agents.control, agentId, NOTHING_HELD, false);
+    return (
+      <AgentActorRef
+        subject={subject}
+        models={agents.control.models}
+        onOpen={() => agents.onOpen?.(agentId)}
+      />
+    );
+  }
+  return <ActorRef actor={person} />;
+}
+
+/** The mark of who wrote an entry, alone, for a thread at rest's faces. */
+function WriterMark({
+  writer,
+  agents,
+}: {
+  writer: PlanCommentWriter;
+  agents: EditAgents | undefined;
+}): ReactNode {
+  const person = usePerson(writer.by);
+  let actor: Actor = person;
+  if (writer.actor === PLAN_COMMENT_ACTOR.LUKE) actor = LUKE_ACTOR;
+  else if (
+    writer.actor === PLAN_COMMENT_ACTOR.AGENT &&
+    writer.agentId !== undefined &&
+    agents !== undefined
+  ) {
+    actor = agentSubject(agents.control, writer.agentId, NOTHING_HELD, false).tile;
+  }
+  return <ActorMark actor={actor} />;
+}
+
+/** Whether the reader wrote an entry, which only its writer edits or deletes. */
+function writtenByReader(entry: PlanCommentEntry, me: string | undefined): boolean {
+  return (
+    entry.writer.actor === PLAN_COMMENT_ACTOR.MEMBER &&
+    me !== undefined &&
+    entry.writer.by?.userId === me
+  );
+}
+
+/** A line of what happened to a thread: who asked whom, who resolved or reopened it. */
+function EventLine({
+  entry,
+  agents,
+  now,
+}: {
+  entry: PlanCommentEntry;
+  agents: EditAgents | undefined;
+  now: number;
+}): React.JSX.Element {
+  const asked = entry.asked;
+  return (
+    <div className="comment-event">
+      <ActorLine>
+        {entry.kind === PLAN_COMMENT_ENTRY.ASKED ? (
+          <>
+            <WriterRef writer={entry.writer} agents={agents} />
+            {` ${COMMENT_WORDS.ASKED} `}
+            {asked === undefined ? null : (
+              <WriterRef
+                writer={{
+                  actor: asked.actor,
+                  ...(asked.agentId === undefined ? undefined : { agentId: asked.agentId }),
+                }}
+                agents={agents}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {entry.kind === PLAN_COMMENT_ENTRY.RESOLVED
+              ? `${COMMENT_WORDS.RESOLVED_BY} `
+              : `${COMMENT_WORDS.REOPENED_BY} `}
+            <WriterRef writer={entry.writer} agents={agents} />
+          </>
+        )}
+      </ActorLine>
+      <span className="comment-time comment-event-time">
+        {"· "}
+        <RelativeTime at={entry.at} now={now} ago />
+      </span>
+    </div>
+  );
+}
+
+/** What a thread's controls do, as the card that draws them is handed. */
+interface ThreadDoors {
+  readonly control: PlanCommentsControl;
+  readonly agents: EditAgents | undefined;
+  readonly me: string | undefined;
+}
+
+/** What deleting asks first, a comment's or a whole thread's, since neither comes back. */
+const DELETE_QUESTION: DialogQuestion = {
+  title: "Delete this comment?",
+  verb: "Delete",
+  running: "Deleting…",
+  tone: DIALOG_TONE.DANGER,
+};
+
+const DELETE_THREAD_QUESTION: DialogQuestion = {
+  title: "Delete this thread?",
+  body: "Every comment in it is deleted with it.",
+  verb: "Delete thread",
+  running: "Deleting…",
+  tone: DIALOG_TONE.DANGER,
+};
+
+/** What a delete that did not land says. */
+const COMMENT_NOT_DELETED = "The comment could not be deleted.";
+
+/** One comment of a thread: who wrote it and when, its words, or the field editing them, and its tools under the pointer. */
+function CommentEntry({
+  thread,
+  entry,
+  first,
+  doors,
+  now,
+}: {
+  thread: PlanCommentThread;
+  entry: PlanCommentEntry;
+  first: boolean;
+  doors: ThreadDoors;
+  now: number;
+}): React.JSX.Element {
+  const [editing, setEditing] = useState<string | undefined>(undefined);
+  const deleting = useConfirmDialog({ subject: true, surfaceOpen: true }, async () =>
+    (await doors.control.act(
+      thread.id,
+      first
+        ? { action: PLAN_COMMENT_ACTION.DELETE_THREAD }
+        : { action: PLAN_COMMENT_ACTION.DELETE, entry: entry.id },
+    ))
+      ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+      : {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: doors.control.notes.get(thread.id) ?? COMMENT_NOT_DELETED,
+        },
+  );
+  const copyLink = useCopyLinkItem()({
+    kind: LINK_PLACE.COMMENT,
+    planId: doors.control.planId,
+    threadId: thread.id,
+  });
+  const menu = useMenu(true);
+  const trigger = menu.trigger();
+  const mine = writtenByReader(entry, doors.me);
+  const items: MenuAction[] = [
+    ...(copyLink === undefined ? [] : [copyLink]),
+    ...(mine
+      ? [
+          {
+            label: COMMENT_WORDS.EDIT,
+            icon: <PencilIcon aria-hidden="true" />,
+            onSelect: () => setEditing(entry.words ?? ""),
+          },
+        ]
+      : []),
+    ...(mine && !first
+      ? [
+          {
+            label: COMMENT_WORDS.DELETE,
+            icon: <TrashIcon />,
+            danger: true,
+            onSelect: deleting.ask,
+          },
+        ]
+      : []),
+    ...(first
+      ? [
+          {
+            label: COMMENT_WORDS.DELETE_THREAD,
+            icon: <TrashIcon />,
+            danger: true,
+            onSelect: deleting.ask,
+          },
+        ]
+      : []),
+  ];
+  const settle = first && openThread(thread);
+  const save = () => {
+    const words = editing?.trim() ?? "";
+    if (words === "") return;
+    void doors.control
+      .act(thread.id, { action: PLAN_COMMENT_ACTION.EDIT, entry: entry.id, words })
+      .then((done) => {
+        if (done) setEditing(undefined);
+      });
+  };
+  return (
+    <div className="comment-entry" data-entry={entry.id}>
+      <div className="comment-head">
+        <WriterRef writer={entry.writer} agents={doors.agents} />
+        <span className="comment-time">
+          <RelativeTime at={entry.at} now={now} ago />
+          {entry.editedAt === undefined ? null : ` · ${COMMENT_WORDS.EDITED}`}
+        </span>
+      </div>
+      {editing === undefined ? (
+        <div className="comment-words">{entry.words}</div>
+      ) : (
+        <div className="comment-field comment-editing">
+          <CommentText
+            value={editing}
+            label={COMMENT_WORDS.EDIT}
+            onChange={setEditing}
+            onSubmit={save}
+            onCancel={() => setEditing(undefined)}
+            autoFocus
+          />
+          <div className="comment-field-foot">
+            <button type="button" className="quiet-button" onClick={() => setEditing(undefined)}>
+              {COMMENT_WORDS.CANCEL}
+            </button>
+            <button type="button" className="primary-button comment-save" onClick={save}>
+              {COMMENT_WORDS.SAVE}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="comment-tools">
+        {first ? (
+          <Tooltip label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
+              onClick={() =>
+                void doors.control.act(thread.id, {
+                  action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
+                })
+              }
+            >
+              {settle ? <CheckIcon aria-hidden="true" /> : <RotateCcwIcon aria-hidden="true" />}
+            </button>
+          </Tooltip>
+        ) : null}
+        <Tooltip label={COMMENT_WORDS.MORE}>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={COMMENT_WORDS.MORE}
+            {...trigger}
+          >
+            <EllipsisIcon />
+          </button>
+        </Tooltip>
+        {menu.drawn === undefined ? null : (
+          <ActionMenu
+            label={COMMENT_WORDS.MORE}
+            menu={menu.drawn}
+            groups={[items]}
+            onClose={menu.close}
+          />
+        )}
+      </div>
+      <ConfirmDialog
+        confirm={deleting}
+        question={first ? DELETE_THREAD_QUESTION : DELETE_QUESTION}
+      />
+    </div>
+  );
+}
+
+/**
+ * A comment's words as they are typed: Return sends, Shift-Return breaks the
+ * line, and Esc lets the field go. A plain field, so the field's own undo
+ * and redo change its words and never the plan's.
+ */
+function CommentText({
+  value,
+  label,
+  onChange,
+  onSubmit,
+  onCancel,
+  autoFocus = false,
+}: {
+  value: string;
+  label: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  autoFocus?: boolean;
+}): React.JSX.Element {
+  const field = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const element = field.current;
+    if (element === null) return;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={field}
+      className="comment-text"
+      rows={1}
+      value={value}
+      placeholder={label}
+      aria-label={label}
+      // biome-ignore lint/a11y/noAutofocus: the field is opened by the press that asked for it, as a reply field is.
+      autoFocus={autoFocus}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          onSubmit();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          onCancel();
+        }
+      }}
+    />
+  );
+}
+
+/** The field under a thread that answers it, or starts it where it is the thread being started. */
+function ReplyField({
+  label,
+  sending,
+  onSend,
+  onCancel,
+  autoFocus,
+}: {
+  label: string;
+  sending: boolean;
+  /** Sends the words under a key that stays the same while they do, so a send tried again after a lost answer is taken once. */
+  onSend: (words: string, clientKey: string) => Promise<boolean>;
+  onCancel: () => void;
+  autoFocus: boolean;
+}): React.JSX.Element {
+  const [words, setWords] = useState("");
+  const attempt = useRef<{ words: string; key: string } | undefined>(undefined);
+  const send = () => {
+    const trimmed = words.trim();
+    if (trimmed === "" || sending) return;
+    const key = attempt.current?.words === trimmed ? attempt.current.key : crypto.randomUUID();
+    attempt.current = { words: trimmed, key };
+    void onSend(trimmed, key).then((sent) => {
+      if (!sent) return;
+      attempt.current = undefined;
+      setWords("");
+    });
+  };
+  return (
+    <div className="comment-field field-well">
+      <CommentText
+        value={words}
+        label={label}
+        onChange={setWords}
+        onSubmit={send}
+        onCancel={onCancel}
+        autoFocus={autoFocus}
+      />
+      <div className="comment-field-foot">
+        <span />
+        <button
+          type="button"
+          className="comment-send"
+          aria-label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
+          disabled={words.trim() === "" || sending}
+          onClick={send}
+        >
+          <ArrowUpIcon aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Over a thread whose words were deleted: that they were, and what they said. */
+function GoneQuote({ thread }: { thread: PlanCommentThread }): React.JSX.Element {
+  return (
+    <>
+      <div className="comment-gone">
+        <TrashIcon />
+        {COMMENT_WORDS.GONE}
+      </div>
+      <blockquote className="comment-quote" data-gone="true">
+        {thread.quote}
+      </blockquote>
+    </>
+  );
+}
+
+/**
+ * One thread as the margin, a count's card, or the Comments tab draws it:
+ * open, every entry and the field that answers it; at rest, its first
+ * comment and the faces and count of its replies, which opens it.
+ */
+function ThreadCard({
+  thread,
+  open,
+  doors,
+  onOpen,
+  onClose,
+  quote = false,
+}: {
+  thread: PlanCommentThread;
+  open: boolean;
+  doors: ThreadDoors;
+  onOpen: () => void;
+  onClose: () => void;
+  /** Whether the quote stands over it, as in the Comments tab, where its words are not beside it. */
+  quote?: boolean;
+}): React.JSX.Element {
+  const now = useMinute();
+  const [sending, setSending] = useState(false);
+  const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
+  const [first] = comments;
+  const gone = thread.anchor === undefined;
+  const note = doors.control.notes.get(thread.id);
+  const head = (
+    <>
+      {gone ? <GoneQuote thread={thread} /> : null}
+      {!gone && quote ? <blockquote className="comment-quote">{thread.quote}</blockquote> : null}
+    </>
+  );
+  if (!open) {
+    const replies = comments.slice(1);
+    const faces = [
+      ...new Map(replies.map((entry) => [JSON.stringify(entry.writer), entry.writer])).values(),
+    ];
+    return (
+      <div className="comment-card" data-open="false" data-thread={thread.id}>
+        {head}
+        {first === undefined ? null : (
+          <div className="comment-head">
+            <WriterRef writer={first.writer} agents={doors.agents} />
+            <span className="comment-time">
+              <RelativeTime at={first.at} now={now} ago />
+            </span>
+          </div>
+        )}
+        {/* Note that the words and the replies are one press that opens the thread, the writer's name its own. */}
+        <button type="button" className="comment-open" onClick={onOpen}>
+          <span className="comment-words" data-clamped="true">
+            {first?.words}
+          </span>
+          {replies.length === 0 ? null : (
+            <span className="comment-replies">
+              <span className="comment-faces">
+                {faces.map((writer) => (
+                  <WriterMark key={JSON.stringify(writer)} writer={writer} agents={doors.agents} />
+                ))}
+              </span>
+              {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
+              <span className="comment-time">
+                {" · "}
+                <RelativeTime at={replies.at(-1)?.at ?? thread.updatedAt} now={now} ago />
+              </span>
+            </span>
+          )}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="comment-card" data-open="true" data-thread={thread.id}>
+      {head}
+      {thread.entries.map((entry) =>
+        entry.kind === PLAN_COMMENT_ENTRY.COMMENT ? (
+          <CommentEntry
+            key={entry.id}
+            thread={thread}
+            entry={entry}
+            first={entry.id === first?.id}
+            doors={doors}
+            now={now}
+          />
+        ) : (
+          <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
+        ),
+      )}
+      {note === undefined ? null : (
+        <div className="comment-note" role="alert">
+          {note}
+        </div>
+      )}
+      {thread.status === PLAN_COMMENT_STATUS.OPEN ? (
+        <ReplyField
+          label={COMMENT_WORDS.REPLY}
+          sending={sending}
+          autoFocus={false}
+          onCancel={onClose}
+          onSend={async (words, clientKey) => {
+            setSending(true);
+            const sent = await doors.control.act(thread.id, {
+              action: PLAN_COMMENT_ACTION.REPLY,
+              clientKey,
+              words,
+            });
+            setSending(false);
+            return sent;
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** The thread being started, its field focused, which posts its first comment. */
+function PendingCard({
+  pending,
+  doors,
+  text,
+  onStarted,
+  onCancel,
+}: {
+  pending: PendingThread;
+  doors: ThreadDoors;
+  /** The plan's text the thread's words are measured in. */
+  text: string;
+  onStarted: (thread: PlanCommentThread) => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState<string | undefined>(undefined);
+  return (
+    <div className="comment-card" data-open="true" data-thread={PENDING_THREAD}>
+      {note === undefined ? null : (
+        <div className="comment-note" role="alert">
+          {note}
+        </div>
+      )}
+      <ReplyField
+        label={COMMENT_WORDS.ADD}
+        sending={sending}
+        autoFocus
+        onCancel={onCancel}
+        onSend={async (words, clientKey) => {
+          setSending(true);
+          const started = await doors.control.start({
+            clientKey,
+            scope: pending.scope,
+            quote: pending.quote,
+            anchor: { from: pending.from, to: pending.to },
+            text,
+            words,
+          });
+          setSending(false);
+          if ("note" in started) {
+            setNote(started.note);
+            return false;
+          }
+          onStarted(started.thread);
+          return true;
+        }}
+      />
+    </div>
+  );
+}
+
+/** Where words drawn inside `root` stand in its drawn text, from its start to the point. */
+function drawnOffset(root: HTMLElement, node: globalThis.Node, offset: number): number {
+  const range = document.createRange();
+  range.setStart(root, 0);
+  range.setEnd(node, offset);
+  return range.toString().length;
+}
+
+/** The words a section's drawn stretch stands for in the plan's text, laid over the section's source; nothing where none of them do. */
+function sourceSpan(
+  unit: HTMLElement,
+  section: PlanSection,
+  drawn: { readonly from: number; readonly to: number },
+): { readonly from: number; readonly to: number } | undefined {
+  const span = textChange(unit.textContent ?? "", section.text)(drawn);
+  return span === undefined
+    ? undefined
+    : { from: section.from + span.from, to: section.from + span.to };
+}
+
+/** What a thread is started on: the words or block drawn, as the plan's text holds them. */
+function pendingOf(
+  unit: HTMLElement,
+  section: PlanSection,
+  drawn: { readonly from: number; readonly to: number },
+  scope: PendingThread["scope"],
+  quote: string,
+): PendingThread | undefined {
+  const span = sourceSpan(unit, section, drawn);
+  return span === undefined ? undefined : { ...span, scope, quote: quote.slice(0, 2_000) };
+}
+
+/** Where an element's top stands in the plan body's own box. */
+function topIn(body: HTMLElement, element: Element): number {
+  return element.getBoundingClientRect().top - body.getBoundingClientRect().top;
+}
+
+/** The bar at the end of a block a thread is on whole: where it stands in the body, and whether its thread is open. */
+interface BlockEdge {
+  readonly thread: string;
+  readonly top: number;
+  readonly height: number;
+  readonly active: boolean;
+}
+
+/** The blocks threads are on whole, each by the block its mark stands in. */
+function blockEdges(body: HTMLElement | null, unitClass: string): readonly BlockEdge[] {
+  if (body === null) return [];
+  const marks = [
+    ...body.querySelectorAll<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-block-threads]`),
+  ];
+  const seen = new Set<string>();
+  return marks.flatMap((mark) => {
+    const found = blockAt(mark, unitClass);
+    if (found === undefined) return [];
+    const threads = (mark.dataset.blockThreads ?? "").split(" ").filter((thread) => thread !== "");
+    return threads.flatMap((thread) => {
+      if (seen.has(thread)) return [];
+      seen.add(thread);
+      return [
+        {
+          thread,
+          top: topIn(body, found.block),
+          height: found.block.getBoundingClientRect().height,
+          active: mark.dataset.blockActive === "true",
+        },
+      ];
+    });
+  });
+}
+
+/** The block a point is over, one of a section's own: a paragraph, a list, a heading, a quote, a table, or code. */
+function blockAt(
+  target: EventTarget | null,
+  unitClass: string,
+): { block: HTMLElement; unit: HTMLElement } | undefined {
+  if (!(target instanceof HTMLElement)) return undefined;
+  const unit = target.closest<HTMLElement>(`.${unitClass}`);
+  if (unit === null) return undefined;
+  let block: HTMLElement | null = target;
+  while (block !== null && block.parentElement !== unit) block = block.parentElement;
+  return block === null ? undefined : { block, unit };
+}
+
+/**
+ * The plan's comments beside its body: the margin or the counts, the
+ * thread being started, the button a block shows under the pointer, and
+ * the bubble over words selected. Drawn inside the body, which it measures,
+ * from the scroller around it, whose width says whether a margin fits.
+ */
+export function PlanCommentLayer({
+  body,
+  scroller,
+  unitClass,
+  sections,
+  text,
+  doors,
+  editing,
+}: {
+  body: RefObject<HTMLDivElement | null>;
+  scroller: RefObject<HTMLDivElement | null>;
+  /** The class each section's drawn words wear, in the order of `sections`. */
+  unitClass: string;
+  sections: readonly PlanSection[];
+  /** The plan's text, which `sections` were read from and a thread's words are measured in. */
+  text: string;
+  doors: ThreadDoors;
+  /** Whether the editor stands in place of the drawn sections, whose marks the margin still stands beside, though no thread is started there. */
+  editing: boolean;
+}): React.JSX.Element | null {
+  const { active, onActive, pending, revealed } = useCommentFocus();
+  const setPending = useContext(PendingSetter);
+  const [wide, setWide] = useState(true);
+  const [tops, setTops] = useState<ReadonlyMap<string, number>>(new Map());
+  // Where each thread's words stand, which a fold's counts stand level with.
+  const [anchors, setAnchors] = useState<ReadonlyMap<string, number>>(new Map());
+  const [edges, setEdges] = useState<readonly BlockEdge[]>([]);
+  const [hovered, setHovered] = useState<{ top: number; start: () => void } | undefined>(undefined);
+  const [bubble, setBubble] = useState<
+    { top: number; left: number; start: () => void } | undefined
+  >(undefined);
+  const cards = useRef(new Map<string, HTMLDivElement>());
+  const open = doors.control.threads.filter(openThread);
+
+  // The margin folds where the scroller has no room for it beside the reading width.
+  useEffect(() => {
+    const element = scroller.current;
+    if (element === null) return;
+    const measure = () => setWide(element.clientWidth >= READING_WIDTH + MARGIN_ROOM + PAGE_INSETS);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [scroller]);
+
+  useEffect(() => {
+    const element = scroller.current;
+    if (element === null) return;
+    element.dataset.comments =
+      wide && (open.length > 0 || pending !== undefined) ? "margin" : "folded";
+  });
+
+  // Each card's words are measured after the body draws them, and the cards stood beside them.
+  const anchorTop = useCallback(
+    (thread: string, section: string): number | undefined => {
+      const element = body.current;
+      if (element === null) return undefined;
+      const mark = element.querySelector(`.${COMMENT_MARK_CLASS}[data-threads~="${thread}"]`);
+      if (mark !== null) return topIn(element, mark);
+      // Note that a thread's id is the service's UUID, which a selector takes as it is.
+      // A thread whose words were deleted stands where its section starts, or at the top.
+      const at = sections.findIndex((each) => each.heading === section);
+      const unit = at < 0 ? undefined : element.querySelectorAll(`.${unitClass}`)[at];
+      return unit === undefined ? 0 : topIn(element, unit);
+    },
+    [body, sections, unitClass],
+  );
+  useLayoutEffect(() => {
+    const placed = [
+      ...open.map((thread) => ({ id: thread.id, section: thread.section })),
+      ...(pending === undefined ? [] : [{ id: PENDING_THREAD, section: "" }]),
+    ].flatMap(({ id, section }) => {
+      const top = anchorTop(id, section);
+      return top === undefined
+        ? []
+        : [{ id, top, height: cards.current.get(id)?.offsetHeight ?? 0 }];
+    });
+    const next = marginTops(
+      placed,
+      active ?? (pending === undefined ? undefined : PENDING_THREAD),
+      CARD_GAP,
+    );
+    const same = next.size === tops.size && [...next].every(([id, top]) => tops.get(id) === top);
+    if (!same) setTops(next);
+    const nextAnchors = new Map(placed.map((card) => [card.id, card.top]));
+    const sameAnchors =
+      nextAnchors.size === anchors.size &&
+      [...nextAnchors].every(([id, top]) => anchors.get(id) === top);
+    if (!sameAnchors) setAnchors(nextAnchors);
+    const nextEdges = blockEdges(body.current, unitClass);
+    if (JSON.stringify(nextEdges) !== JSON.stringify(edges)) setEdges(nextEdges);
+  });
+
+  // An ask to show a thread scrolls the document's own scroller to its words, once per ask.
+  const scrolled = useRef<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    const room = body.current;
+    if (revealed === undefined || element === null || room === null) return;
+    if (scrolled.current === revealed.ask) return;
+    // Note that the ask waits for the read to name the thread, since a link may open the plan before its comments land.
+    const asked = doors.control.threads.find((each) => each.id === revealed.thread);
+    if (!doors.control.read || asked === undefined) return;
+    const top = anchorTop(asked.id, asked.section);
+    if (top === undefined) return;
+    scrolled.current = revealed.ask;
+    element.scrollTop +=
+      room.getBoundingClientRect().top + top - element.getBoundingClientRect().top - REVEAL_ROOM;
+  });
+
+  // A block under the pointer shows its button at the column's end; words selected raise the bubble over them.
+  useEffect(() => {
+    const element = body.current;
+    if (element === null || editing) return;
+    const over = (event: PointerEvent) => {
+      const found = blockAt(event.target, unitClass);
+      if (found === undefined) return;
+      const index = [...element.querySelectorAll(`.${unitClass}`)].indexOf(found.unit);
+      const section = sections[index];
+      if (section === undefined) return;
+      const from = drawnOffset(found.unit, found.block, 0);
+      const to = from + (found.block.textContent ?? "").length;
+      setHovered({
+        top: topIn(element, found.block),
+        start: () => {
+          const begun = pendingOf(
+            found.unit,
+            section,
+            { from, to },
+            PLAN_COMMENT_SCOPE.BLOCK,
+            found.block.textContent ?? "",
+          );
+          if (begun !== undefined) setPending(begun);
+        },
+      });
+    };
+    const selected = () => {
+      const selection = window.getSelection();
+      if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
+        setBubble(undefined);
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const start = range.startContainer.parentElement?.closest<HTMLElement>(`.${unitClass}`);
+      const end = range.endContainer.parentElement?.closest<HTMLElement>(`.${unitClass}`);
+      if (start === null || start === undefined || start !== end || !element.contains(start)) {
+        setBubble(undefined);
+        return;
+      }
+      const index = [...element.querySelectorAll(`.${unitClass}`)].indexOf(start);
+      const section = sections[index];
+      const quote = selection.toString().trim();
+      if (section === undefined || quote === "") return;
+      const from = drawnOffset(start, range.startContainer, range.startOffset);
+      const to = drawnOffset(start, range.endContainer, range.endOffset);
+      const box = range.getBoundingClientRect();
+      const own = element.getBoundingClientRect();
+      setBubble({
+        top: box.top - own.top,
+        left: box.left - own.left,
+        start: () => {
+          const begun = pendingOf(start, section, { from, to }, PLAN_COMMENT_SCOPE.WORDS, quote);
+          if (begun !== undefined) setPending(begun);
+          setBubble(undefined);
+          selection.removeAllRanges();
+        },
+      });
+    };
+    // Note that a press on marked words opens their thread, as the editor would otherwise open there.
+    const pressed = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const mark = event.target.closest<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-threads]`);
+      // Note that words under more than one thread open the next of them each press.
+      const threads = (mark?.dataset.threads ?? "")
+        .split(" ")
+        .filter((each) => each !== "" && each !== PENDING_THREAD);
+      const thread = threads[(threads.indexOf(active ?? "") + 1) % Math.max(threads.length, 1)];
+      if (thread === undefined) return;
+      setPending(undefined);
+      onActive(thread);
+    };
+    element.addEventListener("pointerover", over);
+    element.addEventListener("click", pressed);
+    document.addEventListener("selectionchange", selected);
+    return () => {
+      element.removeEventListener("pointerover", over);
+      element.removeEventListener("click", pressed);
+      document.removeEventListener("selectionchange", selected);
+    };
+  }, [body, editing, sections, unitClass, setPending, onActive, active]);
+
+  const cardRef = (id: string) => (element: HTMLDivElement | null) => {
+    if (element === null) cards.current.delete(id);
+    else cards.current.set(id, element);
+  };
+  const close = () => {
+    onActive(undefined);
+    setPending(undefined);
+  };
+  const pendingCard =
+    pending === undefined ? null : (
+      <PendingCard
+        pending={pending}
+        doors={doors}
+        text={text}
+        onCancel={close}
+        onStarted={(thread) => {
+          setPending(undefined);
+          onActive(thread.id);
+        }}
+      />
+    );
+  const edgesDrawn = edges.map((edge) => (
+    <div
+      key={edge.thread}
+      className="comment-block-edge"
+      data-active={edge.active}
+      style={{ top: edge.top, height: edge.height }}
+    />
+  ));
+  const blockButton =
+    // Note that folded, a line holding a count opens its threads there, so its block shows no button over it.
+    hovered === undefined ||
+    editing ||
+    (!wide && [...anchors.values()].some((top) => Math.abs(top - hovered.top) < 4)) ? null : (
+      <div className="comment-block-button" data-folded={!wide} style={{ top: hovered.top }}>
+        <Tooltip label={COMMENT_WORDS.COMMENT}>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={COMMENT_WORDS.COMMENT}
+            onClick={hovered.start}
+          >
+            <MessageSquarePlusIcon aria-hidden="true" />
+          </button>
+        </Tooltip>
+      </div>
+    );
+  const bubbleDrawn =
+    bubble === undefined || editing ? null : (
+      <div className="comment-bubble menu-surface" style={{ top: bubble.top, left: bubble.left }}>
+        <button
+          type="button"
+          className="toolbar-button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={bubble.start}
+        >
+          <MessageSquarePlusIcon aria-hidden="true" />
+          {COMMENT_WORDS.COMMENT}
+        </button>
+      </div>
+    );
+  if (wide) {
+    return (
+      <div className="comment-layer">
+        {edgesDrawn}
+        {blockButton}
+        {bubbleDrawn}
+        <div className="comment-margin">
+          {open.map((thread) => (
+            <div
+              key={thread.id}
+              ref={cardRef(thread.id)}
+              className="comment-slot"
+              style={{ top: tops.get(thread.id) ?? 0 }}
+            >
+              <ThreadCard
+                thread={thread}
+                open={active === thread.id}
+                doors={doors}
+                onOpen={() => {
+                  setPending(undefined);
+                  onActive(thread.id);
+                }}
+                onClose={close}
+              />
+            </div>
+          ))}
+          {pendingCard === null ? null : (
+            <div
+              ref={cardRef(PENDING_THREAD)}
+              className="comment-slot"
+              style={{ top: tops.get(PENDING_THREAD) ?? 0 }}
+            >
+              {pendingCard}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  // Folded: a count at the end of each line holding marks, the open thread floating under it.
+  const counts = new Map<number, PlanCommentThread[]>();
+  for (const thread of open) {
+    const top = anchors.get(thread.id);
+    if (top === undefined) continue;
+    counts.set(top, [...(counts.get(top) ?? []), thread]);
+  }
+  const shown = open.find((thread) => thread.id === active);
+  const shownTop = shown === undefined ? undefined : anchors.get(shown.id);
+  return (
+    <div className="comment-layer">
+      {edgesDrawn}
+      {blockButton}
+      {bubbleDrawn}
+      {[...counts].map(([top, threads]) => {
+        const comments = threads.reduce(
+          (sum, thread) =>
+            sum +
+            thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT).length,
+          0,
+        );
+        const first = threads[0];
+        return (
+          <button
+            key={top}
+            type="button"
+            className="comment-count"
+            style={{ top }}
+            aria-expanded={threads.some((thread) => thread.id === active)}
+            aria-label={`${comments} ${comments === 1 ? "comment" : "comments"}`}
+            onClick={() =>
+              onActive(threads.some((thread) => thread.id === active) ? undefined : first?.id)
+            }
+          >
+            <MessageSquareIcon aria-hidden="true" />
+            {comments}
+          </button>
+        );
+      })}
+      {shown === undefined || shownTop === undefined ? null : (
+        <div className="comment-float" style={{ top: shownTop + 28 }}>
+          <ThreadCard thread={shown} open doors={doors} onOpen={() => undefined} onClose={close} />
+        </div>
+      )}
+      {pendingCard === null ? null : (
+        <div
+          className="comment-float"
+          style={{ top: (anchors.get(PENDING_THREAD) ?? 0) + 28 }}
+          ref={cardRef(PENDING_THREAD)}
+        >
+          {pendingCard}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PendingSetter = createContext<(pending: PendingThread | undefined) => void>(() => undefined);
+
+/** Holds which thread is open and the one being started, for the marks, the margin, and the Comments tab under it. */
+export function CommentFocusScope({
+  planId,
+  children,
+  reveal,
+}: {
+  /** The plan the focus is on; another plan opened lets go of the open thread and the one being started. */
+  planId?: string | undefined;
+  children: ReactNode;
+  /** A thread to open, as a link to it asks; opened once per ask. */
+  reveal?: { readonly thread: string; readonly ask: number } | undefined;
+}): React.JSX.Element {
+  const [active, setActive] = useState<string | undefined>(undefined);
+  const [pending, setPending] = useState<PendingThread | undefined>(undefined);
+  const [revealed, setRevealed] = useState<CommentFocus["revealed"]>(undefined);
+  const [focusedOn, setFocusedOn] = useState(planId);
+  // Note that the thread being started is let go in the render the plan changes in, so it is never posted to another plan.
+  if (focusedOn !== planId) {
+    setFocusedOn(planId);
+    setActive(undefined);
+    setPending(undefined);
+    setRevealed(undefined);
+  }
+  const asked = useRef<number | undefined>(undefined);
+  const onReveal = useCallback((thread: string) => {
+    setPending(undefined);
+    setActive(thread);
+    setRevealed((was) => ({ thread, ask: (was?.ask ?? 0) + 1 }));
+  }, []);
+  useEffect(() => {
+    if (reveal === undefined || asked.current === reveal.ask) return;
+    asked.current = reveal.ask;
+    onReveal(reveal.thread);
+  }, [reveal, onReveal]);
+  const focus = useMemo(
+    () => ({
+      active: focusedOn !== planId ? undefined : pending === undefined ? active : PENDING_THREAD,
+      onActive: setActive,
+      pending: focusedOn === planId ? pending : undefined,
+      reveal: onReveal,
+      revealed,
+    }),
+    [active, pending, onReveal, revealed, focusedOn, planId],
+  );
+  return (
+    <CommentFocusContext.Provider value={focus}>
+      <PendingSetter.Provider value={setPending}>{children}</PendingSetter.Provider>
+    </CommentFocusContext.Provider>
+  );
+}
+
+/** Which of the plan's threads the Comments tab lists. */
+const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
+
+type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
+
+/** What the Comments tab says over a list holding nothing, by its filter. */
+const NO_COMMENTS = {
+  [COMMENTS_FILTER.OPEN]: "No open comments.",
+  [COMMENTS_FILTER.RESOLVED]: "No resolved comments.",
+} as const satisfies Record<CommentsFilter, string>;
+
+/**
+ * The side panel's Comments tab: the plan's threads, open or resolved, each
+ * under the section it is on and its quote. An open thread's press shows the
+ * plan and opens it beside its words; a resolved one opens where it is
+ * listed, with Reopen, which brings it back beside its words.
+ */
+export function PlanCommentsTab({
+  doors,
+  onShowPlan,
+}: {
+  doors: Omit<ThreadDoors, "control">;
+  /** Shows the plan's own tab in the column, where an open thread is drawn. */
+  onShowPlan: () => void;
+}): React.JSX.Element | null {
+  const control = usePlanCommentsControlOrUndefined();
+  const { reveal, revealed } = useCommentFocus();
+  const [filter, setFilter] = useState<CommentsFilter>(COMMENTS_FILTER.OPEN);
+  const [opened, setOpened] = useState<string | undefined>(undefined);
+  // A resolved thread asked to be shown, as a link to it asks, opens here under Resolved, the plan holding no card of it.
+  const shownAsk = useRef<number | undefined>(undefined);
+  const resolvedAsked =
+    revealed === undefined
+      ? undefined
+      : control?.threads.find((thread) => thread.id === revealed.thread && !openThread(thread));
+  useEffect(() => {
+    if (revealed === undefined || resolvedAsked === undefined || shownAsk.current === revealed.ask)
+      return;
+    shownAsk.current = revealed.ask;
+    setFilter(COMMENTS_FILTER.RESOLVED);
+    setOpened(resolvedAsked.id);
+  }, [revealed, resolvedAsked]);
+  if (control === undefined) return null;
+  const open = control.threads.filter(openThread);
+  const resolved = control.threads.filter((thread) => !openThread(thread));
+  const listed = filter === COMMENTS_FILTER.OPEN ? open : resolved;
+  const full = { ...doors, control };
+  return (
+    <div className="comments-tab">
+      <div className="comments-filters">
+        {[
+          [COMMENTS_FILTER.OPEN, "Open", open.length] as const,
+          [COMMENTS_FILTER.RESOLVED, "Resolved", resolved.length] as const,
+        ].map(([kind, label, count]) => (
+          <button
+            key={kind}
+            type="button"
+            className="comments-filter"
+            aria-pressed={filter === kind}
+            onClick={() => setFilter(kind)}
+          >
+            {label}
+            <span className="comments-filter-count">{count}</span>
+          </button>
+        ))}
+      </div>
+      {control.failed ? (
+        <div className="comments-empty" role="alert">
+          The comments could not be read.{" "}
+          <button type="button" className="quiet-button" onClick={control.onRetry}>
+            Try again
+          </button>
+        </div>
+      ) : listed.length === 0 ? (
+        <div className="comments-empty">{control.read ? NO_COMMENTS[filter] : null}</div>
+      ) : (
+        listed.map((thread) => (
+          <div key={thread.id} className="comments-row">
+            <div className="comments-row-section">
+              {thread.section === "" ? "Plan" : thread.section}
+            </div>
+            <ThreadCard
+              thread={thread}
+              open={opened === thread.id}
+              quote
+              doors={full}
+              onOpen={() => {
+                if (openThread(thread)) {
+                  onShowPlan();
+                  reveal(thread.id);
+                } else setOpened(thread.id);
+              }}
+              onClose={() => setOpened(undefined)}
+            />
+          </div>
+        ))
+      )}
+    </div>
+  );
+}

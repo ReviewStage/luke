@@ -34,6 +34,7 @@ export interface PlaceChipLook {
 const KIND_NAME = {
   [LINK_PLACE.TASK]: "Task",
   [LINK_PLACE.SECTION]: "Section",
+  [LINK_PLACE.COMMENT]: "Comment",
   [LINK_PLACE.VERSION]: "Version",
   [LINK_PLACE.PAGE]: "Page",
   [LINK_PLACE.CALL]: "Call",

@@ -1,5 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { HoverCard, HoverCardHead, HoverCardNote, useMenu } from "@luke/ui";
+import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -14,8 +15,10 @@ import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, newestFileNote } from "../tasks/file-ref";
 import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model";
 import { PageCard } from "../tasks/page-card";
+import { TAB_KIND, tabLook } from "../tasks/tab-look";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
+import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
@@ -426,7 +429,7 @@ function withCards(
  * settled, or its tab is open, as a panel's kind stands once the plan has
  * used it; then the panel's kinds and what they hold, then the agents.
  */
-function summaryRows(plans: TasksControl, inbox: InboxBoardView) {
+function summaryRows(plans: TasksControl, inbox: InboxBoardView, openComments?: number) {
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = taskWorkers(workRowsOf(work.conversation, work.callLive));
   const files = shownFiles(plans.shownCode ?? []);
@@ -436,11 +439,24 @@ function summaryRows(plans: TasksControl, inbox: InboxBoardView) {
     inboxHolds || mainTabs.tabs.includes(MAIN_TAB.INBOX)
       ? [inboxEntry(() => mainTabs.onChoose(MAIN_TAB.INBOX), inbox.open.length)]
       : [];
+  // The task's comments stand in Tabs while any thread is open, counting them, or while their tab was used.
+  const commented = openComments !== undefined && openComments > 0;
+  const commentsRow =
+    commented || sidePanel.used.includes(SIDE_PANEL_TAB.COMMENTS)
+      ? [
+          countedEntry(
+            SIDE_PANEL_TAB.COMMENTS,
+            () => sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS),
+            openComments ?? 0,
+          ),
+        ]
+      : [];
   const rows = [
     ...inboxRow,
+    ...commentsRow,
     ...panelEntries({
       panel: sidePanel,
-      kinds: sidePanel.used,
+      kinds: sidePanel.used.filter((kind) => kind !== SIDE_PANEL_TAB.COMMENTS),
       workers,
       files,
       changes,
@@ -449,6 +465,17 @@ function summaryRows(plans: TasksControl, inbox: InboxBoardView) {
     ...agentEntries(mainTabs, agents),
   ];
   return { rows, workers, files, changes };
+}
+
+/** A panel kind's row with how many of its things it counts at its end, as the Inbox's row counts what waits. */
+function countedEntry(
+  tab: typeof SIDE_PANEL_TAB.COMMENTS,
+  onPick: () => void,
+  count: number,
+): AddEntry {
+  const row = { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab }) };
+  const endMark = count === 0 ? undefined : <span className="inbox-row-count">{count}</span>;
+  return { row, endMark, onPick };
 }
 
 /** `entries` under their headings in their order, each heading only where it has a row. */
@@ -472,8 +499,9 @@ function summarySections(
   held: HeldTranscripts,
   repository: string | null,
   onOpenAgent: (agentId: string) => void,
+  openComments: number | undefined,
 ): SummarySection[] {
-  const { rows, workers, files, changes } = summaryRows(tasks, inbox);
+  const { rows, workers, files, changes } = summaryRows(tasks, inbox, openComments);
   const paths = files.map((ref) => ref.path);
   const entries = withCards(rows, {
     tasks,
@@ -489,8 +517,12 @@ function summarySections(
 }
 
 /** Whether the plan's summary lists anything, which is whether it and its toolbar button are drawn at all. */
-export function summaryHolds(plans: TasksControl, inbox: InboxBoardView): boolean {
-  return sectionsOf(summaryRows(plans, inbox).rows, plans.agents).length > 0;
+export function summaryHolds(
+  plans: TasksControl,
+  inbox: InboxBoardView,
+  openComments?: number,
+): boolean {
+  return sectionsOf(summaryRows(plans, inbox, openComments).rows, plans.agents).length > 0;
 }
 
 /**
@@ -802,7 +834,15 @@ export function TaskSummary({
   /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  const sections = summarySections(tasks, inbox, held, repository, onOpenAgent);
+  const comments = usePlanCommentsControl();
+  const sections = summarySections(
+    tasks,
+    inbox,
+    held,
+    repository,
+    onOpenAgent,
+    comments?.threads.filter(openThread).length,
+  );
   // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
     (entry) => entry.row.id !== INBOX_ROW,

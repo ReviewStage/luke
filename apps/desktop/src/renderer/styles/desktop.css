@@ -105,6 +105,11 @@
   --panel-toggle-clearance: calc(var(--column-inset) + var(--control-height) + var(--control-gap));
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
+  /* The margin a comment thread stands in beside the reading width, and the
+     gap between them (`planning/plan-comments.tsx`, which mirrors both). */
+  --comment-card-width: 288px;
+  --comment-margin-gap: var(--space-48);
+  --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
@@ -3251,6 +3256,15 @@ ul.actor-stack {
   max-width: var(--reading-width);
   margin-right: auto;
   margin-left: auto;
+}
+
+/* With comments in its margin, the document stands left of the column's
+   middle by half the margin, so the reading width and the margin beside it
+   are centred together, as a document's margin comments are. */
+.desktop-document
+  .plan-document-scroll[data-comments="margin"]
+  :is(.plan-body, .plan-crumb, .plan-edit-note, .plan-changed-note) {
+  margin-left: max(0px, calc((100% - var(--reading-width) - var(--comment-margin-room)) / 2));
 }
 
 .desktop-document .plan-body {
