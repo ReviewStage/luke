@@ -203,7 +203,9 @@
    banner, a bar at its foot, a band stuck inside it, or the window's drag
    strip. Content dissolves over `--scroll-fade` rather than being sliced
    against that edge. A scroller wears `scroll-fade` to fade at both edges,
-   or `scroll-fade-top` where only its top meets something pinned.
+   or `scroll-fade-top` where only its top meets something pinned; the
+   shared settings page, which takes no class of the window's, fades as
+   `scroll-fade-top` by its place under a Settings page's drag strip.
 
    Each edge's depth is a registered length that a scroll timeline eases
    from none to `--scroll-fade` over the first (or the last) `--scroll-fade`
@@ -250,7 +252,8 @@
 }
 
 .scroll-fade,
-.scroll-fade-top {
+.scroll-fade-top,
+.settings-page > .luke-settings-page {
   --scroll-fade-mask: linear-gradient(
     to bottom,
     #000 var(--fade-inset-top),
@@ -274,7 +277,8 @@
   scroll-padding-bottom: var(--scroll-fade);
 }
 
-.scroll-fade-top {
+.scroll-fade-top,
+.settings-page > .luke-settings-page {
   animation-name: scroll-fade-start, none;
 }
 
