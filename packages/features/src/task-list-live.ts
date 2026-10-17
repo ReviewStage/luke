@@ -7,6 +7,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
   type CodingAgentStatus,
+  type CodingAgentSummary,
   codingAgentPullRequestSchema,
   PULL_REQUEST_STATE,
   type TasklessAgent,
@@ -277,8 +278,8 @@ function archivedByOf(row: AgentLiveRow): CodingAgentArchivedBy | undefined {
   };
 }
 
-/** An agent with no plan as the list carries it, as its own page reads it, its status read at `now`. */
-function tasklessAgentOf(row: AgentLiveRow, now: number): TasklessAgent {
+/** One agent as the tabs draw it, on a plan or with none, its status read at `now`, as the service's summary of it says it. */
+function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
   const servers = (row.disabledServers ?? []).filter(
     (name) => integrationConnectionOf(name) !== undefined,
   );
@@ -286,7 +287,7 @@ function tasklessAgentOf(row: AgentLiveRow, now: number): TasklessAgent {
   const started = runStartedAt(row);
   return {
     id: row.id,
-    planId: null,
+    planId: row.planId,
     model: row.model,
     effort: row.effort,
     ...(row.contextWindow === CONTEXT_WINDOW.STANDARD
@@ -303,9 +304,18 @@ function tasklessAgentOf(row: AgentLiveRow, now: number): TasklessAgent {
     ...(row.starterName === null
       ? undefined
       : { startedBy: { userId: row.starterId, name: row.starterName } }),
-    automationId: row.automationId,
+    ...(row.automationId === null ? undefined : { automationId: row.automationId }),
     ...(row.automationName === null ? undefined : { automationName: row.automationName }),
     ...(started === undefined ? undefined : { runStartedAt: started }),
+  };
+}
+
+/** An agent with no plan as the list carries it, as its own page reads it, its status read at `now`. */
+function tasklessAgentOf(row: AgentLiveRow, now: number): TasklessAgent {
+  return {
+    ...agentSummaryOf(row, now),
+    planId: null,
+    automationId: row.automationId,
     workspaceId: row.workspaceId,
     repository: row.repository,
     activityAt: activityAt(row),
@@ -314,6 +324,28 @@ function tasklessAgentOf(row: AgentLiveRow, now: number): TasklessAgent {
       ? undefined
       : { pinPosition: row.pinPosition }),
   };
+}
+
+/** First started first, and by id among those started at one instant, as a plan's agents are listed. */
+function firstStarted(a: AgentLiveRow, b: AgentLiveRow): number {
+  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * Every agent on a plan, the archived ones left out, each as the plan's own
+ * list of agents names it with its status read at `now`, the first started
+ * first: what the desktop's ledger of agents reads where it once listed
+ * each plan's agents again on a clock.
+ */
+export function planAgentsOfLiveRows(
+  rows: TaskListLiveRows,
+  now: number,
+): readonly CodingAgentSummary[] {
+  return rows.agents
+    .filter((row) => row.planId !== null && row.archivedAt === null)
+    .toSorted(firstStarted)
+    .map((row) => agentSummaryOf(row, now));
 }
 
 /**

@@ -1,4 +1,6 @@
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
+  planAgentsOfLiveRows,
   type TaskListLiveAnswer,
   type TaskListLiveRows,
   taskListGraceEdge,
@@ -32,23 +34,32 @@ const LIVE_RETRY = Duration.minutes(5);
 /** How long after a subscription stopped for good it is started again. */
 const LIVE_RESTART = Duration.seconds(5);
 
+/** The list as the live rows make it at one instant, and every agent on a plan beside it. */
+interface LiveTaskList {
+  readonly list: TaskListAnswer;
+  readonly planAgents: readonly CodingAgentSummary[];
+}
+
 export interface TaskListFollowDependencies {
   /** The sealed statements, fetched from the service; a failure where it answered none. */
   readonly live: () => Effect.Effect<TaskListLiveAnswer | { readonly failure: string }>;
   readonly openLive: (url: string) => LiveClient;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
-  /** The list, each time its rows or the clock move it. */
-  readonly publish: (list: TaskListAnswer) => void;
+  /** The list, and every agent on a plan as its plan's own list names it, each time the rows or the clock move them. */
+  readonly publish: (read: LiveTaskList) => void;
   /** Whether the list stands live, said as it starts and as it stops, so the reads stand in only while it does not. */
   readonly standing: (live: boolean) => void;
 }
 
 /** The list the rows make now, and again at each instant the clock alone moves it, until the rows move. */
-function listsOf(rows: TaskListLiveRows): Stream.Stream<TaskListAnswer> {
+function listsOf(rows: TaskListLiveRows): Stream.Stream<LiveTaskList> {
   return Stream.unwrap(
     Effect.map(Clock.currentTimeMillis, (at) => {
-      const now = Stream.succeed(taskListOfLiveRows(rows, at));
+      const now = Stream.succeed({
+        list: taskListOfLiveRows(rows, at),
+        planAgents: planAgentsOfLiveRows(rows, at),
+      });
       const edge = taskListGraceEdge(rows, at);
       if (edge === undefined) return now;
       const later = Stream.fromEffect(Effect.sleep(Duration.millis(edge - at)));
@@ -64,7 +75,7 @@ function listsOf(rows: TaskListLiveRows): Stream.Stream<TaskListAnswer> {
 function liveLists(
   dependencies: TaskListFollowDependencies,
   first: TaskListLiveAnswer,
-): Stream.Stream<TaskListAnswer, LiveBroken> {
+): Stream.Stream<LiveTaskList, LiveBroken> {
   const decode = Schema.decodeUnknownOption(taskListLiveRowsSchema);
   const rows = liveRows(
     { openLive: dependencies.openLive, reseal: dependencies.live, now: dependencies.now },
@@ -86,10 +97,10 @@ export function followTaskList(dependencies: TaskListFollowDependencies): Effect
   const attempt = Effect.gen(function* () {
     const sealed = yield* dependencies.live();
     if ("failure" in sealed) return yield* Effect.sleep(LIVE_RETRY);
-    yield* Stream.runForEach(liveLists(dependencies, sealed), (list) =>
+    yield* Stream.runForEach(liveLists(dependencies, sealed), (read) =>
       Effect.sync(() => {
         dependencies.standing(true);
-        dependencies.publish(list);
+        dependencies.publish(read);
       }),
     ).pipe(Effect.catch(() => Effect.void));
     yield* stopped;

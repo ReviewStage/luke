@@ -70,7 +70,7 @@ type InboxAnswerGiven = Omit<AccountInboxAnswer, "plans"> & {
  * written is kept for the test to read. Electron's doors are a Layer of the
  * test's own that records what leaves through each.
  */
-function fixture() {
+function fixture(options: { readonly listFollowed?: boolean } = {}) {
   const listed: string[] = [];
   const readPullRequests: string[] = [];
   const published = new Map<string, CodingAgentPullRequestAnswerView>();
@@ -177,6 +177,7 @@ function fixture() {
       openInbox: (planId) => openedInboxes.push(planId),
       openTasklessItem: (item) => openedTaskless.push(item),
       watchInterval: WATCH,
+      ...(options.listFollowed === true ? { listFollowed: Stream.succeed(true) } : undefined),
       report: () => undefined,
     });
     // The inbox is followed on a fiber of its own, which has subscribed once this settles.
@@ -271,6 +272,30 @@ it.effect(
       assert.deepEqual(f.listed, []);
     }),
 );
+it.effect(
+  "while the plan list is followed live its agents feed the ledger: nothing is listed on a clock or asked for again, an end it carries is announced, and a plan it drops takes its agents' dots with it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture({ listFollowed: true });
+      const notices = yield* f.notices;
+      f.focus(false);
+
+      notices.observeFollowed([agent(CODING_AGENT_STATUS.RUNNING, { turnId: null })], [TASK_ID]);
+      notices.observeFollowed([agent(CODING_AGENT_STATUS.RUNNING)], [TASK_ID]);
+      yield* TestClock.adjust(Duration.times(WATCH, 3));
+      notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
+      yield* settled;
+
+      assert.deepEqual(f.listed, []);
+      assert.equal(f.listReads(), 0);
+      assert.deepEqual(f.said(), [{ title: TASK_NAME, body: "Opus 5.5 finished" }]);
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+
+      notices.observeFollowed([], []);
+      assert.deepEqual(f.unseen.at(-1), []);
+    }),
+);
+
 /**
  * Every step the inbox read has to take, taken: the accounts' stream hands
  * the account on, the read it switched to asks, and the look writes what

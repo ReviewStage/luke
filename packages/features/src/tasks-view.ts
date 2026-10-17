@@ -4,6 +4,7 @@ import {
   CODING_AGENT_BOUNDS,
   codingAgentCallIdSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentSummarySchema,
   storedObjectSchema,
   tasklessAgentSchema,
   turnRecordFields,
@@ -398,6 +399,13 @@ export const tasksViewSchema = EffectSchema.Struct({
   tasks: EffectSchema.Array(taskSummarySchema),
   /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
+  /**
+   * Every agent on a plan, the archived ones left out, each as its plan's
+   * own list names it, the first started first: present only while the list
+   * is followed live over Neon Realtime, when it is what the notices' ledger
+   * reads in place of listing each plan's agents again on a clock.
+   */
+  planAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
   listStatus: tasksReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
