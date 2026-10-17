@@ -6,6 +6,7 @@ import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
+import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
@@ -48,6 +49,7 @@ export const EXAMPLES: readonly Example[] = [
   BADGES_EXAMPLE,
   BUTTONS_EXAMPLE,
   CHIPS_EXAMPLE,
+  COLLECTION_PAGE_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
   DIALOGS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
