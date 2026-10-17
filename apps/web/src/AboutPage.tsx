@@ -1,4 +1,5 @@
-import { SITE_PAGE, SiteFooter, SiteHeader } from "./SiteChrome";
+import { PublicPage, PublicSection } from "@luke/ui";
+import { SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 type Founder = {
   readonly name: string;
@@ -50,23 +51,21 @@ const FOUNDERS: readonly Founder[] = [
 /** Who is behind the app: a page of its own, linked from the header and footer. */
 export function AboutPage(): React.JSX.Element {
   return (
-    <>
-      <SiteHeader current={SITE_PAGE.ABOUT} />
-
-      <main className="shell pt-12 pb-16">
-        <h1 className="m-0 text-[1.75rem] leading-[1.2] font-semibold tracking-[-0.02em]">About</h1>
-
+    <PublicPage
+      banner={<SiteNavigation current={SITE_PAGE.ABOUT} />}
+      footer={<SiteFooterLinks current={SITE_PAGE.ABOUT} />}
+      title="About"
+    >
+      <PublicSection>
         {/* Two up where the 700px column still leaves each card its measure, and
             stacked below that rather than squeezed beside a photo. */}
-        <div className="mt-10 grid gap-8 min-[560px]:grid-cols-2 min-[560px]:gap-6">
+        <div className="grid gap-8 min-[560px]:grid-cols-2 min-[560px]:gap-6">
           {FOUNDERS.map((founder) => (
             <FounderCard founder={founder} key={founder.name} />
           ))}
         </div>
-      </main>
-
-      <SiteFooter current={SITE_PAGE.ABOUT} />
-    </>
+      </PublicSection>
+    </PublicPage>
   );
 }
 
