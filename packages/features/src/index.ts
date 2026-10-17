@@ -5,6 +5,8 @@ export {
   CALL_FAULT,
   type CallCredential,
   callAnswered,
+  DesktopRelease,
+  desktopRelease,
   fixedBearer,
   NO_CREDENTIAL,
 } from "./account-call.js";
@@ -135,6 +137,7 @@ export {
   workspacePhotoPath,
 } from "./service-paths.js";
 export {
+  DESKTOP_VERSION_HEADER,
   HOSTED_API_ERROR,
   type HostedApiError,
   type HostedQuota,

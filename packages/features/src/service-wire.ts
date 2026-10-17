@@ -89,7 +89,22 @@ export const HOSTED_API_ERROR = {
    * Nothing was written.
    */
   LINEAR_UNAVAILABLE: "linear-unavailable",
+  /**
+   * This desktop build is older than the oldest the service still answers
+   * (`LUKE_MINIMUM_DESKTOP_VERSION`), as the version header names it, so
+   * nothing was read or written; the build updates before it asks again.
+   * Answered with 426.
+   */
+  UPDATE_REQUIRED: "update-required",
 } as const;
+
+/**
+ * The header every hosted call from the desktop carries its own build's
+ * version on, which the service compares with the oldest build it still
+ * answers. A caller that sends none — a browser, a webhook, a desktop older
+ * than the header — is never refused for its version.
+ */
+export const DESKTOP_VERSION_HEADER = "x-luke-version";
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];
 

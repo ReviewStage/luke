@@ -6,12 +6,21 @@ import {
   withoutTrailingSlash,
 } from "@luke/wire";
 import { webResponseFromClientResponse } from "@luke/wire/effect";
-import { Data, Duration, Effect, type Schema as EffectSchema, Result } from "effect";
+import {
+  Context,
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  type Schema as EffectSchema,
+  Result,
+} from "effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { AccountRefreshFailed, AccountSessionToken, AccountToken } from "./account-token.js";
+import { DESKTOP_VERSION_HEADER } from "./service-wire.js";
 
 const ACCOUNT_CALL_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -59,9 +68,45 @@ export const CALL_FAULT = {
   NO_CREDENTIAL: "no-credential",
   HOLDER_CHANGED: "holder-changed",
   NETWORK: "network",
+  /**
+   * The service already refused this desktop build as older than the oldest
+   * it answers, so nothing more is sent to it until the build is updated.
+   */
+  UPDATE_REQUIRED: "update-required",
 } as const;
 
 type CallFault = (typeof CALL_FAULT)[keyof typeof CALL_FAULT];
+
+/**
+ * Which desktop build is calling, and whether the service has refused it. A
+ * desktop provides this once for its whole launch: every call then carries
+ * the version (`DESKTOP_VERSION_HEADER`), the first 426 the service answers
+ * opens `updateRequired`, and from then on no call is sent at all, so a loop
+ * that kept asking would rest on a fault rather than reach the service. With
+ * none provided — the service's own calls, a test — nothing is sent and
+ * nothing is latched.
+ */
+export interface DesktopReleaseFacts {
+  readonly version: string;
+  /** Opened once the service answers that this build must update; never closed again in the launch. */
+  readonly updateRequired: Deferred.Deferred<void>;
+}
+
+export const DesktopRelease = Context.Reference<DesktopReleaseFacts | undefined>(
+  "@luke/features/DesktopRelease",
+  { defaultValue: () => undefined },
+);
+
+/** The facts for a build at `version`, not yet refused. */
+export function desktopRelease(version: string): Effect.Effect<DesktopReleaseFacts> {
+  return Effect.map(Deferred.make<void>(), (updateRequired) => ({ version, updateRequired }));
+}
+
+/** Whether the service has already refused this build. */
+const refusedRelease: Effect.Effect<boolean> = Effect.gen(function* () {
+  const release = yield* DesktopRelease;
+  return release === undefined ? false : yield* Deferred.isDone(release.updateRequired);
+});
 
 /** The service answered; every status, including a refusal, is the caller's to read. */
 interface CallResponse {
@@ -221,11 +266,13 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
   function httpRequest(
     request: CallRequest,
     authorization: string | undefined,
+    release: DesktopReleaseFacts | undefined,
   ): HttpClientRequest.HttpClientRequest {
     return HttpClientRequest.make(request.method)(`${address}${request.path}`, {
       headers: {
         ...request.headers,
         ...(authorization === undefined ? undefined : { authorization }),
+        ...(release === undefined ? undefined : { [DESKTOP_VERSION_HEADER]: release.version }),
       },
       // The body a caller hands over is already the serialized text the
       // service reads, so it travels as it came: `HttpBody.text` would encode
@@ -244,9 +291,18 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     CallTransportError,
     HttpClient.HttpClient
   > {
-    return Effect.catch(HttpClient.execute(httpRequest(request, authorization)), (error) =>
-      Effect.fail(new CallTransportError({ errorName: errorName(error.cause) })),
-    );
+    return Effect.gen(function* () {
+      const release = yield* DesktopRelease;
+      const response = yield* Effect.catch(
+        HttpClient.execute(httpRequest(request, authorization, release)),
+        (error) => Effect.fail(new CallTransportError({ errorName: errorName(error.cause) })),
+      );
+      // Note that the refusal is noted before the caller reads it, so every call after this one is held back.
+      if (release !== undefined && response.status === HTTP_STATUS.UPGRADE_REQUIRED) {
+        yield* Deferred.succeed(release.updateRequired, undefined);
+      }
+      return response;
+    });
   }
 
   /**
@@ -324,6 +380,7 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
       );
 
     return Effect.gen(function* () {
+      if (yield* refusedRelease) return { failure: { fault: CALL_FAULT.UPDATE_REQUIRED } };
       const identity = yield* identify;
       if (!identity) return { failure: { fault: CALL_FAULT.NO_CREDENTIAL } };
 

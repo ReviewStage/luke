@@ -591,6 +591,25 @@ rather than as a `Schema.TaggedError`, because `error` is already the
 discriminant the desktop's hosted clients read and a `_tag` beside it would be
 a byte they never asked for.
 
+## The oldest desktop the service answers
+
+Every hosted call the desktop makes names its build in the `X-Luke-Version`
+header (`DESKTOP_VERSION_HEADER`, sent by `packages/features/src/account-call.ts`).
+`routeFromHttpRouter` puts every route behind
+`packages/service/src/http/desktop-version-gate.ts`, which compares that
+version with `LUKE_MINIMUM_DESKTOP_VERSION`, a `MAJOR.MINOR.PATCH` release such
+as `0.17.0`, set in the deployment's environment variables. A build older than
+it is refused with 426 and `{ "error": "update-required" }` before any route
+reads the request; the desktop then sends nothing more, brings Settings forward
+on its Updates row, and checks for the update.
+
+Unset, nothing is refused, and that is the default: no deployment sets one.
+A caller that sends no version (a browser, a webhook, a desktop released
+before the header) is never refused for its version, so a minimum only holds
+back builds from the first release that sends it. A value that is not a
+release is logged and refuses nobody. The minimum is read once per function
+instance, so a change reaches every instance on the next deploy.
+
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so
@@ -740,4 +759,3 @@ Luke's planning brain is its own eve app, `apps/luke`, and the coding agent
 is another, `apps/dev`; their layout, deployment, and evals are in
 `apps/luke/README.md`, which `apps/dev` follows, and `packages/service/README.md`'s
 "The coding-agent service".
-
