@@ -83,8 +83,10 @@ test("an automation's agent with no plan is toasted under the automation's name,
     ],
     ["Triage overnight issues failed", "Morning Sentry triage", "failed"],
   );
-  const view = toast.querySelector<HTMLButtonElement>(".toast-action");
-  assert.equal(view?.textContent, "View");
+  const view = [...toast.querySelectorAll("button")].find(
+    (button) => button.textContent === "View",
+  );
+  assert.ok(view);
   act(() => view?.click());
 
   assert.deepEqual(viewed, [{ taskId: null, agentId: AGENT_ID }]);
