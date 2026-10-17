@@ -13,7 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
-import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
@@ -63,7 +63,7 @@ beforeEach(() => {
   fakeAppBridge({
     act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
-  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
 });
 
 afterEach(() => {
