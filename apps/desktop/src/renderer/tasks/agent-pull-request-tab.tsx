@@ -310,7 +310,8 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
  * for the plan, from the first frame, each of its words replaced by the
  * overview's own as its read lands, since that is the newest and the page
  * under the bar says the same: where it stands by the pull request's read,
- * and its checks by theirs. None while neither has been read.
+ * and its checks by theirs, the published checks standing only for the
+ * pull request they were read on. None while neither has been read.
  */
 function barPullRequestOf(
   pullRequest: CodingAgentOverviewPullRequest | undefined,
@@ -320,7 +321,9 @@ function barPullRequestOf(
   const held = pullRequest ?? published;
   if (held === undefined) return undefined;
   const { number, state, url } = held;
-  const summary = checks === undefined ? published?.checks : checksSummaryOf(checks.checks);
+  // Note that what was published says the checks of its own pull request only, never of a newer one the overview read.
+  const heldChecks = published?.number === number ? published.checks : undefined;
+  const summary = checks === undefined ? heldChecks : checksSummaryOf(checks.checks);
   return { number, state, url, checks: summary ?? CHECK_SUMMARY.NONE };
 }
 

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_STATE,
   CHECK_SUMMARY,
@@ -709,26 +714,34 @@ test("the bar and the title stand from what Luke holds before any read lands; ea
   assert.equal(section("Description").querySelector("h2")?.textContent, "Summary");
 });
 
+/** A read answering each ask with the next of the answers given, the last again once they run out. */
+function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
+  let ask = 0;
+  return () => {
+    const answer = answers[Math.min(ask, answers.length - 1)] ?? assert.fail("an answer is given");
+    ask += 1;
+    return Promise.resolve(answer);
+  };
+}
+
 test("a section whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads all three again", async () => {
-  const asked = { pullRequest: 0, checks: 0, conversation: 0 };
+  const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
+  const later = (name: string) => ({ checks: [check(name, CHECK_STATE.PASSED)] });
   const tab = await draw(
     controlAnswering({
-      pullRequest: () => {
-        asked.pullRequest += 1;
-        return Promise.resolve({ pullRequest: PULL_REQUEST });
-      },
-      checks: () => {
-        asked.checks += 1;
-        return Promise.resolve(
-          asked.checks === 1
-            ? { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }
-            : { pullRequest: CHECKS },
-        );
-      },
-      conversation: () => {
-        asked.conversation += 1;
-        return Promise.resolve({ pullRequest: CONVERSATION });
-      },
+      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+        { pullRequest: PULL_REQUEST },
+        { pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } },
+      ),
+      checks: inTurn<CodingAgentOverviewChecksAnswerView>(
+        failure,
+        { pullRequest: later("retried") },
+        { pullRequest: later("refreshed") },
+      ),
+      conversation: inTurn<CodingAgentOverviewConversationAnswerView>(
+        { pullRequest: CONVERSATION },
+        { pullRequest: { ...CONVERSATION, conversation: CONVERSATION.conversation.slice(0, 1) } },
+      ),
     }),
   );
   const checks =
@@ -742,8 +755,13 @@ test("a section whose read failed says so with a Retry that reads it alone, the 
     assert.fail("the failed section offers a retry");
   act(() => retry.click());
   await settle();
-  assert.deepEqual(asked, { pullRequest: 1, checks: 2, conversation: 1 });
-  assert.deepEqual(words(tab, ".pull-request-check-name"), ["lint", "build", "test"]);
+  assert.deepEqual(words(tab, ".pull-request-check-name"), ["retried"]);
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations #42",
+    "the pull request is not read again",
+  );
+  assert.equal(tab.querySelectorAll(".pull-request-entry").length, 2, "nor is the conversation");
 
   const more =
     tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
@@ -755,26 +773,25 @@ test("a section whose read failed says so with a Retry that reads it alone, the 
     ) ?? assert.fail("the ⋯ offers Refresh");
   await act(async () => refresh.click());
   await settle();
-  assert.deepEqual(asked, { pullRequest: 2, checks: 3, conversation: 2 });
+  assert.deepEqual(words(tab, ".pull-request-check-name"), ["refreshed"]);
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations weekly #42",
+  );
+  assert.equal(tab.querySelectorAll(".pull-request-entry").length, 1);
 });
 
 test("where nothing of the pull request is held and every read failed, one failure offers a retry that reads all three again", async () => {
-  const asked = { pullRequest: 0, checks: 0, conversation: 0 };
   const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
   const control = {
     ...controlAnswering({
-      pullRequest: () => {
-        asked.pullRequest += 1;
-        return Promise.resolve(asked.pullRequest === 1 ? failure : { pullRequest: PULL_REQUEST });
-      },
-      checks: () => {
-        asked.checks += 1;
-        return Promise.resolve(asked.checks === 1 ? failure : { pullRequest: CHECKS });
-      },
-      conversation: () => {
-        asked.conversation += 1;
-        return Promise.resolve(asked.conversation === 1 ? failure : { pullRequest: CONVERSATION });
-      },
+      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(failure, {
+        pullRequest: PULL_REQUEST,
+      }),
+      checks: inTurn<CodingAgentOverviewChecksAnswerView>(failure, { pullRequest: CHECKS }),
+      conversation: inTurn<CodingAgentOverviewConversationAnswerView>(failure, {
+        pullRequest: CONVERSATION,
+      }),
     }),
     pullRequests: new Map(),
   };
@@ -786,6 +803,24 @@ test("where nothing of the pull request is held and every read failed, one failu
 
   await act(async () => retries()[0]?.click());
   await settle();
-  assert.deepEqual(asked, { pullRequest: 2, checks: 2, conversation: 2 });
   assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
+  assert.deepEqual(words(tab, ".pull-request-check-name"), ["lint", "build", "test"]);
+  assert.equal(tab.querySelectorAll(".pull-request-entry").length, 2);
+});
+
+test("the bar wears what was published of the checks only for the pull request they were read on, never a newer one whose checks failed to read", async () => {
+  const control = {
+    ...controlAnswering({
+      pullRequest: () => Promise.resolve({ pullRequest: { ...PULL_REQUEST, number: 43 } }),
+      checks: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }),
+    }),
+  };
+  const tab = await draw(control);
+  const mark = tab.querySelector(".pull-request-state [aria-label]") ?? assert.fail("a mark");
+  assert.match(mark.getAttribute("aria-label") ?? "", /43/u);
+  assert.doesNotMatch(
+    mark.getAttribute("aria-label") ?? "",
+    /checks failing/u,
+    "#42's failing checks are not #43's",
+  );
 });
