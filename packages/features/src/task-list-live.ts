@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { codingAgentStatusAt, type StatusTurn } from "./coding-agent-status.js";
+import { codingAgentStatusAt, type StatusTurn, startingGraceEdge } from "./coding-agent-status.js";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BRIEF,
@@ -337,4 +337,16 @@ export function taskListOfLiveRows(rows: TaskListLiveRows, now: number): TaskLis
       .toSorted(newestFirst)
       .map((agent) => tasklessAgentOf(agent, now)),
   };
+}
+/** The next instant past `now` the clock alone moves the list: the first agent with no turn whose grace ends; none where none waits on one. */
+export function taskListGraceEdge(rows: TaskListLiveRows, now: number): number | undefined {
+  const edges = rows.agents.flatMap((row) => {
+    const edge = startingGraceEdge(turnOf(row), {
+      createdAt: row.createdAt,
+      now,
+      lineAwaits: row.lineAwaits,
+    });
+    return edge === undefined ? [] : [edge];
+  });
+  return edges.length === 0 ? undefined : Math.min(...edges);
 }
