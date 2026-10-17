@@ -165,10 +165,7 @@ export function leftOutLine(replay: Replay): string | undefined {
 
 /** The lede the card's body opens on, naming the source by its tab's name. */
 export function replayLede(source: string): string {
-  return (
-    `What this agent was handed of ${source}'s work, as it was sent: the lines sent to it, ` +
-    "its words, and each call, which opens onto its input and its result."
-  );
+  return `What this agent was handed of ${source}'s work, as it was sent.`;
 }
 
 /**
