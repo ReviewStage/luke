@@ -49,6 +49,21 @@ import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
+  APP_COMMAND,
+  APP_SHORTCUT_GROUPS,
+  APP_SHORTCUTS,
+  type AppCommand,
+  appCommandLabel,
+  commandForKey,
+  isKeyedCommand,
+  type KeyedCommand,
+  PALETTE_COMMANDS,
+  SHORTCUT_KEY,
+  type ShortcutChord,
+} from "@luke/settings/shortcuts";
+import {
+  CHIP_LOOK,
+  Chip,
   GearIcon,
   PinIcon,
   SearchIcon,
@@ -65,19 +80,6 @@ import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  APP_COMMAND,
-  APP_SHORTCUT_GROUPS,
-  APP_SHORTCUTS,
-  type AppCommand,
-  appCommandLabel,
-  commandForKey,
-  isKeyedCommand,
-  type KeyedCommand,
-  PALETTE_COMMANDS,
-  SHORTCUT_KEY,
-  type ShortcutChord,
-} from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
@@ -825,10 +827,9 @@ function FilterChips({
   return (
     <fieldset className="command-palette-filters" aria-label="Filter">
       {PALETTE_FILTERS.map((each) => (
-        <button
+        <Chip
           key={each}
-          type="button"
-          className="command-palette-filter"
+          look={CHIP_LOOK.FILTER}
           aria-pressed={each === filter}
           // Note that a chip takes no focus, because the caret belongs in the
           // field and Return there opens the row chosen, not the chip.
@@ -837,7 +838,7 @@ function FilterChips({
           onClick={() => onFilter(each)}
         >
           {FILTER_LABEL[each]}
-        </button>
+        </Chip>
       ))}
     </fieldset>
   );
