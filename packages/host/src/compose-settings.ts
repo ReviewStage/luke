@@ -557,7 +557,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         if (runMode.observesProviders) {
           yield* Effect.forkScoped(
             Effect.provide(
-              removeRetiredStore({ agentRoot: kernel.agentRootPath(), report }),
+              removeRetiredStore({ stateRoot: kernel.stateRoot, report }),
               fileSystemContext,
             ),
           );
