@@ -1,5 +1,6 @@
 {
   "name": "@luke/gateway",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "The Gateway: the one protocol between the desktop renderer and the host, and the trace record of what crosses it",

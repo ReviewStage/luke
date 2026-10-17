@@ -548,7 +548,9 @@ export function actorCard(actor: Actor): ReactNode {
  * `card`, or the card its kind hangs where the place adds nothing. With
  * `onOpen` it is a button that opens the actor's page, an agent's tab or an
  * automation's page; a person, someone who left, and a GitHub account open
- * their own (`useActorDoor`); otherwise its press is the line's own.
+ * their own (`useActorDoor`); otherwise its press is the line's own. With
+ * `faceOnly` the mark stands alone, its name said to a screen reader and in
+ * its card, for a line too short to hold the name.
  */
 export function ActorRef({
   actor,
@@ -556,6 +558,7 @@ export function ActorRef({
   onOpen,
   sentence = false,
   possessive = false,
+  faceOnly = false,
 }: {
   actor: Actor;
   card?: ReactNode;
@@ -564,6 +567,8 @@ export function ActorRef({
   sentence?: boolean;
   /** Whether the name says whose: "your Mac", "Charles Pan’s call". */
   possessive?: boolean;
+  /** Whether the mark stands without its name, which only a screen reader hears. */
+  faceOnly?: boolean;
 }): React.JSX.Element {
   const name = actorName(actor, { sentence, possessive });
   // A person's own door, their page or GitHub's, where the place hands none.
@@ -572,8 +577,8 @@ export function ActorRef({
   const inner = (
     <>
       <ActorMark actor={actor} />
-      <span className="actor-ref-name">{name}</span>
-      <BotBadge actor={actor} />
+      <span className={faceOnly ? "visually-hidden" : "actor-ref-name"}>{name}</span>
+      {faceOnly ? null : <BotBadge actor={actor} />}
       <LeftWords actor={actor} />
     </>
   );
@@ -601,14 +606,12 @@ export function ActorLine({ children }: { children: ReactNode }): React.JSX.Elem
   return <span className="actor-words">{children}</span>;
 }
 
-/** One face of a facepile that hangs cards: what it says of the actor beyond their name, its badge, and the card it hangs where the actor's own is not the one. */
+/** One face of a facepile that hangs cards: what it says of the actor beyond their name, and its badge. */
 export interface StackFace {
   /** What the face says beside the actor's name to a screen reader and in its pill, "Approved". */
   readonly says?: string;
   /** A small mark at the face's corner, a reviewer's standing. */
   readonly badge?: ReactNode;
-  /** The card the face hangs in place of the actor's own, an agent's tab's. */
-  readonly card?: ReactNode;
 }
 
 /** What the face says of an actor to a screen reader and in its pill: their name, that they left where they did, and what the face says beside it. */
@@ -629,7 +632,7 @@ function CardedFace({
 }): React.JSX.Element {
   const name = faceName(actor, face);
   return (
-    <Tooltip label={name} card={face.card ?? actorCard(actor)}>
+    <Tooltip label={name} card={actorCard(actor)}>
       <li className="actor-stack-face" aria-label={name}>
         <ActorMark actor={actor} size={ACTOR_SIZE.STACK} tiled={tiled} />
         {face.badge === undefined ? null : (
@@ -707,8 +710,8 @@ function overlaps(drawn: number, faces: readonly StackFace[] | undefined): boole
  * behind it by a ring of that ground, a square on its solid tile where the
  * faces overlap, then how many more where `counted`;
  * a place whose words beside the pile already count them, "5 can edit",
- * draws no pill. Handed `faces`, one for each actor, each face hangs its
- * card, the actor's own where the face names none, wears its badge, and is
+ * draws no pill. Handed `faces`, one for each actor, each face hangs the
+ * actor's card, wears its badge, and is
  * named to a screen reader, the pile a list under `label`, its count hanging
  * a card naming the rest; without them the pile is the words' picture
  * beside them and a screen reader skips it.

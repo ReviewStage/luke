@@ -13,10 +13,20 @@
  * over a code line's coloured tokens is, but never from one line or
  * paragraph into the next: text in another block is set apart by a line
  * break, which a query, typed in a one-line field, never holds. What is
- * `hidden` is not searched, nor what wears `FIND_SKIP_ATTRIBUTE`, nor what a shadow root draws, which
- * a tree walker does not enter. A closed `<details>` is searched, since what
- * it folds is still the tab's to find, and opened when its match is brought
- * into view, as Chromium's own find opens one.
+ * `hidden` is not searched, nor what wears `FIND_SKIP_ATTRIBUTE`. A closed
+ * `<details>` is searched, since what it folds is still the tab's to find,
+ * and opened when its match is brought into view, as Chromium's own find
+ * opens one.
+ *
+ * What a shadow root draws is not searched, as a File tab's tree is not,
+ * unless its host wears `FIND_SHADOW_ATTRIBUTE`, as a diff drawn by Pierre
+ * does (`diff-view/index.ts`): its open shadow root's words are then read
+ * in the host's place, less what the attribute's selector names, and its
+ * changes watched (`watchText`), each walk up from a match crossing from
+ * the shadow root to its host, so a match there is painted, ordered among
+ * the rest, and scrolled into view as any other. The rules that paint a
+ * match are the document's, and a shadow root takes none of them, so such
+ * a root adopts its own.
  */
 
 /** The two highlights every find paints into: each match, and the one it is at, drawn over the rest. */
@@ -66,6 +76,16 @@ const UNREAD_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"]);
  */
 export const FIND_SKIP_ATTRIBUTE = "data-find-skip";
 
+/**
+ * The attribute worn by a host whose open shadow root is searched in its
+ * place; its value is a selector naming what in that root is left out of
+ * the words, as a gutter of numbers is, or nothing.
+ */
+export const FIND_SHADOW_ATTRIBUTE = "data-find-shadow";
+
+/** What a find watches of the tab's text and of each shadow root searched. */
+const WATCHED: MutationObserverInit = { childList: true, subtree: true, characterData: true };
+
 /** What sets the text of two blocks apart in the string a query is matched against. */
 const BLOCK_BREAK = "\n";
 
@@ -92,42 +112,96 @@ export interface FindPainting {
 
 export const NO_PAINTING: FindPainting = { ranges: [], at: -1 };
 
-/** Whether an element's subtree is left out of the words searched. */
-function unread(element: Element): boolean {
+/** Whether an element's subtree is left out of the words searched, `skipped` naming more of it within a shadow root. */
+function unread(element: Element, skipped: string | undefined): boolean {
   return (
     UNREAD_TAGS.has(element.tagName) ||
     element.hasAttribute("hidden") ||
-    element.hasAttribute(FIND_SKIP_ATTRIBUTE)
+    element.hasAttribute(FIND_SKIP_ATTRIBUTE) ||
+    (skipped !== undefined && element.matches(skipped))
   );
 }
 
-/** The nearest element around a text node that sets its text apart from the next block's. */
-function blockOf(node: Text, root: Element): Element {
+/** The element a node stands in, crossing from a shadow root to its host. */
+function parentAcross(node: Node): Element | null {
+  if (node.parentElement !== null) return node.parentElement;
+  return node.parentNode instanceof ShadowRoot ? node.parentNode.host : null;
+}
+
+/** The shadow root searched in an element's place, and what in it is left out; none where it is not searched. */
+function searchedShadow(
+  element: Element,
+): { root: ShadowRoot; skipped: string | undefined } | undefined {
+  const root = element.shadowRoot;
+  if (root === null || !element.hasAttribute(FIND_SHADOW_ATTRIBUTE)) return undefined;
+  const skipped = element.getAttribute(FIND_SHADOW_ATTRIBUTE) ?? "";
+  return { root, skipped: skipped === "" ? undefined : skipped };
+}
+
+/** The nearest element around a text node that sets its text apart from the next block's, or the shadow root it stands at the top of. */
+function blockOf(node: Text, root: Element): Node {
   let element = node.parentElement;
   while (element !== null && element !== root && INLINE_TAGS.has(element.tagName)) {
     element = element.parentElement;
   }
-  return element ?? root;
+  return element ?? (node.parentNode instanceof ShadowRoot ? node.parentNode : root);
+}
+
+/** A string being read, and the block its last text stood in. */
+interface Reading {
+  text: string;
+  readonly runs: TextRun[];
+  block: Node | undefined;
+}
+
+/** Reads every searched text node under `parent`, in document order, onto the string, a shadow root searched in its host's place. */
+function readUnder(parent: Node, root: Element, skipped: string | undefined, into: Reading): void {
+  for (let node = parent.firstChild; node !== null; node = node.nextSibling) {
+    if (node instanceof Text) {
+      if (node.data.length === 0) continue;
+      const own = blockOf(node, root);
+      if (into.block !== undefined && own !== into.block) into.text += BLOCK_BREAK;
+      into.block = own;
+      into.runs.push({ node, start: into.text.length });
+      into.text += node.data;
+      continue;
+    }
+    if (!(node instanceof Element) || unread(node, skipped)) continue;
+    const shadow = searchedShadow(node);
+    if (shadow === undefined) readUnder(node, root, skipped, into);
+    else readUnder(shadow.root, root, shadow.skipped, into);
+  }
 }
 
 /** Reads every searched text node under `root`, in document order, into one string. */
 function readText(root: Element): ReadText {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) =>
-      node instanceof Element && unread(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
-  });
-  const runs: TextRun[] = [];
-  let text = "";
-  let block: Element | undefined;
-  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    if (!(node instanceof Text) || node.data.length === 0) continue;
-    const own = blockOf(node, root);
-    if (block !== undefined && own !== block) text += BLOCK_BREAK;
-    block = own;
-    runs.push({ node, start: text.length });
-    text += node.data;
+  const into: Reading = { text: "", runs: [], block: undefined };
+  readUnder(root, root, undefined, into);
+  return { text: into.text, runs: into.runs };
+}
+
+/** The node a node stands for in the document's own tree: itself, or the host of each shadow root it stands in. */
+function inDocumentTree(node: Node): Node {
+  let at = node;
+  for (let top = at.getRootNode(); top instanceof ShadowRoot; top = at.getRootNode()) at = top.host;
+  return at;
+}
+
+/**
+ * Whether range `a` starts before range `b`. Note that two ranges in
+ * different trees, one in a shadow root and one outside it, are ordered by
+ * where each stands in the document's own tree, because a range compares
+ * boundary points only within its own tree.
+ */
+function startsBefore(a: Range, b: Range): boolean {
+  if (a.startContainer.getRootNode() === b.startContainer.getRootNode()) {
+    return a.compareBoundaryPoints(Range.START_TO_START, b) < 0;
   }
-  return { text, runs };
+  const one = inDocumentTree(a.startContainer);
+  const other = inDocumentTree(b.startContainer);
+  return (
+    one !== other && (one.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+  );
 }
 
 /** The run an offset into the string read falls in, the last one starting at or before it. */
@@ -184,7 +258,7 @@ function scrollsAlong(element: Element, axis: "x" | "y"): boolean {
  * included (`renderer/CLAUDE.md`).
  */
 function scrollToRange(range: Range, root: Element): void {
-  let element = range.startContainer.parentElement;
+  let element = parentAcross(range.startContainer);
   while (element !== null) {
     const box = element.getBoundingClientRect();
     const target = range.getBoundingClientRect();
@@ -195,7 +269,7 @@ function scrollToRange(range: Range, root: Element): void {
       element.scrollLeft += target.left - box.left - (box.width - target.width) / 2;
     }
     if (element === root) return;
-    element = element.parentElement;
+    element = parentAcross(element);
   }
 }
 
@@ -220,12 +294,12 @@ export function findRanges(root: Element, query: string): Range[] {
  * range in it.
  */
 function viewOf(range: Range, root: Element, seen: Map<Element, Element>): Element {
-  const start = range.startContainer.parentElement ?? root;
+  const start = parentAcross(range.startContainer) ?? root;
   const known = seen.get(start);
   if (known !== undefined) return known;
   let element: Element | null = start;
   while (element !== null && element !== root && !scrollsAlong(element, "y")) {
-    element = element.parentElement;
+    element = parentAcross(element);
   }
   const view = element ?? root;
   seen.set(start, view);
@@ -251,7 +325,7 @@ export function matchFrom(
     anchor === undefined
       ? range.getBoundingClientRect().bottom >=
         viewOf(range, root, seen).getBoundingClientRect().top
-      : range.compareBoundaryPoints(Range.START_TO_START, anchor) >= 0,
+      : !startsBefore(range, anchor),
   );
   return Math.max(0, after);
 }
@@ -277,13 +351,46 @@ export function repaint(previous: FindPainting, next: FindPainting): void {
  */
 export function reveal(range: Range, root: Element): void {
   for (
-    let element = range.startContainer.parentElement;
+    let element = parentAcross(range.startContainer);
     element !== null && element !== root;
-    element = element.parentElement
+    element = parentAcross(element)
   ) {
     if (element instanceof HTMLDetailsElement && !element.open) element.open = true;
   }
   scrollToRange(range, root);
+}
+
+/** Whether `element` stands under `root`, across the shadow roots between them. */
+function containsAcross(root: Element, element: Element): boolean {
+  for (let at: Element | null = element; at !== null; at = parentAcross(at)) {
+    if (at === root) return true;
+  }
+  return false;
+}
+
+/**
+ * Calls `onChange` whenever the text under `root` changes, or the text in
+ * a shadow root searched in a host's place (`FIND_SHADOW_ATTRIBUTE`), each
+ * such root watched from the moment its host stands under `root`, until the
+ * answer is called.
+ */
+export function watchText(root: Element, onChange: () => void): () => void {
+  const watched = new WeakSet<Node>();
+  const watchShadows = () => {
+    for (const host of root.querySelectorAll(`[${FIND_SHADOW_ATTRIBUTE}]`)) {
+      const shadow = host.shadowRoot;
+      if (shadow === null || watched.has(shadow)) continue;
+      watched.add(shadow);
+      observer.observe(shadow, WATCHED);
+    }
+  };
+  const observer = new MutationObserver(() => {
+    watchShadows();
+    onChange();
+  });
+  observer.observe(root, WATCHED);
+  watchShadows();
+  return () => observer.disconnect();
 }
 
 /**
@@ -297,7 +404,7 @@ export function selectedWords(root: Element): string | undefined {
   const within = selection.getRangeAt(0).commonAncestorContainer;
   const element = within instanceof Element ? within : within.parentElement;
   // Words selected in the bar's own field are the query already.
-  if (element === null || !root.contains(element)) return undefined;
+  if (element === null || !containsAcross(root, element)) return undefined;
   if (element.closest(`[${FIND_SKIP_ATTRIBUTE}]`) !== null) return undefined;
   const words = selection.toString();
   return words.length === 0 || words.includes("\n") ? undefined : words;

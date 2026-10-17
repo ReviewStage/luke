@@ -437,21 +437,23 @@ body,
 .sidebar-home:disabled,
 .sidebar-inbox:disabled,
 .sidebar-factory:disabled,
-.sidebar-automations:disabled {
+.sidebar-automations:disabled,
+.sidebar-issues:disabled {
   opacity: 0.45;
 }
 
 /* The Home row is the place shown while the home page stands, the Inbox
    row while the window's Inbox does, Factory's while Factory does, and the
-   Automations row while the Automations page does, each
-   filled as the open plan's row is.
+   Automations row while the Automations page does, and the Issues row
+   while the Issues page does, each filled as the open plan's row is.
    The Inbox's count of what waits on the developer stands at its end in a
    group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-home[aria-current="page"],
 .sidebar-inbox[aria-current="page"],
 .sidebar-factory[aria-current="page"],
-.sidebar-automations[aria-current="page"] {
+.sidebar-automations[aria-current="page"],
+.sidebar-issues[aria-current="page"] {
   background: var(--raised-strong);
 }
 
@@ -3115,6 +3117,15 @@ ul.actor-stack {
   text-overflow: ellipsis;
 }
 
+/* Or its chip, as the transcript draws one, which cuts its own name to the
+   line: held to the line's width so a narrow line cuts the title, never the
+   state after it. */
+.agent-origin-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* A teammate's call at its divider: their mark and name, then when it
    started, centred on the mark, every space kept. */
 .call-caller {
@@ -3194,7 +3205,6 @@ ul.actor-stack {
 }
 
 .desktop-document .plan-body,
-.desktop-document .task-crumb,
 .desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
@@ -3233,15 +3243,6 @@ ul.actor-stack {
 
 .desktop-document .markdown-heading[data-level="3"] {
   font-size: 1.05em;
-}
-
-/* In a column under 480px the crumb wraps rather than cutting its names to a
-   letter: the workspace, then the repository with its separator, then who
-   can edit, each on a line of its own where they do not fit together. */
-@container plan-document (width < 480px) {
-  .task-crumb {
-    flex-wrap: wrap;
-  }
 }
 
 /* In a column under 400px the title steps down to a section's size and a
@@ -4337,6 +4338,14 @@ button.integration-tool-head:hover,
   border-radius: 50%;
   background: var(--message-sent);
   transform: translateY(-50%);
+}
+
+/* A teammate's open item waits on them, not on the reader: the dot's place
+   holds a hollow ring in the time's ink, so the column still says something
+   is open there without the blue that means the reader is asked. */
+.inbox-row-dot[data-hollow="true"] {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--text-tertiary); /* off-scale: a hairline ring at the dot's size */
 }
 
 /* The agent's byline names it in the thread's own ink, as a message's sender is named. */
@@ -5766,6 +5775,69 @@ button.automation-run:hover {
 
 .chat-ask-settled-note {
   color: var(--text-primary);
+}
+
+/* A chat notice in an agent's transcript: a card across the column washed
+   in Luke's blue, headed by its sender and the message's place, Open in
+   Chat at the head's end. */
+.chat-notice {
+  margin: var(--space-8) 0;
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--voice-luke) 25%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--voice-luke) 5%, transparent);
+}
+
+.chat-notice-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-notice-from {
+  color: var(--voice-luke);
+  font-weight: 600;
+}
+
+/* A person's handle reads in the developer's green, as their words do on a call. */
+.chat-notice[data-author="human"] .chat-notice-from {
+  color: var(--voice-developer);
+}
+
+.chat-notice-words {
+  font-size: 14px;
+}
+
+.chat-notice-place {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-notice-open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.chat-notice-open:hover {
+  color: var(--text-primary);
+}
+
+.chat-notice-open svg {
+  width: 12px;
+  height: 12px;
 }
 
 .chat-empty {
@@ -7396,6 +7468,87 @@ button.automation-run:hover {
   vertical-align: -2px; /* off-scale */
 }
 
+/* A pull request's branches on its card stand as inline code does in words
+   (`.markdown code`): mono on a tint, rounded. */
+.luke-hover-card-note .card-code {
+  padding: 0.08em 0.36em;
+  border-radius: 0.36em;
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Who opened a pull request on its card, and how long ago it moved after
+   them (`tasks/pull-request-card-notes.tsx`): the time wraps under the name
+   as one piece where a long login leaves it no room, so the name is never
+   cut for it, as an agent's origin line wraps. Only the line holding that
+   time wraps, so every other card's line naming an actor, a one-line
+   starter's among them, keeps to its one row. */
+.luke-hover-card-note .actor-words:has(> .card-when) {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+.card-when {
+  white-space: pre;
+}
+
+/* A pull request's comment and commit counts, each its glyph and its
+   number, apart as a row of stats. */
+.card-counts {
+  display: flex;
+  gap: var(--space-8);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.card-count > svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each its
+   name beside a dot of the colour GitHub gives it, a size under the notes,
+   wrapping where they run past the card's width. The dot carries the
+   colour rather than the words, since a label may be any colour, a dark one
+   the card's words could not be read in. */
+.card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 6px; /* off-scale */
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 16px; /* off-scale */
+  overflow-wrap: anywhere;
+}
+
+.card-label-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
 /* A server's card lists its tools as the MCP popover's page does
    (`planning/server-card.tsx`), each row's words on the card's own column. */
 .luke-hover-card .integration-tool-list {
@@ -8157,8 +8310,10 @@ button.automation-run:hover {
 }
 
 /* A person's page (`person-page.tsx`): Home's column, headed by their face
-   at the page's size beside their name and who they are here. */
-.person-column {
+   at the page's size beside their name and who they are here. It and the
+   Issues page stand that column under their toolbar, not Home's way down. */
+.person-column,
+.issues-column {
   margin-top: 0;
   gap: var(--space-24);
 }
@@ -8433,13 +8588,13 @@ button.automation-run:hover {
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
-   its bottom-right corner, newest at the bottom. Over a dock at the
-   window's foot (a plan's call bar, an agent's composer or its to-do list)
-   the stack stands just above the highest of them, the window's step clear
-   of it, as the folded sidebar's call card does in the other corner. It
-   measures nothing: each dock names itself an anchor (below), and the
-   stack's foot stands on the anchor's top, or in the corner where none
-   stands. The window is never narrow enough for the two to meet.
+   its bottom-right corner, newest at the bottom, always the window's step
+   in from its corner whatever docks at its foot (a plan's call bar, an
+   agent's composer or its to-do list). A card over one of them stands
+   there only for its hold, and one with something to press can always be
+   dismissed to reach what is under it. The folded sidebar's call card
+   holds the other corner, and the window is never narrow enough for the
+   two to meet.
    Each rises in on the spring and fades first on its way out; the stack
    itself takes no pointer, so only a card with something to press stands in
    the way of what is under it, and that card is always one the developer
@@ -8448,34 +8603,9 @@ button.automation-run:hover {
   position: fixed;
   z-index: var(--z-toast);
   right: var(--space-16);
-  bottom: max(
-    var(--space-16),
-    calc(anchor(--dock-call top, 0px) + var(--space-8)),
-    calc(anchor(--dock-composer top, 0px) + var(--space-8)),
-    calc(anchor(--dock-todos top, 0px) + var(--space-8))
-  );
+  bottom: var(--space-16);
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
-}
-
-/* What docks at a column's foot names itself, by kind, the anchor the
-   toasts stand on; a column hidden under the side panel filling the window
-   leaves its docks unnamed, since nothing of it stands under the toasts. */
-.desktop-call-bar {
-  anchor-name: --dock-call;
-}
-
-.agent-composer {
-  anchor-name: --dock-composer;
-}
-
-.agent-todos-dock {
-  anchor-name: --dock-todos;
-}
-
-:is(.desktop-task-main[hidden], .desktop-task > .agent-page[hidden])
-  :is(.desktop-call-bar, .agent-composer, .agent-todos-dock) {
-  anchor-name: none;
 }
 
 .toast-stack > ol {

@@ -22,6 +22,7 @@ import {
   repaint,
   reveal,
   selectedWords,
+  watchText,
 } from "./find-matches";
 import { Tooltip } from "./tooltip";
 
@@ -77,6 +78,7 @@ export const FIND_PAGE = {
   INBOX: "inbox",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
+  ISSUES: "issues",
   VERSION_HISTORY: "version-history",
   PERSON: "person",
 } as const;
@@ -172,9 +174,7 @@ function useFindMatches(root: HTMLElement | null, query: string): FindMatches {
       if (shown && range !== undefined) reveal(range, root);
     };
     search(true);
-    const watch = new MutationObserver(() => search(false));
-    watch.observe(root, { childList: true, subtree: true, characterData: true });
-    return () => watch.disconnect();
+    return watchText(root, () => search(false));
   }, [root, query, paint]);
 
   // The highlights are the document's, so a tab that goes takes its matches with it.
