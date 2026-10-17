@@ -2910,10 +2910,7 @@ test("files alone make a message: sent from a settled item's box with no words, 
   );
   const message =
     pane.querySelector('[data-inbox-comment="message"]') ?? assert.fail("the message is drawn");
-  assert.deepEqual(
-    [...message.querySelectorAll(".attached-file-name")].map((name) => name.textContent),
-    ["trace.txt"],
-  );
+  assert.deepEqual(attachedNames(message), ["trace.txt"]);
   assert.equal(message.querySelector("[data-inbox-message-text]"), null, "no empty words");
 });
 
