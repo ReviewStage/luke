@@ -10,7 +10,7 @@ import {
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remedy";
+import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
@@ -49,9 +49,9 @@ import { TOOL_STATE } from "../ai-elements/tool";
 import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
-import { FailureNote } from "../failure-note";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { AgentComposer } from "./agent-composer";
@@ -79,10 +79,13 @@ import {
   agentWorkingPhase,
   archivedByReading,
   chatNoticeOf,
+  continuedByIds,
+  continuedByTitles,
   delegates,
   dockedTodos,
-  endLine,
+  type EndLineParts,
   endLineContinues,
+  endLineParts,
   endLineReason,
   lineSender,
   macOwnerOf,
@@ -100,7 +103,7 @@ import {
   workerStatusOf,
   workerToolState,
 } from "./coding-agent-model";
-import { ContinueAgent } from "./continue-agent";
+import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent";
 import { CopyMessageAction } from "./copy-message";
 import { ForkedToLine } from "./fork-action";
 import { openReply } from "./fork-model";
@@ -1188,6 +1191,59 @@ export function AgentMessage({
   });
 }
 
+/**
+ * The line a transcript ends on once its turn was stopped or failed: a
+ * failure's mark and its words in the danger ink, then what the turn cost,
+ * quiet, after a dot; a stop's words quiet alike. A turn failed on the
+ * reader's own refused key offers its API keys after them.
+ */
+function AgentEndLine({
+  ended,
+  endReason,
+  onOpenApiKeys,
+}: {
+  ended: EndLineParts;
+  endReason: FailureReason | undefined;
+  onOpenApiKeys: (() => void) | undefined;
+}): React.JSX.Element {
+  const mark = ended.failed ? stateEndMark(GLYPH_STATE.FAILED, false) : null;
+  const cost =
+    ended.cost === undefined ? null : (
+      <>
+        <span className="agent-end-dot" aria-hidden="true">
+          ·
+        </span>
+        <span className="agent-end-cost">{ended.cost}</span>
+      </>
+    );
+  // Note that a key refused is mended in Settings, so its line offers the API keys after the words.
+  const remedy =
+    endReason === FAILURE_REASON.API_KEY
+      ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words })
+      : undefined;
+  return (
+    <p
+      className="agent-end-line"
+      data-ended=""
+      data-failed={ended.failed ? "" : undefined}
+      aria-live="polite"
+    >
+      {mark}
+      <span className="agent-end-words">{ended.words}</span>
+      {cost}
+      {remedy === undefined ? null : (
+        <button
+          type="button"
+          className="toolbar-button bordered-button failure-note-remedy agent-end-remedy"
+          onClick={onOpenApiKeys}
+        >
+          {remedy}
+        </button>
+      )}
+    </p>
+  );
+}
+
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
 function AgentTranscriptView({
   messages,
@@ -1229,8 +1285,8 @@ function AgentTranscriptView({
   sessionStarting?: boolean;
   /** When the run under way began, which the working line counts from; none where unknown, when the line only shimmers. */
   startedAt?: number | undefined;
-  /** The line the transcript ends on once its turn was stopped or failed (`endLine`); nothing otherwise. */
-  ended?: string | undefined;
+  /** The line the transcript ends on once its turn was stopped or failed (`endLineParts`); nothing otherwise. */
+  ended?: EndLineParts | undefined;
   /** What mends the turn the end line tells of (`endLineReason`): an API key looked at, or nothing the line offers. */
   endReason?: FailureReason;
   /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
@@ -1254,7 +1310,7 @@ function AgentTranscriptView({
   planId?: string | undefined;
   /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
   replay?: ReplayPlace | undefined;
-  /** What the end line ends on after its words: Continue in new agent, or the agents that continued it (`continue-agent.tsx`). */
+  /** The row under the end line, or at the transcript's end where it has none: Continue in new agent, or the agents that continued it (`continue-agent.tsx`). */
   endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
@@ -1343,17 +1399,13 @@ function AgentTranscriptView({
               words={WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting)]}
             />
           ) : null}
-          {ended === undefined ? null : endReason === FAILURE_REASON.API_KEY ? (
-            <FailureNote
-              failure={{ reason: FAILURE_REASON.API_KEY, text: ended }}
-              className="agent-end-line"
-              onRemedy={onOpenApiKeys}
-            />
-          ) : (
-            <p className="agent-end-line" data-ended="" aria-live="polite">
-              {ended}
+          {ended === undefined && endTrail === undefined ? null : (
+            <div className="agent-end" data-ended={ended === undefined ? undefined : ""}>
+              {ended === undefined ? null : (
+                <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+              )}
               {endTrail}
-            </p>
+            </div>
           )}
           {footer}
           {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
@@ -1369,15 +1421,20 @@ function AgentTranscriptView({
       </ErrorState>
     );
   }
+  // Note that the centred column is wider than the empty state's own, so a one-line failure stays one line.
   return (
-    <ConversationEmptyState>
+    <ConversationEmptyState className="max-w-[440px]">
       {reading && ended === undefined ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
-        <p className="m-0" data-ended={ended === undefined ? undefined : ""}>
-          {ended ?? lead.startingLine}
-          {ended === undefined ? null : endTrail}
-        </p>
+        <>
+          {ended === undefined ? (
+            <p className="m-0">{lead.startingLine}</p>
+          ) : (
+            <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+          )}
+          {endTrail}
+        </>
       )}
     </ConversationEmptyState>
   );
@@ -1417,6 +1474,7 @@ function AgentTabView({
   replay,
   endTrail,
   closedRemedy,
+  continuedNote,
 }: {
   agent: CodingAgentSummary;
   /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
@@ -1462,6 +1520,8 @@ function AgentTabView({
   endTrail?: ReactNode;
   /** What mends the box once it closed for good (`continue-agent.tsx`). */
   closedRemedy?: ReactNode;
+  /** What stands in the box's place once another agent continued this one (`ContinuedComposerNote`), which also drops the end line's advice to start a new one; none while none has. */
+  continuedNote?: ReactNode;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const chatOn = useChatOn();
@@ -1519,7 +1579,13 @@ function AgentTabView({
                 working={working}
                 sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
                 startedAt={startedAt}
-                ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+                ended={endLineParts(
+                  agent.status,
+                  transcript.failure,
+                  transcript.turnUsage,
+                  starter,
+                  continuedNote !== undefined,
+                )}
                 endReason={endLineReason(transcript.failure, starter)}
                 onOpenApiKeys={onOpenApiKeys}
                 endTrail={endTrail}
@@ -1547,6 +1613,8 @@ function AgentTabView({
                 : archivedByReading(agent.archivedBy, readerId)
             }
           />
+        ) : continuedNote !== undefined ? (
+          continuedNote
         ) : (
           <AgentComposer
             agentId={agent.id}
@@ -1573,7 +1641,10 @@ function AgentTabView({
         )}
       </footer>
       {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
-      {onUnarchive !== undefined || composer.closed !== undefined || composer.sending ? null : (
+      {onUnarchive !== undefined ||
+      continuedNote !== undefined ||
+      composer.closed !== undefined ||
+      composer.sending ? null : (
         <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
       )}
     </section>
@@ -1699,6 +1770,14 @@ export function AgentTab({
     onOpenTarget === undefined
       ? undefined
       : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
+  // The agents that continued this one, as its summary or the task's list names them: a fork is none.
+  const continued = continuedByIds(agent, control.agents, control.archived);
+  const continuedDoors = {
+    agentIds: continued,
+    titles: continuedByTitles(agent),
+    control,
+    onOpenAgent: openAgent,
+  };
   return (
     <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
       <AgentTabView
@@ -1740,21 +1819,39 @@ export function AgentTab({
           openGitHub,
         })}
         endTrail={
-          endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
+          continued.length > 0 ? (
+            // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
+            control.onUnarchive === undefined ? undefined : (
+              <ContinuedTrail {...continuedDoors} />
+            )
+          ) : endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
             // Note that a box closed on an ended agent offers the press itself, carrying its words.
             <ContinueAgent
               agentId={agent.id}
               control={control}
-              onOpenAgent={openAgent}
               offers={composer.closed === undefined}
             />
           ) : undefined
+        }
+        continuedNote={
+          continued.length === 0 ? undefined : (
+            <ContinuedComposerNote
+              agent={agent}
+              doors={continuedDoors}
+              stop={
+                agent.status === CODING_AGENT_STATUS.RUNNING
+                  ? () => control.onStop(agent.id)
+                  : undefined
+              }
+              control={control}
+              shown={shown}
+            />
+          )
         }
         closedRemedy={
           <ContinueAgent
             agentId={agent.id}
             control={control}
-            onOpenAgent={openAgent}
             carry={{
               words: composer.unsent.words,
               attachments: composer.unsent.attachments,
@@ -1839,7 +1936,7 @@ export function AgentSubagentTab({
             working={agentStillWriting(status)}
             sessionStarting={status === CODING_AGENT_STATUS.STARTING}
             startedAt={shown ? transcript.runStartedAt : undefined}
-            ended={endLine(status, transcript.failure)}
+            ended={endLineParts(status, transcript.failure)}
             onRetry={transcript.onRetry}
           />
         </AgentPicturesProvider>
