@@ -25,6 +25,7 @@ import { cn, ProviderMark } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+import { useClipped } from "@luke/ui/use-clipped";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -36,6 +37,7 @@ import {
   CircleIcon,
   CircleStopIcon,
   CodeXmlIcon,
+  CpuIcon,
   EyeIcon,
   FilePenIcon,
   FileTextIcon,
@@ -80,7 +82,6 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/re
 import { Shimmer } from "../ai-elements/shimmer";
 import {
   TOOL_BLOCK,
-  TOOL_LINE_CLASS,
   TOOL_STATE,
   Tool,
   type ToolBlock,
@@ -96,7 +97,6 @@ import {
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
 import { useMentionDoors } from "./plan-mentions";
@@ -533,16 +533,12 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   return (
     <Reasoning>
       <ReasoningTrigger preview={cardTitle(text).slice(0, REASONING_PREVIEW_LENGTH)} />
-      <ReasoningContent>
-        <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {text.replace(LEADING_BLANK_LINES, "").trimEnd()}
-        </p>
-      </ReasoningContent>
+      <ReasoningContent text={text.replace(LEADING_BLANK_LINES, "").trimEnd()} />
     </Reasoning>
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -564,6 +560,7 @@ const CALL_ICON = {
   [CALL_KIND.INBOX_POST]: InboxIcon,
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,
   [CALL_KIND.INBOX_READ]: InboxIcon,
+  [CALL_KIND.INBOX_REPLY]: InboxIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
@@ -573,6 +570,8 @@ const CALL_ICON = {
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.ARCHIVE_AGENT]: ArchiveIcon,
   [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
+  [CALL_KIND.LIST_MODELS]: CpuIcon,
+  [CALL_KIND.STOP_AGENT]: CircleStopIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,
@@ -738,7 +737,7 @@ export function TranscriptOpeningCall({
     <Tooltip label={hint} card={card ?? undefined}>
       <button
         type="button"
-        className={cn(TOOL_LINE_CLASS, "w-full bg-transparent text-left text-[12.5px]")}
+        className="tool-line tool-opening"
         data-call-id={callId}
         data-opens=""
         onClick={onOpen}

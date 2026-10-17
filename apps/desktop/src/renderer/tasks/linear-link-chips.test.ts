@@ -11,6 +11,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -103,35 +104,31 @@ async function settle(): Promise<void> {
 async function drawn(text: string, workspace: Workspace, onTask = true) {
   const asked: Act[] = [];
   const state = stateWith(workspace);
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
-        deliver = listener;
-        return () => undefined;
-      },
-      requestAppState: () => Promise.resolve(state),
-      act: (request: Act): Promise<ActOutcome> => {
-        asked.push(request);
-        return Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_LINEAR_ISSUES
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: [
-                  {
-                    id: "issue-1",
-                    identifier: "ENG-1",
-                    title: "Start a plan from Linear",
-                    url: ISSUE,
-                    state: "In Progress",
-                    assignee: "Sam Okafor",
-                  },
-                ],
-              }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-        );
-      },
+  fakeAppBridge({
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      deliver = listener;
+      return () => undefined;
+    },
+    requestAppState: () => Promise.resolve(state),
+    act: (request: Act): Promise<ActOutcome> => {
+      asked.push(request);
+      return Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_LINEAR_ISSUES
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: [
+                {
+                  id: "issue-1",
+                  identifier: "ENG-1",
+                  title: "Start a plan from Linear",
+                  url: ISSUE,
+                  state: "In Progress",
+                  assignee: "Sam Okafor",
+                },
+              ],
+            }
+          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+      );
     },
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -215,7 +212,9 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
-  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map((note) => note.textContent);
+  const notes = [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].map(
+    (note) => note.textContent,
+  );
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });

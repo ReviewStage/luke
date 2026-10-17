@@ -1,6 +1,6 @@
 import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
+import { SettingsSection } from "@luke/ui";
 import { SchemaSettingRows } from "./schema-rows";
-import { SettingsGroup } from "./settings-group";
 import type { SettingsWrites } from "./writes";
 
 /**
@@ -18,8 +18,8 @@ export function MacCommandsSection({
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
-    <SettingsGroup>
+    <SettingsSection>
       <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.THIS_MAC} view={view} writes={writes} />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }

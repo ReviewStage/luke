@@ -1,7 +1,7 @@
+import { channels } from "@luke/host/bridge";
 import { stopHotkeyCandidates, voiceHotkeyCandidates } from "@luke/settings";
 import type { UnparsedWireValue } from "@luke/wire";
 import { type BrowserWindow, globalShortcut, type WebContents } from "electron";
-import { channels } from "#shared/bridge";
 import { type TalkKeyEdges, talkKeyWatcher } from "../native/talk-key";
 
 /**

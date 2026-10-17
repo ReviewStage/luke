@@ -1,20 +1,26 @@
-import { ISSUE_STATUS_WORDS, issueColumns, issueIdentifier } from "@luke/features/issue-list-model";
-import type { Issue, IssueStatus } from "@luke/features/issue-wire";
+import {
+  ISSUE_STATUS_WORDS,
+  type IssueGroup,
+  issueColumns,
+  issueIdentifier,
+} from "@luke/features/issue-list-model";
+import { ISSUE_STATUS_ORDER, type Issue, type IssueStatus } from "@luke/features/issue-wire";
+import { IconButton, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text, useMenu } from "@luke/ui";
 import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";
-import { useActionMenu } from "./action-menu";
 import { IssueActions } from "./issue-actions";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
 import type { IssueChange } from "./use-issues";
+import { useRowDrag } from "./use-row-drag";
 
 /**
  * issue-board.tsx -- a workspace's issues as a board: a column for every status, in the order work moves through them, each column's cards in the list's order.
  *
  * Each column is headed and boxed as Factory's stations are
- * (`desktop-factory.tsx`), and the columns stand side by side at every
- * width, the board scrolling sideways in its own scroller (`issues.css`)
+ * (`desktop-factory.tsx`), in the shared type roles and button, and the
+ * columns stand side by side at every width, the board scrolling sideways in its own scroller (`issues.css`)
  * rather than stacking them into a second copy of the list. A column fills
  * the page's height and scrolls its own cards, so its head stays in view. A
  * card is a row of the sidebar's own on two lines, its identifier, mark,
@@ -24,7 +30,12 @@ import type { IssueChange } from "./use-issues";
  * ← and → to the nearest card of the next column holding any, from the
  * window itself as from a card, and Return opens the card reached. A
  * right-click on a card, or the menu key or ⇧F10 on it, opens its actions
- * (`issue-actions.tsx`).
+ * (`issue-actions.tsx`). A card dragged onto another column is moved to
+ * that column's status, sent as its menu's Status sends it, so it stands
+ * where it was until the answer lands, and a column keeps the list's order
+ * rather than one dragged. The drag is the sidebar's (`use-row-drag.ts`):
+ * the board is its drop scope, each column a zone of it, and a card is
+ * carried over the board as a copy, since its column scrolls and clips it.
  */
 
 /** What a column with no issue says in its own place. */
@@ -151,7 +162,7 @@ function IssueCard({
   onOpen: () => void;
   onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const identifier = issueIdentifier(workspaceName, issue.number);
   const card = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
@@ -188,10 +199,99 @@ function IssueCard({
   );
 }
 
+/** The status a column's drop zone names, or none for a zone that is no column's. */
+function columnStatus(zone: string): IssueStatus | undefined {
+  return ISSUE_STATUS_ORDER.find((status) => status === zone);
+}
+
+/**
+ * A column: its head, and its cards or the line saying it holds none. It is
+ * a drop zone of the board, and its cards are dragged out of it onto
+ * another; dropped there, a card's issue is sent that column's status.
+ */
+function IssueColumn({
+  column,
+  workspaceName,
+  now,
+  focused,
+  shown,
+  onOpen,
+  onCompose,
+  onChange,
+}: {
+  column: IssueGroup;
+  workspaceName: string;
+  now: number;
+  focused: string | undefined;
+  shown: boolean;
+  onOpen: (issue: Issue) => void;
+  onCompose: ((status: IssueStatus) => void) | undefined;
+  onChange: (issue: Issue, change: IssueChange) => Promise<boolean>;
+}): React.JSX.Element {
+  const drag = useRowDrag(undefined, {
+    onDropOut: (from, zone) => {
+      const issue = column.issues[from];
+      const status = columnStatus(zone);
+      if (issue === undefined || status === undefined || status === issue.status) return;
+      void onChange(issue, { status });
+    },
+  });
+  return (
+    <section
+      className="issue-column"
+      data-issue-column={column.status}
+      data-row-drop={column.status}
+      aria-label={ISSUE_STATUS_WORDS[column.status]}
+    >
+      <h2 className="issue-column-head">
+        <StatusGlyph status={column.status} />
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+          {ISSUE_STATUS_WORDS[column.status]}
+        </Text>
+        {column.issues.length === 0 ? null : (
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            {column.issues.length}
+          </Text>
+        )}
+        {onCompose === undefined ? null : (
+          <Tooltip label={newIssueIn(column.status)}>
+            <IconButton
+              icon={<PlusIcon />}
+              label={newIssueIn(column.status)}
+              onClick={() => onCompose(column.status)}
+            />
+          </Tooltip>
+        )}
+      </h2>
+      {column.issues.length === 0 ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {NO_ISSUES}
+        </Text>
+      ) : (
+        <ul className="sidebar-tasks issue-column-cards scroll-fade" onPointerDown={drag}>
+          {column.issues.map((issue) => (
+            <IssueCard
+              key={issue.id}
+              issue={issue}
+              workspaceName={workspaceName}
+              now={now}
+              focused={issue.id === focused}
+              shown={shown}
+              onOpen={() => onOpen(issue)}
+              onChange={(change) => onChange(issue, change)}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /**
  * The board: a column for every status, each headed by its glyph, its name,
  * how many issues stand in it, and a + filing a new one into it; a column
- * holding none says so in place of its count.
+ * holding none says so in place of its count. It is the drop scope its
+ * cards are dragged across.
  */
 export function IssueBoard({
   issues,
@@ -217,52 +317,19 @@ export function IssueBoard({
   onChange: (issue: Issue, change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   return (
-    <div className="issue-board">
+    <div className="issue-board" data-row-drop-scope="">
       {issueColumns(issues).map((column) => (
-        <section
+        <IssueColumn
           key={column.status}
-          className="factory-step issue-column"
-          data-issue-column={column.status}
-          aria-label={ISSUE_STATUS_WORDS[column.status]}
-        >
-          <h2 className="factory-head">
-            <StatusGlyph status={column.status} />
-            <span className="factory-name">{ISSUE_STATUS_WORDS[column.status]}</span>
-            {column.issues.length === 0 ? null : (
-              <span className="factory-count">{column.issues.length}</span>
-            )}
-            {onCompose === undefined ? null : (
-              <Tooltip label={newIssueIn(column.status)}>
-                <button
-                  type="button"
-                  className="icon-button issue-column-new"
-                  aria-label={newIssueIn(column.status)}
-                  onClick={() => onCompose(column.status)}
-                >
-                  <PlusIcon className="icon-button-glyph" />
-                </button>
-              </Tooltip>
-            )}
-          </h2>
-          {column.issues.length === 0 ? (
-            <p className="factory-idle">{NO_ISSUES}</p>
-          ) : (
-            <ul className="sidebar-tasks issue-column-cards scroll-fade">
-              {column.issues.map((issue) => (
-                <IssueCard
-                  key={issue.id}
-                  issue={issue}
-                  workspaceName={workspaceName}
-                  now={now}
-                  focused={issue.id === focused}
-                  shown={shown}
-                  onOpen={() => onOpen(issue)}
-                  onChange={(change) => onChange(issue, change)}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
+          column={column}
+          workspaceName={workspaceName}
+          now={now}
+          focused={focused}
+          shown={shown}
+          onOpen={onOpen}
+          onCompose={onCompose}
+          onChange={onChange}
+        />
       ))}
     </div>
   );

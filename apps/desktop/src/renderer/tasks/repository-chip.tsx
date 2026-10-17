@@ -2,17 +2,16 @@ import type { GitHubRepository } from "@luke/features";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { GearIcon, ProviderMark } from "@luke/ui";
+import { CHIP_LOOK, Chip, type ChipLook, ChipName, GearIcon, ProviderMark } from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row";
 import { Spinner } from "../spinner";
-import { useDisclosure } from "../use-disclosure";
 
 /**
  * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
@@ -182,6 +181,10 @@ export function RepositoryChip(props: {
   place: ChipPlace;
   /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
   align?: PickerAlign | undefined;
+  /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
+  describedBy?: string | undefined;
+  /** A form row's chip: whether the row says its value is refused. */
+  invalid?: true | undefined;
 }): React.JSX.Element {
   const { chooser, openRequest, onUnreached, value } = props;
   const openSettings = useOpenSettings();
@@ -307,7 +310,8 @@ export function RepositoryChip(props: {
           ref={trigger}
           look={PLACE_LOOK[props.place]}
           chevron={props.place === CHIP_PLACE.FIELD}
-          className={props.place === CHIP_PLACE.FIELD ? "settings-picker-chip" : undefined}
+          aria-describedby={props.describedBy}
+          aria-invalid={props.invalid}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
@@ -322,7 +326,7 @@ export function RepositoryChip(props: {
               fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
             />
           )}
-          <span className="chip-name">{label}</span>
+          <ChipName>{label}</ChipName>
         </Chip>
       ) : null}
       {drawn.mounted ? (

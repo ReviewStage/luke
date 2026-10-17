@@ -1,3 +1,4 @@
+import { BUTTON_VARIANT, Button } from "@luke/ui";
 import type { ReactNode } from "react";
 import { AttentionMark } from "../attention-mark";
 import { BANNER_LOOK, Banner } from "../banner";
@@ -14,7 +15,7 @@ import { BANNER_LOOK, Banner } from "../banner";
  * fills the window it stands under the panel's bar instead, since the column
  * is covered (`desktop-tasks.tsx`, `side-panel.tsx`). It reads as a devtool's
  * notice rather than a card: the attention mark, one line of words, and the
- * one press that mends it, on a faint attention tint. It has no close: it
+ * one press that mends it, an outlined button, on a faint attention tint. It has no close: it
  * goes once what it says no longer holds. Its words are text, never an
  * attribute, because the session recording masks text and nothing else. Where
  * the column is narrow it gives way as every banner does (`banner.tsx`):
@@ -41,9 +42,9 @@ export function TaskBanner({
       look={BANNER_LOOK.LINE}
       glyph={<AttentionMark />}
       actions={
-        <button type="button" className="task-banner-action" onClick={action.onPress}>
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={action.onPress}>
           {action.label}
-        </button>
+        </Button>
       }
     >
       <p className="task-banner-words">{children}</p>

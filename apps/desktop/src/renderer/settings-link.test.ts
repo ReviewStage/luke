@@ -8,6 +8,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settin
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { WorkspacePage } from "./settings/workspace-page";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
@@ -34,12 +35,8 @@ interface Landing {
 const roots: Root[] = [];
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }),
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }),
   });
 });
 
@@ -90,7 +87,7 @@ test("a link lists its workspace, turns to Settings and its page, and lands on i
   assert.deepEqual(turned, [ACME.id, PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
   assert.equal(landed.on?.querySelector("h2")?.textContent, "Integrations");
   assert.ok(
-    [...(landed.on?.querySelectorAll(".settings-row strong") ?? [])].some(
+    [...(landed.on?.querySelectorAll('.luke-settings-row [id$="label"]') ?? [])].some(
       (name) => name.textContent === "GitHub",
     ),
     "the group the old GitHub repositories link names holds GitHub's row",

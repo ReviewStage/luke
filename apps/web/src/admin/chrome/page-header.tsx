@@ -3,11 +3,15 @@ import {
   CollectionPage,
   type CollectionState,
   DetailPage,
+  Menu,
   SKELETON_SHAPE,
   Skeleton,
+  TEXT_TONE,
+  Text,
+  useMenu,
 } from "@luke/ui";
 import { accountInitials, accountLabel } from "@luke/ui/account-initials";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 /** The signed-in account the header names; read from the session, shown as-is. */
 export interface ViewerAccount {
@@ -70,13 +74,12 @@ export function AccountAvatar({
 }
 
 /**
- * The focus ring is drawn inside the item: the page's own `:focus-visible`
- * outline would otherwise sit astride the panel's border, which reads as a
- * seam rather than as focus.
+ * The account's menu, opened from its avatar: whose account it is over the
+ * one act, signing out. The shared menu draws itself over the page, from the
+ * body, which is what keeps it clear of the page's header: the header clips
+ * what it holds to its own box. The body sits under the root that names the
+ * admin's profile, theme, and density, so the menu is drawn at them too.
  */
-const ACCOUNT_MENU_ITEM =
-  "flex min-h-11 w-full cursor-pointer items-center px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
-
 function AccountMenu({
   account,
   avatarSkeleton = false,
@@ -86,66 +89,33 @@ function AccountMenu({
   avatarSkeleton?: boolean;
   onSignOut: () => void;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const itemRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    itemRef.current?.focus();
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && containerRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
+  const menu = useMenu(true);
+  const label = `Account menu for ${accountLabel(account)}`;
   return (
-    <div className="relative" ref={containerRef}>
+    <>
       <button
         type="button"
-        ref={triggerRef}
-        className="flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`Account menu for ${accountLabel(account)}`}
-        onClick={() => setOpen(!open)}
+        className="ml-auto flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
+        aria-label={label}
+        {...menu.trigger()}
       >
         {avatarSkeleton ? <AvatarSkeleton /> : <AccountAvatar account={account} />}
       </button>
-      {open ? (
-        <div
-          role="menu"
-          className="absolute top-[calc(100%+8px)] right-0 z-10 min-w-[200px] rounded-lg border border-border bg-card py-1 text-left shadow-[0_16px_48px_rgba(0,0,0,0.32)]"
-        >
-          <div className="border-b border-border px-3 py-2">
-            <div className="text-sm leading-tight font-medium">{account.name}</div>
-            <div className="truncate text-xs text-muted-foreground">{account.email}</div>
-          </div>
-          <button
-            type="button"
-            ref={itemRef}
-            role="menuitem"
-            className={ACCOUNT_MENU_ITEM}
-            onClick={onSignOut}
-          >
-            Sign out
-          </button>
-        </div>
-      ) : null}
-    </div>
+      {menu.drawn === undefined ? null : (
+        <Menu
+          label={label}
+          menu={menu.drawn}
+          heading={
+            <>
+              <Text>{account.name}</Text>
+              <Text tone={TEXT_TONE.MUTED}>{account.email}</Text>
+            </>
+          }
+          groups={[[{ label: "Sign out", onSelect: onSignOut }]]}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -164,10 +134,12 @@ function AdminActions({
   return (
     <>
       {controls}
+      {/* The avatar keeps to the actions' far end, on a phone too, where
+          it wraps under the controls onto a row of its own. */}
       {account ? (
         <AccountMenu account={account} avatarSkeleton={accountSkeleton} onSignOut={onSignOut} />
       ) : accountSkeleton ? (
-        <div className="flex size-11 items-center justify-center">
+        <div className="ml-auto flex size-11 items-center justify-center">
           <AvatarSkeleton />
         </div>
       ) : null}

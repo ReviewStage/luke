@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
+import { loopbackConsent } from "@luke/credentials/node";
 import type { HostSeams } from "@luke/host";
 import {
+  ALL_HOST_PLATFORM_CONCERNS,
   AppIdentity,
   type DuplicateGatewayMethod,
   Environment,
@@ -13,9 +15,14 @@ import {
   reporterLayer,
   SecretCipher,
   ShutdownSignal,
+  SignInConsent,
   StateRoot,
+  TerminalSocket,
+  VoiceSocket,
 } from "@luke/host/effect";
+import { openTerminalSocketOverWs, openVoiceSocketOverWs } from "@luke/host/node";
 import { ConfigProvider, Layer } from "effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type { DesktopConfig } from "./desktop-config";
 
 interface HostSeamDependencies {
@@ -36,6 +43,11 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(SecretCipher, cipher),
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
+    Layer.succeed(VoiceSocket, openVoiceSocketOverWs),
+    Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
+    // The sign-in's consent is a loopback on this Mac: the browser hands the
+    // code back to a `node:http` listener on 127.0.0.1.
+    Layer.succeed(SignInConsent, { open: loopbackConsent }),
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, which the entry's `before-quit` asks for.
     Layer.succeed(ShutdownSignal, { notify: () => config.quit() }),
@@ -60,13 +72,15 @@ export function hostAssemblyLayerFor(
 ): Layer.Layer<HostAssemblyTag, DuplicateGatewayMethod> {
   const seams = hostSeamLayersFor(dependencies);
   return Layer.provide(
-    hostAssemblyLayer,
+    // The desktop runs every platform concern: it is the host they were written for.
+    hostAssemblyLayer(ALL_HOST_PLATFORM_CONCERNS),
     Layer.mergeAll(
       Layer.provideMerge(hostKernelLayer, seams),
       Layer.provideMerge(
         NodeChildProcessSpawner.layer,
         Layer.mergeAll(NodeFileSystem.layer, NodePath.layer),
       ),
+      FetchHttpClient.layer,
     ),
   );
 }

@@ -1,4 +1,4 @@
-/* chip.css -- the chip: a control of the shared contract in one of three
+/* chip.css -- the chip: a control of the shared contract in one of four
    looks, giving way before the row around it does, its words cut short
    rather than pushing past it. A mark beside the words is a size under the
    control's glyph, and a menu's chevron is the small, muted one a menu
@@ -130,6 +130,30 @@
   .luke-chip[data-look="field"] .luke-chip-name {
     flex: 1;
     text-align: left;
+  }
+
+  /* A filter is a quiet capsule that lights under the pointer, and fills
+     inside the selection's hairline while it stands pressed, so the row
+     says which kind the list is narrowed to. */
+  .luke-chip[data-look="filter"] {
+    padding: 0 var(--luke-space-12);
+    border-radius: var(--luke-radius-full);
+    --luke-chip-ink: var(--luke-color-text-muted);
+  }
+
+  .luke-chip[data-look="filter"]:hover:not(
+    :disabled,
+    [aria-disabled="true"],
+    [aria-pressed="true"]
+  ) {
+    background: var(--luke-color-fill-hover);
+    --luke-chip-ink: var(--luke-color-text);
+  }
+
+  .luke-chip[data-look="filter"][aria-pressed="true"] {
+    border-color: var(--luke-color-border-selected);
+    background: var(--luke-color-fill-selected);
+    --luke-chip-ink: var(--luke-color-text);
   }
 
   /* Unavailable, a chip fades to 45%: a disabled one whole, one that keeps

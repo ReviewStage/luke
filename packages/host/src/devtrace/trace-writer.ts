@@ -28,13 +28,9 @@ type PendingTraceEntry =
 interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
   directory: string;
-  report?: (message: string) => void;
+  /** Where a failed write is said, once. */
+  report: (message: string) => void;
 }
-
-/** Where a writer with no reporter of its own says a write failed. */
-const reportToStderr = (text: string): void => {
-  process.stderr.write(text);
-};
 
 /**
  * The trace's line format: what one tapped entry becomes once the moment it
@@ -105,7 +101,7 @@ export class AgentTraceWriter {
     work: SerialQueue<FileSystem.FileSystem>,
   ) {
     this.#directory = options.directory;
-    this.#report = options.report ?? reportToStderr;
+    this.#report = options.report;
     this.file = file;
     this.#work = work;
   }
@@ -119,14 +115,14 @@ export class AgentTraceWriter {
       const openedAt = yield* DateTime.nowAsDate;
       const stamp = openedAt.toISOString().replace(/[:.]/gu, "-");
       const file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
-      const report = options.report ?? reportToStderr;
+      const { report } = options;
       // Only a write's own failure is caught by the write; a line that dies
       // is one more way the trace could not be written, said the same way.
       const work = yield* serialQueue<FileSystem.FileSystem>({
         onDefect: (cause) =>
-          Effect.sync(() => report(`Agent trace could not be written: ${Cause.pretty(cause)}\n`)),
+          Effect.sync(() => report(`Agent trace could not be written: ${Cause.pretty(cause)}`)),
       });
-      return new AgentTraceWriter({ ...options, report }, file, work);
+      return new AgentTraceWriter(options, file, work);
     });
   }
 
@@ -151,7 +147,7 @@ export class AgentTraceWriter {
         Effect.sync(() => {
           if (this.#failed) return;
           this.#failed = true;
-          this.#report(`Agent trace could not be written: ${error.message}\n`);
+          this.#report(`Agent trace could not be written: ${error.message}`);
         }),
       ),
     );

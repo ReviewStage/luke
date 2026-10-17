@@ -6,11 +6,12 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
+import { Button } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { editorBundleAtom, prefetchEditorBundle } from "../editor-bundle";
+import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader";
 import { DiagramPreview } from "../plan-diagram";
 import type {
   EditorDiagram,
@@ -40,7 +41,7 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * editable. A click into a section's words opens the whole text in place,
  * the caret where the click landed; the editor is TipTap, from the editor
  * bundle the panel starts loading as it first paints, and again the first
- * time a section is hovered or selected (`../editor-bundle.ts`), and draws the words exactly as the
+ * time a section is hovered or selected (`../bundle-loader.ts`), and draws the words exactly as the
  * sections drew them, so nothing moves. Until the bundle has loaded the
  * sections stay drawn, so a click's point still lands on the same word. The
  * keyboard moves between the title and the sections as a document editor
@@ -94,13 +95,14 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
   return true;
 }
 
-/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, or the section's byline. */
+/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, a task's checkbox, or the section's byline. */
 function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, and a button in the words, a diagram's Show code say.
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item.
   return !(
-    target instanceof Element && target.closest("a, button, .mention-chip, .plan-unit-row") !== null
+    target instanceof Element &&
+    target.closest("a, button, input, .mention-chip, .plan-unit-row") !== null
   );
 }
 
@@ -136,6 +138,7 @@ export function DocumentBlock({
   children: ReactNode;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
+  const prefetchEditorBundle = usePrefetchEditorBundle();
   useSelectedOnClose(editing, host, () => block.current?.focus());
   // Note that a code block is taken out of the Tab order, because Chrome makes
   // a scrolling `<pre>` a Tab stop of its own inside the document's one.
@@ -231,6 +234,7 @@ export function EditableTitle({
   onDraft: (name: string | undefined) => void;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
+  const prefetchEditorBundle = usePrefetchEditorBundle();
   const text = useRef<HTMLDivElement>(null);
   const [pause, restartPause] = useAtom(titlePauseAtom);
   const stamp = useRef(0);
@@ -310,7 +314,7 @@ export function EditableTitle({
     // biome-ignore lint/a11y/useSemanticElements: the title's block holds its words, not a form's controls, so it is no `<fieldset>`.
     <div
       ref={block}
-      className={`plan-title-block ${DOCUMENT_BLOCK_CLASS}`}
+      className={DOCUMENT_BLOCK_CLASS}
       role="group"
       tabIndex={entry ? 0 : -1}
       aria-label="Title"
@@ -529,12 +533,8 @@ function DocumentNote({
     return (
       <div className="plan-editor-note" role="alert">
         <span>{CONFLICT_NOTE}</span>
-        <button type="button" className="toolbar-button" onClick={editing.keepMine}>
-          Keep mine
-        </button>
-        <button type="button" className="toolbar-button" onClick={editing.takeLukes}>
-          Use Luke's
-        </button>
+        <Button onClick={editing.keepMine}>Keep mine</Button>
+        <Button onClick={editing.takeLukes}>Use Luke's</Button>
       </div>
     );
   }
@@ -574,7 +574,7 @@ export function PlanDocumentEditor({
   const doors = useDraftHandOver(editing, hostOf);
   const handle = useRef<PlanEditorHandle | undefined>(undefined);
   useMergedAnswers(editor, editing, task, handle);
-  const module = useAtomValue(editorBundleAtom);
+  const module = useAtomValue(useSideBundles().planEditor);
   const room = useRef<HTMLElement>(null);
   const chips = useEditorDrawings<MentionNode>();
   const diagrams = useEditorDrawings<EditorDiagram>();

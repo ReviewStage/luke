@@ -15,12 +15,12 @@
  * window.
  */
 
+import { ActRefused, type ActRows } from "@luke/host/act-router";
 import { ACT, ACT_KIND } from "@luke/host/acts";
+import type { AppStateStore } from "@luke/host/client";
 import { AVATAR_STATUS, avatarStanding } from "@luke/voice/avatar";
 import { AVATAR_VIEW_SIGNAL } from "@luke/voice/avatar-view";
 import type { WebContents } from "electron";
-import { ActRefused, type ActRows } from "../act-router";
-import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";
 import type { AvatarLink } from "../services/avatar-link";
 import type { CallWindow } from "../window/call-window";
