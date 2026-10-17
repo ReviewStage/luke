@@ -31,13 +31,19 @@ interface MarkdownSpan {
 export const MARKDOWN_MARK = {
   INSERTED: "inserted",
   DELETED: "deleted",
+  /** Words a comment thread is anchored to (`planning/plan-comments.tsx`). */
+  COMMENT: "comment",
 } as const;
 
 type MarkdownMarkKind = (typeof MARKDOWN_MARK)[keyof typeof MARKDOWN_MARK];
 
-/** A stretch of the words marked as a change. */
+/** A stretch of the words marked as a change, or as a comment's words, which names its thread and whether it is the one open. */
 export interface MarkdownMark extends MarkdownSpan {
   kind: MarkdownMarkKind;
+  thread?: string | undefined;
+  active?: boolean | undefined;
+  /** Whether the comment is on its whole block, drawn by the block's edge rather than over its words. */
+  block?: boolean | undefined;
 }
 
 /**
@@ -68,6 +74,7 @@ const SELECTION_CLASS = "markdown-selection";
 const MARK_DRAWN = {
   [MARKDOWN_MARK.INSERTED]: { tagName: "ins", className: "markdown-inserted" },
   [MARKDOWN_MARK.DELETED]: { tagName: "del", className: "markdown-deleted" },
+  [MARKDOWN_MARK.COMMENT]: { tagName: "mark", className: "plan-comment-mark" },
 } as const satisfies Record<MarkdownMarkKind, { tagName: string; className: string }>;
 
 /** Whether a node is the line break the renderer leaves between block elements, which draws nothing. */
@@ -125,7 +132,21 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
     if (hidden !== undefined && from >= local(hidden.from) && to <= local(hidden.to)) return;
     const selected =
       selection !== undefined && from >= local(selection.from) && to <= local(selection.to);
-    const mark = marks.find((each) => from >= local(each.from) && to <= local(each.to));
+    const covering = marks.filter((each) => from >= local(each.from) && to <= local(each.to));
+    // Note that a change mark wins over a comment's, and words under several threads name every one of them.
+    const mark = covering.find((each) => each.kind !== MARKDOWN_MARK.COMMENT) ?? covering[0];
+    const threads = covering.flatMap((each) =>
+      each.kind === MARKDOWN_MARK.COMMENT && each.thread !== undefined ? [each.thread] : [],
+    );
+    // Note that a block's threads are named apart from the words', so words a block thread and a word thread both cover keep the word's mark, and the block still draws its edge.
+    const blockThreads = covering.flatMap((each) =>
+      each.kind === MARKDOWN_MARK.COMMENT && each.block === true && each.thread !== undefined
+        ? [each.thread]
+        : [],
+    );
+    const wordsCovered = covering.some(
+      (each) => each.kind === MARKDOWN_MARK.COMMENT && each.block !== true,
+    );
     const drawn = mark === undefined ? undefined : MARK_DRAWN[mark.kind];
     parts.push(
       selected
@@ -139,7 +160,20 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
           ? {
               type: "element",
               tagName: drawn.tagName,
-              properties: { className: [drawn.className] },
+              properties: {
+                className: [drawn.className],
+                ...(threads.length === 0 ? undefined : { dataThreads: threads.join(" ") }),
+                ...(covering.some((each) => each.active === true)
+                  ? { dataActive: "true" }
+                  : undefined),
+                ...(blockThreads.length > 0 && !wordsCovered ? { dataBlock: "true" } : undefined),
+                ...(blockThreads.length === 0
+                  ? undefined
+                  : { dataBlockThreads: blockThreads.join(" ") }),
+                ...(covering.some((each) => each.block === true && each.active === true)
+                  ? { dataBlockActive: "true" }
+                  : undefined),
+              },
               children: [{ type: "text", value }],
             }
           : { type: "text", value },
@@ -561,7 +595,33 @@ function drawnMarked(
   if (marks === LINK_MARKS.NONE) return drawn;
   if (marks === LINK_MARKS.MIXED) return plainLink(href, children, link, openLink);
   const Mark = marks.tagName;
-  return <Mark className={marks.className}>{drawn}</Mark>;
+  // Note that a comment's mark keeps the threads it names, so a press on a marked chip still opens them.
+  const first = link?.children.find((child) => !isBlockBreak(child));
+  const threads =
+    first?.type === "element" && isWireString(first.properties.dataThreads)
+      ? { "data-threads": first.properties.dataThreads }
+      : undefined;
+  const active =
+    first?.type === "element" && first.properties.dataActive === "true"
+      ? { "data-active": "true" }
+      : undefined;
+  const block =
+    first?.type === "element"
+      ? {
+          ...(first.properties.dataBlock === "true" ? { "data-block": "true" } : undefined),
+          ...(isWireString(first.properties.dataBlockThreads)
+            ? { "data-block-threads": first.properties.dataBlockThreads }
+            : undefined),
+          ...(first.properties.dataBlockActive === "true"
+            ? { "data-block-active": "true" }
+            : undefined),
+        }
+      : undefined;
+  return (
+    <Mark className={marks.className} {...threads} {...active} {...block}>
+      {drawn}
+    </Mark>
+  );
 }
 
 /** The words under a node of the tree, however they are formatted: a heading's emphasis copied into a label still reads as its words. */

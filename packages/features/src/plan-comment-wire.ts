@@ -106,6 +106,8 @@ export const planCommentWriterSchema = EffectSchema.Struct({
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
+export type PlanCommentWriter = typeof planCommentWriterSchema.Type;
+
 /** Who a thread was sent to: Luke, or a coding agent by its id. */
 export const planCommentAskedSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals([PLAN_COMMENT_ACTOR.LUKE, PLAN_COMMENT_ACTOR.AGENT]),

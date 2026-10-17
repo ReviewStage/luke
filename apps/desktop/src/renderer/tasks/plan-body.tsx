@@ -6,12 +6,18 @@ import {
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
-import { planSections } from "@luke/features/plan-document";
+import { type PlanSection, planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import { ActorStack } from "@luke/panel/actor-ref";
 import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
-import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "@luke/panel/markdown-message";
+import {
+  type LinkDrawer,
+  MARKDOWN_MARK,
+  type MarkdownEdit,
+  MarkdownMessage,
+  type TaskToggler,
+} from "@luke/panel/markdown-message";
 import { useCreator } from "@luke/panel/member-directory";
 import { DocumentByline, DocumentScroll } from "@luke/panel/tasks/document-frame";
 import { PlanPictures, usePlanPictureDrawer } from "@luke/panel/tasks/plan-pictures";
@@ -44,6 +50,7 @@ import { Tooltip } from "@luke/panel/tooltip";
 import { prefersReducedMotion } from "@luke/panel/use-reduced-motion";
 import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
+import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -55,6 +62,7 @@ import {
   useEditReader,
 } from "./edit-ref";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
+import { PlanCommentLayer, useCommentFocus } from "./plan-comments";
 import {
   DOCUMENT_BLOCK_CLASS,
   DocumentBlock,
@@ -681,6 +689,27 @@ function TitleMenu({
   return <UnitMenu label={TITLE_MENU_LABEL} items={items} tabbable={tabbable} />;
 }
 
+/** A unit's edit with the plan's open comments on its words marked, the open one and the one being started among them. */
+function useCommentedEdit(
+  edit: MarkdownEdit | undefined,
+  section: PlanSection | undefined,
+): MarkdownEdit | undefined {
+  const control = usePlanCommentsControl();
+  const { active, pending } = useCommentFocus();
+  if (control === undefined || section === undefined) return edit;
+  const spans = commentSpansIn(control.threads, section, active, pending);
+  if (spans.length === 0) return edit;
+  const comments = spans.map((span) => ({
+    from: span.from,
+    to: span.to,
+    kind: MARKDOWN_MARK.COMMENT,
+    thread: span.thread,
+    active: span.active,
+    block: span.block,
+  }));
+  return { ...edit, marks: [...(edit?.marks ?? []), ...comments] };
+}
+
 /**
  * One section of the text, drawn as the chase has it, tinted where it
  * changed since the last look, and carrying the byline of the save that
@@ -688,6 +717,7 @@ function TitleMenu({
  */
 function DocumentUnit({
   view,
+  section,
   marks,
   link,
   linked,
@@ -696,6 +726,8 @@ function DocumentUnit({
   onTask,
 }: {
   view: UnitView;
+  /** Where the unit's words stand in the plan's text, where they stand as drawn, which marks the comments on them; none mid-chase. */
+  section: PlanSection | undefined;
   marks: SectionMarks;
   /** Draws the plan's mentions as chips; links are drawn as words without it. */
   link: LinkDrawer | undefined;
@@ -711,11 +743,12 @@ function DocumentUnit({
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
   const picture = usePlanPictureDrawer();
+  const edit = useCommentedEdit(view.edit, section);
   const drawn = (
     <MarkdownMessage
       words={view.words}
       className={unitClass(view, changed)}
-      edit={view.edit}
+      edit={edit}
       link={link}
       openLink={openLink}
       diagrams
@@ -904,6 +937,18 @@ export function PlanBody({
     scroller.current?.querySelector(".markdown-caret")?.scrollIntoView({ block });
   });
 
+  // The sections as the plan's text holds them, where the chase draws them so, which is where comments are marked and measured.
+  // Note that comments are the plan's own page's alone, never a version of it or a Settings page.
+  const comments = usePlanCommentsControl();
+  const commentsHere =
+    comments !== undefined && comments.planId === task.id && sectionLinks !== undefined;
+  const textSections = useMemo(() => planSections(task.document.body), [task.document.body]);
+  const drawnSections =
+    commentsHere &&
+    textSections.length === views.length &&
+    textSections.every((section, at) => section.text === views[at]?.words)
+      ? textSections
+      : undefined;
   const edited = lastEditOf(task);
   // A task item is ticked from the drawn plan while its words stand whole and
   // no editor is open, and saved through the editor's own door.
@@ -953,6 +998,7 @@ export function PlanBody({
       >
         <DocumentUnit
           view={view}
+          section={drawnSections?.[section]}
           marks={marks}
           link={link}
           linked={linked}
@@ -965,6 +1011,7 @@ export function PlanBody({
       <DocumentUnit
         key={view.id}
         view={view}
+        section={drawnSections?.[section]}
         marks={marks}
         link={link}
         linked={linked}
@@ -1043,6 +1090,17 @@ export function PlanBody({
               hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
               mentions={mentionDoors}
               scroller={scroller}
+            />
+          )}
+          {comments === undefined || !commentsHere || drawnSections === undefined ? null : (
+            <PlanCommentLayer
+              body={body}
+              scroller={scroller}
+              unitClass={UNIT_CLASS}
+              sections={drawnSections}
+              text={task.document.body}
+              doors={{ control: comments, agents, me: reader.readerId }}
+              editing={editing.editor !== undefined}
             />
           )}
         </div>

@@ -121,6 +121,14 @@
   --scroll-glide: smooth;
   /* The depth `@luke/ui`'s `ScrollArea` fades by, so the two fades agree. */
   --scroll-fade: var(--luke-scroll-fade);
+  /* A comment's anchored words (`tasks/plan-comments.tsx`): a wash under
+     the words and an edge beneath them, both stronger while their thread is
+     open or the pointer is on them, in an amber that is neither the blue of
+     a selection, the yellow of a find, nor the orange of attention. */
+  --comment-mark: rgba(255, 200, 87, 0.13);
+  --comment-mark-edge: rgba(255, 200, 87, 0.5);
+  --comment-mark-active: rgba(255, 200, 87, 0.28);
+  --comment-mark-active-edge: rgba(255, 200, 87, 0.95);
   /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --label-fade: 20px;
 }
@@ -132,6 +140,10 @@
    `nativeTheme.themeSource`) on the frame it changes, without a re-render. */
 @media (prefers-color-scheme: light) {
   :root {
+    --comment-mark: rgba(245, 176, 0, 0.14);
+    --comment-mark-edge: rgba(196, 132, 0, 0.55);
+    --comment-mark-active: rgba(245, 176, 0, 0.3);
+    --comment-mark-active-edge: rgba(176, 112, 0, 1);
     --code-ground: #fff;
     --code-text: #1f2328;
     --code-line-number: rgba(31, 35, 40, 0.5);

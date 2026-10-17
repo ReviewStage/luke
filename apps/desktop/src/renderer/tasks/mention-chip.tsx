@@ -42,6 +42,7 @@ import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { useAppState } from "@luke/panel/use-app-state";
 import {
   CallIcon,
+  CommentsIcon,
   DocumentIcon,
   GearIcon,
   HoverCard,
@@ -670,6 +671,8 @@ function PlaceGlyph({
       return <DocumentIcon />;
     case LINK_PLACE.SECTION:
       return <HashIcon aria-hidden="true" />;
+    case LINK_PLACE.COMMENT:
+      return <CommentsIcon />;
     case LINK_PLACE.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case LINK_PLACE.CALL:

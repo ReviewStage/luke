@@ -9,6 +9,7 @@ import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
 import { usePrefetchEditorBundle, useSideBundles } from "@luke/panel/bundle-loader";
 import { DiagramPreview } from "@luke/panel/plan-diagram";
 import {
+  type EditorAnchors,
   type EditorDiagram,
   type MentionNode,
   PLACEMENT_END,
@@ -26,6 +27,7 @@ import {
   type PlanEditing,
 } from "@luke/panel/tasks/use-plan-editing";
 import { Button, PROSE_CLASS } from "@luke/ui";
+import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -110,7 +112,8 @@ export function editsOnClick(target: EventTarget): boolean {
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item.
   return !(
     target instanceof Element &&
-    target.closest("a, button, input, [data-mention-ref], .plan-unit-row") !== null
+    target.closest("a, button, input, [data-mention-ref], .plan-unit-row, .plan-comment-mark") !==
+      null
   );
 }
 
@@ -511,7 +514,7 @@ export function EditableTitle({
 
 /** What the editor reports its text, its finish, and its leaving through. */
 interface DraftDoors {
-  readonly onDraft: (markdown: string) => void;
+  readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
   readonly onFinish: (section: number) => void;
   readonly onLeave: () => void;
   readonly onLeaveUp: () => void;
@@ -530,14 +533,16 @@ function useDraftHandOver(
   hostOf: (section: number) => EditorHost,
 ): DraftDoors {
   const [pause, restartPause] = useAtom(draftPauseAtom);
-  const pending = useRef<string | undefined>(undefined);
+  const pending = useRef<{ markdown: string; anchors: EditorAnchors | undefined } | undefined>(
+    undefined,
+  );
   const stamp = useRef(0);
   const door = useRef(editing);
   door.current = editing;
   const flush = () => {
     const next = pending.current;
     pending.current = undefined;
-    if (next !== undefined) door.current.typeText(next);
+    if (next !== undefined) door.current.typeText(next.markdown, next.anchors);
   };
   // A pause that ran out on the newest text hands it over.
   useEffect(() => {
@@ -551,8 +556,8 @@ function useDraftHandOver(
     };
   }, []);
   return {
-    onDraft: (markdown) => {
-      pending.current = markdown;
+    onDraft: (markdown, anchors) => {
+      pending.current = { markdown, anchors };
       stamp.current += 1;
       restartPause(stamp.current);
     },
@@ -589,7 +594,7 @@ export function MountedPlanEditor({
     const { mentions } = latest.current;
     const mounted = module.mount(host.current, {
       ...latest.current,
-      onDraft: (markdown) => latest.current.onDraft(markdown),
+      onDraft: (markdown, anchors) => latest.current.onDraft(markdown, anchors),
       onFinish: (section) => latest.current.onFinish(section),
       onLeaveUp: () => latest.current.onLeaveUp(),
       // Note that the mentions' doors are read as they are used, as the rest are.
@@ -708,6 +713,16 @@ export function PlanDocumentEditor({
   scroller?: React.RefObject<HTMLElement | null> | undefined;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
+  // The open threads' words, carried by the editor from the text it opens on, which is the plan's as saved.
+  const comments = usePlanCommentsControl();
+  const commentAnchors =
+    comments === undefined || editor.draft !== task.document.body
+      ? undefined
+      : comments.threads.flatMap((thread) =>
+          thread.anchor === undefined || !openThread(thread)
+            ? []
+            : [{ thread: thread.id, ...thread.anchor }],
+        );
   const handle = useRef<PlanEditorHandle | undefined>(undefined);
   useMergedAnswers(editor, editing, task, handle);
   const module = useAtomValue(useSideBundles().planEditor);
@@ -775,6 +790,7 @@ export function PlanDocumentEditor({
   }
   const props: PlanEditorProps = {
     markdown: editor.draft,
+    anchors: commentAnchors,
     placement: pending ?? editing.placement,
     focus: true,
     label: "Plan",
