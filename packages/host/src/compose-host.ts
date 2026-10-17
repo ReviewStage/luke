@@ -47,6 +47,7 @@ import {
   Reporter,
   type SecretCipher,
   ShutdownSignal,
+  type SignInConsent,
 } from "./effect/seams.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
@@ -101,6 +102,7 @@ export const hostAssemblyLayer: Layer.Layer<
   | SecretCipher
   | AppIdentity
   | ShutdownSignal
+  | SignInConsent
   | FileSystem.FileSystem
   | Path.Path
   | ChildProcessSpawner.ChildProcessSpawner

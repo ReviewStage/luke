@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
+import { loopbackConsent } from "@luke/credentials/node";
 import type { HostSeams } from "@luke/host";
 import {
   AppIdentity,
@@ -14,6 +15,7 @@ import {
   reporterLayer,
   SecretCipher,
   ShutdownSignal,
+  SignInConsent,
   StateRoot,
 } from "@luke/host/effect";
 import { openTerminalSocketOverWs, openVoiceSocketOverWs } from "@luke/host/node";
@@ -42,6 +44,9 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
       openVoice: openVoiceSocketOverWs,
       openTerminal: openTerminalSocketOverWs,
     }),
+    // The sign-in's consent is a loopback on this Mac: the browser hands the
+    // code back to a `node:http` listener on 127.0.0.1.
+    Layer.succeed(SignInConsent, { open: loopbackConsent }),
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, which the entry's `before-quit` asks for.
     Layer.succeed(ShutdownSignal, { notify: () => config.quit() }),
