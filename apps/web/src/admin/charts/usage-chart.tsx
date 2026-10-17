@@ -8,7 +8,7 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
-import { ChartFrame, ChartTrend } from "./chart-frame";
+import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame";
 
 export const USAGE_CHART = {
   calls: { label: "Hosted calls", color: "var(--chart-1)" },
@@ -41,9 +41,7 @@ export function UsageChart({
   if (seriesHasNoData(daily.map((point) => point.calls))) {
     return (
       <ChartFrame title={label} aside={<ChartTrend trend={trend} />}>
-        <p className="m-0 py-6 text-center text-sm text-muted-foreground">
-          No hosted-tier calls recorded in this window yet.
-        </p>
+        <ChartEmpty>No hosted-tier calls recorded in this window yet.</ChartEmpty>
       </ChartFrame>
     );
   }

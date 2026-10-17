@@ -26,6 +26,9 @@ import { formatNumber, formatTrendMove, trendTone } from "@luke/ui/admin-format"
 
 const CHART_CARD = "relative rounded-lg border border-border bg-card p-5";
 
+/** The room an empty window's line stands in, about a short plot's height. */
+const CHART_EMPTY = "py-6 text-center";
+
 /** A heading bone's width, about the words it stands for. */
 const SKELETON_TITLE_WIDTH = "144px";
 
@@ -48,6 +51,19 @@ export function ChartTrend({ trend }: { trend: AdminTrend }): React.JSX.Element 
       {formatNumber(trend.recent)} in the last {trend.days} days, against{" "}
       {formatNumber(trend.prior)} before
     </>
+  );
+}
+
+/**
+ * What a chart draws in place of its plot when its window holds nothing to
+ * measure: one muted line, centered in the room the bars would take, rather
+ * than the server's zero-fill drawn as a flat measurement.
+ */
+export function ChartEmpty({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className={CHART_EMPTY}>
+      <Text tone={TEXT_TONE.MUTED}>{children}</Text>
+    </div>
   );
 }
 
