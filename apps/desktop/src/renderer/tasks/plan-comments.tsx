@@ -44,7 +44,6 @@ import {
   MessageSquarePlusIcon,
   PencilIcon,
   RotateCcwIcon,
-  SlidersHorizontalIcon,
 } from "lucide-react";
 import {
   createContext,
@@ -146,6 +145,7 @@ const COMMENT_WORDS = {
   ASKED: "asked",
   EDITED: "edited",
   OPEN_THREAD: "Open thread",
+  SHOW_WORDS: "Show in the plan",
 } as const;
 
 /** Which thread is open, and the one being started, shared by the marks that open them and the margin that draws them. */
@@ -801,17 +801,53 @@ type ReplyVariant = (typeof REPLY_VARIANT)[keyof typeof REPLY_VARIANT];
 const NO_KEYWORDS: readonly string[] = [];
 
 /** Over a thread whose words were deleted: that they were, and what they said. */
-function GoneQuote({ thread }: { thread: PlanCommentThread }): React.JSX.Element {
+function GoneQuote({
+  thread,
+  onShowWords,
+}: {
+  thread: PlanCommentThread;
+  /** Shows where the words stood, their section's start; none where the quote is only words. */
+  onShowWords?: (() => void) | undefined;
+}): React.JSX.Element {
   return (
     <>
       <div className="comment-gone">
         <TrashIcon />
         {COMMENT_WORDS.GONE}
       </div>
-      <blockquote className="comment-quote" data-gone="true">
+      <ThreadQuote thread={thread} gone onShowWords={onShowWords} />
+    </>
+  );
+}
+
+/** A thread's quote over it: its words, or a press that shows them in the plan where it is offered. */
+function ThreadQuote({
+  thread,
+  gone = false,
+  onShowWords,
+}: {
+  thread: PlanCommentThread;
+  gone?: boolean;
+  onShowWords?: (() => void) | undefined;
+}): React.JSX.Element {
+  if (onShowWords === undefined) {
+    return (
+      <blockquote className="comment-quote" data-gone={gone}>
         {thread.quote}
       </blockquote>
-    </>
+    );
+  }
+  return (
+    <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
+      <button
+        type="button"
+        className="comment-quote comment-quote-link"
+        data-gone={gone}
+        onClick={onShowWords}
+      >
+        {thread.quote}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -828,6 +864,7 @@ function ThreadCard({
   onClose,
   quote = false,
   pointed = false,
+  onShowWords,
 }: {
   thread: PlanCommentThread;
   open: boolean;
@@ -838,6 +875,8 @@ function ThreadCard({
   quote?: boolean;
   /** Whether the pointer is on the thread's words, which the card at rest answers as it answers the pointer itself. */
   pointed?: boolean;
+  /** Shows the thread's words where the plan holds them, which its quote offers; none where the quote is only words. */
+  onShowWords?: (() => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const [sending, setSending] = useState(false);
@@ -849,8 +888,8 @@ function ThreadCard({
   const note = doors.control.notes.get(thread.id);
   const head = (
     <>
-      {gone ? <GoneQuote thread={thread} /> : null}
-      {!gone && quote ? <blockquote className="comment-quote">{thread.quote}</blockquote> : null}
+      {gone ? <GoneQuote thread={thread} onShowWords={onShowWords} /> : null}
+      {!gone && quote ? <ThreadQuote thread={thread} onShowWords={onShowWords} /> : null}
     </>
   );
   if (!open) {
@@ -1700,49 +1739,32 @@ const COMMENTS_FILTER_WORDS = {
   [COMMENTS_FILTER.RESOLVED]: "Resolved",
 } as const satisfies Record<CommentsFilter, string>;
 
-const VIEW_OPTIONS = "View options";
+/** What the Comments tab's toggle says it does, by whether resolved threads are shown. */
+const RESOLVED_PRESS = {
+  SHOW: "Show resolved comments",
+  HIDE: "Show open comments",
+} as const;
 
-/** The Comments tab's view menu, as the Inbox's: which threads it lists, the choice checked, each with how many it holds. */
-function CommentsViewOptions({
-  filter,
-  counts,
-  onFilter,
+/** The Comments tab's toggle, as the Inbox's Needs you is one: pressed, the tab lists the resolved threads in the open ones' place. */
+function ResolvedOnly({
+  shown,
+  onShown,
 }: {
-  filter: CommentsFilter;
-  counts: { readonly open: number; readonly resolved: number };
-  onFilter: (filter: CommentsFilter) => void;
+  shown: boolean;
+  onShown: (shown: boolean) => void;
 }): React.JSX.Element {
-  const menu = useMenu(true);
-  const choices: MenuAction[] = [
-    {
-      label: `${COMMENTS_FILTER_WORDS[COMMENTS_FILTER.OPEN]} (${counts.open})`,
-      icon: <MessageSquareIcon />,
-      checked: filter === COMMENTS_FILTER.OPEN,
-      onSelect: () => onFilter(COMMENTS_FILTER.OPEN),
-    },
-    {
-      label: `${COMMENTS_FILTER_WORDS[COMMENTS_FILTER.RESOLVED]} (${counts.resolved})`,
-      icon: <CircleCheckIcon />,
-      checked: filter === COMMENTS_FILTER.RESOLVED,
-      onSelect: () => onFilter(COMMENTS_FILTER.RESOLVED),
-    },
-  ];
   return (
-    <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={VIEW_OPTIONS}
-          menu={menu.drawn}
-          groups={[choices]}
-          onClose={menu.close}
-        />
-      )}
-    </>
+    <Tooltip label={shown ? RESOLVED_PRESS.HIDE : RESOLVED_PRESS.SHOW}>
+      <button
+        type="button"
+        className="icon-button"
+        aria-label={COMMENTS_FILTER_WORDS[COMMENTS_FILTER.RESOLVED]}
+        aria-pressed={shown}
+        onClick={() => onShown(!shown)}
+      >
+        <CircleCheckIcon className="icon-button-glyph" />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1769,8 +1791,7 @@ export function PlanCommentsTab({
   const control = usePlanCommentsControlOrUndefined();
   const { reveal, revealed } = useCommentFocus();
   const [filter, setFilter] = useState<CommentsFilter>(COMMENTS_FILTER.OPEN);
-  const [opened, setOpened] = useState<string | undefined>(undefined);
-  // A resolved thread asked to be shown, as a link to it asks, opens here under Resolved, the plan holding no card of it.
+  // A resolved thread asked to be shown, as a link to it asks, is listed here under Resolved, the plan holding no card of it.
   const shownAsk = useRef<number | undefined>(undefined);
   const resolvedAsked =
     revealed === undefined
@@ -1781,7 +1802,6 @@ export function PlanCommentsTab({
       return;
     shownAsk.current = revealed.ask;
     setFilter(COMMENTS_FILTER.RESOLVED);
-    setOpened(resolvedAsked.id);
   }, [revealed, resolvedAsked]);
   // The thread a link opened here is scrolled to in the list, once per ask, the list alone moving.
   const list = useRef<HTMLDivElement>(null);
@@ -1789,7 +1809,7 @@ export function PlanCommentsTab({
   useLayoutEffect(() => {
     const element = list.current;
     if (revealed === undefined || element === null || scrolledAsk.current === revealed.ask) return;
-    if (shownAsk.current !== revealed.ask || opened !== revealed.thread) return;
+    if (shownAsk.current !== revealed.ask || filter !== COMMENTS_FILTER.RESOLVED) return;
     const row = element.querySelector(`.comment-card[data-thread="${revealed.thread}"]`);
     if (row === null) return;
     scrolledAsk.current = revealed.ask;
@@ -1808,10 +1828,9 @@ export function PlanCommentsTab({
           {COMMENTS_FILTER_WORDS[filter]}
           <span className="comments-head-count">{listed.length}</span>
         </span>
-        <CommentsViewOptions
-          filter={filter}
-          counts={{ open: open.length, resolved: resolved.length }}
-          onFilter={setFilter}
+        <ResolvedOnly
+          shown={filter === COMMENTS_FILTER.RESOLVED}
+          onShown={(shown) => setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN)}
         />
       </div>
       <div ref={list} className="comments-list scroll-fade">
@@ -1827,18 +1846,22 @@ export function PlanCommentsTab({
         ) : (
           listed.map((thread) => (
             <div key={thread.id} className="comments-row">
+              {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
               <ThreadCard
                 thread={thread}
-                open={opened === thread.id}
+                open
                 quote
                 doors={full}
-                onOpen={() => {
-                  if (openThread(thread)) {
-                    onShowPlan();
-                    reveal(thread.id);
-                  } else setOpened(thread.id);
-                }}
-                onClose={() => setOpened(undefined)}
+                onOpen={() => undefined}
+                onClose={() => undefined}
+                {...(openThread(thread)
+                  ? {
+                      onShowWords: () => {
+                        onShowPlan();
+                        reveal(thread.id);
+                      },
+                    }
+                  : {})}
               />
             </div>
           ))
