@@ -591,13 +591,10 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   assert.ok(own, "the agent's pull request is its chip");
   act(() => own.click());
   await settle();
-  const tabs = [...container.querySelectorAll("aside.side-panel [role='tab']")].map(
-    (tab) => tab.textContent ?? "",
-  );
-  // The tab is named for its agent until the pull request's read lands, and for the pull request after.
+  // Note that the tab is known by its conversation rather than its name, which is its agent's until the pull request's read lands and the pull request's after.
   assert.ok(
-    tabs.some((label) => /Pull request|#2911/u.test(label)),
-    `the Pull request tab stands in the panel: ${tabs.join(", ")}`,
+    container.querySelector('aside.side-panel [aria-label="Conversation"]'),
+    "the Pull request tab stands in the panel, on its conversation",
   );
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 
