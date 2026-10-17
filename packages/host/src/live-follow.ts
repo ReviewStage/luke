@@ -4,8 +4,10 @@ import { Cause, Data, Duration, Effect, Queue, Stream } from "effect";
 /**
  * live-follow.ts -- a read the host follows over Neon Realtime, as Neon's guide says to: sealed statements subscribed to at the address the service names, and renewed before they expire.
  *
- * Each read is one or more parts, one sealed statement each, all on one
- * socket ("Subscribe to the sealed query"). Once every part has its first
+ * Each read is one or more parts, one sealed statement each, and every read
+ * following one address shares one client and its one socket ("Create one
+ * client for the whole app, because every subscription shares its
+ * connection"). Once every part has its first
  * result, every change of any part is the parts' rows whole, undecoded, for
  * the caller to decode at this boundary. Every seal is renewed ten seconds
  * before the earliest expires, a fetch that failed asked again a second
@@ -41,12 +43,61 @@ export interface LiveClient {
 }
 
 /**
- * Realtime's own client, at the address the service named, loaded only when
- * a read is first followed, so its protocol's validators stay out of the
- * web app's first load.
+ * One client per address, shared by every read following there: each open
+ * takes a handle, and the client's socket closes once the last handle is
+ * let go. Neon's client multiplexes every subscription over its one socket,
+ * so the host holds one socket however many reads it follows, rather than
+ * one per read. The client is opened once per address, however many reads
+ * wait on it while it loads; one that failed to open is forgotten, so the
+ * next read opens it afresh.
  */
-export const openRealtimeClient = (url: string): Promise<LiveClient> =>
-  import("@neon/realtime/client").then(({ createRealtimeClient }) => createRealtimeClient({ url }));
+export function shareLiveClients(
+  open: (url: string) => LiveClient | PromiseLike<LiveClient>,
+): (url: string) => Promise<LiveClient> {
+  const standing = new Map<string, { readonly client: Promise<LiveClient>; holders: number }>();
+  const forget = (url: string, shared: { readonly client: Promise<LiveClient> }) => {
+    if (standing.get(url) === shared) standing.delete(url);
+  };
+  return async (url) => {
+    let shared = standing.get(url);
+    if (shared === undefined) {
+      const opening = { client: Promise.resolve(url).then(open), holders: 0 };
+      opening.client.catch(() => forget(url, opening));
+      standing.set(url, opening);
+      shared = opening;
+    }
+    const held = shared;
+    held.holders += 1;
+    let client: LiveClient;
+    try {
+      client = await held.client;
+    } catch (error) {
+      held.holders -= 1;
+      throw error;
+    }
+    let holding = true;
+    return {
+      subscribe: (query) => client.subscribe(query),
+      close: () => {
+        if (!holding) return;
+        holding = false;
+        held.holders -= 1;
+        if (held.holders > 0) return;
+        forget(url, held);
+        client.close();
+      },
+    };
+  };
+}
+
+/**
+ * Realtime's own client at the address the service named, shared by every
+ * read following there, and loaded only when a read is first followed, so
+ * its protocol's validators stay out of the web app's first load.
+ */
+export const openRealtimeClient = shareLiveClients((url) =>
+  import("@neon/realtime/client").then(({ createRealtimeClient }) => createRealtimeClient({ url })),
+);
 
 /** A read sealed for following: where to subscribe, and each part's sealed statement. */
 export interface SealedRead<Part extends string> {
