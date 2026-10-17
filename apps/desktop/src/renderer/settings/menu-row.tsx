@@ -1,5 +1,5 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { EllipsisIcon, IconButton, SettingsRow, useMenu } from "@luke/ui";
+import { EllipsisIcon, IconButton, SettingsRow, type SettingsRowControl, useMenu } from "@luke/ui";
 import { type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
@@ -29,9 +29,13 @@ type MenuRowActions = readonly MenuAction[] | readonly (readonly MenuAction[])[]
 interface MenuRowWords {
   label: ReactNode;
   description?: ReactNode;
+  /** What went wrong with the row's last act, or nothing while none did. */
+  error?: ReactNode;
   /** The provider's or service's mark the row leads with. */
   leading?: ReactNode;
   control?: ReactNode;
+  /** A control drawn from the row's ids, where the row's words and error must describe it. */
+  describedControl?: (control: SettingsRowControl) => ReactNode;
 }
 
 /** What the row draws: its words for the shared row, or its own children in the window's row. */
@@ -95,10 +99,16 @@ export function MenuRow({
             {more}
           </>
         ) : (
-          <SettingsRow leading={row.leading} label={row.label} description={row.description}>
-            {() => (
+          <SettingsRow
+            leading={row.leading}
+            label={row.label}
+            description={row.description}
+            error={row.error}
+          >
+            {(control) => (
               <>
                 {row.control}
+                {row.describedControl?.(control)}
                 {more}
               </>
             )}
