@@ -1,23 +1,81 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "stream",
+  // Strict mode hands a task only the variables named here and turbo's own
+  // short list (PATH, HOME, CI and the like), and none are named: no check
+  // reads the environment, and a task that never sees a secret can neither
+  // print one into a cached log nor bake one into a cached hash. The desktop
+  // build's Sentry token and DSN stay with `pnpm package`, which turbo never runs.
   "envMode": "strict",
+  // Files outside every workspace that a workspace reads: the web app imports
+  // the changelog and the privacy notice. The brand artwork the web app and
+  // the desktop build read is @luke/brand's, which `transit` tracks.
   "globalDependencies": [".nvmrc", "tsconfig.base.json", "CHANGELOG.md", "PRIVACY.md"],
   "tasks": {
-    "transit": { "dependsOn": ["^transit"] },
-    "typecheck": { "dependsOn": ["^transit"], "outputs": [] },
-    "test:vitest": { "dependsOn": ["^transit"], "outputs": [] },
-    "test:vitest:1": { "dependsOn": ["^transit"], "outputs": [] },
-    "test:vitest:2": { "dependsOn": ["^transit"], "outputs": [] },
-    "test:vitest:3": { "dependsOn": ["^transit"], "outputs": [] },
+    // A task with no script anywhere, whose hash is its workspace's files and
+    // the transit hashes of the workspaces it depends on. A task that depends
+    // on `^transit` is therefore invalidated by a change to the source of any
+    // workspace it imports, at any depth, without waiting for that
+    // workspace's own run of the same task. Workspaces import one another's
+    // source rather than a build, so this is the whole of their dependency.
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    // No task declares outputs: each is a check, and what it leaves behind
+    // (the build's dist/ included) is read by nothing that runs after it. A
+    // hit replays the log and restores no files, so no bundle or stamped
+    // commit ever travels through the cache.
+    "typecheck": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    // One workspace's tests. apps/web reads beyond its own graph in one test,
+    // tests/api-callers.test.ts, which walks every client in the repository;
+    // its check is the one scripts/repository-checks.sh runs on every
+    // check.sh and in CI outside the cache, so web's tests do not hash the
+    // whole repository for its sake.
+    "test:vitest": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    // @luke/service's suite in three vitest shards, one per CI runner.
+    "test:vitest:1": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    "test:vitest:2": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    "test:vitest:3": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    // Web's store tests against the real Postgres CI's postgres job stands.
+    // The database URL is hashed, not passed through, because without it the
+    // same files run on PGlite: a pass there must never replay as a pass on
+    // Postgres. CI's URL names a throwaway local server and carries no secret.
+    // The runner starts vitest from the root, so the root config is an input.
     "test:store": {
       "dependsOn": ["^transit"],
       "env": ["LUKE_STORE_TEST_DATABASE_URL"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/vitest.config.ts"],
       "outputs": []
     },
-    "build": { "dependsOn": ["^transit"], "outputs": [] },
-    "//#lint": { "outputs": [] },
-    "//#knip": { "outputs": [] },
-    "//#discarded-effect": { "outputs": [] }
+    "build": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    // The whole-repository checks each read every file in one program, so
+    // each is one root task whose inputs are every file the repository tracks.
+    "//#lint": {
+      "outputs": []
+    },
+    "//#knip": {
+      "outputs": []
+    },
+    "//#discarded-effect": {
+      "outputs": []
+    }
   }
 }
