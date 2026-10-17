@@ -1,3 +1,4 @@
+// cookie-session.test.ts -- a browser's session cookie on the hosted routes, through the adaptor and its origin guard.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
