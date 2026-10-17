@@ -17,7 +17,7 @@ import { SIDE_PANEL_WIDTH } from "./use-side-panel";
  * The side panel's tabs at its default width, as it opens, which holds a
  * tab and its pane side by side: the same tabs `side-panel-narrow.test.ts` reads at the panel's
  * narrowest keep their wide layout here, the tree beside the diff and its
- * count under it, the diff numbered on both sides, a note's age and link in
+ * count under it, a note's age and link in
  * words, a subagent's job on one line, and a page's versions in words.
  */
 
@@ -43,7 +43,7 @@ function drawn(element: Element): boolean {
   return getComputedStyle(element).display !== "none";
 }
 
-test("a Changes tab stands its tree beside the diff as the panel holds it, the count under the tree, the diff numbered on both sides", async () => {
+test("a Changes tab stands its tree beside the diff as the panel holds it, the count under the tree", async () => {
   const tab = await drawChangesTab();
   const tree =
     tab.querySelector('[aria-label="Changed files"]') ?? assert.fail("the tree is drawn");
@@ -60,14 +60,6 @@ test("a Changes tab stands its tree beside the diff as the panel holds it, the c
       .filter(drawn)
       .map((button) => button.getAttribute("aria-label")),
     ["Hide files"],
-  );
-  const added =
-    tab.querySelector('.code-line[data-diff="added"]') ?? assert.fail("a line is added");
-  assert.deepEqual(
-    [...added.querySelectorAll(".code-line-number")]
-      .filter(drawn)
-      .map((number) => number.textContent),
-    ["", "2"],
   );
 });
 

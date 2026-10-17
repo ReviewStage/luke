@@ -618,7 +618,13 @@ function stripTabs(input: {
       ).then((messages) =>
         messages === undefined
           ? undefined
-          : agentTranscript({ title: label, messages, brief: undefined, task }),
+          : agentTranscript({
+              title: label,
+              messages,
+              brief: undefined,
+              task,
+              chatOn: agents.chatOn,
+            }),
       );
     return {
       tab,
@@ -987,6 +993,8 @@ export function workerCardReading(
         messages,
         brief: undefined,
         task: worker.task,
+        // A worker's own lines carry no chat notice, which reaches the agent's turn alone.
+        chatOn: false,
       }),
   };
 }
@@ -1094,7 +1102,13 @@ function subagentCardReading(
       choice: delegationChoices(delegation, tab.subagent, agents, held).delegated,
       transcript:
         messages &&
-        agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
+        agentTranscript({
+          title: label,
+          messages,
+          brief: undefined,
+          task: delegation.task,
+          chatOn: agents.chatOn,
+        }),
     };
   };
 }

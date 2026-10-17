@@ -1,5 +1,6 @@
 {
   "name": "@luke/runtime",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "Effect infrastructure: storage, timers, serial queues, single-flight, execution, and test support",

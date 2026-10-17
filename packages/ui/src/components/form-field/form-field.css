@@ -16,6 +16,7 @@
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
     font-weight: var(--luke-weight-medium);
+    overflow-wrap: anywhere;
   }
 
   :is(.luke-field-description, .luke-field-error) {
