@@ -6,6 +6,7 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
+import { Button } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -310,7 +311,7 @@ export function EditableTitle({
     // biome-ignore lint/a11y/useSemanticElements: the title's block holds its words, not a form's controls, so it is no `<fieldset>`.
     <div
       ref={block}
-      className={`plan-title-block ${DOCUMENT_BLOCK_CLASS}`}
+      className={DOCUMENT_BLOCK_CLASS}
       role="group"
       tabIndex={entry ? 0 : -1}
       aria-label="Title"
@@ -529,12 +530,8 @@ function DocumentNote({
     return (
       <div className="plan-editor-note" role="alert">
         <span>{CONFLICT_NOTE}</span>
-        <button type="button" className="toolbar-button" onClick={editing.keepMine}>
-          Keep mine
-        </button>
-        <button type="button" className="toolbar-button" onClick={editing.takeLukes}>
-          Use Luke's
-        </button>
+        <Button onClick={editing.keepMine}>Keep mine</Button>
+        <Button onClick={editing.takeLukes}>Use Luke's</Button>
       </div>
     );
   }
