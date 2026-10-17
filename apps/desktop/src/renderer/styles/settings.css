@@ -364,13 +364,6 @@
   cursor: not-allowed;
 }
 
-.settings-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
-}
-
 /* A row's words that say something failed, in the failure's red over the
    muted ink every other detail wears. */
 .settings-copy .error-message {

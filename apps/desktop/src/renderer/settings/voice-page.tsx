@@ -4,7 +4,15 @@ import {
   type SettingsRowsInput,
 } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { CheckIcon, ExternalIcon } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  CheckIcon,
+  ExternalIcon,
+  IconButton,
+  SettingsRow,
+  SettingsSection,
+} from "@luke/ui";
 import {
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
@@ -14,7 +22,6 @@ import type { MicrophoneControl } from "@luke/voice/settings-controls";
 import { Tooltip } from "../tooltip";
 import { AttentionMark } from "./marks";
 import { SchemaSettingRows } from "./schema-rows";
-import { SettingsGroup } from "./settings-group";
 import type { SettingsWrites } from "./writes";
 
 /**
@@ -30,6 +37,10 @@ import type { SettingsWrites } from "./writes";
  * Luke *is* to the ear — offered as one value from a small fixed set: a
  * chip naming it, and under it the app's own menu, which stands above the
  * chip where a window sized to the panel leaves no room below.
+ *
+ * Each stage is `@luke/ui`'s `SettingsSection` and each line its
+ * `SettingsRow`; the microphone's System Settings door is the quiet
+ * `IconButton`, and Allow the outline `Button`.
  */
 export function VoiceSection({
   view,
@@ -50,23 +61,25 @@ export function VoiceSection({
       {/* While voice cannot run, the one section says how to turn it on rather
           than drawing settings for a feature two steps from working. */}
       {settings.voiceAvailable ? null : (
-        <SettingsGroup>
-          <div className="settings-row">
-            <span className="settings-copy">
+        <SettingsSection>
+          <SettingsRow
+            label={
               <span className="settings-name">
-                <strong>Voice</strong>
+                Voice
                 <AttentionMark note={VOICE_KEYLESS_NOTE} />
               </span>
-              <small>{VOICE_KEYLESS_NOTE}</small>
-            </span>
-          </div>
-        </SettingsGroup>
+            }
+            description={VOICE_KEYLESS_NOTE}
+          >
+            {() => null}
+          </SettingsRow>
+        </SettingsSection>
       )}
       {/* Drawn only once there is a voice for the microphone to reach: until
           then, the permission guards a feature that cannot run, and the page
           holds the one thing to do next rather than a queue of them. */}
       {settings.voiceAvailable ? (
-        <SettingsGroup title="Permissions">
+        <SettingsSection title="Permissions">
           {/* Access, not use. The talk key is what opens the microphone, so a
               button here could only ever repeat what the key already does — the
               line answers the one question it can: whether Luke is allowed. It
@@ -76,43 +89,43 @@ export function VoiceSection({
               the same words: what Luke has been let at, and whether it is on. The
               check and the attention mark trade the same spot: allowed, or the
               next thing needing a hand. */}
-          <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.MICROPHONE)}>
-            <span className="settings-copy">
-              <span className="settings-name">
-                <strong>Microphone</strong>
-                {microphoneRow.ready ? (
-                  <CheckIcon />
-                ) : (
-                  <AttentionMark note={MICROPHONE_UNGRANTED_NOTE} />
-                )}
-              </span>
-              {microphoneRow.detail ? <small>{microphoneRow.detail}</small> : undefined}
-            </span>
-            <span className="settings-actions">
-              {microphoneRow.offerSystemSettings ? (
-                <Tooltip label="System Settings">
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label="Open Privacy & Security in System Settings"
-                    onClick={microphone.onOpenSettings}
-                  >
-                    <ExternalIcon />
-                  </button>
-                </Tooltip>
-              ) : null}
-              {microphoneRow.offerAccess ? (
-                <button
-                  type="button"
-                  className="toolbar-button bordered-button"
-                  onClick={microphone.onRequest}
-                >
-                  Allow
-                </button>
-              ) : null}
-            </span>
+          {/* Note that the row stands in a wrapper wearing its search anchor,
+              because the shared row takes no attribute of a caller's. */}
+          <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.MICROPHONE)}>
+            <SettingsRow
+              label={
+                <span className="settings-name">
+                  Microphone
+                  {microphoneRow.ready ? (
+                    <CheckIcon />
+                  ) : (
+                    <AttentionMark note={MICROPHONE_UNGRANTED_NOTE} />
+                  )}
+                </span>
+              }
+              description={microphoneRow.detail}
+            >
+              {() => (
+                <>
+                  {microphoneRow.offerSystemSettings ? (
+                    <Tooltip label="System Settings">
+                      <IconButton
+                        icon={<ExternalIcon />}
+                        label="Open Privacy & Security in System Settings"
+                        onClick={microphone.onOpenSettings}
+                      />
+                    </Tooltip>
+                  ) : null}
+                  {microphoneRow.offerAccess ? (
+                    <Button variant={BUTTON_VARIANT.OUTLINE} onClick={microphone.onRequest}>
+                      Allow
+                    </Button>
+                  ) : null}
+                </>
+              )}
+            </SettingsRow>
           </div>
-        </SettingsGroup>
+        </SettingsSection>
       ) : null}
       {/* `ready` already folds the account in — a microphone with no voice to
           reach never reports itself ready — so the controls stand exactly
@@ -131,13 +144,13 @@ function VoiceControlsSection({
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
-    <SettingsGroup title="Conversation">
+    <SettingsSection title="Conversation">
       <SchemaSettingRows
         page={SCHEMA_SETTINGS_PAGE.VOICE}
         section={SETTING_SECTION.CONTROLS}
         view={view}
         writes={writes}
       />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
