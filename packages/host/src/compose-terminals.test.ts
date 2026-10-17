@@ -20,6 +20,7 @@ import {
 } from "@luke/gateway";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { noNetwork } from "@luke/wire/testing";
 import { type Cause, Duration, Effect, Exit, Queue, Result, Stream } from "effect";
 import { Base64 } from "effect/encoding";
 import { TestClock } from "effect/testing";
@@ -32,7 +33,6 @@ import {
   type TerminalSocketFrame,
   type TerminalSocketOpening,
 } from "./compose-terminals.js";
-import { noNetworkHttpClient } from "./testing/no-network.js";
 
 /**
  * A coding agent's terminals as the host answers the desktop for them, over
@@ -140,7 +140,7 @@ function subject(options: { signedIn?: boolean; bearers?: string[] } = {}) {
           Effect.sync(() => void opened.push({ url, authorization: headers.authorization })),
           Queue.take(openings),
         ),
-    }).pipe(Effect.provide(noNetworkHttpClient));
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);

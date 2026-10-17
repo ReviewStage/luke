@@ -5,10 +5,9 @@ import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
-import { fakeHttpClientLayer, jsonResponse } from "@luke/wire/testing";
+import { jsonResponse, noNetwork, recordedRequest, recordingHttpClient } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { composeIssues, type IssuesClient } from "./compose-issues.js";
-import { noNetworkHttpClient } from "./testing/no-network.js";
 
 /**
  * The issues concern: behind a closed gate nothing is asked of the service,
@@ -63,7 +62,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-    }).pipe(Effect.provide(noNetworkHttpClient));
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
@@ -136,7 +135,7 @@ it.effect("params of the wrong shape are refused before anything travels", () =>
 
 it.effect("the service is asked over the HTTP client the host was handed", () =>
   Effect.gen(function* () {
-    const sent: { url: string; authorization: string | null }[] = [];
+    const http = recordingHttpClient(() => jsonResponse({ issues: [ISSUE] }));
     const composer = yield* composeIssues({
       kernel: { runMode: { sendsNetwork: true } },
       account: { capabilitiesActive: () => true },
@@ -145,22 +144,15 @@ it.effect("the service is asked over the HTTP client the host was handed", () =>
         readAccessToken: () => Effect.succeed("bearer-1"),
         refreshAccount: () => Effect.void,
       }),
-    }).pipe(
-      Effect.provide(
-        fakeHttpClientLayer((url, init) => {
-          sent.push({ url, authorization: new Headers(init.headers).get("authorization") });
-          return jsonResponse({ issues: [ISSUE] });
-        }),
-      ),
-    );
+    }).pipe(Effect.provide(http.layer));
     const list = composer.methods[GATEWAY_METHOD.ISSUES_LIST];
     assert.ok(list, "no handler for the issues list");
 
     const listed = yield* list({ workspaceId: WORKSPACE_ID }, context);
 
     assert.deepEqual(listed, { issues: [ISSUE] });
-    assert.equal(sent.length, 1);
-    assert.equal(sent[0]?.authorization, "Bearer bearer-1");
-    assert.ok(sent[0]?.url.startsWith("https://tryluke.test/"));
+    const sent = recordedRequest(http.requests);
+    assert.equal(sent.authorization, "Bearer bearer-1");
+    assert.ok(sent.url.startsWith("https://tryluke.test/"));
   }),
 );

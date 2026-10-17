@@ -40,9 +40,9 @@ import {
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
-import { noNetworkHttpClient } from "./testing/no-network.js";
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -415,7 +415,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-    }).pipe(Effect.provide(noNetworkHttpClient));
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
