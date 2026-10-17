@@ -431,11 +431,19 @@ const buttons = (within: Element, words: string) =>
 const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
+/** Every row of the page, the shared row and the window's own alike. */
+const ROWS = ".settings-row, .luke-settings-row";
+
+/** What a row names: the shared row's label, or the window's own row's first words. */
+const nameOf = (row: Element) =>
+  row.matches(".luke-settings-row")
+    ? row.querySelector('[id$="label"]')?.textContent
+    : row.querySelector("strong")?.firstChild?.textContent;
+
 /** The page's row naming `name`, the reader's own beside its You. */
 const rowNamed = (page: HTMLElement, name: string) =>
-  [...page.querySelectorAll<HTMLElement>(".settings-row")].find(
-    (row) => row.querySelector("strong")?.firstChild?.textContent === name,
-  ) ?? assert.fail(`no ${name} row`);
+  [...page.querySelectorAll<HTMLElement>(ROWS)].find((row) => nameOf(row) === name) ??
+  assert.fail(`no ${name} row`);
 
 /** The Members row naming `name`, the reader's own beside its You. */
 const memberNamed = (page: HTMLElement, name: string) =>
@@ -1206,13 +1214,15 @@ const githubGroup = (page: HTMLElement) =>
 
 /** What a row says: its name, and the line under it. */
 const rowWords = (row: HTMLElement) => [
-  row.querySelector("strong")?.textContent,
-  row.querySelector("small")?.textContent,
+  nameOf(row),
+  row.matches(".luke-settings-row")
+    ? row.querySelector('[id$="description"]')?.textContent
+    : row.querySelector("small")?.textContent,
 ];
 
 /** What every GitHub row of the Integrations group says, in order: every row but Linear's, which the group holds beside them. */
 const integrationRows = (page: HTMLElement) =>
-  [...githubGroup(page).querySelectorAll<HTMLElement>(".settings-row")]
+  [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)]
     .map(rowWords)
     .filter(([name]) => name !== "Linear");
 
@@ -1371,7 +1381,7 @@ test("a member reads every account connected, or is told to ask an owner or admi
   for (const { page } of [connected, unconnected]) {
     const group = githubGroup(page);
     assert.equal(group.querySelector("button"), null);
-    for (const row of group.querySelectorAll<HTMLElement>(".settings-row")) {
+    for (const row of group.querySelectorAll<HTMLElement>(ROWS)) {
       act(() => {
         row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
       });
