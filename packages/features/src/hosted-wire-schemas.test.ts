@@ -201,6 +201,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentGitHubImageViewSchema: codingAgentView.codingAgentGitHubImageViewSchema,
     codingAgentInboxParamsSchema: codingAgentView.codingAgentInboxParamsSchema,
     codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
+    codingAgentInboxScopeSchema: codingAgentView.codingAgentInboxScopeSchema,
+    codingAgentInboxChangedSchema: codingAgentView.codingAgentInboxChangedSchema,
     codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
     codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
     codingAgentAccountInboxAnswerViewSchema:

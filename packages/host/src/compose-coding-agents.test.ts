@@ -281,10 +281,11 @@ function fakeService() {
         asked.push(`page:${agentId}`);
         return { agent: PAGE };
       }),
+    // The held read answers at once from the start and is held from its own cursor on, as the service holds it while nothing changed.
     agentInbox: (agentId, after) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         asked.push(`agent-inbox:${agentId}:${after}`);
-        return { items: [ITEM], cursor: "8" };
+        return after === "8" ? Effect.never : Effect.succeed({ items: [ITEM], cursor: "8" });
       }),
     pullRequest: (agentId) =>
       Effect.sync(() => {
@@ -361,9 +362,9 @@ function fakeService() {
         return { text: "Run the tests" };
       }),
     inbox: (taskId, after) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         asked.push(`inbox:${taskId}:${after}`);
-        return { items: [ITEM], cursor: "7" };
+        return after === "7" ? Effect.never : Effect.succeed({ items: [ITEM], cursor: "7" });
       }),
     inboxAttachment: (itemId, attachmentId) =>
       Effect.sync(() => {
@@ -453,6 +454,11 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       events.flatMap((event) =>
         event.kind === GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED ? [event.payload] : [],
       );
+    /** Every followed plan's or agent's inbox the host told, in order. */
+    const told = () =>
+      events.flatMap((event) =>
+        event.kind === GATEWAY_EVENT.INBOX_CHANGED ? [event.payload] : [],
+      );
     return {
       call,
       asked: service.asked,
@@ -460,6 +466,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       sealScope: service.sealScope,
       realtime,
       inboxes,
+      told,
       reset: composer.reset,
     };
   });
@@ -1014,4 +1021,125 @@ it.effect(
       );
       assert.deepEqual(held.realtime.opened, []);
     }),
+);
+
+const PLAN_SCOPE = { kind: "plan", id: TASK_ID } as const;
+const AGENT_SCOPE = { kind: "agent", id: AGENT_ID } as const;
+
+it.effect(
+  "a followed plan's inbox is told from its Realtime subscription once its rows land, again each time they move and never when a delivery moved nothing, and never from the held read; letting it go ends the telling",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealScope, realtime, told } = yield* subject();
+      sealScope(SEALED_SCOPE);
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE), {});
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
+      assert.deepEqual(told(), []);
+
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      const closed = {
+        ...ITEM_ROW,
+        revision: 3,
+        status: INBOX_STATUS.CLOSED,
+        closedReason: "Done",
+      };
+      realtime.deliver("items", [closed]);
+      yield* settled;
+      assert.deepEqual(told(), [
+        { scope: PLAN_SCOPE, inbox: { items: [ITEM] } },
+        {
+          scope: PLAN_SCOPE,
+          inbox: {
+            items: [{ ...ITEM, revision: 3, status: INBOX_STATUS.CLOSED, closedReason: "Done" }],
+          },
+        },
+      ]);
+      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
+      assert.ok(!JSON.stringify(told()).includes("capability"));
+
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* settled;
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      assert.equal(told().length, 2);
+      // The subscription outlives the follow a while, so a window coming back finds it standing.
+      yield* TestClock.adjust("30 seconds");
+      yield* settled;
+      assert.deepEqual(realtime.closed, [SEALED_SCOPE.url]);
+    }),
+);
+
+it.effect(
+  "a followed inbox whose subscription says nothing within the hold is told the held read meanwhile, and one whose subscription stops for good is told the held read from then on",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealScope, realtime, told } = yield* subject();
+      sealScope(SEALED_SCOPE);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      yield* TestClock.adjust("20 seconds");
+      yield* settled;
+      assert.deepEqual(told(), [{ scope: PLAN_SCOPE, inbox: { items: [ITEM] } }]);
+
+      realtime.fail("items");
+      yield* settled;
+      assert.deepEqual(asked, [
+        `plan-inbox-live:${TASK_ID}`,
+        `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
+        `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
+        `inbox:${TASK_ID}:7`,
+      ]);
+      assert.equal(told().length, 2);
+    }),
+);
+
+it.effect(
+  "an agent's inbox the service seals nothing for is followed by its held read, one after another; one the account does not reach is told not found; and behind a closed gate every follow is told unanswered",
+  () =>
+    Effect.gen(function* () {
+      const held = yield* subject();
+      yield* held.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* settled;
+      assert.deepEqual(held.asked, [
+        `agent-inbox-live:${AGENT_ID}`,
+        `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
+        `agent-inbox:${AGENT_ID}:8`,
+      ]);
+      assert.deepEqual(held.told(), [{ scope: AGENT_SCOPE, inbox: { items: [ITEM] } }]);
+      assert.deepEqual(held.realtime.opened, []);
+
+      const refused = yield* subject();
+      refused.sealScope({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* settled;
+      assert.deepEqual(refused.told(), [
+        { scope: AGENT_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+      ]);
+
+      const signedOut = yield* subject({ signedIn: false });
+      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      assert.deepEqual(signedOut.told(), [
+        { scope: PLAN_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      assert.deepEqual(signedOut.asked, []);
+    }),
+);
+
+it.effect("a sign-out lets every followed inbox go", () =>
+  Effect.gen(function* () {
+    const { call, sealScope, realtime, told, reset } = yield* subject();
+    sealScope(SEALED_SCOPE);
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+    yield* settled;
+    yield* reset;
+    yield* settled;
+    assert.deepEqual(realtime.closed, [SEALED_SCOPE.url]);
+    assert.deepEqual(realtime.subscribed(), []);
+    assert.deepEqual(told(), []);
+  }),
 );

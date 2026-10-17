@@ -45,6 +45,7 @@ import {
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxAttachmentViewSchema,
   codingAgentInboxParamsSchema,
+  codingAgentInboxScopeSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -490,6 +491,13 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  /**
+   * A plan's inbox, or one agent's, followed by the window that asks and let
+   * go by it: what it holds is pushed to that window alone on `app:inbox`,
+   * each time it changes, until the window lets it go or its page is gone.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  CODING_AGENTS_INBOX_UNFOLLOW: "codingAgents.inboxUnfollow",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
@@ -1363,6 +1371,16 @@ export const ACT = {
     payload: actSchema(codingAgentAgentInboxParamsSchema),
     result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
     refusal: "Could not read the agent's inbox on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: {
+    payload: actSchema(codingAgentInboxScopeSchema),
+    result: answersNothing,
+    refusal: "Could not follow the inbox on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_UNFOLLOW]: {
+    payload: actSchema(codingAgentInboxScopeSchema),
+    result: answersNothing,
+    refusal: "Could not let the inbox go on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: {
     payload: actSchema(codingAgentInboxAnswerParamsSchema),

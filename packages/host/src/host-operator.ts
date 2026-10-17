@@ -38,7 +38,9 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxChanged,
   type CodingAgentInboxParams,
+  type CodingAgentInboxScope,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -64,6 +66,7 @@ import {
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxChangedSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
@@ -573,6 +576,12 @@ export interface HostOperator {
   codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
   /** What waits on the developer across the account, whole, each time it changes while it is followed. */
   onAccountInboxChanged(listener: (inbox: AccountInboxAnswer) => void): () => void;
+  /** One plan's or agent's inbox, followed from now until let go or signed out, heard through `onInboxChanged`; following again starts over. */
+  codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  /** One plan's or agent's inbox let go: nothing more is heard of it until it is followed again. */
+  codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  /** A followed inbox, its items whole or why there are none, each time it changes. */
+  onInboxChanged(listener: (changed: CodingAgentInboxChanged) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   codingAgentInboxAttachment(
     params: CodingAgentInboxAttachmentParams,
@@ -1620,6 +1629,26 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           Result.getOrUndefined(
             readEither(accountInboxAnswerSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    codingAgentInboxFollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id }),
+      ),
+    codingAgentInboxUnfollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, {
+          kind: scope.kind,
+          id: scope.id,
+        }),
+      ),
+    onInboxChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INBOX_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentInboxChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),

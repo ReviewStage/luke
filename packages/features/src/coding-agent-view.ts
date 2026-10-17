@@ -23,6 +23,7 @@ import {
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxImageTypeSchema,
+  inboxItemSchema,
 } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
@@ -378,6 +379,31 @@ export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSche
 export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
 
 export type CodingAgentInboxAnswerView = typeof codingAgentInboxAnswerViewSchema.Type;
+
+/** Whose inbox is followed: a plan's, or one agent's. */
+export const INBOX_SCOPE_KIND = {
+  PLAN: "plan",
+  AGENT: "agent",
+} as const;
+
+/** One plan's inbox, or one agent's, as the window follows it: which kind, and the plan's or agent's id. */
+export const codingAgentInboxScopeSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals(Object.values(INBOX_SCOPE_KIND)),
+  id: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentInboxScope = typeof codingAgentInboxScopeSchema.Type;
+
+/** A followed inbox as it now stands, as the window hears it pushed: its items whole, or why there are none. */
+export const codingAgentInboxChangedSchema = EffectSchema.Struct({
+  scope: codingAgentInboxScopeSchema,
+  inbox: EffectSchema.Union([
+    EffectSchema.Struct({ items: EffectSchema.Array(inboxItemSchema) }),
+    failed,
+  ]),
+});
+
+export type CodingAgentInboxChanged = typeof codingAgentInboxChangedSchema.Type;
 
 /** An answer to one item of the inbox, as the window asks it: the item, and the answer request the service takes, its key the window's own. */
 export const codingAgentInboxAnswerParamsSchema = EffectSchema.Struct({
