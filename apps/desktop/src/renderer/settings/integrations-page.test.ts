@@ -747,7 +747,7 @@ function rowNamed(page: HTMLElement, name: string): Element {
 function shownTools(page: HTMLElement) {
   return [...page.querySelectorAll(".integration-tools-panel .integration-tool")].map((tool) => [
     toolName(tool),
-    tool.querySelector(".integration-tool-badge")?.textContent ?? undefined,
+    tool.querySelector(".luke-badge")?.textContent ?? undefined,
   ]);
 }
 
@@ -978,7 +978,7 @@ test("an opened row holds its first tool, whose page stands beside the list, and
     "every",
   );
   assert.deepEqual(
-    [...detail.querySelectorAll(".integration-tool-hint")].map((hint) => hint.textContent),
+    [...detail.querySelectorAll(".integration-tool-hints li")].map((hint) => hint.textContent),
     ["Read-only", "Only Vercel's own data"],
   );
   assert.equal(detail.querySelector(".integration-tool-parameter-name")?.textContent, "limit");
@@ -1111,7 +1111,7 @@ test("a tool its server says nothing of has a page that says so", async () => {
   openRow(page, "Vercel");
 
   assert.equal(page.querySelector(".integration-tool-description"), null);
-  assert.equal(page.querySelector(".integration-tool-silent")?.textContent, "No description.");
+  assert.equal(page.querySelector(".integration-tool-detail-body")?.textContent, "No description.");
   assert.equal(page.querySelector(".integration-tool-hints"), null);
   assert.equal(page.querySelector(".integration-tool-parameters"), null);
 });
