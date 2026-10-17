@@ -108,6 +108,21 @@ test("a replay with no note opens on its brief and the replay alone, a coding ag
   assert.equal(note === undefined ? undefined : messageWords(note), "Go.");
 });
 
+test("the same first message answers the same opening each time it is read, so a render hands its rows the same brief and replay; a new message reads afresh", () => {
+  const text = firstMessageText("# Invite flow", replay(), "Try five days instead.");
+  const message = first(text);
+  const opening = replayOpening(message);
+  assert.ok(opening !== undefined);
+  assert.equal(replayOpening(message), opening);
+  const again = replayOpening(first(text));
+  assert.notEqual(again, opening);
+  assert.deepEqual(again, opening);
+  // A message with no replay is remembered as having none.
+  const plain = first("# Invite flow");
+  assert.equal(replayOpening(plain), undefined);
+  assert.equal(replayOpening(plain), undefined);
+});
+
 test("a first message with no replay, or one whose markers do not add up, has no opening of its own", () => {
   assert.equal(replayOpening(first("# Invite flow")), undefined);
   const text = firstMessageText("# Invite flow", replay(), undefined);
