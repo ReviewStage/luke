@@ -7,14 +7,24 @@ import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { repositoryPinsAnswerSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { makeSignature } from "better-auth/crypto";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { afterEach, vi } from "vitest";
 import { repositoryPinsApp } from "../github/repository-pins-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import type { UserIdResolver } from "../http/http-effect.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
-import { hostedUserId, requestUserId, type UserInfoEndpoint } from "./bearer.js";
+import { auth } from "./auth.js";
+import {
+  hostedUserId,
+  requestUserId,
+  resolveHostedBearerUserId,
+  resolveHostedUserId,
+  type SessionEndpoint,
+  type UserInfoEndpoint,
+} from "./bearer.js";
 
 /**
  * The account a hosted request names: its OAuth bearer where it carries
@@ -33,6 +43,16 @@ const ORIGIN = "https://luke.test";
 /** The one OAuth token the fake userinfo endpoint knows: Ada's. */
 const ADA_BEARER = "Bearer oauth-token-of-ada";
 
+/** A secret no deployment of this suite signs under. */
+const FOREIGN_SECRET = "another-deployment-secret-with-enough-length";
+
+/** A userinfo endpoint that knows no token. */
+const NO_TOKEN: UserInfoEndpoint = () => Effect.succeed(undefined);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 function request(headers: Record<string, string> = {}): Request {
   return new Request("https://luke.test/api/voice/mint", { method: "POST", headers });
 }
@@ -41,6 +61,19 @@ function request(headers: Record<string, string> = {}): Request {
 function read(headers: Record<string, string>): Request {
   return new Request(new URL(HOSTED_SERVICE_PATH.REPOSITORY_PINS, ORIGIN), { headers });
 }
+
+/**
+ * The cookie given, naming the same session but signed under a secret the
+ * deployment never held: a signature as well formed as the deployment's own.
+ */
+const signedElsewhere = (cookie: string) =>
+  Effect.promise(async () => {
+    const at = cookie.indexOf("=");
+    const signed = decodeURIComponent(cookie.slice(at + 1));
+    const token = signed.slice(0, signed.lastIndexOf("."));
+    const forged = `${token}.${await makeSignature(token, FOREIGN_SECRET)}`;
+    return `${cookie.slice(0, at)}=${encodeURIComponent(forged)}`;
+  });
 
 /**
  * Two accounts on Better Auth over its own PGlite, each signed in on a
@@ -147,10 +180,37 @@ it.effect("a request with no Authorization is the account its browser session co
     assert.deepEqual(yield* resolveUserId(read({ cookie: adaCookie })), Option.some(ada));
     assert.deepEqual(yield* resolveUserId(read({ cookie: graceCookie })), Option.some(grace));
     assert.deepEqual(
-      yield* resolveUserId(read({ cookie: "better-auth.session_token=forged.signature" })),
+      yield* resolveUserId(read({ cookie: yield* signedElsewhere(adaCookie) })),
+      Option.none(),
+      "Ada's own session, signed under a secret the deployment never held",
+    );
+  }),
+);
+
+it.effect("a request with no cookie, or a blank one, asks the auth service for no session", () =>
+  Effect.gen(function* () {
+    // A session read that names anyone, so a resolution names nobody only where it never asked.
+    const anyone: SessionEndpoint = () => Effect.succeedSome("user-anyone");
+
+    for (const headers of [{}, { cookie: "" }, { cookie: "   " }]) {
+      assert.deepEqual(
+        yield* requestUserId(read(headers), NO_TOKEN, anyone),
+        Option.none(),
+        JSON.stringify(headers),
+      );
+    }
+  }),
+);
+
+it.effect("a session read the auth service fails resolves nobody, as a failed userinfo does", () =>
+  Effect.gen(function* () {
+    const failing: SessionEndpoint = () =>
+      Effect.tryPromise(() => Promise.reject(new Error("the auth service is down")));
+
+    assert.deepEqual(
+      yield* requestUserId(read({ cookie: "better-auth.session_token=any" }), NO_TOKEN, failing),
       Option.none(),
     );
-    assert.deepEqual(yield* resolveUserId(read({})), Option.none());
   }),
 );
 
@@ -193,12 +253,27 @@ it.effect(
 );
 
 it.effect(
-  "the bearer resolution the Mac's commands and eve's channels take never reads a session cookie",
+  "the bearer resolutions the Mac's commands and eve's channels take never read the session a cookie names",
   () =>
     Effect.gen(function* () {
-      const { adaCookie, userInfo } = yield* openAccounts;
+      const { plugin, ada, adaCookie, userInfo } = yield* openAccounts;
+      // The deployment's auth service keeps its sessions in a database this suite never reaches, so it reads a cookie as the plugin over PGlite does.
+      vi.spyOn(auth.api, "getSession").mockImplementation(
+        // SAFETY: the resolvers read the session's user id alone, which both instances answer from the same row.
+        async (context) =>
+          (await plugin.api.getSession({ headers: context?.headers ?? new Headers() })) as Awaited<
+            ReturnType<typeof auth.api.getSession>
+          >,
+      );
+      const cookieOnly = read({ cookie: adaCookie });
 
-      assert.deepEqual(yield* hostedUserId(read({ cookie: adaCookie }), userInfo), Option.none());
+      assert.deepEqual(
+        yield* resolveHostedUserId(cookieOnly),
+        Option.some(ada),
+        "the account routes' resolution takes the cookie",
+      );
+      assert.deepEqual(yield* resolveHostedBearerUserId(cookieOnly), Option.none());
+      assert.deepEqual(yield* hostedUserId(cookieOnly, userInfo), Option.none());
     }),
 );
 
