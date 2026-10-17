@@ -665,7 +665,9 @@ test("once the typing rests, Linear itself is searched for the words, and an iss
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const card = await mount(undefined, undefined, {}, ISSUES, (ask) =>
-      ask.query === "deploy queue" ? [OLDER_ISSUE, ISSUES[0] as LinearIssueSummary] : [],
+      ask.query === "deploy queue"
+        ? [OLDER_ISSUE, ISSUES[0] ?? assert.fail("the first issue")]
+        : [],
     );
     card.type("deploy");
     await settle();
