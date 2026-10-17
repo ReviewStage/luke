@@ -248,7 +248,7 @@ test("a pull request, a page, and a file the item names open as tabs of the pane
   await pressChip(container, "invites.ts");
   const tabs = panelTabs(container);
   assert.ok(tabs, "the panel stands beside the Inbox");
-  assert.deepEqual(tabs, ["Pull request: Batch the invitations", "Invite funnel", "▸ invites.ts"]);
+  assert.deepEqual(tabs, ["#42 Send invitations in batches", "Invite funnel", "▸ invites.ts"]);
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
 
