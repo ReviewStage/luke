@@ -14,26 +14,21 @@
 
 const CDNJS = "https://cdnjs.cloudflare.com";
 
-/** Each directive of the page's content security policy, with its sources, in the order the header spells them. */
-const PAGE_POLICY_DIRECTIVES = {
-  "default-src": ["'none'"],
-  "script-src": ["'unsafe-inline'", "'unsafe-eval'", CDNJS],
-  "style-src": ["'unsafe-inline'", CDNJS],
-  "img-src": ["data:", "blob:"],
-  "font-src": ["data:", CDNJS],
-  "media-src": ["data:", "blob:"],
-  "worker-src": ["blob:"],
-  "connect-src": ["'none'"],
-  "frame-src": ["'none'"],
-  "form-action": ["'none'"],
-  "base-uri": ["'none'"],
-  sandbox: ["allow-scripts"],
-} as const satisfies Readonly<Record<string, readonly string[]>>;
-
 /** The content security policy every page is served under. */
-const PAGE_CONTENT_SECURITY_POLICY = Object.entries(PAGE_POLICY_DIRECTIVES)
-  .map(([name, sources]) => `${name} ${sources.join(" ")}`)
-  .join("; ");
+const PAGE_CONTENT_SECURITY_POLICY = [
+  "default-src 'none'",
+  `script-src 'unsafe-inline' 'unsafe-eval' ${CDNJS}`,
+  `style-src 'unsafe-inline' ${CDNJS}`,
+  "img-src data: blob:",
+  `font-src data: ${CDNJS}`,
+  "media-src data: blob:",
+  "worker-src blob:",
+  "connect-src 'none'",
+  "frame-src 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+  "sandbox allow-scripts",
+].join("; ");
 
 /** The headers every page is answered with. */
 export const PAGE_RESPONSE_HEADERS = {
@@ -42,4 +37,4 @@ export const PAGE_RESPONSE_HEADERS = {
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
   "cache-control": "no-store",
-} as const satisfies Readonly<Record<string, string>>;
+} as const;
