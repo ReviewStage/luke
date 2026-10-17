@@ -31,10 +31,10 @@ export function TopAccountsNote(): React.JSX.Element {
 
 export function AccountActivityNote(): React.JSX.Element {
   return (
-    <p className="mt-3 text-sm text-muted-foreground">
+    <SectionNote>
       An active day is a UTC day this account spent hosted voice or attention. Local use of the
       desktop app writes no row here. Launch activity is in product analytics, not this database.
-    </p>
+    </SectionNote>
   );
 }
 
