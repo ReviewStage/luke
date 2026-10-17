@@ -15,6 +15,7 @@ import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
+import { MENU_EXAMPLE } from "./examples/menu";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
@@ -63,6 +64,7 @@ export const EXAMPLES: readonly Example[] = [
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
   LIST_ROW_EXAMPLE,
+  MENU_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
   SEGMENTED_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,

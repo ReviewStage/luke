@@ -144,7 +144,7 @@ function namesIn(sidebar: HTMLElement, label: string): string[] {
 
 /** The menu item named `label`, failing where none is drawn. */
 function item(label: string): HTMLElement {
-  const name = [...document.querySelectorAll(".task-menu-label")].find(
+  const name = [...document.querySelectorAll(".luke-menu-item-label")].find(
     (each) => each.textContent === label,
   );
   const found = name?.closest<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]');

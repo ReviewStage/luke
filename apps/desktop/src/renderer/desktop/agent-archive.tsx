@@ -5,6 +5,7 @@ import {
   type DialogQuestion,
   UnarchiveIcon,
   useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
@@ -15,7 +16,7 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 
 /**
@@ -131,7 +132,7 @@ function ArchivedAgentRow({
 }): React.JSX.Element {
   const [words, clipped] = useClipped();
   const press = useArchivePress(agents);
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const item = useRef<HTMLLIElement>(null);
   const unarchive = () => press(agent.id, false);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);

@@ -11,7 +11,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
+import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon, riseAboveEnd, useMenu } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
@@ -24,7 +24,7 @@ import {
   PromptInputTools,
   submitPromptInput,
 } from "../ai-elements/prompt-input";
-import { ActionMenu, type MenuAction, riseAboveEnd, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { editorBundleAtom } from "../editor-bundle";
 import { FailureNote } from "../failure-note";
 import { imageFiles } from "../feedback-images";
@@ -210,7 +210,7 @@ function ComposerMore({
   foot: RefObject<HTMLDivElement | null>;
   offers: readonly OverflowOffer[];
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const [taken, setTaken] = useState<readonly OverflowPress[]>([]);
   const trigger = menu.trigger(riseAboveEnd);
   const standing = menu.open !== undefined;
