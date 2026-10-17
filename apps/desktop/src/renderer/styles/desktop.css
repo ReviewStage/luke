@@ -375,8 +375,8 @@ body,
 .luke-identity {
   display: flex;
   align-items: center;
-  gap: var(--space-12);
-  padding: var(--space-2) var(--row-inset) var(--section-gap);
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-2) var(--row-inset) var(--luke-section-gap);
 }
 
 .luke-identity-face {
@@ -386,7 +386,7 @@ body,
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .luke-identity-face .luke-face {
@@ -605,12 +605,12 @@ body,
 }
 
 .workspace-ref[data-size="row"] {
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 .workspace-ref[data-size="head"],
 .workspace-ref:has(> .workspace-ref-copy) {
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
 .workspace-ref-copy {
@@ -632,7 +632,7 @@ body,
 .workspace-card-head {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .workspace-card-head > .luke-hover-card-head {
@@ -641,7 +641,7 @@ body,
 }
 
 .workspace-ref-line {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
 }
 
@@ -652,15 +652,15 @@ body,
    above New plan. */
 .sidebar-workspace {
   flex: 0 0 auto;
-  padding-bottom: var(--space-12);
+  padding-bottom: var(--luke-space-12);
 }
 
 .sidebar-workspace-toggle {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: var(--space-12);
-  padding: var(--space-6) var(--row-inset);
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-6) var(--row-inset);
   border-radius: 10px;
   background: none;
   text-align: left;
@@ -670,7 +670,7 @@ body,
 
 .sidebar-workspace-toggle:hover,
 .sidebar-workspace-toggle[aria-expanded="true"] {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .sidebar-workspace-toggle > .workspace-ref {
@@ -678,12 +678,12 @@ body,
 }
 
 .sidebar-workspace-toggle .workspace-ref-copy {
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
 }
 
 .sidebar-workspace-toggle .workspace-ref-name {
-  color: var(--text-primary);
-  font-size: 14px;
+  color: var(--luke-color-text);
+  font-size: 14px; /* off-scale: the sidebar's head, a step above its rows */
   font-weight: 650;
   letter-spacing: -0.005em;
 }
@@ -691,9 +691,9 @@ body,
 .sidebar-workspace-shared {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
-  color: var(--text-secondary);
-  font-size: 11.5px;
+  gap: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
 .sidebar-workspace-shared > svg {
@@ -705,7 +705,7 @@ body,
   width: 12px;
   height: 12px;
   flex: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .sidebar-new-task svg,
