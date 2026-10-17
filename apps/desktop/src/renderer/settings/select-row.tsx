@@ -1,7 +1,6 @@
 import type { SettingsRowDensity } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
-import { ACTOR_SIZE, PictureMark } from "../actor-ref";
 import { PickerRow } from "./picker-row";
 
 /** What the menu says when a search over a short fixed set matches nothing, which it has no search to say. */
@@ -29,8 +28,8 @@ export function SelectRow<Value extends string | number>({
   label: string;
   detail?: string | undefined;
   value: Value;
-  /** Each option's token and words, and the address of its picture where the set has faces. */
-  options: readonly { value: Value; label: string; picture?: string | undefined }[];
+  /** Each option's token and words. A set with faces is a `PictureChoiceRow` instead. */
+  options: readonly { value: Value; label: string }[];
   parse: (raw: string) => Value | undefined;
   /** The empty search field's words, for a set long enough that its menu searches; none reads it whole. */
   placeholder?: string | undefined;
@@ -50,7 +49,6 @@ export function SelectRow<Value extends string | number>({
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   const chosen = options.find((option) => option.value === value);
-  const pictured = options.some((option) => option.picture !== undefined);
   return (
     <PickerRow
       label={label}
@@ -60,33 +58,7 @@ export function SelectRow<Value extends string | number>({
       density={density}
       value={String(value)}
       valueLabel={chosen?.label ?? String(value)}
-      valueIcon={
-        pictured && chosen !== undefined ? (
-          <PictureMark
-            id={String(chosen.value)}
-            name={chosen.label}
-            pictureUrl={chosen.picture}
-            size={ACTOR_SIZE.INLINE}
-          />
-        ) : undefined
-      }
-      rows={options.map((option) => ({
-        id: String(option.value),
-        label: option.label,
-        // A set with faces draws one on every row, the window's own face, its letter where it has no picture.
-        ...(pictured
-          ? {
-              icon: (
-                <PictureMark
-                  id={String(option.value)}
-                  name={option.label}
-                  pictureUrl={option.picture}
-                  size={ACTOR_SIZE.ROW}
-                />
-              ),
-            }
-          : undefined),
-      }))}
+      rows={options.map((option) => ({ id: String(option.value), label: option.label }))}
       placeholder={placeholder}
       noMatch={NO_MATCH}
       anchor={anchor}
