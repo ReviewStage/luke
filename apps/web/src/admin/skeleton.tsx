@@ -161,11 +161,11 @@ function SkeletonAccountsTable({
       <div className="flex items-center gap-6 border-b border-border px-5 py-3">
         {starGutter ? <div className="w-4 shrink-0" /> : null}
         <div className="min-w-0 flex-1">
-          <SkeletonLine box="h-4" bone="h-3 w-16" />
+          <SkeletonLine box="h-[18px]" bone="h-3 w-16" />
         </div>
         {columns.map((column) => (
           <div key={column} className="flex w-14 shrink-0 justify-end">
-            <SkeletonLine box="h-4" bone="h-3 w-10" />
+            <SkeletonLine box="h-[18px]" bone="h-3 w-10" />
           </div>
         ))}
       </div>
@@ -178,7 +178,7 @@ function SkeletonAccountsTable({
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Skeleton circle className="size-8 shrink-0" />
             <div className="min-w-0">
-              <SkeletonLine box="h-5" bone="h-3.5 w-36" />
+              <SkeletonLine box="h-[18px]" bone="h-3.5 w-36" />
               <SkeletonLine box="h-4" bone="h-3 w-44" />
             </div>
           </div>
