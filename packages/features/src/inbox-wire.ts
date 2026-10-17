@@ -464,8 +464,6 @@ export const inboxAnswerFileSchema = EffectSchema.Struct({
   byteCount: countedNumber,
 });
 
-export type InboxAnswerFile = typeof inboxAnswerFileSchema.Type;
-
 /** The types this build draws, by which a read tells a type it does not know. */
 const KNOWN_TYPES: ReadonlySet<string> = new Set([
   ...Object.values(INBOX_BLOCK),
