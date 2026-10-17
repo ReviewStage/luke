@@ -1,0 +1,123 @@
+/* public-page.css -- the public site's page: a still banner, a column of
+   title, lead, and sections, and a footer under a rule, all at one measure
+   centred in the room and inset by the page's gutter. The measure is the
+   site's own reading column. The page queries its own width rather than
+   the viewport's, so it is drawn the same in a frame as in a window; a
+   container query cannot read a custom property, so the widths it steps
+   under are literals here, the ones the site steps at. */
+
+@layer components {
+  .luke-public-page {
+    --luke-public-page-width: 700px;
+    --luke-public-page-start: var(--luke-space-48);
+    --luke-public-page-end: var(--luke-space-64);
+    --luke-public-page-rhythm: var(--luke-space-64);
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+  }
+
+  /* Under 520px of room the page opens and closes nearer its words and
+     sets its sections closer, as the landing does on a phone. */
+  @container (max-width: 519px) {
+    .luke-public-page > * {
+      --luke-public-page-start: var(--luke-space-32);
+      --luke-public-page-end: var(--luke-space-40);
+      --luke-public-page-rhythm: var(--luke-space-40);
+    }
+  }
+
+  .luke-public-page-column {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: var(--luke-public-page-width);
+    margin-inline: auto;
+    padding-inline: var(--luke-page-inset);
+  }
+
+  /* The banner owns its ground across the whole page, a wash of it over a
+     blur with a rule under it, because words sliding beneath an unbounded
+     banner read as a glitch; its contents keep to the column. */
+  .luke-public-page-banner {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-bottom: 1px solid var(--luke-color-border);
+    background: color-mix(in srgb, var(--luke-color-ground) 85%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .luke-public-page-banner-column {
+    display: grid;
+    align-items: center;
+    min-height: var(--luke-space-64);
+  }
+
+  .luke-public-page-main {
+    flex: 1;
+    padding-block: var(--luke-public-page-start) var(--luke-public-page-end);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-public-page-intro + .luke-public-page-sections {
+    margin-top: var(--luke-space-32);
+  }
+
+  .luke-public-page-title {
+    margin: 0;
+    font-size: var(--luke-type-title-size);
+    line-height: var(--luke-type-title-leading);
+    font-weight: var(--luke-weight-bold);
+    text-wrap: pretty;
+  }
+
+  /* The landing's one line, in the site's display style. Note that the
+     window has no display type, so on the desktop profile it falls back to
+     the page title. */
+  .luke-public-page-title[data-style="hero"] {
+    font-size: var(--luke-display-hero-size, var(--luke-type-title-size));
+    line-height: var(--luke-display-hero-leading, var(--luke-type-title-leading));
+    font-weight: var(--luke-display-hero-weight, var(--luke-weight-bold));
+    letter-spacing: var(--luke-display-hero-tracking, normal);
+  }
+
+  /* At 2.25rem the hero needs about 490px, so it steps down before the
+     column can squeeze it. */
+  @container (max-width: 575px) {
+    .luke-public-page-title[data-style="hero"] {
+      font-size: var(--luke-display-hero-size-narrow, var(--luke-type-title-size));
+    }
+  }
+
+  .luke-public-page-lead {
+    max-width: 34rem;
+    margin: var(--luke-space-24) 0 0;
+    color: var(--luke-color-text-muted);
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+    text-wrap: pretty;
+  }
+
+  .luke-public-section + .luke-public-section {
+    margin-top: var(--luke-public-page-rhythm);
+  }
+
+  .luke-public-section-title {
+    margin: 0 0 var(--luke-section-gap);
+    font-size: var(--luke-type-section-size);
+    line-height: var(--luke-type-section-leading);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  /* The footer opens under a rule across the whole page. */
+  .luke-public-page-footer {
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  .luke-public-page-footer-column {
+    padding-block: var(--luke-space-48) var(--luke-space-64);
+  }
+}

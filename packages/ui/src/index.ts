@@ -8,6 +8,7 @@ export * from "./components/detail-page/detail-page.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/layout/layout.js";
 export * from "./components/list-row/list-row.js";
+export * from "./components/public-page/public-page.js";
 export * from "./components/segmented/segmented.js";
 export * from "./components/skeleton/skeleton.js";
 export * from "./components/spinner/spinner.js";
