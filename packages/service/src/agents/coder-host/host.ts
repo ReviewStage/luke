@@ -11,7 +11,7 @@ import {
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
@@ -838,7 +838,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           return chatRejected(CHAT_TOOL_REFUSAL.OFF);
         }
         const { id: agentId, taskId: planId, repository } = found.success;
-        const reader = { userId: admitted.target.userId, agentId, planId };
+        const self = { kind: MEMBER_KIND.AGENT, agentId };
+        const reader = { userId: admitted.target.userId, planId, self };
         if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
         if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
         // An archived agent, or one on an archived task, posts nothing until it is brought back.

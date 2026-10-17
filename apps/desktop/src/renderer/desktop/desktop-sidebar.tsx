@@ -11,6 +11,7 @@ import {
   ArrowRightIcon,
   ComposeIcon,
   EllipsisIcon,
+  ErrorState,
   FolderIcon,
   PinIcon,
   PlusIcon,
@@ -65,7 +66,6 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
@@ -1630,7 +1630,7 @@ function SidebarColumn({
           ) : null}
           {tasks.listFailed ? (
             <div className="sidebar-note">
-              <ReadFailure line="Your tasks could not be read." onRetry={tasks.onRetryList} />
+              <ErrorState onRetry={tasks.onRetryList}>Your tasks could not be read.</ErrorState>
             </div>
           ) : null}
           {/* The list is empty before its first read lands, so that it

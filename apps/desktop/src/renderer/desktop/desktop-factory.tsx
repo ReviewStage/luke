@@ -2,7 +2,7 @@ import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-ag
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState, useMenu } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
@@ -23,7 +23,6 @@ import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -685,21 +684,19 @@ export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React
       <div className="factory-scroll scroll-fade-top">
         {/* A question that could not be read is not shown as though none waits. */}
         {questions.failed ? (
-          <ReadFailure line={QUESTIONS_UNREAD_LINE} onRetry={questions.onRetry} />
+          <ErrorState onRetry={questions.onRetry}>{QUESTIONS_UNREAD_LINE}</ErrorState>
         ) : null}
         {/* Until the list is read nothing stands, since what the line says hangs on it. A read that failed with nothing listed says so in the line's place; one that failed over a list read before says so above it. */}
         {plans.listFailed && empty ? (
-          <ReadFailure
-            line={UNREAD_LINE}
-            onRetry={plans.onRetryList}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
+          <ErrorState onRetry={plans.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_LINE}
+          </ErrorState>
         ) : !plans.listRead && !plans.listFailed ? null : empty ? (
           <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
         ) : (
           <>
             {plans.listFailed ? (
-              <ReadFailure line={UNREAD_LINE} onRetry={plans.onRetryList} />
+              <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
             ) : null}
             <Summary board={board} />
             {/* A teammate's task names its creator against the listed workspace's members. */}

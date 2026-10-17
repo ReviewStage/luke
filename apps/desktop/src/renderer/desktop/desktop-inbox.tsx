@@ -8,7 +8,7 @@ import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-vi
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState } from "@luke/ui";
+import { EmptyState, ErrorState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
@@ -20,7 +20,6 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
@@ -148,7 +147,7 @@ function ListNote({
   if (failed) {
     return (
       <div className="sidebar-note">
-        <ReadFailure line={NOT_READ} onRetry={onRetry} />
+        <ErrorState onRetry={onRetry}>{NOT_READ}</ErrorState>
       </div>
     );
   }

@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -51,6 +51,7 @@ import {
   type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
@@ -242,6 +243,14 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
 /** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
 function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
   return Effect.map(imageBodyOf(response, inboxImageTypeSchema), (image) => image ?? UNANSWERED);
+}
+
+/** The types an inbox item's attachment is served under: a block's picture's, or any a file an answer carried travelled as. */
+const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** An inbox attachment's bytes in base64 under its type: a picture, or a file an answer carried; unanswered under any other type. */
+function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
+  return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
 }
 
 /**
@@ -836,7 +845,7 @@ export class HostedCodingAgentClient {
   /**
    * One image of an inbox item, fetched under the account: its bytes in
    * base64 under the media type the service kept, where the service answered
-   * with one of the types an image block may be; not found where the item or
+   * with one of the types an image block's picture or an answer's file may be; not found where the item or
    * the attachment is not the account's; unanswered for anything else,
    * another media type included, so nothing the window draws is a type it
    * did not expect.
@@ -854,7 +863,7 @@ export class HostedCodingAgentClient {
             refusedAs(unparsedWire(body), ROW_REFUSALS),
           );
         }
-        return readImage(answer.response);
+        return readInboxFile(answer.response);
       },
     );
   }

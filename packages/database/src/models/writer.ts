@@ -1047,22 +1047,31 @@ function pendingToolPart(name: string, callId: string, input: UnparsedWireValue)
 }
 
 /**
- * A call the turn left unanswered, settled once the turn is over as the one
- * thing the record can truthfully say of it: the call was dispatched and its
- * effect is unknown, an answer whose envelope says so, never an error, which
- * would read as a refusal and license doing it again.
+ * Why the record settled a call nothing answered: its turn ended or was
+ * cancelled first, or eve ran the step that asked for it again.
  */
-function unansweredToolPart(part: StoredToolPart, status: BrainRequestStatus): ToolPart {
+const UNANSWERED_REASON = {
+  ENDED: "The turn ended before the call answered; it may have run.",
+  CANCELLED: "The turn was cancelled before the call answered; it may have run.",
+  RETRIED:
+    "The step that asked for the call was run again before the call answered; it may have run.",
+} as const;
+
+type UnansweredReason = (typeof UNANSWERED_REASON)[keyof typeof UNANSWERED_REASON];
+
+/**
+ * A call nothing will answer, settled as the one thing the record can
+ * truthfully say of it: the call was dispatched and its effect is unknown,
+ * an answer whose envelope says so, never an error, which would read as a
+ * refusal and license doing it again.
+ */
+function unansweredToolPart(part: StoredToolPart, reason: UnansweredReason): ToolPart {
   return {
     type: part.type,
     toolCallId: part.toolCallId,
     state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
     input: part.input,
-    output: unknownOutcome(
-      status === BRAIN_REQUEST_STATUS.CANCELLED
-        ? "The turn was cancelled before the call answered; it may have run."
-        : "The turn ended before the call answered; it may have run.",
-    ),
+    output: unknownOutcome(reason),
   };
 }
 
@@ -1358,10 +1367,14 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* reviseJournal({ id: open.value.id, conversationId: context.target.conversationId });
   }
   if (Option.isSome(open) && open.value.finishedAt === null) {
+    const reason =
+      event.status === BRAIN_REQUEST_STATUS.CANCELLED
+        ? UNANSWERED_REASON.CANCELLED
+        : UNANSWERED_REASON.ENDED;
     const parts = open.value.parts.flatMap((part) => {
       if (part.type === UI_PART_TYPE.TEXT) return [];
       return isStoredToolPart(part) && !isSettledToolPartState(part.state)
-        ? [unansweredToolPart(part, event.status)]
+        ? [unansweredToolPart(part, reason)]
         : [part];
     });
     yield* finishMessage({
@@ -1374,6 +1387,22 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
 
+/** The newest step's calls still unanswered, settled as an abandoned attempt's; a journal with none, or closed, is a repeat. */
+const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  row: MessageRow,
+): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+  const boundary = row.parts.findLastIndex((part) => part.type === UI_PART_TYPE.STEP_START);
+  const parts = row.parts.map((part, index) =>
+    index > boundary && isStoredToolPart(part) && !isSettledToolPartState(part.state)
+      ? unansweredToolPart(part, UNANSWERED_REASON.RETRIED)
+      : part,
+  );
+  const settled = parts.some((part, index) => part !== row.parts[index]);
+  if (!settled || row.finishedAt !== null) return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
+  return yield* amendJournal(context, row, parts);
+});
+
 /**
  * A step joins the journal as the boundary before its parts. Steps are
  * counted, not named, so the journal's own count of boundaries is what tells
@@ -1381,6 +1410,17 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
  * repeat, and any later step appends one boundary, whatever the stream
  * dropped between. The turn's completed projection replaces the journal
  * whole, boundaries and all, when the turn answers.
+ *
+ * The newest step told again is eve running it again. A step interrupted
+ * part way re-runs whole, asking the model afresh, while whatever the first
+ * attempt wrote stays on the stream, and the relay's state rolls back with
+ * the step, so the relay tells its boundary a second time. Every call past
+ * that boundary still unanswered is then the abandoned attempt's, which
+ * nothing will answer, so it is settled here as a turn's end settles one,
+ * rather than left running until the turn ends, which for a coding agent is
+ * its whole run: a worker such a call delegated reads as starting until then.
+ * Note that a call the new attempt asks for again under the same id finds it
+ * settled, which no provider's fresh answer does, since each mints its own.
  */
 const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
@@ -1390,7 +1430,8 @@ const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
   const row = opened.success;
   const held = row.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START).length;
-  if (held >= event.step) return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
+  if (held > event.step) return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
+  if (held === event.step) return yield* settleRetriedCalls(context, row);
   if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
   return yield* amendJournal(context, row, [...row.parts, STEP_START_PART]);
 });
