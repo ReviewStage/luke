@@ -33,6 +33,7 @@ import * as planEdit from "./plan-edit.js";
 import * as providerKeyWire from "./provider-key-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
+import * as taskListLive from "./task-list-live.js";
 import * as taskWire from "./task-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
 import * as workspaceWire from "./workspace-wire.js";
@@ -64,6 +65,10 @@ const EFFECT_MODULE_SCHEMAS = {
     scopeInboxLiveAnswerSchema: liveWire.scopeInboxLiveAnswerSchema,
     scopeInboxLiveRowsSchema: liveWire.scopeInboxLiveRowsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
+  "task-list-live": {
+    taskListLiveAnswerSchema: taskListLive.taskListLiveAnswerSchema,
+    taskListLiveRowsSchema: taskListLive.taskListLiveRowsSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof taskListLive>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
     boardElementsSchema: boardWire.boardElementsSchema,

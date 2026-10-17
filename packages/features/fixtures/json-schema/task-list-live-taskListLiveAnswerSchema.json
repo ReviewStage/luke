@@ -1,0 +1,65 @@
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string"
+    },
+    "queries": {
+      "type": "object",
+      "properties": {
+        "plans": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "agents": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "plans",
+        "agents"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "url",
+    "queries"
+  ],
+  "additionalProperties": false
+}

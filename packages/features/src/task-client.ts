@@ -69,6 +69,7 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import { type TaskListLiveAnswer, taskListLiveAnswerSchema } from "./task-list-live.js";
 import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
@@ -213,6 +214,25 @@ export class HostedTaskClient {
       this.#call.ask(
         { method: HTTP_METHOD.GET, path: LIST_WITH_ARCHIVED_PATH },
         taskListAnswerSchema,
+      ),
+      (answer) => (answer === undefined ? UNANSWERED : succeeded(answer)),
+    );
+  }
+
+  /**
+   * The plan list sealed for following over Neon Realtime, answered at
+   * once; unanswered where the deployment has no Realtime and for anything
+   * else, which the caller answers by reading the list as before.
+   */
+  listLive(): Effect.Effect<
+    TaskCallResult<TaskListLiveAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASKS },
+        taskListLiveAnswerSchema,
       ),
       (answer) => (answer === undefined ? UNANSWERED : succeeded(answer)),
     );

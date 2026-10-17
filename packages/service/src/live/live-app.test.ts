@@ -7,6 +7,7 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { accountInboxLiveAnswerSchema, scopeInboxLiveAnswerSchema } from "@luke/features/live-wire";
+import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter } from "effect/http";
@@ -192,6 +193,43 @@ it.layer(getTestDB())("the live reads", (it) => {
             body: { error: HOSTED_API_ERROR.UNAVAILABLE },
           });
         }
+      }),
+  );
+
+  it.effect(
+    "the plan list is sealed as its plans and its agents for the bearer's own account, and unavailable without Realtime or a seal",
+    () =>
+      Effect.gen(function* () {
+        const path = "/api/live/plans";
+        const dana = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
+
+        assert.equal(dana.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(dana.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["agents", "plans"]);
+        for (const sealed of Object.values(answer.queries)) {
+          assert.ok(sealed.capability.includes('"user-dana"'), "read for the bearer");
+          assert.ok(!sealed.capability.includes("user-eli"), "read for no one else");
+        }
+        assert.deepEqual(yield* ask({ path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        });
+        assert.deepEqual(yield* ask({ bearer: "user-dana", path, sealing: Option.none() }), {
+          status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+          body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+        });
+        const refusing: LiveSealer = {
+          url: REALTIME_URL,
+          seal: () => Effect.fail(new SealRefused({ reason: "refused" })),
+        };
+        assert.deepEqual(
+          yield* ask({ bearer: "user-dana", path, sealing: Option.some(refusing) }),
+          {
+            status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+            body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+          },
+        );
       }),
   );
 });
