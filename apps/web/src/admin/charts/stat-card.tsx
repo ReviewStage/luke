@@ -13,8 +13,10 @@ import { GAP, Skeleton, Stack, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } fro
 
 /**
  * Note that a card keeps its content's width, with no `min-w-0`, because its
- * figure never breaks: a grid too narrow for the figure widens its column,
- * and the label wraps, rather than the card squeezing the number apart.
+ * figure never breaks: a row or a track sized by its content widens for the
+ * figure, and the label wraps, rather than the card squeezing the number
+ * apart. A track that starts at zero holds the card to it, and the figure
+ * then overflows the card whole.
  */
 const METRIC_CARD = "rounded-lg border border-border bg-card px-5 py-4";
 

@@ -1,0 +1,115 @@
+/* combobox.css -- a text field and the options its words narrow
+   (`combobox.tsx`) as one well: while options stand, the field's foot opens
+   onto the list under it, so the list reads as the field's own suggestions
+   rather than a menu over the page. The field is the text field's own look;
+   each option is a menu row's height, its one highlight the active option,
+   which the keys and the pointer both move. */
+
+@layer components {
+  .luke-combobox {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .luke-combobox[data-open="true"] > .luke-text-field {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  /* The list is its options' offset parent, which keeping the active one in view reads. */
+  .luke-combobox-list {
+    position: relative;
+    display: flex;
+    max-height: 280px; /* off-scale: seven rows and a heading */
+    flex-direction: column;
+    overflow-y: auto;
+    padding: var(--luke-menu-inset);
+    border: 1px solid var(--luke-color-border-strong);
+    border-top: 0;
+    border-radius: 0 0 var(--luke-control-radius) var(--luke-control-radius);
+    background: var(--luke-color-input);
+  }
+
+  .luke-combobox-heading {
+    padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-4);
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  /* One option: its glyph, its name, then its detail and its hint at the
+     row's end. The name gives way before the detail and the hint do. */
+  .luke-combobox-option {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    height: var(--luke-menu-row-height);
+    padding: 0 var(--luke-space-8);
+    border-radius: var(--luke-menu-row-radius);
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    white-space: nowrap;
+    cursor: default;
+  }
+
+  .luke-combobox-option[aria-selected="true"] {
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-combobox-option-glyph {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-combobox-option-glyph svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .luke-combobox-option-label {
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    font-weight: var(--luke-weight-medium);
+    text-overflow: ellipsis;
+  }
+
+  .luke-combobox-option-detail,
+  .luke-combobox-option-hint {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    margin-left: auto;
+    padding-left: var(--luke-space-12);
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+  }
+
+  /* A detail gives way to the name before the name gives way to it, cut
+     short where the row runs out, since the name is what tells options apart. */
+  .luke-combobox-option-detail {
+    display: block;
+    min-width: 0;
+    flex: 0 1000 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A hint keeps a menu's distance from what stands before it, as a chord does. */
+  .luke-combobox-option-hint {
+    padding-left: var(--luke-space-16);
+  }
+
+  .luke-combobox-option-detail + .luke-combobox-option-hint {
+    margin-left: 0;
+  }
+}

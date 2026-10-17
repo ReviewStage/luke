@@ -9,6 +9,7 @@ import {
   type AgentToolCall,
   type ChatCall,
   type CoderHost,
+  type CoderSessionPromptRecord,
   coderHost,
   type InboxCall,
 } from "@luke/service/agents/coder-host/host";
@@ -186,12 +187,16 @@ export function offeredPlanTools(
  * for those tools' own files: only where the account that started the agent
  * turned Chat on; never for a session the host does not admit.
  */
-export function offeredChatTools(auth: SessionAuth, sessionId: string): Promise<boolean> {
+export function offeredChatTools(
+  auth: SessionAuth,
+  sessionId: string,
+  prompt: CoderSessionPromptRecord,
+): Promise<boolean> {
   return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return false;
-      return yield* host.chatOffered(admitted.success);
+      return yield* host.chatOffered(admitted.success, prompt);
     }),
   );
 }

@@ -4,6 +4,18 @@ import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ErrorState,
+  IconButton,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import {
   ACTOR_KIND,
   type Actor,
@@ -22,14 +34,12 @@ import {
 } from "@luke/ui/person-page-model";
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { useOpenSettings } from "../open-settings";
-import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { lineSubject } from "../tasks/agent-ref";
 import { InboxItemRow } from "../tasks/inbox-list";
@@ -40,7 +50,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { RecentRow } from "./desktop-home";
 import { useArchivedView, useTaskListView } from "./task-list-view";
 import { useAutomations } from "./use-automations";
@@ -94,10 +104,14 @@ function PersonSection({
 }): React.JSX.Element {
   return (
     <section className="home-section" aria-label={title}>
-      <h2 className="home-section-title">
-        {title}
-        <span className="home-section-count">{count}</span>
-      </h2>
+      <header className="person-section-head">
+        <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
+          {title}
+        </Text>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          {count}
+        </Text>
+      </header>
       <ul className="sidebar-tasks">{children}</ul>
     </section>
   );
@@ -163,7 +177,7 @@ function PersonActions({
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const copy = useCopyToast();
-  const menu = useActionMenu(plans.shown);
+  const menu = useMenu(plans.shown);
   const member = person.kind === ACTOR_KIND.PERSON ? person : undefined;
   const you = member?.you === true;
   const { workspace } = plans;
@@ -210,17 +224,14 @@ function PersonActions({
   return (
     <div className="desktop-toolbar-actions">
       {shared ? (
-        <button type="button" className="toolbar-button bordered-button" onClick={onShowTasks}>
-          <ListFilterIcon />
+        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ListFilterIcon />} onClick={onShowTasks}>
           {you ? "My tasks in sidebar" : "Their tasks in sidebar"}
-        </button>
+        </Button>
       ) : null}
       {actions.length === 0 ? null : (
         <>
           <Tooltip label={MORE}>
-            <button type="button" className="icon-button" aria-label={MORE} {...menu.trigger()}>
-              <EllipsisIcon className="icon-button-glyph" />
-            </button>
+            <IconButton icon={<EllipsisIcon />} label={MORE} {...menu.trigger()} />
           </Tooltip>
           {menu.drawn === undefined ? null : (
             <ActionMenu label={MORE} menu={menu.drawn} groups={actions} onClose={menu.close} />
@@ -296,10 +307,16 @@ function PersonHead({ person }: { person: Actor }): React.JSX.Element {
       <ActorMark actor={person} size={ACTOR_SIZE.PAGE} />
       <div className="person-head-copy">
         <p className="person-head-name">
-          {headName(person)}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.TITLE}>
+            {headName(person)}
+          </Text>
           {person.kind === ACTOR_KIND.PERSON && person.you ? <YouBadge /> : null}
         </p>
-        {line === undefined ? null : <p className="person-head-line">{line}</p>}
+        {line === undefined ? null : (
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {line}
+          </Text>
+        )}
       </div>
     </header>
   );
@@ -433,9 +450,7 @@ function PersonColumn({
           )}
           {page.created.length > PERSON_TASKS_SHOWN && shared ? (
             <p className="person-section-foot">
-              <button type="button" className="toolbar-button quiet-button" onClick={showTasks}>
-                {`Show all ${page.created.length} in sidebar`}
-              </button>
+              <Button onClick={showTasks}>{`Show all ${page.created.length} in sidebar`}</Button>
             </p>
           ) : null}
           {page.agents.length === 0 ? null : (
@@ -462,17 +477,17 @@ function PersonColumn({
             </PersonSection>
           )}
           {read.failed ? (
-            <div className="sidebar-note person-empty flex items-center gap-2" role="alert">
-              <span>Some Inbox items could not be read.</span>
-              <RetryButton onRetry={read.onRetry} />
+            <div className="home-note">
+              <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
             </div>
           ) : waiting.length === 0 && read.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
           ) : null}
           {theirAutomations.failed ? (
-            <div className="sidebar-note person-empty flex items-center gap-2" role="alert">
-              <span>{you ? "Your" : "Their"} automations could not be read.</span>
-              <RetryButton onRetry={theirAutomations.onRetry} />
+            <div className="home-note">
+              <ErrorState onRetry={theirAutomations.onRetry}>
+                {`${you ? "Your" : "Their"} automations could not be read.`}
+              </ErrorState>
             </div>
           ) : theirAutomations.reading ? (
             <Spinner label="Loading automations" size={SPINNER_SIZE.INLINE} />
@@ -484,9 +499,11 @@ function PersonColumn({
           theirAutomations.reading ? null : personPageEmpty(page) &&
             waiting.length === 0 &&
             automations.length === 0 ? (
-            <p className="sidebar-note person-empty">
-              {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
-            </p>
+            <div className="home-note">
+              <Text tone={TEXT_TONE.MUTED}>
+                {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
+              </Text>
+            </div>
           ) : null}
         </div>
       </div>

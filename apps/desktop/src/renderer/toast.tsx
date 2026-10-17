@@ -44,6 +44,15 @@
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@luke/brand";
+import {
+  BUTTON_VARIANT,
+  Button,
+  IconButton,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { CircleAlertIcon, CircleCheckIcon, InboxIcon, XIcon } from "lucide-react";
@@ -485,29 +494,37 @@ function ToastCard({
     >
       <ToneGlyph tone={notice.tone} />
       <span className="toast-text">
-        <span className="toast-words">{notice.words}</span>
-        {notice.detail === undefined ? null : <span className="toast-detail">{notice.detail}</span>}
+        <span className="toast-words">
+          <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.SPAN}>
+            {notice.words}
+          </Text>
+        </span>
+        {notice.detail === undefined ? null : (
+          <span className="toast-detail">
+            <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              {notice.detail}
+            </Text>
+          </span>
+        )}
       </span>
       {action === undefined ? null : (
         <>
-          <button
-            type="button"
-            className="toast-action"
+          <Button
+            variant={BUTTON_VARIANT.OUTLINE}
             onClick={() => {
               step({ kind: TOAST_STEP.DISMISS, id });
               action.onPress();
             }}
           >
             {action.label}
-          </button>
-          <button
-            type="button"
-            className="toast-dismiss"
-            aria-label={DISMISS_LABEL}
-            onClick={() => step({ kind: TOAST_STEP.DISMISS, id })}
-          >
-            <XIcon aria-hidden="true" />
-          </button>
+          </Button>
+          <span className="toast-dismiss">
+            <IconButton
+              icon={<XIcon aria-hidden="true" />}
+              label={DISMISS_LABEL}
+              onClick={() => step({ kind: TOAST_STEP.DISMISS, id })}
+            />
+          </span>
         </>
       )}
     </li>

@@ -26,6 +26,7 @@ import {
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
@@ -34,6 +35,9 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -115,6 +119,8 @@ let refuseLaterReads = false;
 let inviteHeld: Promise<void> | undefined;
 /** Whether the browser could not be opened on GitHub's page. */
 let refuseGitHubOpen = false;
+/** Where the next Linear sign-in waits before the browser is sent, so a test can hold it on the wire. */
+let linearConnectHeld: Promise<void> | undefined;
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
@@ -224,6 +230,13 @@ function answer(request: Act): Promise<ActOutcome> {
     case ACT_KIND.WORKSPACE_INVITATION_CANCEL:
       invitations = invitations.filter((one) => one.id !== request.payload.invitationId);
       return Promise.resolve(done(invitations));
+    case ACT_KIND.WORKSPACE_LINEAR_CONNECT:
+      if (linearConnectHeld !== undefined) {
+        const held = linearConnectHeld;
+        linearConnectHeld = undefined;
+        return held.then(() => done(undefined));
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
       if (refuseGitHubOpen) {
         return Promise.resolve({
@@ -304,7 +317,6 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done(undefined));
     }
     case ACT_KIND.WORKSPACE_LEAVE:
-    case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
@@ -328,16 +340,15 @@ beforeEach(() => {
   refuseLaterReads = false;
   inviteHeld = undefined;
   refuseGitHubOpen = false;
+  linearConnectHeld = undefined;
   refuseRename = false;
   refusePhoto = false;
   refuseRole = false;
   automations = undefined;
   macRepositories = [];
   githubRepositories = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ act: answer });
+  handCapabilities(DESKTOP_CAPABILITIES);
 });
 
 afterEach(() => {
@@ -431,19 +442,37 @@ const buttons = (within: Element, words: string) =>
 const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
-/** The page's row naming `name` past its first row, the workspace's own, the reader's own beside its You. */
+/** Every row of the page, the shared row and the window's own alike. */
+const ROWS = ".settings-row, .luke-settings-row";
+
+/** What a row names: the shared row's label, or the window's own row's first words. */
+const nameOf = (row: Element) =>
+  row.matches(".luke-settings-row")
+    ? row.querySelector('[id$="label"]')?.textContent
+    : row.querySelector("strong")?.firstChild?.textContent;
+
+/** The page's row naming `name`, the reader's own beside its You. */
 const rowNamed = (page: HTMLElement, name: string) =>
-  [...page.querySelectorAll<HTMLElement>(".settings-row")].find(
-    (row) =>
-      row.closest(".settings-group") !== page.querySelector(".settings-group") &&
-      row.querySelector("strong")?.firstChild?.textContent === name,
-  ) ?? assert.fail(`no ${name} row`);
+  [...page.querySelectorAll<HTMLElement>(ROWS)].find((row) => nameOf(row) === name) ??
+  assert.fail(`no ${name} row`);
+
+/** The Members row naming `name`, the reader's own beside its You. */
+const memberNamed = (page: HTMLElement, name: string) =>
+  [...page.querySelectorAll<HTMLElement>(".workspace-member > .menu-row")].find(
+    (row) => row.querySelector('[id$="label"]')?.firstChild?.firstChild?.textContent === name,
+  ) ?? assert.fail(`no ${name} member`);
+
+/** A member row's line under the name: their email. */
+const emailOf = (row: HTMLElement) => row.querySelector("p")?.textContent;
 
 /** The rows of the invitations still pending, by the line each wears. */
 const invitationRows = (page: HTMLElement) =>
-  [...page.querySelectorAll<HTMLElement>(".settings-row")].filter((row) =>
-    row.querySelector("small")?.textContent?.startsWith("Invited as "),
+  [...page.querySelectorAll<HTMLElement>(".menu-row")].filter((row) =>
+    row.querySelector("p")?.textContent?.startsWith("Invited as "),
   );
+
+/** A pending invitation's address, its row's label. */
+const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .settings-one-line');
 
 /** The items of the ⋯ on `row`, or none where it draws no ⋯. */
 function rowActions(row: HTMLElement): string[] {
@@ -484,11 +513,13 @@ async function confirm(verb: string): Promise<void> {
 
 /** The page's first row: the workspace's tile, name, and line, its Rename, and its ⋯. */
 const identity = (page: HTMLElement) =>
-  page.querySelector<HTMLElement>(".settings-group .settings-row") ??
-  assert.fail("no identity row");
+  page.querySelector<HTMLElement>(".menu-row") ?? assert.fail("no identity row");
+
+/** The workspace's name, as the identity row's label says it. */
+const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
 
 /** Who shares the workspace and the account's role in it, as the identity row's line says it. */
-const roleLine = (page: HTMLElement) => identity(page).querySelector("small")?.textContent;
+const roleLine = (page: HTMLElement) => identity(page).querySelector("p")?.textContent;
 
 /** The renames the page asked for, by their payloads. */
 const renames = () =>
@@ -510,7 +541,7 @@ async function renameTo(page: HTMLElement, typed: string, key: string): Promise<
 test("an owner renames the workspace in place with its ends trimmed, and Escape or the same name sends nothing", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  assert.equal(identity(page).querySelector("strong")?.textContent, ACME.name);
+  assert.equal(nameShown(page), ACME.name);
   await renameTo(page, "  Acme Labs  ", "Escape");
   await renameTo(page, ACME.name, "Enter");
   await renameTo(page, "  Acme Labs  ", "Enter");
@@ -554,7 +585,7 @@ test("a personal workspace shows its owner's name with no Rename to its owner an
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...FIRST, role });
 
-    assert.equal(identity(page).querySelector("strong")?.textContent, FIRST.name);
+    assert.equal(nameShown(page), FIRST.name);
     assert.equal(buttons(page, "Rename").length, 0);
     assert.deepEqual(rowActions(identity(page)), ["Upload photo"]);
   }
@@ -714,14 +745,14 @@ test("the chosen team workspace's members are listed with their email and role, 
     sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
     [ACT_KIND.WORKSPACE_MEMBERS_READ],
   );
-  assert.equal(rowNamed(page, "Dana").querySelector("small")?.textContent, "dana@example.com");
+  assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
     ["Dana", "Sam"].map(
-      (name) => rowNamed(page, name).querySelector(".settings-row-value")?.textContent,
+      (name) => memberNamed(page, name).querySelector(".settings-row-value")?.textContent,
     ),
     ["Owner", "Member"],
   );
-  assert.deepEqual(rowActions(rowNamed(page, "Sam")), []);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), []);
 });
 
 /** Lays `words` out narrower than they run, as a row too narrow for an address does, and tells the window. */
@@ -745,8 +776,8 @@ test("a member's address and an invited one, where the row cuts them short, are 
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
   const addresses = [
-    rowNamed(page, "Sam").querySelector(".settings-copy small"),
-    (invitationRows(page)[0] ?? assert.fail("no pending invitation")).querySelector("strong"),
+    memberNamed(page, "Sam").querySelector("p .settings-one-line"),
+    addressOf(invitationRows(page)[0] ?? assert.fail("no pending invitation")),
   ].map((words) => words ?? assert.fail("an address is not drawn"));
 
   assert.deepEqual(addresses.map(pillOver), [undefined, undefined], "drawn whole, no pill");
@@ -757,8 +788,8 @@ test("a member's address and an invited one, where the row cuts them short, are 
 test("each member's row leads with their face, their picture where the read lists one and their letter where it lists none, and the reader's own wears You", async () => {
   const { page } = await mount(ACME);
 
-  const dana = rowNamed(page, "Dana");
-  const sam = rowNamed(page, "Sam");
+  const dana = memberNamed(page, "Dana");
+  const sam = memberNamed(page, "Sam");
   assert.equal(dana.querySelector(".actor-mark .actor-face")?.textContent, "D");
   assert.equal(
     sam.querySelector<HTMLImageElement>(".actor-mark img")?.src,
@@ -793,21 +824,21 @@ test("while the members are being read the page holds itself back, and a read th
 
   assert.equal(heldBack, true);
   assert.equal(
-    container.querySelector('[role="alert"] .failure-note-words')?.textContent,
-    "The members could not be read.",
+    container.querySelector('[role="alert"]')?.textContent,
+    "The members could not be read.Retry",
   );
   refuseMembersRead = false;
   act(() => button(container, "Retry").click());
   await settle();
-  assert.ok(rowNamed(container, "Sam"));
+  assert.ok(memberNamed(container, "Sam"));
   assert.equal(container.querySelector(".settings-reading"), null);
 });
 
 test("an admin is offered Remove for a member but not for the owner, and Remove asks before it removes", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  assert.deepEqual(rowActions(rowNamed(page, "Dana")), []);
-  await chooseAction(rowNamed(page, "Sam"), "Remove from workspace");
+  assert.deepEqual(rowActions(memberNamed(page, "Dana")), []);
+  await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_MEMBER_REMOVE);
   await confirm("Remove");
 
@@ -819,7 +850,9 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
     [{ workspaceId: ACME.id, userId: MEMBER.userId }],
   );
   assert.equal(
-    [...page.querySelectorAll(".settings-row strong")].some((each) => each.textContent === "Sam"),
+    [...page.querySelectorAll(".workspace-member")].some((each) =>
+      each.textContent?.includes("Sam"),
+    ),
     false,
   );
 });
@@ -832,8 +865,8 @@ test("an admin is offered no Remove on their own row, since their way out is Lea
   ];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  assert.deepEqual(rowActions(rowNamed(page, "Dana")), []);
-  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Remove from workspace"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Dana")), []);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Remove from workspace"]);
   assert.equal(buttons(page, "Leave").length, 1);
 });
 
@@ -846,11 +879,11 @@ test("an admin is offered no Remove on another admin, and the owner is, as the s
   };
   stored = [OWNER, admin, MEMBER];
   const asAdmin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const adminSees = rowActions(rowNamed(asAdmin.page, "Ola"));
+  const adminSees = rowActions(memberNamed(asAdmin.page, "Ola"));
   const asOwner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   assert.deepEqual(adminSees, []);
-  assert.deepEqual(rowActions(rowNamed(asOwner.page, "Ola")), [
+  assert.deepEqual(rowActions(memberNamed(asOwner.page, "Ola")), [
     "Make member",
     "Make owner",
     "Remove from workspace",
@@ -876,8 +909,8 @@ const ADMIN_OLA: WorkspaceMember = {
 test("the owner makes a member an admin from the member's ⋯ at once, and the row says Admin", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Make admin", "Remove from workspace"]);
-  await chooseAction(rowNamed(page, "Sam"), "Make admin");
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Make admin", "Remove from workspace"]);
+  await chooseAction(memberNamed(page, "Sam"), "Make admin");
 
   assert.deepEqual(roleSent(), [
     [
@@ -885,7 +918,7 @@ test("the owner makes a member an admin from the member's ⋯ at once, and the r
       { workspaceId: ACME.id, userId: MEMBER.userId, role: WORKSPACE_ROLE.ADMIN },
     ],
   ]);
-  assert.equal(rowNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
+  assert.equal(memberNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
 });
 
@@ -893,12 +926,12 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   stored = [OWNER, ADMIN_OLA, MEMBER];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  assert.deepEqual(rowActions(rowNamed(page, "Ola")), [
+  assert.deepEqual(rowActions(memberNamed(page, "Ola")), [
     "Make member",
     "Make owner",
     "Remove from workspace",
   ]);
-  await chooseAction(rowNamed(page, "Ola"), "Make owner");
+  await chooseAction(memberNamed(page, "Ola"), "Make owner");
   const askedFirst = roleSent().length === 0;
   const question = dialog().querySelector("h2")?.textContent;
   await confirm("Make owner");
@@ -908,26 +941,26 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   assert.deepEqual(roleSent(), [
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
-  assert.equal(rowNamed(page, "Ola").querySelector(".settings-row-value")?.textContent, "Owner");
+  assert.equal(memberNamed(page, "Ola").querySelector(".settings-row-value")?.textContent, "Owner");
 });
 
 test("an admin of the account's own first workspace is never offered Make owner, since it is named for its creator", async () => {
   stored = [OWNER, ADMIN_OLA];
   const { page } = await mount({ ...FIRST, role: WORKSPACE_ROLE.OWNER });
 
-  assert.deepEqual(rowActions(rowNamed(page, "Ola")), ["Make member", "Remove from workspace"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Ola")), ["Make member", "Remove from workspace"]);
 });
 
 test("an admin is offered no role change, and a role change the service refuses is said under the row", async () => {
   const asAdmin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const adminSees = rowActions(rowNamed(asAdmin.page, "Sam"));
+  const adminSees = rowActions(memberNamed(asAdmin.page, "Sam"));
   refuseRole = true;
   const asOwner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  await chooseAction(rowNamed(asOwner.page, "Sam"), "Make admin");
+  await chooseAction(memberNamed(asOwner.page, "Sam"), "Make admin");
 
   assert.deepEqual(adminSees, ["Remove from workspace"]);
   assert.equal(
-    rowNamed(asOwner.page, "Sam").nextElementSibling?.textContent,
+    memberNamed(asOwner.page, "Sam").nextElementSibling?.textContent,
     WORKSPACE_NOT_PERMITTED_REFUSAL,
   );
 });
@@ -937,6 +970,10 @@ const leaveGroup = (page: HTMLElement) =>
   page.querySelector<HTMLElement>(
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.LEAVE}"]`,
   );
+
+/** What the leave group's one row says under its name. */
+const leaveLine = (group: HTMLElement) =>
+  rowWords(group.querySelector<HTMLElement>(ROWS) ?? assert.fail("no leave row"))[1];
 
 test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is", async () => {
   const other: WorkspaceMember = {
@@ -948,7 +985,7 @@ test("the owner cannot leave until the workspace is handed over: its row says so
   stored = [OWNER, ADMIN_OLA, other, MEMBER];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   const group = leaveGroup(page) ?? assert.fail("no leave");
-  const line = group.querySelector("small")?.textContent;
+  const line = leaveLine(group);
   act(() => button(group, "Transfer ownership").click());
   const chip =
     dialog().querySelector<HTMLButtonElement>('button[aria-label^="New owner"]') ??
@@ -978,7 +1015,7 @@ test("the owner with no admin is told to make one first and offered no handover,
   const own = await mount({ ...FIRST, role: WORKSPACE_ROLE.OWNER });
 
   assert.equal(
-    group.querySelector("small")?.textContent,
+    leaveLine(group),
     "You're its owner. Make a member an admin, then make them the owner, and you can leave.",
   );
   assert.deepEqual(buttons(group, "Transfer ownership"), []);
@@ -1075,11 +1112,11 @@ test("a members read sent before a role change and landing after it does not put
   });
   act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership").click());
   act(() => button(dialog(), "Cancel").click());
-  await chooseAction(rowNamed(page, "Sam"), "Make admin");
+  await chooseAction(memberNamed(page, "Sam"), "Make admin");
   release();
   await settle();
 
-  assert.equal(rowNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
+  assert.equal(memberNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
 });
 
 test("an admin's leave says the invitations they sent stay valid, and a member's, who sends none, says nothing of them", async () => {
@@ -1109,7 +1146,7 @@ test("a removal the account's role does not allow says so in the dialog that ask
   refuseRemoval = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  await chooseAction(rowNamed(page, "Sam"), "Remove from workspace");
+  await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
   await confirm("Remove");
 
   assert.equal(
@@ -1120,8 +1157,8 @@ test("a removal the account's role does not allow says so in the dialog that ask
 
 test("a member leaves after confirming, which names what stays and what stops, says so in a toast, and lands the window; an owner is offered no Leave", async () => {
   const member = await mount(ACME);
-  const leaveRow = button(member.page, "Leave").closest(".settings-row") ?? assert.fail();
-  const line = leaveRow.querySelector("small")?.textContent;
+  const leaveRow = leaveGroup(member.page) ?? assert.fail("no leave");
+  const line = leaveLine(leaveRow);
   act(() => button(leaveRow, "Leave").click());
   const named = [...dialog().querySelectorAll(".leave-consequences li")].map(
     (li) => li.textContent,
@@ -1161,7 +1198,7 @@ test("the account's first workspace reads like any other: its role, its members 
 
   assert.equal(roleLine(page), "You're the owner");
   assert.ok(page.querySelector(".workspace-invite"));
-  assert.equal(rowNamed(page, "Dana").querySelector("small")?.textContent, "dana@example.com");
+  assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
     sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT),
     [{ kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: { workspaceId: FIRST.id } }],
@@ -1192,13 +1229,15 @@ const githubGroup = (page: HTMLElement) =>
 
 /** What a row says: its name, and the line under it. */
 const rowWords = (row: HTMLElement) => [
-  row.querySelector("strong")?.textContent,
-  row.querySelector("small")?.textContent,
+  nameOf(row),
+  row.matches(".luke-settings-row")
+    ? row.querySelector('[id$="description"]')?.textContent
+    : row.querySelector("small")?.textContent,
 ];
 
 /** What every GitHub row of the Integrations group says, in order: every row but Linear's, which the group holds beside them. */
 const integrationRows = (page: HTMLElement) =>
-  [...githubGroup(page).querySelectorAll<HTMLElement>(".settings-row")]
+  [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)]
     .map(rowWords)
     .filter(([name]) => name !== "Linear");
 
@@ -1357,7 +1396,7 @@ test("a member reads every account connected, or is told to ask an owner or admi
   for (const { page } of [connected, unconnected]) {
     const group = githubGroup(page);
     assert.equal(group.querySelector("button"), null);
-    for (const row of group.querySelectorAll<HTMLElement>(".settings-row")) {
+    for (const row of group.querySelectorAll<HTMLElement>(ROWS)) {
       act(() => {
         row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
       });
@@ -1433,15 +1472,14 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
 }
 
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
   const face = row.querySelector<HTMLElement>(".actor-mark")?.dataset.kind;
-  const listed = [
-    row.querySelector("strong")?.textContent,
-    row.querySelector("small")?.textContent,
-  ];
+  const listed = [addressOf(row)?.textContent, row.querySelector("p")?.textContent];
   act(() => button(row, "Copy link").click());
   await chooseAction(row, "Cancel invitation");
 
@@ -1470,15 +1508,12 @@ test("the owner invites an address as a role, sees it pending with its link to c
       ],
       [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
       [
-        ACT_KIND.WINDOW_COPY_TEXT,
-        { words: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com" },
-      ],
-      [
         ACT_KIND.WORKSPACE_INVITATION_CANCEL,
         { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },
       ],
     ],
   );
+  assert.deepEqual(copied, ["https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com"]);
 });
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
@@ -1538,7 +1573,7 @@ test("a first read still out when an invitation lands does not take the new invi
   await settle();
 
   assert.deepEqual(
-    invitationRows(page).map((row) => row.querySelector("strong")?.textContent),
+    invitationRows(page).map((row) => addressOf(row)?.textContent),
     ["alan@example.com"],
   );
 });
@@ -1550,7 +1585,7 @@ test("an invitation made stays listed with its link when the read after it fails
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
 
   const row = invitationRows(page)[0] ?? assert.fail("the invitation was lost");
-  assert.equal(row.querySelector("strong")?.textContent, "alan@example.com");
+  assert.equal(addressOf(row)?.textContent, "alan@example.com");
   assert.ok(button(row, "Copy link"));
 });
 
@@ -1654,8 +1689,8 @@ test("a workspaces read that failed says so with Retry, which asks for them agai
   act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
 
   assert.equal(
-    container.querySelector('[role="alert"] .failure-note-words')?.textContent,
-    "Your workspaces could not be read.",
+    container.querySelector('[role="alert"]')?.textContent,
+    "Your workspaces could not be read.Retry",
   );
   assert.equal(container.querySelector(".settings-reading"), null);
   act(() => button(container, "Retry").click());
@@ -1676,8 +1711,8 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
   assert.equal(
-    [...page.querySelectorAll('[role="alert"] .failure-note-words')].some(
-      (each) => each.textContent === "The invitations could not be read.",
+    [...page.querySelectorAll('[role="alert"]')].some(
+      (each) => each.textContent === "The invitations could not be read.Retry",
     ),
     true,
   );
@@ -1688,7 +1723,7 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   await settle();
 
   assert.deepEqual(
-    invitationRows(page).map((row) => row.querySelector("strong")?.textContent),
+    invitationRows(page).map((row) => addressOf(row)?.textContent),
     ["sam@example.com"],
   );
 });
@@ -1716,6 +1751,27 @@ test("an admin's Linear row in Integrations connects Linear for the workspace at
   assert.deepEqual(before, ["Linear", "Not connected."]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(linearSent(), [[ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId: ACME.id }]]);
+});
+
+test("an admin's Linear Connect is named Connecting while the browser is sent, and Connect again once it is", async () => {
+  let release: () => void = () => undefined;
+  linearConnectHeld = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const connect = button(rowNamed(githubGroup(page), "Linear"), "Connect");
+
+  act(() => connect.click());
+  const during = [connect.getAttribute("aria-label"), connect.getAttribute("aria-busy")];
+  release();
+  await settle();
+
+  assert.deepEqual(during, ["Connecting", "true"]);
+  assert.deepEqual(
+    [connect.getAttribute("aria-label"), connect.getAttribute("aria-busy")],
+    [null, null],
+  );
+  assert.equal(page.querySelector('[role="alert"]'), null);
 });
 
 test("a connected workspace's Linear reads connected for everyone and stands quiet, its ⋯ disconnects after asking, and a member sees it read only", async () => {
@@ -1752,10 +1808,21 @@ test("in the window, each member's ⋯ opens their profile first, in the workspa
     opened.push([userId, name, workspaceId]),
   );
 
-  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Open profile"]);
-  await chooseAction(rowNamed(page, "Sam"), "Open profile");
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Open profile"]);
+  await chooseAction(memberNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);
+});
+
+test("on a platform without this Mac's terminal, the Workspace page draws no Repositories group beside its Integrations", async () => {
+  githubRepositories = ["acme/app"];
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MAC_TERMINAL));
+  const { page } = await mount(ACME);
+  const group = (section: string) =>
+    page.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${section}"]`);
+
+  assert.equal(group(SETTINGS_SECTION.GITHUB_REPOSITORIES) !== null, true, "the page is drawn");
+  assert.equal(group(SETTINGS_SECTION.MAC_REPOSITORIES) !== null, false);
 });
 
 test("the Repositories group lists the workspace's repositories and those set here, and saves a command typed on this Mac", async () => {

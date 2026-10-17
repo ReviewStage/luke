@@ -217,6 +217,19 @@ test("an approval, a task, and an item asking nothing are answered by their pres
   });
 });
 
+test("files attached alone answer an item in the developer's own words, and travel apart from the answer", () => {
+  const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
+  assert.deepEqual(
+    inboxReply(item({ id: "question" }), { ...EMPTY_INBOX_DRAFT, attachments: files }),
+    {
+      reply: INBOX_REPLY.ANSWERED,
+    },
+  );
+  assert.deepEqual(inboxReply(QUEUE, { ...EMPTY_INBOX_DRAFT, attachments: files }), {
+    reply: INBOX_REPLY.ANSWERED,
+  });
+});
+
 test("a settled item says what its answerer did: the developer's pick, a form's values a line each, and their note, or the agent taking it back and why; an open one is not settled", () => {
   assert.equal(settlementOf(QUEUE), undefined);
   assert.deepEqual(

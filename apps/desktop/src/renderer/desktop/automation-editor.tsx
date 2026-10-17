@@ -10,6 +10,7 @@ import {
   automationDraft,
   changeOf,
   createRequestOf,
+  cronOf,
   DRAFT_FIELD,
   type DraftDefaults,
   type DraftProblems,
@@ -27,6 +28,7 @@ import {
   withRepository,
 } from "@luke/features/automation-draft-model";
 import { automationTriggerText } from "@luke/features/automation-list-model";
+import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
@@ -62,21 +64,42 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   AnchoredPopover,
+  BUTTON_VARIANT,
+  Button,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
   ConfirmDialog,
   EllipsisIcon,
+  IconButton,
   POPOVER_ALIGN,
   ProviderMark,
+  SETTINGS_SECTION_FRAME,
+  SettingsRow,
+  SettingsSection,
   SidePanelIcon,
+  Switch,
+  TEXT_ELEMENT,
+  TEXT_FIELD_FONT,
+  TEXT_FIELD_TYPE,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextArea,
+  TextField,
   useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { Result } from "effect";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
@@ -85,10 +108,8 @@ import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
-import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
-import { BusyLabel, Spinner } from "../spinner";
-import { Switch } from "../switch";
+import { Spinner } from "../spinner";
 import { AgentModelChip } from "../tasks/agent-model-chip";
 import { AgentServersButton } from "../tasks/agent-servers";
 import { ModelMenu } from "../tasks/model-menu";
@@ -96,9 +117,7 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
@@ -276,21 +295,14 @@ function OwnerRow({
   onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
   const parse = optionValue(owners);
-  const detailId = useId();
   return (
     <PickerRow
-      copy={
-        <>
-          <strong>Owner</strong>
-          <small id={detailId}>
-            {owner === AUTOMATION_SCOPE.WORKSPACE
-              ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
-              : "Only you see and change it. Owners and admins can see it and turn it off."}
-          </small>
-        </>
-      }
       label="Owner"
-      describedBy={detailId}
+      detail={
+        owner === AUTOMATION_SCOPE.WORKSPACE
+          ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
+          : "Only you see and change it. Owners and admins can see it and turn it off."
+      }
       value={owner}
       valueLabel={ownerName(owner, workspace)}
       valueIcon={
@@ -347,16 +359,16 @@ function ServersRow({
 }): React.JSX.Element {
   if (!mine) {
     return (
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>MCP servers</strong>
-          <small>
-            {disabled.length === 0
-              ? "All of its creator's connected servers."
-              : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`}
-          </small>
-        </span>
-      </div>
+      <SettingsRow
+        label="MCP servers"
+        description={
+          disabled.length === 0
+            ? "All of its creator's connected servers."
+            : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`
+        }
+      >
+        {() => null}
+      </SettingsRow>
     );
   }
   return <OwnServersRow disabled={disabled} onSwitch={onSwitch} />;
@@ -389,40 +401,41 @@ function OwnServersRow({
   const off = connected.filter((provider) => disabled.includes(provider));
   const shown = on.slice(0, SERVERS_CHIP_MARKS);
   return (
-    <div className="settings-row">
-      <span className="settings-copy">
-        <strong>MCP servers</strong>
-        <small>
-          {connected.length === 0
-            ? "None connected yet."
-            : off.length === 0
-              ? "Every connected server is on."
-              : `${namesSaid(off)} off.`}
-        </small>
-      </span>
-      <AgentServersButton
-        servers={{
-          disabled,
-          onSwitch,
-          onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
-        }}
-        statuses={statuses}
-        face={
-          on.length === 0 ? (
-            <span className="chip-name">None</span>
-          ) : (
-            <span className="automation-servers">
-              {shown.map((provider) => (
-                <ProviderMark key={provider} provider={provider} />
-              ))}
-              {on.length > shown.length ? (
-                <span className="chip-name">{`+${on.length - shown.length}`}</span>
-              ) : null}
-            </span>
-          )
-        }
-      />
-    </div>
+    <SettingsRow
+      label="MCP servers"
+      description={
+        connected.length === 0
+          ? "None connected yet."
+          : off.length === 0
+            ? "Every connected server is on."
+            : `${namesSaid(off)} off.`
+      }
+    >
+      {() => (
+        <AgentServersButton
+          servers={{
+            disabled,
+            onSwitch,
+            onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+          }}
+          statuses={statuses}
+          face={
+            on.length === 0 ? (
+              <ChipName>None</ChipName>
+            ) : (
+              <span className="automation-servers">
+                {shown.map((provider) => (
+                  <ProviderMark key={provider} provider={provider} />
+                ))}
+                {on.length > shown.length ? (
+                  <ChipName>{`+${on.length - shown.length}`}</ChipName>
+                ) : null}
+              </span>
+            )
+          }
+        />
+      )}
+    </SettingsRow>
   );
 }
 
@@ -461,15 +474,28 @@ const scheduleKindOf = optionValue(SCHEDULE_KINDS);
  */
 function ScheduleRows({
   draft,
+  problem,
   onSchedule,
   onTimezone,
 }: {
   draft: AutomationDraft;
+  /** What stops a save in the schedule, said under the row it is about. */
+  problem: string | undefined;
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
 }): React.JSX.Element {
+  // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  const cron = useRef<HTMLInputElement>(null);
+  const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
   const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
+  // Note that a zone Luke cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
+  const read =
+    problem === undefined
+      ? undefined
+      : readSchedule({ cron: cronOf(schedule), timezone }, new Date());
+  const zoneRefused =
+    read !== undefined && Result.isFailure(read) && read.failure === SCHEDULE_REFUSAL.TIMEZONE;
   return (
     <>
       <SelectRow
@@ -481,71 +507,81 @@ function ScheduleRows({
         onChange={(kind) => onSchedule({ ...schedule, kind })}
       />
       {schedule.kind === SCHEDULE_KIND.CUSTOM ? (
-        <div className="settings-row">
-          <span className="settings-copy">
-            <strong>Cron</strong>
-          </span>
-          <input
-            className="settings-input automation-cron"
-            aria-label="Cron"
-            spellCheck={false}
-            onKeyDown={releaseOnEscape}
-            value={schedule.cron}
-            onChange={(event) => onSchedule({ ...schedule, cron: event.target.value })}
-          />
-        </div>
+        <SettingsRow label="Cron" error={zoneRefused ? undefined : problem}>
+          {(control) => (
+            <span className="automation-field">
+              <TextField
+                ref={cron}
+                label="Cron"
+                describedBy={control["aria-describedby"]}
+                invalid={control["aria-invalid"]}
+                font={TEXT_FIELD_FONT.MONO}
+                spellCheck={false}
+                value={schedule.cron}
+                onEscape={() => cron.current?.blur()}
+                onChange={(text) => onSchedule({ ...schedule, cron: text })}
+              />
+            </span>
+          )}
+        </SettingsRow>
       ) : (
-        <div className="settings-row">
-          <span className="settings-copy">
-            <strong>{schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}</strong>
-          </span>
-          <span className="automation-row-controls">
-            {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
-              <Picker
-                label="Day"
-                value={String(schedule.weekday)}
-                valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
-                rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
-                noMatch={NO_MATCH}
-                onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
-              />
-            ) : null}
-            {schedule.kind === SCHEDULE_KIND.HOURLY ? (
-              <Picker
-                label="Minutes past the hour"
-                value={String(schedule.minute)}
-                valueLabel={hourlyLabel(schedule.minute)}
-                rows={HOURLY_MINUTES.map((minute) => ({
-                  id: String(minute),
-                  label: hourlyLabel(minute),
-                }))}
-                noMatch={NO_MATCH}
-                onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
-              />
-            ) : (
-              <input
-                type="time"
-                className="settings-input automation-time"
-                aria-label="Time"
-                value={clockValue(schedule.hour, schedule.minute)}
-                onKeyDown={releaseOnEscape}
-                onChange={(event) => {
-                  const clock = clockOf(event.target.value);
-                  if (clock !== undefined) onSchedule({ ...schedule, ...clock });
-                }}
-              />
-            )}
-          </span>
-        </div>
+        <SettingsRow
+          label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}
+          error={zoneRefused ? undefined : problem}
+        >
+          {(control) => (
+            <>
+              {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
+                <Picker
+                  label="Day"
+                  value={String(schedule.weekday)}
+                  valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
+                  rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
+                  noMatch={NO_MATCH}
+                  onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
+                />
+              ) : null}
+              {schedule.kind === SCHEDULE_KIND.HOURLY ? (
+                <Picker
+                  label="Minutes past the hour"
+                  value={String(schedule.minute)}
+                  valueLabel={hourlyLabel(schedule.minute)}
+                  rows={HOURLY_MINUTES.map((minute) => ({
+                    id: String(minute),
+                    label: hourlyLabel(minute),
+                  }))}
+                  noMatch={NO_MATCH}
+                  onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
+                />
+              ) : (
+                <span className="automation-field">
+                  <TextField
+                    ref={time}
+                    type={TEXT_FIELD_TYPE.TIME}
+                    label="Time"
+                    describedBy={control["aria-describedby"]}
+                    invalid={control["aria-invalid"]}
+                    value={clockValue(schedule.hour, schedule.minute)}
+                    onEscape={() => time.current?.blur()}
+                    onChange={(text) => {
+                      const clock = clockOf(text);
+                      if (clock !== undefined) onSchedule({ ...schedule, ...clock });
+                    }}
+                  />
+                </span>
+              )}
+            </>
+          )}
+        </SettingsRow>
       )}
       <PickerRow
         label="Time zone"
-        copy={<strong>Time zone</strong>}
         value={timezone}
         valueLabel={zoneLabel(timezone)}
         rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
         placeholder="Search time zones"
         noMatch="No time zones match"
+        error={zoneRefused ? problem : undefined}
         onPick={onTimezone}
       />
     </>
@@ -563,7 +599,7 @@ function AutomationActions({
   automation: AutomationSummary;
   onDelete: () => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",
@@ -574,14 +610,7 @@ function AutomationActions({
   return (
     <>
       <Tooltip label={ACTIONS_LABEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={ACTIONS_LABEL}
-          {...menu.trigger()}
-        >
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -647,7 +676,7 @@ function EditorToolbar({
       <div className="automation-toolbar">
         <div className="desktop-toolbar-heading">
           <nav className="automation-crumbs" aria-label="Path">
-            <FoldingButton label="Automations" glyph={<ZapIcon />} onClick={onBack} />
+            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
             <ChevronRightIcon aria-hidden="true" />
             <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
           </nav>
@@ -655,33 +684,33 @@ function EditorToolbar({
         </div>
         <div className="desktop-toolbar-actions">
           <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
-          <span className="automation-editor-status" data-dirty={String(dirty)}>
-            {status}
+          <span className="automation-editor-status">
+            <Text
+              variant={TEXT_VARIANT.CAPTION}
+              tone={dirty ? TEXT_TONE.MUTED : TEXT_TONE.SUBTLE}
+              as={TEXT_ELEMENT.SPAN}
+            >
+              {status}
+            </Text>
           </span>
           {automation === undefined ? null : (
             <FoldingButton
               label="Run now"
-              glyph={<PlayIcon />}
+              icon={<PlayIcon />}
+              variant={BUTTON_VARIANT.OUTLINE}
               busy={running ? "Running" : undefined}
-              className="toolbar-button bordered-button"
-              disabled={running}
               onClick={onRunNow}
-            >
-              <BusyLabel busy={running} label="Running">
-                Run now
-              </BusyLabel>
-            </FoldingButton>
+            />
           )}
-          <button
-            type="button"
-            className="primary-button"
-            disabled={saving || !(automation === undefined || dirty)}
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            busy={saving}
+            busyLabel="Saving"
+            disabled={!(automation === undefined || dirty)}
             onClick={onSave}
           >
-            <BusyLabel busy={saving} label="Saving">
-              {automation === undefined ? "Create" : "Save"}
-            </BusyLabel>
-          </button>
+            {automation === undefined ? "Create" : "Save"}
+          </Button>
           {automation === undefined ? null : (
             <>
               <Switch
@@ -696,16 +725,12 @@ function EditorToolbar({
           )}
           {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right. */}
           <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
-            <button
-              type="button"
-              className="icon-button side-panel-toggle"
-              aria-label={runsLabel}
+            <IconButton
+              icon={<SidePanelIcon />}
+              label={runsLabel}
               aria-expanded={runsPanel.open}
-              data-open={String(runsPanel.open)}
               onClick={runsPanel.onToggle}
-            >
-              <SidePanelIcon />
-            </button>
+            />
           </Tooltip>
         </div>
       </div>
@@ -841,8 +866,10 @@ function CodeReviewGroup({
   settings: CodeReviewSettings;
   onSettings: (settings: CodeReviewSettings) => void;
 }): React.JSX.Element {
+  // The rules file's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  const rulesFile = useRef<HTMLInputElement>(null);
   return (
-    <SettingsGroup title="Code review">
+    <SettingsSection title="Code review">
       <SwitchRow
         label="Comment when no issues are found"
         detail="Only on a pull request's first review."
@@ -857,27 +884,32 @@ function CodeReviewGroup({
         parse={mostFindingsOf}
         onChange={(mostFindings) => onSettings({ ...settings, mostFindings })}
       />
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Rules file</strong>
-          <small>Read from the base branch, beside AGENTS.md and CLAUDE.md.</small>
-        </span>
-        <input
-          className="settings-input automation-rules-file"
-          aria-label="Rules file"
-          spellCheck={false}
-          value={settings.rulesFile}
-          onKeyDown={releaseOnEscape}
-          onChange={(event) => onSettings({ ...settings, rulesFile: event.target.value })}
-        />
-      </div>
+      <SettingsRow
+        label="Rules file"
+        description="Read from the base branch, beside AGENTS.md and CLAUDE.md."
+      >
+        {(control) => (
+          <span className="automation-field">
+            <TextField
+              ref={rulesFile}
+              label="Rules file"
+              describedBy={control["aria-describedby"]}
+              font={TEXT_FIELD_FONT.MONO}
+              spellCheck={false}
+              value={settings.rulesFile}
+              onEscape={() => rulesFile.current?.blur()}
+              onChange={(text) => onSettings({ ...settings, rulesFile: text })}
+            />
+          </span>
+        )}
+      </SettingsRow>
       <SwitchRow
         label="Fix what it finds"
         detail="Pushes its fixes to the pull request as Luke. Luke's own pushes start no review."
         checked={settings.fix}
         onChange={(fix) => onSettings({ ...settings, fix })}
       />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -903,30 +935,32 @@ function ShownSecretRow({
 }): React.JSX.Element {
   const copy = useCopyFeedback();
   return (
-    <div className="settings-row ph-no-capture">
-      <span className="settings-copy">
-        <strong>Secret</strong>
-        <small>You won't be able to see this again. Copy it into your sender now.</small>
-      </span>
-      <span className="automation-row-controls">
-        <input
-          className="settings-input automation-webhook-url"
-          aria-label="Secret"
-          readOnly
-          value={secret}
-        />
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={copyHint(copy.state, "Copy secret")}
-          onClick={() => copy.copy(secret)}
-        >
-          <CopyGlyph state={copy.state} />
-        </button>
-        <button type="button" className="toolbar-button" onClick={onDone}>
-          Done
-        </button>
-      </span>
+    <div className="ph-no-capture">
+      <SettingsRow
+        label="Secret"
+        description="You won't be able to see this again. Copy it into your sender now."
+      >
+        {() => (
+          <>
+            <span className="automation-webhook-field">
+              <TextField
+                label="Secret"
+                font={TEXT_FIELD_FONT.MONO}
+                spellCheck={false}
+                readOnly
+                value={secret}
+                onChange={() => undefined}
+              />
+            </span>
+            <IconButton
+              icon={<CopyGlyph state={copy.state} />}
+              label={copyHint(copy.state, "Copy secret")}
+              onClick={() => copy.copy(secret)}
+            />
+            <Button onClick={onDone}>Done</Button>
+          </>
+        )}
+      </SettingsRow>
     </div>
   );
 }
@@ -973,51 +1007,54 @@ function WebhookRows({
     automation?.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? automation.webhookUrl : undefined;
   if (automation === undefined || url === undefined) {
     return (
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Address</strong>
-          <small>Save it as a webhook to get its address and a secret to call it with.</small>
-        </span>
-      </div>
+      <SettingsRow
+        label="Address"
+        description="Save it as a webhook to get its address and a secret to call it with."
+      >
+        {() => null}
+      </SettingsRow>
     );
   }
   return (
     <>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Address</strong>
-          <small>
+      <SettingsRow
+        label="Address"
+        description={
+          <>
             POST to the address with the secret as <code>Authorization: Bearer</code>. Don't send
             secrets in the body: Luke hands the body to the run's agent, and it shows in the run's
             transcript.
-          </small>
-        </span>
-        <span className="automation-row-controls">
-          <input
-            className="settings-input automation-webhook-url"
-            aria-label="Webhook address"
-            readOnly
-            value={url}
-          />
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={copyHint(address.state, "Copy address")}
-            onClick={() => address.copy(url)}
-          >
-            <CopyGlyph state={address.state} />
-          </button>
-        </span>
-      </div>
+          </>
+        }
+      >
+        {() => (
+          <>
+            <span className="automation-webhook-field">
+              <TextField
+                label="Webhook address"
+                font={TEXT_FIELD_FONT.MONO}
+                spellCheck={false}
+                readOnly
+                value={url}
+                onChange={() => undefined}
+              />
+            </span>
+            <IconButton
+              icon={<CopyGlyph state={address.state} />}
+              label={copyHint(address.state, "Copy address")}
+              onClick={() => address.copy(url)}
+            />
+          </>
+        )}
+      </SettingsRow>
       {secret === undefined ? (
-        <div className="settings-row">
-          <span className="settings-copy">
-            <strong>Secret</strong>
-          </span>
-          <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
-            New secret
-          </button>
-        </div>
+        <SettingsRow label="Secret">
+          {() => (
+            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={rotation.ask}>
+              New secret
+            </Button>
+          )}
+        </SettingsRow>
       ) : (
         <ShownSecretRow key={secret} secret={secret} onDone={() => onSecret(undefined)} />
       )}
@@ -1070,7 +1107,6 @@ function ModelPicker({
         ref={trigger}
         look={CHIP_LOOK.FIELD}
         chevron
-        className="settings-picker-chip"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -1079,7 +1115,7 @@ function ModelPicker({
           setOpen(!open);
         }}
       >
-        <span className="chip-name">Choose a model</span>
+        <ChipName>Choose a model</ChipName>
       </Chip>
       {drawn.mounted ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
@@ -1127,28 +1163,25 @@ function ModelRow({
         ? "It runs on your default model, which could not be read."
         : "Your default model.";
   return (
-    <div className="settings-row">
-      <span className="settings-copy">
-        <strong>Model</strong>
-        {note === undefined ? null : <small>{note}</small>}
-      </span>
-      {shown !== undefined ? (
-        <AgentModelChip
-          model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
-          models={choices.models}
-          readModels={choices.readModels}
-          usage={undefined}
-          look={CHIP_LOOK.FIELD}
-          className="settings-picker-chip"
-        />
-      ) : choices.defaultFailed ? (
-        <ModelPicker
-          models={choices.models}
-          readModels={choices.readModels}
-          onChoose={(choice) => onDraft({ choice })}
-        />
-      ) : null}
-    </div>
+    <SettingsRow label="Model" description={note}>
+      {() =>
+        shown !== undefined ? (
+          <AgentModelChip
+            model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
+            models={choices.models}
+            readModels={choices.readModels}
+            usage={undefined}
+            look={CHIP_LOOK.FIELD}
+          />
+        ) : choices.defaultFailed ? (
+          <ModelPicker
+            models={choices.models}
+            readModels={choices.readModels}
+            onChoose={(choice) => onDraft({ choice })}
+          />
+        ) : null
+      }
+    </SettingsRow>
   );
 }
 
@@ -1160,6 +1193,13 @@ function agentLabel(agent: { title: string | null }): string {
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
+/** What the agent row says where the workspace's agents could not be read. */
+const AGENTS_UNREAD = "The workspace's agents could not be read.";
+
+/** What the agent row says under its name. */
+const AGENT_DETAIL =
+  "Each run is sent to that agent as a message, even mid-turn. It keeps its own model and effort.";
+
 /**
  * The agent each run goes to, chosen from the workspace's agents on the
  * repository. The agent it goes to as saved is kept first in the menu where
@@ -1169,32 +1209,27 @@ function AgentRow({
   draft,
   savedAgentId,
   agents,
+  problem,
   onDraft,
 }: {
   draft: AutomationDraft;
   /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
   agents: AgentsRead;
+  /** What stops a save here, or nothing. */
+  problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const copy = (
-    <>
-      <strong>Agent</strong>
-      <small>
-        Each run is sent to that agent as a message, even mid-turn. It keeps its own model and
-        effort.
-      </small>
-    </>
-  );
   if (agents !== undefined && "failed" in agents) {
     return (
-      <div className="settings-row">
-        <span className="settings-copy">
-          {copy}
-          <small className="error-message">The workspace's agents could not be read.</small>
-        </span>
-      </div>
+      <SettingsRow
+        label="Agent"
+        description={AGENT_DETAIL}
+        error={problem === undefined ? AGENTS_UNREAD : `${AGENTS_UNREAD} ${problem}`}
+      >
+        {() => null}
+      </SettingsRow>
     );
   }
   const listed = agents?.agents ?? [];
@@ -1214,7 +1249,7 @@ function AgentRow({
   return (
     <PickerRow
       label="Agent"
-      copy={copy}
+      detail={AGENT_DETAIL}
       value={draft.agentId ?? ""}
       valueLabel={
         chosen !== undefined
@@ -1234,6 +1269,7 @@ function AgentRow({
         ) : undefined
       }
       noMatch={NO_MATCH}
+      error={problem}
       onPick={(agentId) => onDraft({ agentId })}
     />
   );
@@ -1273,27 +1309,32 @@ function RunsGroup({
   // The other repositories as a save would send them: the one shown first left out.
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
-    <SettingsGroup title="Runs">
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Repository</strong>
-          {taskBacked ? (
-            <small>Its task's repository.</small>
-          ) : also.length === 0 ? null : (
-            <small>{`Runs start here, and also work in ${also.join(", ")}.`}</small>
-          )}
-        </span>
-        {taskBacked ? null : (
-          <RepositoryChip
-            key={repositories.scope}
-            place={CHIP_PLACE.FIELD}
-            value={draft.repository}
-            chooser={repositories}
-            onChoose={(repository) => onDraft(withRepository(draft, repository))}
-          />
-        )}
-      </div>
-      <Problem problem={problems[DRAFT_FIELD.REPOSITORY]} />
+    <SettingsSection title="Runs">
+      <SettingsRow
+        label="Repository"
+        description={
+          taskBacked
+            ? "Its task's repository."
+            : also.length === 0
+              ? undefined
+              : `Runs start here, and also work in ${also.join(", ")}.`
+        }
+        error={problems[DRAFT_FIELD.REPOSITORY]}
+      >
+        {(control) =>
+          taskBacked ? null : (
+            <RepositoryChip
+              key={repositories.scope}
+              place={CHIP_PLACE.FIELD}
+              describedBy={control["aria-describedby"]}
+              invalid={control["aria-invalid"]}
+              value={draft.repository}
+              chooser={repositories}
+              onChoose={(repository) => onDraft(withRepository(draft, repository))}
+            />
+          )
+        }
+      </SettingsRow>
       <SelectRow
         label="Runs land in"
         value={draft.target}
@@ -1306,6 +1347,7 @@ function RunsGroup({
           draft={draft}
           savedAgentId={savedAgentId}
           agents={choices.agents}
+          problem={problems[DRAFT_FIELD.AGENT]}
           onDraft={onDraft}
         />
       ) : (
@@ -1324,8 +1366,7 @@ function RunsGroup({
           />
         </>
       )}
-      <Problem problem={problems[DRAFT_FIELD.AGENT]} />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -1369,6 +1410,8 @@ function EditorForm({
 }): React.JSX.Element {
   // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
   const review = readCodeReviewSettings(draft.prompt);
+  // The prompt's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  const prompt = useRef<HTMLTextAreaElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
   const owners = [
     { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
@@ -1377,7 +1420,7 @@ function EditorForm({
   return (
     <div className="automation-form">
       {offersOwner ? (
-        <SettingsGroup title="Sharing">
+        <SettingsSection title="Sharing">
           <OwnerRow
             owner={draft.owner}
             owners={owners}
@@ -1385,20 +1428,26 @@ function EditorForm({
             workspace={workspace}
             onOwner={(owner) => onDraft({ owner })}
           />
-        </SettingsGroup>
+        </SettingsSection>
       ) : null}
-      <SettingsGroup title="Trigger">
+      <SettingsSection title="Trigger">
         <SelectRow
           label="Type"
           detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
           value={draft.triggerKind}
           options={TRIGGERS}
           parse={triggerKindOf}
+          error={
+            draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
+              ? undefined
+              : problems[DRAFT_FIELD.SCHEDULE]
+          }
           onChange={(triggerKind) => onDraft({ triggerKind })}
         />
         {draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE ? (
           <ScheduleRows
             draft={draft}
+            problem={problems[DRAFT_FIELD.SCHEDULE]}
             onSchedule={(schedule) => onDraft({ schedule })}
             onTimezone={(timezone) => onDraft({ timezone })}
           />
@@ -1426,25 +1475,25 @@ function EditorForm({
             onSecret={onSecret}
           />
         )}
-        <Problem problem={problems[DRAFT_FIELD.SCHEDULE]} />
-      </SettingsGroup>
+      </SettingsSection>
       {review === undefined ? null : (
         <CodeReviewGroup
           settings={review}
           onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
         />
       )}
-      <SettingsGroup title="Prompt">
-        <textarea
-          className="automation-prompt"
-          aria-label="Prompt"
+      <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
+        <TextArea
+          ref={prompt}
+          label="Prompt"
+          rows={5}
           placeholder="Find the flakiest test in CI this week and fix it."
           value={draft.prompt}
-          onKeyDown={releaseOnEscape}
-          onChange={(event) => onDraft({ prompt: event.target.value })}
+          onEscape={() => prompt.current?.blur()}
+          onChange={(text) => onDraft({ prompt: text })}
         />
         <Problem problem={problems[DRAFT_FIELD.PROMPT]} />
-      </SettingsGroup>
+      </SettingsSection>
       <RunsGroup
         draft={draft}
         mine={automation === undefined || automation.mine === true}

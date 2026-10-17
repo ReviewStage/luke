@@ -5,6 +5,7 @@ import type {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
+import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import {
   ACTOR_SIZE,
@@ -15,7 +16,6 @@ import {
   automationActor,
 } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
-import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { usePerson } from "../member-directory";
 import {
   type ArchivedByReading,
@@ -176,7 +176,7 @@ function StartedBy({
   const known = useAutomation(automationId);
   if (known === undefined && by === undefined) return null;
   return (
-    <CardNote oneLine>
+    <HoverCardNote oneLine>
       <ActorLine>
         {"Started by "}
         {known === undefined ? (
@@ -191,7 +191,7 @@ function StartedBy({
           />
         )}
       </ActorLine>
-    </CardNote>
+    </HoverCardNote>
   );
 }
 
@@ -199,8 +199,8 @@ function StartedBy({
 function ArchivedByNote({ archivedBy }: { archivedBy: ArchivedByReading }): React.JSX.Element {
   return (
     <>
-      <CardNote oneLine>{archivedBy.words}</CardNote>
-      {archivedBy.reason === undefined ? null : <CardNote>{archivedBy.reason}</CardNote>}
+      <HoverCardNote oneLine>{archivedBy.words}</HoverCardNote>
+      {archivedBy.reason === undefined ? null : <HoverCardNote>{archivedBy.reason}</HoverCardNote>}
     </>
   );
 }
@@ -210,7 +210,7 @@ function ActivityLine({ transcript }: { transcript: CopiedTranscript }): React.J
   const activity = latestActivity(transcript);
   if (activity === undefined) return null;
   return (
-    <CardNote oneLine>
+    <HoverCardNote oneLine>
       {activity.kind === LATEST_ACTIVITY.WORDS ? (
         activity.text
       ) : (
@@ -220,7 +220,7 @@ function ActivityLine({ transcript }: { transcript: CopiedTranscript }): React.J
           {activity.code ? <code>{activity.subject}</code> : activity.subject}
         </>
       )}
-    </CardNote>
+    </HoverCardNote>
   );
 }
 
@@ -311,7 +311,7 @@ export function AgentTabCard({
   const { corner, choice, transcript, startedBy, automationId, tile, pullRequest, archivedBy } =
     read();
   const head = (
-    <CardHead
+    <HoverCardHead
       name={name}
       oneLine={untitled}
       sub={choice === undefined ? undefined : <ModelLabel choice={choice} models={models} />}
@@ -333,8 +333,8 @@ export function AgentTabCard({
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
       {foot === undefined ? null : (
         <>
-          <CardRule />
-          <CardNote>{foot}</CardNote>
+          <HoverCardRule />
+          <HoverCardNote>{foot}</HoverCardNote>
         </>
       )}
     </HoverCard>

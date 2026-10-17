@@ -1,9 +1,11 @@
 import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { CHAT_TOOLS } from "@luke/service/agents/coder-host/chat";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
 import { offeredChatTools, runChatTool } from "../host.js";
+import { sessionPrompt } from "../session-prompt.js";
 
 /**
  * read_chat.ts -- the agent reads its workspace's chat: who is in it, its channels, and the messages.
@@ -17,7 +19,7 @@ import { offeredChatTools, runChatTool } from "../host.js";
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      (await offeredChatTools(ctx.session.auth, ctx.session.id))
+      (await offeredChatTools(ctx.session.auth, ctx.session.id, pinnedState(sessionPrompt).get()))
         ? defineTool({
             description: CHAT_TOOLS.READ.description,
             inputSchema: emitJsonSchema(CHAT_TOOLS.READ.inputSchema),
