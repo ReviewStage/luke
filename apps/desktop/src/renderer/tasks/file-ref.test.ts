@@ -130,7 +130,7 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   const icon = tab.querySelector(".tab-icon")?.innerHTML;
   assert.equal(head.querySelector("svg")?.outerHTML, icon, "the head wears the tab's icon");
 
-  const add = panel.querySelector<HTMLButtonElement>("button.tab-add");
+  const add = panel.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const row = [...document.querySelectorAll('.tab-add-menu [role="option"]')].find(

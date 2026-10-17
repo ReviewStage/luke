@@ -3,6 +3,7 @@ import {
   CloseIcon,
   CopyIcon,
   EllipsisIcon,
+  IconButton,
   PencilIcon,
   PinIcon,
   PlusIcon,
@@ -375,11 +376,10 @@ export function AddTabButton({
   return (
     <div ref={root} className="tab-add-anchor" data-side={side}>
       <Tooltip label={label} command={APP_COMMAND.NEW_TAB}>
-        <button
+        <IconButton
           ref={opener}
-          type="button"
-          className="icon-button tab-add"
-          aria-label={label}
+          icon={<PlusIcon />}
+          label={label}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
@@ -392,9 +392,7 @@ export function AddTabButton({
             setOpen(true);
             onOpen?.();
           }}
-        >
-          <PlusIcon />
-        </button>
+        />
       </Tooltip>
       {drawn.mounted ? (
         <SearchableMenu

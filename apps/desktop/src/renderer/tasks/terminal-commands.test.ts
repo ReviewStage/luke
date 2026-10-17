@@ -275,7 +275,9 @@ test("the panel's + lists each agent's terminal under Terminal, says how it stan
     side: SIDE_PANEL_TAB.BOARD,
     lastTerminal: DONE.id,
   });
-  const add = document.querySelector<HTMLButtonElement>(".side-panel-tabs button.tab-add");
+  const add = document.querySelector<HTMLButtonElement>(
+    '.side-panel-tabs button[aria-label="Open a tab"]',
+  );
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
