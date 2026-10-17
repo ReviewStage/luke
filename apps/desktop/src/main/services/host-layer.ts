@@ -20,6 +20,7 @@ import {
 } from "@luke/host/effect";
 import { openTerminalSocketOverWs, openVoiceSocketOverWs } from "@luke/host/node";
 import { ConfigProvider, Layer } from "effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type { DesktopConfig } from "./desktop-config";
 
 interface HostSeamDependencies {
@@ -78,6 +79,7 @@ export function hostAssemblyLayerFor(
         NodeChildProcessSpawner.layer,
         Layer.mergeAll(NodeFileSystem.layer, NodePath.layer),
       ),
+      FetchHttpClient.layer,
     ),
   );
 }
