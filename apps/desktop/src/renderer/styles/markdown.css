@@ -48,7 +48,7 @@
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
   background: var(--markdown-tint);
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
   /* Mono runs wider than the text around it at equal size. */
   font-size: 0.92em;
   font-weight: 500;
@@ -100,8 +100,8 @@
 .markdown-quote {
   margin: 0;
   padding-left: 0.8em;
-  border-left: 3px solid var(--hairline-strong);
-  color: var(--text-secondary);
+  border-left: 3px solid var(--luke-color-border-strong);
+  color: var(--luke-color-text-muted);
   font-style: normal;
   text-align: left;
 }
@@ -134,7 +134,7 @@ blockquote.markdown-quote > * + * {
   height: 0.95em;
   margin: 0 0.45em 0 -1.45em;
   vertical-align: -0.1em;
-  accent-color: var(--state-complete);
+  accent-color: var(--luke-color-complete);
 }
 
 /* A table scrolls sideways rather than widening the bubble; a column's
@@ -266,17 +266,17 @@ a.text-link {
    red, which each appearance restates. */
 .markdown-inserted {
   border-radius: 3px;
-  background: color-mix(in srgb, var(--state-complete) 24%, transparent);
+  background: color-mix(in srgb, var(--luke-color-complete) 24%, transparent);
   color: inherit;
   text-decoration: none;
 }
 
 .markdown-deleted {
   border-radius: 3px;
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
-  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
+  color: var(--luke-color-text-muted);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--danger) 70%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
 }
 
 /* Words struck out and the words written in their place stand side by side,
