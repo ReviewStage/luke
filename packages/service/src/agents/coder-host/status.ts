@@ -1,10 +1,10 @@
 import type { CodingAgent, CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
 import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
+import { codingAgentStatusAt } from "@luke/features/coding-agent-status";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
-  CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
   type CodingAgentFailure,
@@ -13,10 +13,9 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { Duration } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
-import { CODER, CODER_REFUSAL } from "./bounds.js";
+import { CODER_REFUSAL } from "./bounds.js";
 
 /**
  * status.ts -- where a coding agent stands, read from its newest turn.
@@ -28,7 +27,7 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * ended after. A turn still running that carries a Stop stamp
  * reads as cancelled already, since the Stop is on its way to eve and
  * nothing the turn still does changes where it ends. An agent with no turn
- * row long past its Start (`CODER.STARTING_GRACE`) reads as failed rather
+ * row long past its Start (`STARTING_GRACE_MILLIS`) reads as failed rather
  * than starting forever, as one that never started: eve took the session,
  * and its first turn lands in seconds or not at all. A line that awaits its turn reads as running
  * whatever the newest turn says, because the session took the message and
@@ -41,21 +40,6 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * of the detail itself leaves here.
  */
 
-/** The status a turn row's own status word reads as. */
-const STATUS_OF_TURN = {
-  [TURN_STATUS.QUEUED]: CODING_AGENT_STATUS.RUNNING,
-  [TURN_STATUS.RUNNING]: CODING_AGENT_STATUS.RUNNING,
-  [TURN_STATUS.SETTLED]: CODING_AGENT_STATUS.COMPLETED,
-  [TURN_STATUS.CANCELLED]: CODING_AGENT_STATUS.CANCELLED,
-  [TURN_STATUS.FAILED]: CODING_AGENT_STATUS.FAILED,
-} as const satisfies Record<string, CodingAgentStatus>;
-
-const STATUS_WORDS: ReadonlySet<string> = new Set(Object.keys(STATUS_OF_TURN));
-
-function isTurnStatusWord(status: string): status is keyof typeof STATUS_OF_TURN {
-  return STATUS_WORDS.has(status);
-}
-
 /** When the agent was started, when it is being read, which is what an agent with no turn is judged by, and whether a line of the developer's awaits its turn. */
 export interface AgentStanding {
   readonly createdAt: Date;
@@ -65,28 +49,21 @@ export interface AgentStanding {
   readonly lineAwaits?: boolean;
 }
 
-/** Whether an agent with no turn row is still inside the grace its first turn may land in. */
-function withinStartingGrace(standing: AgentStanding): boolean {
-  return standing.now - standing.createdAt.getTime() <= Duration.toMillis(CODER.STARTING_GRACE);
-}
-
-/** Where an agent stands, from its newest turn; running where a line awaits its turn, starting with no turn inside the grace, failed with none past it. */
+/** Where an agent stands, from its newest turn, by the rule the desktop reads it by too (`@luke/features/coding-agent-status`). */
 export function codingAgentStatusOf(
   turn: CodingAgentLatestTurn | undefined,
   standing: AgentStanding,
 ): CodingAgentStatus {
-  if (standing.lineAwaits === true) return CODING_AGENT_STATUS.RUNNING;
-  if (turn === undefined) {
-    return withinStartingGrace(standing)
-      ? CODING_AGENT_STATUS.STARTING
-      : CODING_AGENT_STATUS.FAILED;
-  }
-  // A row outside the vocabulary is a write this build does not know, read as the one status that claims nothing.
-  if (!isTurnStatusWord(turn.status)) return CODING_AGENT_STATUS.FAILED;
-  const status = STATUS_OF_TURN[turn.status];
-  return status === CODING_AGENT_STATUS.RUNNING && turn.cancelRequestedAt !== null
-    ? CODING_AGENT_STATUS.CANCELLED
-    : status;
+  return codingAgentStatusAt(
+    turn === undefined
+      ? undefined
+      : { status: turn.status, cancelRequested: turn.cancelRequestedAt !== null },
+    {
+      createdAt: standing.createdAt.getTime(),
+      now: standing.now,
+      lineAwaits: standing.lineAwaits === true,
+    },
+  );
 }
 
 /** The host's refusal sentences a failed turn's detail may carry, by the word the wire says for each. */
