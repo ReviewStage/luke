@@ -304,6 +304,12 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`answer:${itemId}:${revision}:${reply}:${clientKey}`);
           return { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true };
         }),
+      codingAgentInboxMessage: ({ itemId, text, attachments, clientKey }) =>
+        Effect.sync(() => {
+          const files = (attachments ?? []).map((file) => file.name).join(",");
+          asked.push(`message:${itemId}:${text}:${files}:${clientKey}`);
+          return { item: ITEM };
+        }),
       codingAgentInboxAttachment: ({ itemId, attachmentId }) =>
         Effect.sync(() => {
           asked.push(`attachment:${itemId}:${attachmentId}`);
@@ -492,6 +498,33 @@ it.effect(
       assert.deepEqual(asked, [
         `pull-request-action:${AGENT_ID}:${PULL_REQUEST_ACTION.CONVERT_TO_DRAFT}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a panel's message on an inbox item's thread reaches the host with its words, files, and key, and hears the item; the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const message = {
+        kind: ACT_KIND.CODING_AGENTS_INBOX_MESSAGE,
+        payload: {
+          itemId: ITEM.id,
+          text: "Also page on-call.",
+          attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
+          clientKey: "message-1",
+        },
+      } as const;
+
+      const refused = yield* router.performAct(message, VOICE);
+      const sent = yield* router.performAct(message, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX_MESSAGE].refusal,
+      });
+      assert.deepEqual(sent, { status: ACT_OUTCOME_STATUS.DONE, value: { item: ITEM } });
+      assert.deepEqual(asked, [`message:${ITEM.id}:Also page on-call.:pager.txt:message-1`]);
     }),
 );
 

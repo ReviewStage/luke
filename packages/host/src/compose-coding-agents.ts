@@ -11,6 +11,7 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -30,6 +31,7 @@ import {
   codingAgentGitHubImageParamsSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAttachmentParamsSchema,
+  codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -121,6 +123,7 @@ export type CodingAgentClient = Pick<
   | "transcribeDictation"
   | "inbox"
   | "answerInbox"
+  | "messageInbox"
   | "accountInbox"
   | "inboxAttachment"
   | "agentPicture"
@@ -505,6 +508,16 @@ function composed(
         );
         const answer = yield* asked(client.answerInbox(itemId, request));
         return carried<CodingAgentInboxAnsweredView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE]: (params) =>
+      Effect.gen(function* () {
+        const { itemId, ...request } = yield* read(
+          codingAgentInboxMessageParamsSchema,
+          params,
+          "a message on an inbox item names the item, the words or files, and the message's key",
+        );
+        const answer = yield* asked(client.messageInbox(itemId, request));
+        return carried<CodingAgentInboxMessagedView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT]: (params) =>
       Effect.gen(function* () {

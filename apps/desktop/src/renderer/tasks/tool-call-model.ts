@@ -333,8 +333,27 @@ function postLines(post: InboxPost): string {
 }
 
 /**
+ * The tool an agent writes its message on one of its items' threads with,
+ * by the name its tool part carries. Note that it is named here rather than
+ * read off `INBOX_TOOL`, because the tool lands in its own change, and a
+ * transcript holding it must draw its row either way.
+ */
+const REPLY_INBOX_TOOL = "reply_inbox";
+
+/** A reply's words, then each picture it showed by the path of its file, as the row's body lists them. */
+function replyLines(input: WireValue | undefined): string {
+  const images = isRecord(input) && Array.isArray(input.images) ? input.images : [];
+  const paths = images.flatMap((image) => {
+    const path = stringAt(image, "path");
+    return path === undefined ? [] : [`Image: ${path}`];
+  });
+  return [stringAt(input, "text") ?? "", ...paths].filter((line) => line.trim() !== "").join("\n");
+}
+
+/**
  * An inbox call's row: a post names its item's title and lists what it
- * asks, a close names the item's key and says why, and a read names
+ * asks, a close names the item's key and says why, a reply names the
+ * item's key and shows its words and pictures, and a read names
  * nothing. An answer that did what was asked is the agent's whole inbox,
  * which the Inbox tab draws as it stands, so none is shown here; one that
  * did nothing shows why, so a refused post never reads as posted.
@@ -356,6 +375,14 @@ function inboxToolView(
             ? textBlock("")
             : jsonBlock(input)
           : textBlock(postLines(post)),
+      output: refused,
+    };
+  }
+  if (tool === REPLY_INBOX_TOOL) {
+    return {
+      kind: CALL_KIND.INBOX_REPLY,
+      subject: stringAt(input, "key") ?? "",
+      input: textBlock(replyLines(input)),
       output: refused,
     };
   }
@@ -532,6 +559,7 @@ function knownToolView(
     case AGENT_TOOL.POST_TO_INBOX:
     case AGENT_TOOL.CLOSE_INBOX_ITEM:
     case AGENT_TOOL.READ_INBOX:
+    case REPLY_INBOX_TOOL:
       return inboxToolView(tool, input, output);
     case AGENT_TOOL.SLEEP: {
       const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;
@@ -854,7 +882,7 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
-  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL] | ChatTool,
+  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL] | ChatTool | typeof REPLY_INBOX_TOOL,
   (call: TargetedCall) => ToolTarget | undefined
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
@@ -874,6 +902,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
   [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
+  [REPLY_INBOX_TOOL, () => INBOX_TARGET],
   [CHAT_TOOL.POST, plansOwnPost],
 ]);
 

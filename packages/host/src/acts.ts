@@ -26,6 +26,7 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -53,6 +54,8 @@ import {
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxMessagedViewSchema,
+  codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
@@ -518,6 +521,8 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
+  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
@@ -1449,6 +1454,13 @@ export const ACT = {
       isReadable(codingAgentInboxAnsweredViewSchema),
     ),
     refusal: "Could not answer the inbox item on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: {
+    payload: actSchema(codingAgentInboxMessageParamsSchema),
+    result: wireResult<CodingAgentInboxMessagedView>(
+      isReadable(codingAgentInboxMessagedViewSchema),
+    ),
+    refusal: "Could not send the message on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
     payload: actSchema(codingAgentInboxAttachmentParamsSchema),
