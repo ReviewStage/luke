@@ -1637,6 +1637,34 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 
   it.effect(
+    "a member comments on the pull request itself on their own token, and a blank comment never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: "ghu_teammate" });
+
+        const commented = yield* ask(
+          threadActionAs(other, agent.id, { action: "comment", body: "Shipping after lunch." }),
+        );
+        const blank = yield* ask(
+          threadActionAs(other, agent.id, { action: "comment", body: "\n" }),
+        );
+
+        assert.deepEqual(commented, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(
+          blank,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables]),
+          [["addComment", { id: PULL_REQUEST_NODE_ID, body: "Shipping after lunch." }]],
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
     "an account outside the agent's workspace is answered as if the agent were none, and a change the wire does not name is refused, neither reaching GitHub",
     () =>
       Effect.gen(function* () {

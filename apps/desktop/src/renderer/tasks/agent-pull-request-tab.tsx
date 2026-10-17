@@ -66,6 +66,7 @@ import {
   useConversationFilters,
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
+import { PullRequestCommentBox } from "./pull-request-comment-box";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
 import { PullRequestReview } from "./pull-request-review";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
@@ -1412,15 +1413,18 @@ function ConversationFilterRow({
   );
 }
 
-/** The Conversation tab: its filters, then the description, then the comments, reviews, and threads, in one scroll under them. */
+/** The Conversation tab: its filters, then the description, then the comments, reviews, and threads, in one scroll under them, and, once the conversation is read, the box a new comment is written in at its foot. */
 function ConversationView({
   agentId,
   parts,
   url,
+  comment,
 }: {
   agentId: string;
   parts: OverviewParts;
   url: string | undefined;
+  /** The comment box's own change, apart from the others, so it says its own answer under itself. */
+  comment: PullRequestWrites;
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
@@ -1441,6 +1445,7 @@ function ConversationView({
           now={now}
           picture={picture}
         />
+        {conversation === undefined ? null : <PullRequestCommentBox writes={comment} />}
       </div>
     </>
   );
@@ -1547,6 +1552,7 @@ export function AgentPullRequestTab({
   };
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
+  const comment = usePullRequestWrites(agentId, written);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
@@ -1582,7 +1588,12 @@ export function AgentPullRequestTab({
               aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
               hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
             >
-              <ConversationView agentId={agentId} parts={parts} url={title?.url} />
+              <ConversationView
+                agentId={agentId}
+                parts={parts}
+                url={title?.url}
+                comment={comment}
+              />
             </div>
             <div
               className="pull-request-view"
