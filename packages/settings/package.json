@@ -12,7 +12,8 @@
     "./settings-anchors": "./src/settings-anchors.js",
     "./update": "./src/update.js",
     "./update-row": "./src/update-row.js",
-    "./diff-view": "./src/diff-view.js"
+    "./diff-view": "./src/diff-view.js",
+    "./shortcuts": "./src/shortcuts.js"
   },
   "types": "./src/index.ts",
   "scripts": {

@@ -12,6 +12,14 @@ import {
 } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
+  APP_SHORTCUTS,
+  commandForKey,
+  KEYED_COMMANDS,
+  type KeyedCommand,
+  shortcutAccelerator,
+  shortcutLabel,
+} from "@luke/settings/shortcuts";
+import {
   PencilIcon,
   ResetIcon,
   type SettingsRowControl,
@@ -23,14 +31,6 @@ import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import type { ShortcutControl } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
 import { useEffect, useId, useRef, useState } from "react";
-import {
-  APP_SHORTCUTS,
-  commandForKey,
-  KEYED_COMMANDS,
-  type KeyedCommand,
-  shortcutAccelerator,
-  shortcutLabel,
-} from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 import { AttentionMark, ChangedMark } from "./marks";
 import { MenuRow } from "./menu-row";

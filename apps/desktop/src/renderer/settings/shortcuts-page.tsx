@@ -1,6 +1,6 @@
 import type { ExperimentChoices } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
+import { APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
 import { Shortcut } from "../shortcut";
 import { SettingsGroup } from "./settings-group";
 
