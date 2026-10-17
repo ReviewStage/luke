@@ -50,6 +50,7 @@ import {
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
+  type LinearIssuesAsk,
   MARK_FAILED_NOTES,
   MARK_UNDOS,
   MICROPHONE_PRESS,
@@ -602,13 +603,15 @@ export interface TasksControl {
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /**
-     * The read of a workspace's Linear issues, which the dialog matches its
-     * name against as it is typed, where that workspace has Linear
-     * connected; none where it has not, which leaves the name a plain field.
+     * The read of a workspace's Linear issues, where that workspace has
+     * Linear connected; none where it has not, which leaves the name a plain
+     * field. Asked nothing, it answers the issues the dialog lists as it
+     * opens, the member's own open ones first; asked a search or an
+     * identifier, it answers what Linear finds for the name as typed.
      */
     linearIssuesIn: (
       workspaceId: string | undefined,
-    ) => (() => Promise<readonly LinearIssueSummary[]>) | undefined;
+    ) => ((ask?: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>) | undefined;
   };
   /** Leaves the open plan for the home page; a call on it stands, as opening another plan leaves one. */
   onLeaveTask: () => void;
@@ -2053,11 +2056,11 @@ export function useTasksTab(input: {
   };
 
   // The dialog matches its name against the Linear issues of the workspace
-  // it starts in, where that workspace has Linear connected.
+  // it starts in, and searches them, where that workspace has Linear connected.
   const linearIssuesIn: TasksControl["newTask"]["linearIssuesIn"] = (workspaceId) => {
     const linked = viewed.workspaces.find((each) => each.id === workspaceId);
     if (linked?.linear?.active !== true) return undefined;
-    return () => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { workspaceId: linked.id });
+    return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
   };
 
   // New plan opens the dialog over whatever stands, an open plan and its

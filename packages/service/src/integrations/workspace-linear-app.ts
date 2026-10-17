@@ -21,8 +21,9 @@
  *   through the grant, then asks Connect to revoke it; it answers the
  *   workspace. What plans already kept of an issue stays with them.
  * - `POST /api/workspaces/linear/issues` takes any member, and answers the
- *   issues the grant reaches, newest changed first, or those a search
- *   matches (`linear-issues.ts`).
+ *   issues the grant reaches, the open ones assigned to the member's own
+ *   email first, then newest changed first; or those a search matches; or
+ *   the one an identifier names (`linear-issues.ts`).
  *
  * A workspace the account is not in is not found, whatever it asked.
  */
@@ -45,6 +46,7 @@ import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
+import { listMembers } from "../accounts/workspace-members.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -145,6 +147,15 @@ const memberWorkspace = Effect.fn("web/workspaceLinearWorkspace")(function* (
   const workspace = yield* hostedStoreOrUnavailable(workspaceOf(userId, workspaceId));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return workspace.value;
+});
+
+/** The email of the member's Luke account, which their own Linear issues are matched by. */
+const memberEmailOf = Effect.fn("web/workspaceLinearMemberEmail")(function* (
+  userId: string,
+  workspaceId: string,
+): Effect.fn.Return<string | undefined, HostedRefusal, DatabaseServices> {
+  const members = yield* hostedStoreOrUnavailable(listMembers(workspaceId));
+  return members.find((each) => each.userId === userId)?.email;
 });
 
 /** The workspace named, where the account is an owner or admin of it. */
@@ -292,7 +303,11 @@ const disconnectEndpoint = Effect.fn("web/workspaceLinearDisconnectEndpoint")(fu
   });
 });
 
-/** POST: the issues the workspace's grant reaches, or the one an identifier names, to any member of it. */
+/**
+ * POST: the issues the workspace's grant reaches, the member's own open ones
+ * first where nothing is searched, or the one an identifier names, to any
+ * member of it.
+ */
 const issuesEndpoint = Effect.fn("web/workspaceLinearIssuesEndpoint")(function* (
   seams: WorkspaceLinearAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -300,11 +315,13 @@ const issuesEndpoint = Effect.fn("web/workspaceLinearIssuesEndpoint")(function* 
   const userId = yield* accountOf(seams);
   const asked = yield* bodyAs(linearIssuesRequestSchema);
   const workspace = yield* memberWorkspace(userId, asked.workspaceId);
-  const { identifier } = asked;
+  const { identifier, query } = asked;
+  const searched = identifier !== undefined || (query?.trim() ?? "") !== "";
+  const email = searched ? undefined : yield* memberEmailOf(userId, workspace.id);
   const issues = yield* linearOrRefused(
     throughWorkspaceLinear(workspace.id, (token) =>
       identifier === undefined
-        ? listLinearIssues(token, asked.query)
+        ? listLinearIssues(token, query, email)
         : linearIssueByIdentifier(token, identifier),
     ),
     "Linear listed no issues",

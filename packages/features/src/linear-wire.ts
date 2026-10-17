@@ -12,10 +12,12 @@ import { Schema as EffectSchema } from "effect";
  * `/api/workspaces/linear/connected`, which settles it and lands on the
  * integrations landing page. `POST /api/workspaces/linear/disconnect` ends
  * it and answers the workspace. `POST /api/workspaces/linear/issues`
- * answers the issues a member may start a plan from, newest changed first,
- * or those a search matches, or the one issue an identifier names, as a
- * link to it drawn in Luke's words asks for its title and state
- * (`linearIssueIdentifierOf`). A plan started from one names it by its id
+ * answers the issues a member may start a plan from: the open ones assigned
+ * to the member asking first, marked `mine`, then the rest newest changed
+ * first; or those a search matches; or the one issue an identifier names,
+ * as a link to it drawn in Luke's words, or a key or link pasted into New
+ * task, asks for its title and state (`linearIssueIdentifierOf`,
+ * `linearIssueIdentifierIn`). A plan started from one names it by its id
  * (`planCreateRequestSchema`'s `linearIssueId`), and the service reads the
  * issue itself through the workspace's grant and keeps what it read on the
  * plan (`planLinearIssueSchema`), so the plan keeps it after Linear is
@@ -73,6 +75,17 @@ export function linearIssueIdentifierOf(href: string): string | undefined {
   return LINEAR_IDENTIFIER.test(upper) ? upper : undefined;
 }
 
+/**
+ * The identifier of the issue words typed or pasted name whole: a link to
+ * one of Linear's issue pages, or its key alone, `ENG-123` in any case;
+ * nothing for any other words, a key among others included.
+ */
+export function linearIssueIdentifierIn(typed: string): string | undefined {
+  const words = typed.trim();
+  const upper = words.toUpperCase();
+  return LINEAR_IDENTIFIER.test(upper) ? upper : linearIssueIdentifierOf(words);
+}
+
 /** One issue as the picker lists it: what a person picks it by. */
 export const linearIssueSummarySchema = EffectSchema.Struct({
   id: linearIssueIdSchema,
@@ -84,6 +97,12 @@ export const linearIssueSummarySchema = EffectSchema.Struct({
   state: EffectSchema.optionalKey(EffectSchema.String),
   /** The name of the member it is assigned to; absent where it is assigned to no one, and from a service older than it. */
   assignee: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * Present, and true, where the issue is open and assigned to the member who
+   * asked, as the service matched their Luke account's email to a Linear
+   * user's; absent otherwise, from a search, and from a service older than it.
+   */
+  mine: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type LinearIssueSummary = typeof linearIssueSummarySchema.Type;

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -49,16 +50,19 @@ async function settle(): Promise<void> {
 /**
  * The dialog open in its owner, a start answered by `answer` and each
  * start's name and repository written down; `preset` is the repository the
- * press that opened it chose, as a repository group's + does, and `issues`
- * the workspace's Linear issues where it has Linear connected.
+ * press that opened it chose, as a repository group's + does, `issues`
+ * the workspace's Linear issues where it has Linear connected, and `finds`
+ * what its Linear answers a search or an identifier with.
  */
 async function mount(
   answer: string | undefined = undefined,
   preset?: string,
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[],
+  finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
 ) {
   const starts: [string, string | null][] = [];
+  const asks: LinearIssuesAsk[] = [];
   const planned: boolean[] = [];
   const fromIssues: (string | undefined)[] = [];
   const control = tasksControl();
@@ -89,7 +93,14 @@ async function mount(
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
-        linearIssuesIn: () => (issues === undefined ? undefined : () => Promise.resolve(issues)),
+        linearIssuesIn: () =>
+          issues === undefined
+            ? undefined
+            : (ask?: LinearIssuesAsk) => {
+                if (ask === undefined) return Promise.resolve(issues);
+                asks.push(ask);
+                return Promise.resolve(finds(ask));
+              },
       },
     });
     return createElement(
@@ -128,6 +139,8 @@ async function mount(
   };
   return {
     starts,
+    /** Every search or identifier the card asked the workspace's Linear for. */
+    asks,
     /** The Linear issue each start came from, where it came from one. */
     fromIssues,
     /** Whether each start asked for its planning phase. */
@@ -625,5 +638,97 @@ test("a name no issue matches is the plain field it always was: nothing listed, 
   assert.equal(listed, null);
   assert.equal(card.field().getAttribute("aria-expanded"), "false");
   assert.deepEqual(card.starts, [["Refactor billing", "acme/web"]]);
+  assert.deepEqual(card.fromIssues, [undefined]);
+});
+
+/** Longer than the typing rests before Linear is searched. */
+const PAST_SEARCH_PAUSE = 300;
+
+/** The clock moved past the search's pause, and what the search answered drawn. */
+async function rest(): Promise<void> {
+  act(() => {
+    vi.advanceTimersByTime(PAST_SEARCH_PAUSE);
+  });
+  await settle();
+}
+
+/** An issue older than any the card read as it opened, which only Linear's own search finds. */
+const OLDER_ISSUE: LinearIssueSummary = {
+  id: "issue-301",
+  identifier: "ENG-301",
+  title: "Queue jumps on retry",
+  url: "https://linear.app/acme/issue/ENG-301",
+  state: "Backlog",
+};
+
+test("once the typing rests, Linear itself is searched for the words, and an issue it finds beyond those read stands after the ones read", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const card = await mount(undefined, undefined, {}, ISSUES, (ask) =>
+      ask.query === "deploy queue" ? [OLDER_ISSUE, ISSUES[0] as LinearIssueSummary] : [],
+    );
+    card.type("deploy");
+    await settle();
+    card.type("deploy queue");
+    await settle();
+    const before = { rows: matchRows().rows, asks: card.asks.length };
+    await rest();
+    const after = matchRows().rows;
+
+    assert.deepEqual(before, {
+      rows: ["Restack the deploy queueENG-1 · Todo", "Create task “deploy queue”"],
+      asks: 0,
+    });
+    assert.deepEqual(card.asks, [{ query: "deploy queue" }]);
+    assert.deepEqual(after, [
+      "Restack the deploy queueENG-1 · Todo",
+      "Queue jumps on retryENG-301 · Backlog",
+      "Create task “deploy queue”",
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a pasted link to an issue, or its key typed alone, asks Linear for that one issue, which is offered first and started by Return", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const card = await mount(undefined, undefined, {}, ISSUES, (ask) =>
+      ask.identifier === "ENG-301" ? [OLDER_ISSUE] : [],
+    );
+    card.type("https://linear.app/acme/issue/ENG-301/queue-jumps-on-retry");
+    await rest();
+    const listed = matchRows();
+    await card.press("Enter", card.field());
+    card.type("eng-301");
+    await rest();
+
+    assert.deepEqual(card.asks, [{ identifier: "ENG-301" }, { identifier: "ENG-301" }]);
+    assert.deepEqual(listed.highlighted, "Queue jumps on retryENG-301 · Backlog");
+    assert.deepEqual(card.starts, [["Queue jumps on retry", "acme/web"]]);
+    assert.deepEqual(card.fromIssues, ["issue-301"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("with nothing typed, the developer's own open issues stand under the field with Create untitled task highlighted, so Return still starts the task unnamed", async () => {
+  const mine = { ...OLDER_ISSUE, mine: true as const };
+  const card = await mount(undefined, undefined, {}, [...ISSUES, mine]);
+
+  const listed = matchRows();
+  const heading = document.querySelector('[role="listbox"]')?.getAttribute("aria-label");
+  await card.press("ArrowDown", card.field());
+  const stepped = matchRows().highlighted;
+  await card.press("ArrowUp", card.field());
+  await card.press("Enter", card.field());
+
+  assert.equal(heading, "Assigned to you");
+  assert.deepEqual(listed, {
+    rows: ["Queue jumps on retryENG-301 · Backlog", "Create untitled task"],
+    highlighted: "Create untitled task",
+  });
+  assert.equal(stepped, "Queue jumps on retryENG-301 · Backlog");
+  assert.deepEqual(card.starts, [["", "acme/web"]]);
   assert.deepEqual(card.fromIssues, [undefined]);
 });
