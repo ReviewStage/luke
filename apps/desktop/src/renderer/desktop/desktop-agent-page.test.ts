@@ -139,6 +139,8 @@ let transcript: CodingAgentMessagesAnswerView | undefined;
 let told: Act[] = [];
 /** What a read of what the agent published answers; none refuses it. */
 let published: CodingAgentPullRequestAnswer | undefined;
+/** How many of the pull request's conversation entries its read left on GitHub; none answers no read. */
+let earlier = 0;
 /** What the window copied, in order. */
 let copied: string[] = [];
 /** What the workspace's list of agents answers, whatever it was asked. */
@@ -156,6 +158,7 @@ beforeEach(() => {
   transcript = undefined;
   told = [];
   published = undefined;
+  earlier = 0;
   openedOnGitHub = [];
   copied = [];
   workspace = [];
@@ -202,6 +205,10 @@ beforeEach(() => {
           // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
           const value = transcript;
           transcript = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
+          const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
@@ -535,6 +542,72 @@ test("⌘T on an agent's page opens the panel beside it on its +, the page's one
     document.querySelector("input[placeholder='Search tabs']"),
     "its + opens on the tabs it offers",
   );
+});
+
+test("a chip in the agent's words naming the pull request it opened opens its Pull request tab beside its page, and another pull request's opens on GitHub, as does the tab's own way to its earlier comments", async () => {
+  const url = "https://github.com/acme/relay/pull/2911";
+  earlier = 3;
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url,
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  const other = "https://github.com/acme/relay/pull/7";
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "text",
+            text: `Opened [@relay#2911](${url}#issuecomment-1), beside [@relay#7](${other}).`,
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const container = await mountPanelPage();
+  await settle();
+  const chip = (name: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>(".agent-page .mention-chip")].find((each) =>
+      each.querySelector(".mention-chip-label")?.textContent?.includes(name),
+    );
+
+  const own = chip("relay#2911");
+  assert.ok(own, "the agent's pull request is its chip");
+  act(() => own.click());
+  await settle();
+  const tabs = [...container.querySelectorAll("aside.side-panel [role='tab']")].map(
+    (tab) => tab.textContent ?? "",
+  );
+  assert.ok(
+    tabs.some((label) => label.includes("Pull request")),
+    `the Pull request tab stands in the panel: ${tabs.join(", ")}`,
+  );
+  assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
+
+  act(() => chip("relay#7")?.click());
+  assert.deepEqual(openedOnGitHub, [other]);
+
+  // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
+  const more = container.querySelector<HTMLButtonElement>("aside.side-panel .pull-request-earlier");
+  assert.ok(more, "the tab counts the earlier comments");
+  act(() => more.click());
+  assert.deepEqual(openedOnGitHub, [other, url]);
 });
 
 test("a skill a message names is its chip, which opens the skill's SKILL.md on GitHub, there being no File tab for a repository no plan names", async () => {
