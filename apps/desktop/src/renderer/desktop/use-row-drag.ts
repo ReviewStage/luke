@@ -29,13 +29,22 @@
  * only elsewhere. A list of groups dragged by their headers names the
  * handle a press must land on, so a press on a row inside a group starts
  * that row's own drag and not the group's.
+ *
+ * A drop scope (an element wearing `data-row-drop-scope`, the Issues board)
+ * keeps its zones to its own lists' rows, and a row of one of its lists
+ * goes any way, so it is a drag once the pointer has gone a few pixels in
+ * any direction. Such a list scrolls its own rows and would clip one
+ * carried out of it, so the row is not moved: it stays as its own
+ * placeholder while a copy of it, lifted over the scope, follows the
+ * pointer on its `transform`. A row of a scope is carried rather than
+ * reordered.
  */
 
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 
-/** How far the pointer goes up or down, in CSS pixels, before a press is a drag rather than a click. */
+/** How far the pointer goes up or down, or any way in a drop scope, in CSS pixels, before a press is a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
 
 /** The list's rows that move. */
@@ -49,6 +58,12 @@ const NOT_A_HANDLE = "input, textarea, select, [contenteditable], [data-editing]
 
 /** What a place a row may be dropped into wears, its id as the value. */
 const DROP_ZONE = "data-row-drop";
+
+/** What an element whose zones take only its own lists' rows wears, over which a row of its lists is carried as a copy. */
+const DROP_SCOPE = "data-row-drop-scope";
+
+/** What the copy of a row carried over its scope wears; the scope's stylesheet lifts it there. */
+const CARRIED_ATTRIBUTE = "data-carried";
 
 /** A drop zone's rows, where it keeps an order of its own that a drop lands at a place in. */
 const ZONE_ROWS = "[data-row-drop-rows] > li";
@@ -67,6 +82,13 @@ interface ZoneLanding {
   at: number;
 }
 
+/** The copy of a row carried over its scope, in a shell of its list's own kind, and where the scope stood on screen as it was lifted. */
+interface Carried {
+  shell: HTMLElement;
+  left: number;
+  top: number;
+}
+
 /** A row's stretch down the list as laid out when the press began. */
 interface Slot {
   top: number;
@@ -82,6 +104,7 @@ interface Slot {
  */
 interface RowPress {
   pointerId: number;
+  x: number;
   y: number;
   pointer: number;
   pointerX: number;
@@ -96,6 +119,10 @@ interface RowPress {
   reorders: boolean;
   /** The zone it would land in out of its own list, if it is over one. */
   zone: ZoneLanding | undefined;
+  /** The drop scope the list stands in, whose zones alone it drops into; none for the window's own. */
+  scope: Element | null;
+  /** The copy carried over the scope once the press is a drag. */
+  carried: Carried | undefined;
 }
 
 /** What a list's rows may do beyond moving among themselves. */
@@ -149,10 +176,11 @@ function landingIn(zone: HTMLElement, y: number): number {
   }).length;
 }
 
-/** The drop zone under the pointer other than the list's own, with where it would land; none over the list's own or over nothing. */
+/** The drop zone of the list's scope under the pointer other than the list's own, with where it would land; none over the list's own or over nothing. */
 function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined {
   const own = list.closest(`[${DROP_ZONE}]`);
   const zone = [...document.querySelectorAll<HTMLElement>(`[${DROP_ZONE}]`)].find((each) => {
+    if (each.closest(`[${DROP_SCOPE}]`) !== press.scope) return false;
     const box = each.getBoundingClientRect();
     const { pointer: y, pointerX: x } = press;
     return box.top <= y && y < box.bottom && box.left <= x && x <= box.right;
@@ -186,6 +214,35 @@ function mark(press: RowPress, landing: ZoneLanding | undefined): void {
   else rows.at(-1)?.setAttribute(DROP_AFTER, "true");
 }
 
+/**
+ * Lifts a copy of the pressed row over its scope, at the row's own place:
+ * in a shell of the list's tag and classes, so the row's own rules still
+ * draw it, and hidden from assistive technology, since the row it copies
+ * is still there.
+ */
+function liftCopy(row: HTMLElement, list: HTMLElement, scope: Element): Carried {
+  const shell = document.createElement(list.tagName);
+  shell.className = list.className;
+  shell.setAttribute(CARRIED_ATTRIBUTE, "true");
+  shell.setAttribute("aria-hidden", "true");
+  shell.append(row.cloneNode(true));
+  const box = row.getBoundingClientRect();
+  const ground = scope.getBoundingClientRect();
+  shell.style.left = `${box.left - ground.left + scope.scrollLeft}px`;
+  shell.style.top = `${box.top - ground.top + scope.scrollTop}px`;
+  shell.style.width = `${box.width}px`;
+  scope.append(shell);
+  return { shell, left: ground.left, top: ground.top };
+}
+
+/** Draws the carried copy where the pointer has it, however far the scope has scrolled beneath it since it was lifted. */
+function drawCarried(press: RowPress, carried: Carried, scope: Element): void {
+  const ground = scope.getBoundingClientRect();
+  const across = press.pointerX - press.x - (ground.left - carried.left);
+  const down = press.pointer - press.y - (ground.top - carried.top);
+  carried.shell.style.transform = `translate(${across}px, ${down}px)`;
+}
+
 /** Draws the row carried out of its list: it follows the pointer, and the rows it left stand home. */
 function drawOut(press: RowPress, list: HTMLElement): void {
   const scrolled = press.listTop - list.getBoundingClientRect().top;
@@ -200,6 +257,11 @@ function drawOut(press: RowPress, list: HTMLElement): void {
 function draw(press: RowPress, list: HTMLElement, out: boolean): void {
   const zone = out ? zoneUnder(press, list) : undefined;
   mark(press, zone);
+  if (press.carried !== undefined && press.scope !== null) {
+    press.to = press.at;
+    drawCarried(press, press.carried, press.scope);
+    return;
+  }
   if (zone !== undefined) {
     drawOut(press, list);
     return;
@@ -219,6 +281,8 @@ function draw(press: RowPress, list: HTMLElement, out: boolean): void {
  */
 function lower(press: RowPress, list: HTMLElement, settle: boolean): void {
   unmark(press);
+  press.carried?.shell.remove();
+  press.carried = undefined;
   for (const row of press.rows) {
     row.removeAttribute(DRAGGING_ATTRIBUTE);
     if (!settle) row.style.transition = "none";
@@ -270,12 +334,18 @@ export function useRowDrag(
     const pressed = () => press.rows[press.at];
     const move = (event: PointerEvent) => {
       if (event.pointerId !== press.pointerId) return;
-      if (!press.dragging && Math.abs(event.clientY - press.y) < DRAG_THRESHOLD) return;
+      const across = press.scope === null ? 0 : Math.abs(event.clientX - press.x);
+      const far = Math.max(across, Math.abs(event.clientY - press.y)) >= DRAG_THRESHOLD;
+      if (!press.dragging && !far) return;
       if (!press.dragging) {
         press.dragging = true;
         list.setPointerCapture(press.pointerId);
         list.setAttribute(DRAGGING_ATTRIBUTE, "true");
-        pressed()?.setAttribute(DRAGGING_ATTRIBUTE, "true");
+        const row = pressed();
+        row?.setAttribute(DRAGGING_ATTRIBUTE, "true");
+        if (row !== undefined && press.scope !== null) {
+          press.carried = liftCopy(row, list, press.scope);
+        }
       }
       press.pointer = event.clientY;
       press.pointerX = event.clientX;
@@ -297,6 +367,10 @@ export function useRowDrag(
         lower(press, list, true);
         return;
       }
+      // The drag is drawn where the pointer was let go, which a move may not have reported.
+      press.pointer = event.clientY;
+      press.pointerX = event.clientX;
+      draw(press, list, out);
       const zone = press.zone;
       if (zone !== undefined) {
         // The row now stands in the zone's list, so it comes down there rather than settling here.
@@ -361,13 +435,15 @@ export function useRowDrag(
     const gap = Number.parseFloat(getComputedStyle(list).rowGap) || 0;
     const pointer = {
       pointerId: event.pointerId,
+      x: event.clientX,
       y: event.clientY,
       pointer: event.clientY,
       pointerX: event.clientX,
     };
     const listTop = list.getBoundingClientRect().top;
-    const reorders = onMove !== undefined;
-    const state = { to: at, dragging: false, reorders, zone: undefined };
+    const scope = list.closest(`[${DROP_SCOPE}]`);
+    const reorders = onMove !== undefined && scope === null;
+    const state = { to: at, dragging: false, reorders, zone: undefined, scope, carried: undefined };
     begin(list, { ...pointer, listTop, at, rows, slots, gap, ...state });
   };
 }

@@ -73,6 +73,17 @@ test("the desktop and web profiles set the same roles", () => {
   );
 });
 
+test("a compact site sets only sizes, and only roles the site's profile sets", () => {
+  const web = new Set(ruleOf("profiles", '[data-luke-profile="web"]').values.keys());
+  const compact = sortedNames(
+    ruleOf("profiles", '[data-luke-profile="web"][data-luke-density="compact"]'),
+  );
+  for (const name of compact) {
+    assert.ok(web.has(name), `the compact site sets ${name}, which the site's profile does not`);
+    assert.match(name, /^--luke-(control|type|menu-row)-/, `the compact site sets ${name}`);
+  }
+});
+
 test("every palette sets the same colours", () => {
   const desktop = sortedNames(ruleOf("palettes", '[data-luke-profile="desktop"]'));
   const webLight = sortedNames(

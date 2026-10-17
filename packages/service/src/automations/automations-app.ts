@@ -203,7 +203,7 @@ function agentOf(
   const status = codingAgentStatusOf(standing.turn, {
     createdAt,
     now,
-    lineAwaits: standing.lineAwaits,
+    awaitingLineAt: standing.awaitingLineAt,
   });
   const failureReason =
     status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;

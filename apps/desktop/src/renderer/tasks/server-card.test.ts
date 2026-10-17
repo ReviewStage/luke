@@ -29,8 +29,9 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -90,8 +91,8 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -100,12 +101,8 @@ beforeEach(() => {
   linear = INTEGRATION_STATUS.CONNECTED;
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: ignore,
-      act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
   });
 });
 
@@ -113,7 +110,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   window.localStorage.clear();
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });
 
 /** What the main process answers the panel: where the integrations stand and Linear's tools; nothing else here. */
