@@ -872,6 +872,35 @@ const ListedStatusesSchema = Schema.Struct({
   ),
 });
 
+/**
+ * How many gave each reaction, as a REST listing of an issue's comments
+ * rolls them up beside each comment, by the key it counts each under.
+ */
+const ReactionRollupSchema = Schema.Struct({
+  "+1": Schema.optionalKey(Schema.Number),
+  "-1": Schema.optionalKey(Schema.Number),
+  laugh: Schema.optionalKey(Schema.Number),
+  hooray: Schema.optionalKey(Schema.Number),
+  confused: Schema.optionalKey(Schema.Number),
+  heart: Schema.optionalKey(Schema.Number),
+  rocket: Schema.optionalKey(Schema.Number),
+  eyes: Schema.optionalKey(Schema.Number),
+});
+
+type ReactionRollup = typeof ReactionRollupSchema.Type;
+
+/** The key a REST rollup counts each reaction under. */
+const ROLLUP_KEY = {
+  [REACTION.THUMBS_UP]: "+1",
+  [REACTION.THUMBS_DOWN]: "-1",
+  [REACTION.LAUGH]: "laugh",
+  [REACTION.HOORAY]: "hooray",
+  [REACTION.CONFUSED]: "confused",
+  [REACTION.HEART]: "heart",
+  [REACTION.ROCKET]: "rocket",
+  [REACTION.EYES]: "eyes",
+} as const satisfies Record<Reaction, keyof ReactionRollup>;
+
 /** A pull request's comments, oldest first, as GitHub lists an issue's. */
 const IssueCommentsSchema = Schema.Array(
   Schema.Struct({
@@ -881,6 +910,7 @@ const IssueCommentsSchema = Schema.Array(
     body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
     created_at: Schema.String,
     html_url: Schema.String,
+    reactions: Schema.optionalKey(ReactionRollupSchema),
   }),
 );
 
@@ -1142,7 +1172,10 @@ function wordsOf(body: string | null | undefined, html: string | null | undefine
  * a push outdated it; and the reactions its description, its comments, its
  * reviews, and its thread comments wear, which no REST listing of a review
  * carries. The newest comments and reviews are read up to the bound on the
- * conversation's entries, which holds every one the conversation keeps.
+ * conversation's entries; GraphQL counts the empty ones the conversation
+ * leaves out, so a comment kept past those is counted by the rollup its
+ * REST listing carries instead, naming nobody, and a review kept past a
+ * hundred newer ones, most of them a reply's wrapper, wears none.
  * Each reaction names the first who gave it up to the bound, but a thread
  * comment's only counts them: GitHub prices a read by the lists it may
  * answer, and naming them under every thread comment costs fifty times the
@@ -1215,16 +1248,27 @@ const GRAPHQL_PENDING = "PENDING";
 /** The account GitHub names a deleted account's comments by. */
 const GHOST: GitHubAccount = { id: 10_137, login: "ghost", bot: false, avatarUrl: undefined };
 
-/** GitHub's GraphQL words for each reaction. */
+/** GitHub's GraphQL words for each reaction (`ReactionContent`). */
+const GRAPHQL_REACTION_CONTENT = {
+  THUMBS_UP: "THUMBS_UP",
+  THUMBS_DOWN: "THUMBS_DOWN",
+  LAUGH: "LAUGH",
+  HOORAY: "HOORAY",
+  CONFUSED: "CONFUSED",
+  HEART: "HEART",
+  ROCKET: "ROCKET",
+  EYES: "EYES",
+} as const;
+
 const GRAPHQL_REACTION = new Map<string, Reaction>([
-  ["THUMBS_UP", REACTION.THUMBS_UP],
-  ["THUMBS_DOWN", REACTION.THUMBS_DOWN],
-  ["LAUGH", REACTION.LAUGH],
-  ["HOORAY", REACTION.HOORAY],
-  ["CONFUSED", REACTION.CONFUSED],
-  ["HEART", REACTION.HEART],
-  ["ROCKET", REACTION.ROCKET],
-  ["EYES", REACTION.EYES],
+  [GRAPHQL_REACTION_CONTENT.THUMBS_UP, REACTION.THUMBS_UP],
+  [GRAPHQL_REACTION_CONTENT.THUMBS_DOWN, REACTION.THUMBS_DOWN],
+  [GRAPHQL_REACTION_CONTENT.LAUGH, REACTION.LAUGH],
+  [GRAPHQL_REACTION_CONTENT.HOORAY, REACTION.HOORAY],
+  [GRAPHQL_REACTION_CONTENT.CONFUSED, REACTION.CONFUSED],
+  [GRAPHQL_REACTION_CONTENT.HEART, REACTION.HEART],
+  [GRAPHQL_REACTION_CONTENT.ROCKET, REACTION.ROCKET],
+  [GRAPHQL_REACTION_CONTENT.EYES, REACTION.EYES],
 ]);
 
 /** The order GitHub draws reactions in. */
@@ -1392,6 +1436,15 @@ function reactionsAt(byId: ReactionsById, id: number | undefined): readonly GitH
   return (id === undefined ? undefined : byId.get(id)) ?? [];
 }
 
+/** The reactions a REST rollup counts, in GitHub's order, those given, naming nobody. */
+function rolledUpReactions(rollup: ReactionRollup | undefined): readonly GitHubReaction[] {
+  if (rollup === undefined) return [];
+  return REACTION_ORDER.flatMap((content): GitHubReaction[] => {
+    const count = rollup[ROLLUP_KEY[content]] ?? 0;
+    return count === 0 ? [] : [{ content, count, accounts: undefined }];
+  });
+}
+
 function sideOf(side: string): DiffSide {
   return side === GRAPHQL_LEFT ? DIFF_SIDE.LEFT : DIFF_SIDE.RIGHT;
 }
@@ -1543,7 +1596,11 @@ function conversationOf(
         at: timeOf(comment.created_at) ?? 0,
         url: comment.html_url,
         threads: [],
-        reactions: reactionsAt(read.commentReactions, comment.id),
+        // Note that a comment past the GraphQL read's newest hundred, which counts the empty ones the conversation leaves out, is counted by its REST rollup instead.
+        reactions:
+          comment.id !== undefined && read.commentReactions.has(comment.id)
+            ? reactionsAt(read.commentReactions, comment.id)
+            : rolledUpReactions(comment.reactions),
       },
     ];
   });

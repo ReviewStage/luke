@@ -1,8 +1,3 @@
-import { REACTION, type Reaction, type ReactionGroup } from "@luke/features/coding-agent-wire";
-import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
-import { useMemberDirectory } from "../member-directory";
-import { Tooltip } from "../tooltip";
-
 /**
  * pull-request-reactions.tsx -- the reactions a pull request's description, comment, review, or thread comment wears, drawn under it as GitHub draws them.
  *
@@ -16,6 +11,11 @@ import { Tooltip } from "../tooltip";
  * past the bound on who is named) is never lit. Nothing here writes a
  * reaction.
  */
+
+import { REACTION, type Reaction, type ReactionGroup } from "@luke/features/coding-agent-wire";
+import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
+import { useMemberDirectory } from "../member-directory";
+import { Tooltip } from "../tooltip";
 
 /** Each reaction's emoji, and its name as GitHub says it. */
 const REACTION_FACES = {
