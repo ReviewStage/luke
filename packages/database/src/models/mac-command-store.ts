@@ -6,7 +6,8 @@ import {
 import { and, asc, eq, gte, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
@@ -17,7 +18,9 @@ import type { TaskStoreEffect } from "./task-store.js";
  * account, so no account claims, settles, or reads another's commands. A
  * command is claimed once, by the first Mac whose read takes it, and
  * settled once, by a Mac after it was claimed; the call that queued it
- * reads the result and withdraws the row.
+ * reads the result and withdraws the row. A Mac that follows its account's
+ * commands over Neon Realtime subscribes to the unclaimed ones
+ * (`macCommandsLiveStatement`) and claims each by its id.
  */
 
 const CommandKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
@@ -92,6 +95,31 @@ const claimWaiting = SqlSchema.findAll({
         command: macCommand.command,
         timeoutSeconds: macCommand.timeoutSeconds,
       }),
+    ),
+});
+
+const claimOne = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    ...CommandKeySchema.fields,
+    queuedSince: Schema.Date,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    command: Schema.String,
+    timeoutSeconds: Schema.Number,
+  }),
+  execute: ({ userId, id, queuedSince, now }) =>
+    Database.use((db) =>
+      db
+        .update(macCommand)
+        .set({ claimedAt: now })
+        .where(and(eq(macCommand.id, id), waiting(userId, queuedSince)))
+        .returning({
+          id: macCommand.id,
+          command: macCommand.command,
+          timeoutSeconds: macCommand.timeoutSeconds,
+        }),
     ),
 });
 
@@ -176,6 +204,46 @@ export function claimMacCommands(
   queuedSince: Date,
 ): TaskStoreEffect<readonly MacCommand[]> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => claimWaiting({ userId, queuedSince, now }));
+}
+
+/**
+ * Claims one command of the account by its id, for the Mac that asked,
+ * where it still waits and was queued at or after `queuedSince`; none where
+ * another Mac took it first, its call withdrew it, or it waited too long.
+ */
+export function claimMacCommand(
+  userId: string,
+  id: string,
+  queuedSince: Date,
+): TaskStoreEffect<Option.Option<MacCommand>> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) => claimOne({ userId, id, queuedSince, now }));
+}
+
+/**
+ * The account's commands no Mac has claimed yet, written for Neon Realtime,
+ * each column under the key `live-wire.ts` reads it by and the instant it was
+ * queued in epoch milliseconds. Note that it names no claim window, because a
+ * live read measures nothing from the clock: the claim (`claimMacCommand`)
+ * keeps the window, on the service's clock. The order is the reader's to keep,
+ * since Realtime keeps none. None where the statement names a value Realtime
+ * cannot carry.
+ */
+export function macCommandsLiveStatement(userId: string): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: macCommand.id,
+            command: macCommand.command,
+            timeoutSeconds: macCommand.timeoutSeconds,
+          },
+          { queuedAt: macCommand.queuedAt },
+        ),
+      )
+      .from(macCommand)
+      .where(and(eq(macCommand.userId, userId), isNull(macCommand.claimedAt))),
+  );
 }
 
 /** Keeps a claimed command's result; false where the account holds no such command claimed and unsettled. */

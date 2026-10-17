@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
+  claimMacCommand,
   claimMacCommands,
   macCommandResult,
   macCommandsWaiting,
@@ -38,7 +39,10 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  * a call that died left behind is never run later. An ask the Mac's read
  * would refuse is refused before it is queued. The Mac's side is `GET /api/mac-commands`, held open while
  * nothing waits and answered with every waiting command claimed for it,
- * and `POST`, its result (`../mac-commands-app.ts`).
+ * and `POST`, its result (`../mac-commands-app.ts`). A Mac that follows the
+ * account's unclaimed commands over Neon Realtime instead claims each by its
+ * id (`claimedMacCommand`), inside the same claim window, and says it is
+ * listening on a timer well inside `LISTENER_FRESH`.
  */
 
 const MAC_COMMAND_SERVICE = {
@@ -210,16 +214,32 @@ export function runOnMacTool(
   );
 }
 
+/** The instant a command must have been queued at or after for a Mac to take it now. */
+const queuedSince = Effect.map(
+  Clock.currentTimeMillis,
+  (now) => new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.CLAIM_WINDOW)),
+);
+
+/**
+ * One command a Mac heard of over Realtime, claimed for it by its id where
+ * it still waits inside the claim window; none where another Mac took it,
+ * its call withdrew it, or it waited too long. The window is kept here, on
+ * the service's clock, because the live statement can measure nothing from
+ * one.
+ */
+export function claimedMacCommand(
+  userId: string,
+  id: string,
+): TaskStoreEffect<Option.Option<MacCommand>> {
+  return Effect.flatMap(queuedSince, (since) => claimMacCommand(userId, id, since));
+}
+
 /**
  * The Mac's held read: it is counted listening as the read arrives, and
  * answered with every waiting command claimed for it as soon as one waits,
  * or with none once the hold ends.
  */
 export function macCommandsFor(userId: string): TaskStoreEffect<readonly MacCommand[]> {
-  const queuedSince = Effect.map(
-    Clock.currentTimeMillis,
-    (now) => new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.CLAIM_WINDOW)),
-  );
   return markMacListening(userId).pipe(
     Effect.andThen(
       Effect.flatMap(queuedSince, (since) => macCommandsWaiting(userId, since)).pipe(

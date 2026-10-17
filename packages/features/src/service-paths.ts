@@ -81,6 +81,16 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   MAC_COMMANDS: "/api/mac-commands",
+  /** One waiting command, named by its id, claimed for the Mac that heard of it over Neon Realtime (POST). `mac-command-wire.ts` declares the bodies. */
+  MAC_COMMAND_CLAIM: "/api/mac-commands/claim",
+  /** That a Mac of the account listens for its commands now (POST), which a Mac following them over Neon Realtime says on a timer, since its subscription writes nothing. */
+  MAC_COMMANDS_LISTENING: "/api/mac-commands/listening",
+  /**
+   * The commands no Mac of the account has claimed, sealed for following over
+   * Neon Realtime (GET), or `unavailable` where the deployment has no
+   * Realtime. `live-wire.ts` declares the answer.
+   */
+  LIVE_MAC_COMMANDS: "/api/live/mac-commands",
   /**
    * The account's automations: list them, newest first, or one plan's where
    * `planId` names it (GET), or make one (POST). `automation-wire.ts`

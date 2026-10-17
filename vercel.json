@@ -349,12 +349,24 @@
           "dest": "/api/default.js?route=live/inbox"
         },
         {
+          "src": "/api/live/mac-commands",
+          "dest": "/api/default.js?route=live/mac-commands"
+        },
+        {
           "src": "/api/live/plan-inbox",
           "dest": "/api/default.js?route=live/plan-inbox"
         },
         {
           "src": "/api/mac-commands",
           "dest": "/api/default.js?route=mac-commands"
+        },
+        {
+          "src": "/api/mac-commands/claim",
+          "dest": "/api/default.js?route=mac-commands/claim"
+        },
+        {
+          "src": "/api/mac-commands/listening",
+          "dest": "/api/default.js?route=mac-commands/listening"
         },
         {
           "src": "/api/maintenance/provider-keys-rewrap",
