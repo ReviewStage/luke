@@ -249,3 +249,31 @@ test("an agent's chip the window knows no harness for has its name say whose it 
 
   assert.equal(chip?.querySelector(".mention-chip-label")?.textContent, "Agent");
 });
+
+test("an agent's chip the window holds wears its harness's mark, on another task's words or none, and the card it hangs wears it too", async () => {
+  const container = await drawn(
+    `${HOME}/plan/${PLAN}/agent/${AGENT} and ${HOME}/agent/${TRIAGE_AGENT}`,
+    [],
+  );
+  const agentChips = [
+    ...container.querySelectorAll<HTMLElement>('.mention-chip[data-kind="agent"]'),
+  ];
+
+  const worn = agentChips.map((chip) => {
+    const onChip = chip.querySelector(".mention-chip-glyph .harness-mark") !== null;
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    const onCard =
+      document.querySelector(".luke-tooltip-card [data-mention-card] .harness-mark") !== null;
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+    return [onChip, onCard];
+  });
+
+  assert.deepEqual(worn, [
+    [true, true],
+    [true, true],
+  ]);
+});

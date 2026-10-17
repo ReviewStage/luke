@@ -2497,7 +2497,15 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
-          ["Take the split view.", { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab" }],
+          [
+            "Take the split view.",
+            {
+              kind: MESSAGE_SENDER.AGENT,
+              agentId: agent.id,
+              name: "Add PR overview tab",
+              model: agent.model,
+            },
+          ],
         ] as const) {
           yield* writer.writeAwaitingLine(
             target,
@@ -2527,8 +2535,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
-          // Another agent is marked as one beside its name, with no kind an older window would refuse.
-          ["Take the split view.", { name: "Add PR overview tab", agent: true }],
+          // Another agent is marked as one beside its name, its model, and itself on its task, with no kind an older window would refuse.
+          [
+            "Take the split view.",
+            {
+              name: "Add PR overview tab",
+              agent: true,
+              model: agent.model,
+              agentId: agent.id,
+              taskId: task.id,
+            },
+          ],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);
@@ -3416,7 +3433,29 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         });
         assert.deepEqual(
           (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
-          { kind: MESSAGE_SENDER.AGENT, name: "agent-1" },
+          // An agent's notice names it by its handle, and by its member's agent and the model that agent posted under.
+          {
+            kind: MESSAGE_SENDER.AGENT,
+            name: "agent-1",
+            model: chat.first.agent.model,
+            agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
+          },
+        );
+        // The notice keeps the model its agent posted under, whatever the agent runs on since.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ model: "openai/gpt-6.1-sol" })
+            .where(eq(codingAgent.id, chat.first.agent.id)),
+        );
+        assert.deepEqual(
+          (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
+          {
+            kind: MESSAGE_SENDER.AGENT,
+            name: "agent-1",
+            model: chat.first.agent.model,
+            agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
+          },
         );
         const again = yield* chat.post(
           chat.first.member,

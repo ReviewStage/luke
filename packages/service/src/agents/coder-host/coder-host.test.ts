@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
@@ -789,7 +790,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           {
             text: CHAT_NOTICE,
             clientKey: "chat-notice-41",
-            sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+            sender: {
+              kind: MESSAGE_SENDER.AGENT,
+              agentId: randomUUID(),
+              name: "agent-2",
+              model: agent.model,
+            },
             metadata: notice,
           },
           Effect.succeed(true),

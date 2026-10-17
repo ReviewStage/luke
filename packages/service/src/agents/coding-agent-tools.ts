@@ -953,7 +953,15 @@ function messageLine(
   if (caller.kind === AGENT_CALLER.LUKE) return { text, sender: { kind: MESSAGE_SENDER.LUKE } };
   const line = agentLine(caller.agent, text);
   if (line.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) return undefined;
-  return { text: line, sender: { kind: MESSAGE_SENDER.AGENT, name: agentName(caller.agent) } };
+  return {
+    text: line,
+    sender: {
+      kind: MESSAGE_SENDER.AGENT,
+      agentId: caller.agent.id,
+      name: agentName(caller.agent),
+      model: caller.agent.model,
+    },
+  };
 }
 
 /** One call of `message_agent`: the words handed to an agent of the caller's workspace, or why nothing was sent. */
@@ -993,6 +1001,7 @@ export function runMessageAgent(
         agent: {
           id: agent.id,
           title: agentName(agent),
+          model: agent.model,
           status: CODING_AGENT_STATUS.RUNNING,
           onYourTask: agent.taskId !== null && agent.taskId === callerTask(caller),
         },
@@ -1102,6 +1111,7 @@ function archiveAnswer(
     agent: {
       id: agent.id,
       title: agentName(agent),
+      model: agent.model,
       task: task.task === null ? null : { ...task.task },
       onYourTask: task.onYourTask,
     },

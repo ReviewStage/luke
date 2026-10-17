@@ -233,8 +233,9 @@ export function agentActor(
  * What sent one of the developer's messages to an agent, as the actor named
  * over it: a teammate read against the workspace's `members` for their
  * face, a former member, Luke, an automation, another coding agent of the
- * workspace by its name on the mark of no known harness, since the service
- * keeps no more of it than its name, or the GitHub login GitHub
+ * workspace by its name on its harness's mark, read off the model the
+ * service answers it runs on, and the mark of no known harness where it
+ * answers none, or the GitHub login GitHub
  * told the agent of, a person's circle by their avatar or an App's bot's
  * square by whether the login is a bot's (`githubLoginActor`); none for the reader's own,
  * a message whose sender was not kept, or a member's read with no account
@@ -257,7 +258,9 @@ export function lineSender(
     return {
       kind: ACTOR_KIND.AGENT,
       name: sentBy.name,
-      provider: undefined,
+      ...(sentBy.agentId === undefined ? undefined : { agentId: sentBy.agentId }),
+      ...(sentBy.taskId === undefined ? undefined : { taskId: sentBy.taskId }),
+      provider: sentBy.model === undefined ? undefined : providerOf(sentBy.model),
       state: ACTOR_STATE.REST,
     };
   }

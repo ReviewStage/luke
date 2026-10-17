@@ -1832,7 +1832,12 @@ export function delegationStartsOf(
  * a member by their account's id and the name it holds now, or nobody where
  * their account is gone; Luke; an automation by the name its run kept; or
  * GitHub by the login the line kept; or another coding agent by the name
- * its send kept.
+ * its send kept, and the model it ran on then, which its harness is read
+ * off, where the line kept one, and the agent itself, by its id and the
+ * task it works on, where the line kept it and it still stands. Note that
+ * the model is only ever the one the line kept, never the agent's now,
+ * because a byline names who sent it as it was, whatever the agent runs on
+ * since.
  */
 export type LineSent =
   | {
@@ -1842,7 +1847,18 @@ export type LineSent =
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
-  | { readonly kind: typeof MESSAGE_SENDER.AGENT; readonly name: string };
+  | {
+      readonly kind: typeof MESSAGE_SENDER.AGENT;
+      readonly name: string;
+      readonly model: string | undefined;
+      readonly agent: SendingAgent | undefined;
+    };
+
+/** The coding agent that sent a line, as it stands now: its id, and the task it works on, none for one on no task. */
+interface SendingAgent {
+  readonly id: string;
+  readonly taskId: string | undefined;
+}
 
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
@@ -1851,6 +1867,9 @@ const LineSenderRowSchema = Schema.Struct({
   memberId: Schema.NullOr(Schema.String),
   memberName: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
+  senderModel: Schema.NullOr(Schema.String),
+  agentId: Schema.NullOr(Schema.String),
+  agentTaskId: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -1869,9 +1888,13 @@ const findLineSenders = SqlSchema.findAll({
           memberId: user.id,
           memberName: user.name,
           senderName: messages.senderName,
+          senderModel: messages.senderModel,
+          agentId: codingAgent.id,
+          agentTaskId: codingAgent.taskId,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
+        .leftJoin(codingAgent, eq(codingAgent.id, messages.senderAgentId))
         .where(
           and(
             inArray(messages.id, [...messageIds]),
@@ -1907,7 +1930,15 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
     case MESSAGE_SENDER.AGENT:
       return row.senderName === null
         ? undefined
-        : { kind: MESSAGE_SENDER.AGENT, name: row.senderName };
+        : {
+            kind: MESSAGE_SENDER.AGENT,
+            name: row.senderName,
+            model: row.senderModel ?? undefined,
+            agent:
+              row.agentId === null
+                ? undefined
+                : { id: row.agentId, taskId: row.agentTaskId ?? undefined },
+          };
   }
 }
 

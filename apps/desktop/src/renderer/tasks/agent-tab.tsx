@@ -11,16 +11,31 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remedy";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import {
+  DocumentIcon,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  HoverCard,
+  HoverCardHead,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
-import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref";
+import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  automationActor,
+} from "../actor-ref";
 import {
   Conversation,
   ConversationContent,
@@ -74,6 +89,7 @@ import {
   messageWords,
   newestTodos,
   placedMessages,
+  providerOf,
   settledPlanEdits,
   showsPublishedRow,
   teammateStarter,
@@ -88,6 +104,7 @@ import { CopyMessageAction } from "./copy-message";
 import { ForkedToLine } from "./fork-action";
 import { openReply } from "./fork-model";
 import { linkChip } from "./mention-chip";
+import { MentionedAgentCard } from "./mentioned-agent-card";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
@@ -139,6 +156,8 @@ import { useAgentPullRequest } from "./use-agent-pull-request";
 import { useAgentServers } from "./use-agent-servers";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { useKnownNames } from "./use-known-names";
+import { useOpenPlace } from "./use-open-link";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
@@ -341,23 +360,28 @@ function NoticeRow({
 /**
  * The agent a call about one names, as its row's chip wears it: its tab's
  * own tile and name where the place lists the agent, else the title the
- * call's answer gives it on the bare agent mark, as an agent of another
- * task is named; nothing where neither is known, as a start's before it
- * answers, whose row keeps its own words.
+ * call's answer gives it on the mark of its harness, read off the model
+ * the answer says it runs on, or the one the window last read it running
+ * on (`useKnownNames`), as an agent of another task is named; nothing
+ * where neither is known, as a start's before it answers, whose row keeps
+ * its own words.
  */
 function calledAgentActor(
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>,
   cards: TranscriptCards | undefined,
+  known: KnownNames,
 ): Actor | undefined {
   const called = calledAgent(part);
   if (called === undefined) return undefined;
   const listed = called.id === undefined ? undefined : cards?.agent?.(called.id);
   if (listed !== undefined || called.title === undefined) return listed;
+  const model =
+    called.model ?? (called.id === undefined ? undefined : known.agentModels.get(called.id));
   return {
     kind: ACTOR_KIND.AGENT,
     agentId: called.id,
     name: called.title,
-    provider: undefined,
+    provider: model === undefined ? undefined : providerOf(model),
     state: ACTOR_STATE.REST,
   };
 }
@@ -373,6 +397,7 @@ function ToolCallView({
   cards?: TranscriptCards | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
+  const known = useKnownNames();
   return (
     <>
       <TranscriptTool
@@ -382,7 +407,7 @@ function ToolCallView({
         provider={view.provider}
         subject={view.subject}
         description={view.description}
-        agent={calledAgentActor(part, cards)}
+        agent={calledAgentActor(part, cards, known)}
         input={view.input}
         output={view.output}
         errorText={part.errorText}
@@ -559,12 +584,13 @@ function OpeningCallView({
   onOpen: () => void;
 }): ReactNode {
   const view = toolCallView(part);
+  const known = useKnownNames();
   return (
     <TranscriptOpeningCall
       callId={part.callId}
       kind={view.kind}
       subject={view.subject}
-      agent={calledAgentActor(part, cards)}
+      agent={calledAgentActor(part, cards, known)}
       state={part.state}
       hint={hint}
       card={card}
@@ -904,9 +930,56 @@ function agentOrigin(input: {
 function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   return (
     <span className="message-sender">
-      <ActorRef actor={actor} />
+      {actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
+        <SendingAgent actor={actor} agentId={actor.agentId} />
+      ) : (
+        <ActorRef actor={actor} />
+      )}
     </span>
   );
+}
+
+/**
+ * Another coding agent named as a line's sender, by the id the service
+ * answered for it: its harness's mark and its name, as it sent the line,
+ * hanging its tab's card as it stands now, read as the card is first hung
+ * (`mentioned-agent-card.tsx`), and opening its tab on a press.
+ */
+function SendingAgent({
+  actor,
+  agentId,
+}: {
+  actor: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>;
+  agentId: string;
+}): React.JSX.Element {
+  const { workspaceId } = useMemberDirectory();
+  const openPlace = useOpenPlace();
+  const { taskId } = actor;
+  // Its own card stands while the agent is read, and where the read answers nothing.
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
+    </HoverCard>
+  );
+  const card = (
+    <MentionedAgentCard
+      agentId={agentId}
+      taskId={taskId}
+      name={actor.name}
+      workspaceId={workspaceId}
+      fallback={fallback}
+    />
+  );
+  const open =
+    openPlace === undefined
+      ? undefined
+      : () =>
+          openPlace({
+            kind: LINK_PLACE.AGENT,
+            ...(taskId === undefined ? undefined : { planId: taskId }),
+            agentId,
+          });
+  return <ActorRef actor={actor} card={card} onOpen={open} />;
 }
 
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */

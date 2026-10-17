@@ -196,13 +196,31 @@ const GONE_REFUSALS: ReadonlySet<string> = new Set([
   HOSTED_REFUSAL.TASK_ARCHIVED.error,
 ]);
 
-/** What sent a notice, as the row keeps it: a person by their account, Luke for a planner, and an agent by its handle. */
-function senderOf(from: ChatMemberRow): LineSender {
-  if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
-    return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId };
-  }
-  if (from.kind === MEMBER_KIND.PLANNER) return { kind: MESSAGE_SENDER.LUKE };
-  return { kind: MESSAGE_SENDER.AGENT, name: from.handle };
+/**
+ * What sent a notice, as the row keeps it: a person by their account, Luke
+ * for a planner, and an agent by its handle and, where the member still
+ * names one the poster reaches, its agent and the model it runs on as it
+ * posts, which its line's mark is drawn by for good.
+ */
+function senderOf(userId: string, from: ChatMemberRow) {
+  return Effect.gen(function* () {
+    if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
+      return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId } satisfies LineSender;
+    }
+    if (from.kind === MEMBER_KIND.PLANNER) {
+      return { kind: MESSAGE_SENDER.LUKE } satisfies LineSender;
+    }
+    const agent =
+      from.agentId === null
+        ? Option.none()
+        : yield* hostedStoreOrUnavailable(readCodingAgent(userId, from.agentId));
+    const sender: LineSender = {
+      kind: MESSAGE_SENDER.AGENT,
+      name: from.handle,
+      ...(Option.isNone(agent) ? undefined : { agentId: agent.value.id, model: agent.value.model }),
+    };
+    return sender;
+  });
 }
 
 /** The message author each kind of member speaks as, on the notice's row. */
@@ -306,6 +324,8 @@ function tellAgent(
     // A deployment that reaches no eve steers nothing, so the agent reads the message when it next reads.
     const eve = telling.eveFor(agent.value.userId);
     if (eve === undefined) return NOTICE_OUTCOME.HELD;
+    // Note that who sent it is read before the notice is claimed, because a read that fails after the claim would hold the notice with nothing to release it.
+    const sender = yield* senderOf(userId, notice.from);
     const claimed = yield* hostedStoreOrUnavailable(
       markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
     );
@@ -314,7 +334,7 @@ function tellAgent(
     const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
       text: notice.text,
       clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
-      sender: senderOf(notice.from),
+      sender,
       metadata: {
         author: AUTHOR_OF_KIND[notice.from.kind],
         channel: MESSAGE_CHANNEL.CHAT,
