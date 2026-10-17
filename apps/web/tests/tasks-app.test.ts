@@ -86,14 +86,14 @@ import { TestClock } from "effect/testing";
 import { dispatched } from "./support/platform-landing";
 
 /**
- * The Plans tab's plan routes, answered by the group the way a
+ * The Tasks tab's task routes, answered by the group the way a
  * function answers them, over a real dialect: the bearer names the account
- * and nothing else does, a plan another account owns answers exactly as one
+ * and nothing else does, a task another account owns answers exactly as one
  * that does not exist, and what the notetaker's notes saved is what the window opens.
- * The path is the one the rewrite hands the group, the plan id moved from
- * the path into the `id` query. A plan's repository is kept only once the
+ * The path is the one the rewrite hands the group, the task id moved from
+ * the path into the `id` query. A task's repository is kept only once the
  * Luke GitHub App, over a GitHub the test scripts, confirms the
- * installation connected to the plan's workspace reaches it.
+ * installation connected to the task's workspace reaches it.
  *
  * Synthetic accounts, bearers, tokens, and repositories throughout.
  */
@@ -179,7 +179,7 @@ const answer = (
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
         workspaces: yield* fakeWorkspaceSeams,
-        // A plan here has no coding agent, so its delete has nothing to stop; `coding-agents-app.test.ts` deletes one that has.
+        // A task here has no coding agent, so its delete has nothing to stop; `coding-agents-app.test.ts` deletes one that has.
         eveOrigin: () => undefined,
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
@@ -230,7 +230,7 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   return read.success;
 }
 
-/** The started plan's id, failing the test where the answer is not a started plan. */
+/** The started task's id, failing the test where the answer is not a started task. */
 function startedId(started: Answer): string {
   return readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.id;
 }
@@ -325,7 +325,7 @@ type Recorded = Pick<
   "closedAt" | "closeReason" | "usage" | "model"
 >;
 
-/** A call about the plan, started at the instant given, with the fragments said on it in the order they were written. */
+/** A call about the task, started at the instant given, with the fragments said on it in the order they were written. */
 const callAbout = (
   input: { userId: string; taskId: string; startedAt: number; recorded?: Recorded },
   said: readonly Said[],
@@ -1513,7 +1513,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         const moved = readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, toAcme).plan;
         assert.deepEqual([moved.workspaceId, moved.repository], [acme, "acme/relay"]);
-        // The teammate was in the workspace the plan left, not the one it moved to.
+        // The teammate was in the workspace the task left, not the one it moved to.
         assert.deepEqual(
           yield* ask(request(ONE_TASK, other, { id: task.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),

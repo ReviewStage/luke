@@ -43,7 +43,7 @@ import {
  * account owns, and the deployment's secret can open only the turns the
  * table admits, a row for each of the two things a message does, opening a
  * session or following one up: a spoken ask for the voice function on the
- * planning channel, and on the coder channel (`coder-host/channel.ts`) the
+ * brain channel, and on the coder channel (`coder-host/channel.ts`) the
  * typed line the voice brain sends a coding agent and the typed opening
  * that starts one, where it presents the account's own principal so the
  * line steers the agent's running turn, never a stream.
@@ -99,7 +99,7 @@ export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
  * steers a running turn only with a message whose principal is the turn's
  * own, read as the tuple of authenticator, type, and id, so a principal of
  * the deployment's own type can open a turn or follow one up but never
- * join one under way. The planning channel's deployment presents itself: a
+ * join one under way. The brain channel's deployment presents itself: a
  * spoken ask opens its own turn, and nothing of the voice's joins a typed
  * one. The coder channel's presents the account: a coding agent's turn runs
  * under the developer's bearer, and the one message the deployment carries
@@ -158,7 +158,7 @@ const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
  * not admit for what it does is refused here, before any later authenticator could admit it
  * as something else. The stream read is the voice function hearing a spoken
  * ask's turn as eve writes it rather than reading the record on a timer, so
- * it is admitted to the actor that presents itself (the planning channel's)
+ * it is admitted to the actor that presents itself (the brain channel's)
  * and no other, and the door's ownership check still holds it to a session
  * the named account reaches. An actor that presents the account mints the account's
  * own principal instead, the deployment named as its carrier, so the

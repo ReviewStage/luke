@@ -4,7 +4,7 @@ import { useState } from "react";
 import { readKept, writeKept } from "./folded-groups";
 
 /**
- * chosen-workspace.ts -- which of the account's workspaces the sidebar lists and New plan starts in, kept across launches.
+ * chosen-workspace.ts -- which of the account's workspaces the sidebar lists and New task starts in, kept across launches.
  *
  * The choice is this window's alone, as a fold is (`folded-groups.ts`), so it
  * is kept in the renderer's own storage rather than on the account: a Mac

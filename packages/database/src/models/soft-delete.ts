@@ -9,7 +9,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
 
 /**
  * The purge that follows a soft delete. Nothing is erased at the stamp: a
- * deleted plan's conversation is stamped `deleted_at` (`task-store.ts`), so
+ * deleted task's conversation is stamped `deleted_at` (`task-store.ts`), so
  * the reads — which skip a stamped row — show nothing of it from the call
  * after, while the rows stand until the purge. There is no archive, no
  * registry, and no cutoff: the stamp is the whole record, and the cron's
@@ -20,7 +20,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * sweep to delete its sandbox (`session-sandbox-cleanup.ts`), since the
  * conversation's row is the last record that names it.
  *
- * A deleted plan's calls are not stamped: the delete removes the ones that
+ * A deleted task's calls are not stamped: the delete removes the ones that
  * had ended (`task-store.ts`), and the cron removes each one left once it
  * has ended too, the words said on it going with it by the cascade.
  */
@@ -70,9 +70,9 @@ export function purgeClearedConversations(
 }
 
 /**
- * A call whose plan is gone, once it has ended: recorded closed, or started
+ * A call whose task is gone, once it has ended: recorded closed, or started
  * before `liveEdge`, past which no Live session still runs whatever its row
- * says. A call no plan was ever named for is not one of a deleted plan.
+ * says. A call no task was ever named for is not one of a deleted task.
  */
 const purgeCallRows = SqlSchema.findAll({
   Request: Schema.Date,
@@ -104,7 +104,7 @@ const purgeCallRows = SqlSchema.findAll({
 });
 
 /**
- * Removes the ended calls of plans deleted since, across every account, at
+ * Removes the ended calls of tasks deleted since, across every account, at
  * most a sweep's worth; each call's segments cascade with it. Answers how
  * many calls went.
  */

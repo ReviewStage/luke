@@ -14,10 +14,10 @@ import { ActionMenu, type MenuAction } from "./action-menu";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 
 /**
- * agent-archive.tsx -- a coding agent's Archive, asked first while the agent still works, and the plan's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.
+ * agent-archive.tsx -- a coding agent's Archive, asked first while the agent still works, and the task's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.
  *
  * Archive agent stands in an agent's tab menu and in the menu of its row in
- * the plan's summary. An agent at rest is archived at once; one still
+ * the task's summary. An agent at rest is archived at once; one still
  * working asks first, since archiving it stops the turn it is on, and a
  * stopped turn is not given back. Note that an agent drawn at rest is read
  * again before it is archived unasked, because nothing follows an agent
@@ -48,7 +48,7 @@ const ARCHIVED_LABEL = "Archived";
 /** What the fold's count is read as while folded. */
 const ARCHIVED_NOUN: CountNoun = { one: "archived agent", many: "archived agents" };
 
-/** What an archived agent's one action says, in an archived plan's words. */
+/** What an archived agent's one action says, in an archived task's words. */
 const UNARCHIVE_LABEL = "Unarchive";
 
 /** What asking to archive a working agent says. */
@@ -172,7 +172,7 @@ function ArchivedAgentRow({
   );
 }
 
-/** The plan's archived agents, folded away under Archived at the foot of its Coding agents; nothing while none is archived. */
+/** The task's archived agents, folded away under Archived at the foot of its Coding agents; nothing while none is archived. */
 export function ArchivedAgents({
   agents,
   shown,

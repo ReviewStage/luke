@@ -15,7 +15,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * agent-model-chip.tsx -- the chip at the agent box's foot that names what the agent runs on, and the menu that changes it.
  *
  * Drawn along the composer card's foot as the window's toolbar chip
- * (`../chip.tsx`), the plan toolbar's repository chip's look, with no
+ * (`../chip.tsx`), the task toolbar's repository chip's look, with no
  * border and no fill until the pointer is on it or its menu is open:
  * "Opus 5.5 High" (`model-label.tsx`), with "Fast" after the effort where
  * the fast version is on and the standard context window's size where the

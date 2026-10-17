@@ -13,7 +13,7 @@ import { useFileViewSettings } from "./file-view-settings";
 /**
  * file-menu.tsx -- the File view bar's ⋯: what is done with the file shown, then how every File tab draws its lines.
  *
- * The window's own menu (`../desktop/action-menu.tsx`), as the plan's ⋯
+ * The window's own menu (`../desktop/action-menu.tsx`), as the task's ⋯
  * draws it: the file's name or its whole text copied, said in the copy
  * toast as every copy from a menu is; the file saved where the system's
  * save dialog chooses (`ACT_KIND.WINDOW_SAVE_FILE`); and, under a rule, the

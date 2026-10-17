@@ -41,7 +41,7 @@ in front. Then look at the list as a set.
   tall as a whole-window picture, only narrower. The changelog page shows
   every picture at that one height.
 - The plan document is not wallpaper. Show it only where it is the subject;
-  elsewhere open another plan, another tab, or fold it away.
+  elsewhere open another task, another tab, or fold it away.
 
 Show the developer the list (and the old releases' pictures it should not
 repeat) before staging; it is cheap to change now and expensive later.
@@ -55,9 +55,9 @@ beyond that is a throwaway patch, never committed, applied on the Mac to the
 release commit. Start from 0.12.0's, beside this file:
 
 - `WORLD.md` is the invented company every release's pictures happen in: its
-  name and mark, repositories, the plan everything is about, its coding agents
+  name and mark, repositories, the task everything is about, its coding agents
   and pull requests, people, and how times are told. Reuse it, so the pictures
-  stay one continuing story; add new plans and work for what a release shows,
+  stay one continuing story; add new tasks and work for what a release shows,
   and record what is worth keeping there.
 - `assets/` holds acme's mark (`acme-mark.svg`) and Dean's photo
   (`dean-stratakos.jpg`), the two images every picture carries.
@@ -85,7 +85,7 @@ design, which is, in short:
   read the app re-asks as soon as it lands (an agent's transcript, the Inbox)
   gets its page once and then a promise that never settles, or it spins.
 - One staging effect lays the window out once its pieces are drawn: the
-  sidebar fold, the side panel's tab, width, and full screen, the plan
+  sidebar fold, the side panel's tab, width, and full screen, the task
   column's tab, Settings' page, version history, ⌘K with a query typed, a
   hover card held open.
 - Hooks into app files are few and marked `Throwaway:`.
@@ -101,7 +101,7 @@ Every picture, whatever it shows:
   started seconds before launch reads "Working… 20s".
 - Synthetic data on the acme organisation: its repositories (`acme/relay`,
   `acme/ledger`, `acme/web`), its teal two-peak mark as the owner picture,
-  believable plans, agents, diffs, and dialogue about one feature
+  believable tasks, agents, diffs, and dialogue about one feature
   ("Teammate invitations"). Model ids from the repository's real catalog.
 - Positive states: everything connected, checks passing, work done or
   moving. An error, an empty list, a disconnected service, or a "Connect"

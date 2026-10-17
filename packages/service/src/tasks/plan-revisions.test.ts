@@ -24,7 +24,7 @@ import { PLAN_SAVE_REFUSAL, PLAN_SAVE_STATUS, restoreRevision, saveNotes } from 
  * every save that changes the plan is kept under its writer, the same
  * writer's saves in a row are one revision, a plan from before history keeps
  * what it held as its first revision, and the plan names its newest
- * revision's writer as its last edit. Synthetic accounts and plans throughout.
+ * revision's writer as its last edit. Synthetic accounts and tasks throughout.
  */
 
 const CALL = "rtc-session-history";

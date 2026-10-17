@@ -1,10 +1,14 @@
 import { ANCHORED_POPOVER_EXAMPLE } from "./examples/anchored-popover";
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
+import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
+import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
@@ -34,15 +38,19 @@ export const EXAMPLES: readonly Example[] = [
   ANCHORED_POPOVER_EXAMPLE,
   TYPOGRAPHY_EXAMPLE,
   LAYOUT_EXAMPLE,
-  MENU_EXAMPLE,
+  BADGES_EXAMPLE,
   BUTTONS_EXAMPLE,
   CHIPS_EXAMPLE,
+  DIALOGS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
+  LIST_ROW_EXAMPLE,
+  MENU_EXAMPLE,
   SEGMENTED_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
+  AUTH_PAGE_EXAMPLE,
 ];

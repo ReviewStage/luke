@@ -3,7 +3,7 @@ import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
 import { Schema } from "effect";
 
 /**
- * board-layout.ts -- what is wrong with how a drawing of Luke's is laid out, in words the planning model can fix it from.
+ * board-layout.ts -- what is wrong with how a drawing of Luke's is laid out, in words the brain can fix it from.
  *
  * The model cannot see the board, so it cannot do what Excalidraw's own
  * agent guides ask of a model that draws: look at the result and fix what

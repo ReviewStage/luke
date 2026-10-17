@@ -27,10 +27,10 @@ import { task } from "./task.js";
  * is whether the agent is to hear the answer as a message. The status is
  * open until a member answers it, which writes the answer, the member, and
  * the key the client sent it under, so an answer sent again after a lost
- * reply is taken once, or until the agent closes it, which writes why. The plan is
- * the agent's, kept on the row so a plan's inbox is read by one index, and
+ * reply is taken once, or until the agent closes it, which writes why. The task is
+ * the agent's, kept on the row so a task's inbox is read by one index, and
  * the account's open items are read by another. The row goes with its
- * account, its plan, and its agent alike. The columns
+ * account, its task, and its agent alike. The columns
  * the fixed kinds stood in, `kind`, `details`, `options`, and
  * `recommended`, are declared no longer and wait on their drop
  * (`tests/drizzle-schema.test.ts`'s `PENDING_DROP`).
@@ -42,7 +42,7 @@ export const inboxItem = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The agent's plan; null for an agent with no plan. */
+    /** The agent's task; null for an agent with no task. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     /** The agent's workspace. */
     organizationId: text("organization_id")
@@ -69,7 +69,7 @@ export const inboxItem = pgTable(
     /** The key the answer was sent under; null until they answer. */
     answerKey: text("answer_key"),
     /**
-     * The member who answered, any member of the plan's workspace; null until
+     * The member who answered, any member of the task's workspace; null until
      * one does, for an answer from before answerers were kept, and once their
      * account is gone, which reads as nobody the service can name.
      */
@@ -82,9 +82,9 @@ export const inboxItem = pgTable(
   (table) => [
     // One item per key per agent: a post under a key it used is that item's write.
     uniqueIndex("inbox_item_agent_key").on(table.agentId, table.key),
-    // A plan's inbox is read the latest changed first.
+    // A task's inbox is read the latest changed first.
     index("inbox_item_task_updated").on(table.taskId, table.updatedAt),
-    // A workspace's items of agents with no plan are read the latest changed first.
+    // A workspace's items of agents with no task are read the latest changed first.
     index("inbox_item_org_updated").on(table.organizationId, table.updatedAt),
     // What waits across the account is read on every look of a held read, its open items the latest changed first.
     index("inbox_item_user_status_updated").on(table.userId, table.status, table.updatedAt),

@@ -2,27 +2,27 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { createContext, useContext } from "react";
 
 /**
- * repository-remedy.tsx -- what the press under a refused start or message does when the plan's repository is out of reach.
+ * repository-remedy.tsx -- what the press under a refused start or message does when the task's repository is out of reach.
  *
  * Each reason's remedy is one door of the window's (`App`'s, over the
- * Plans tab), handed down on a context so the composer and the Start button
- * mend the plan's repository without every surface between threading the
- * doors on: Settings › Workspace's GitHub for the plan's workspace, the
- * installation's settings page on GitHub, the plan's repository chip, or
- * the plan moved to the workspace whose GitHub reaches it, after which the
+ * Tasks tab), handed down on a context so the composer and the Start button
+ * mend the task's repository without every surface between threading the
+ * doors on: Settings › Workspace's GitHub for the task's workspace, the
+ * installation's settings page on GitHub, the task's repository chip, or
+ * the task moved to the workspace whose GitHub reaches it, after which the
  * same send goes again by itself. Outside the window, as in a test of one
  * surface, every door does nothing.
  */
 
 /** The window's doors a repository's remedy opens. */
 export interface RepositoryRemedyDoors {
-  /** Settings › Workspace at its GitHub, for the plan's workspace. */
+  /** Settings › Workspace at its GitHub, for the task's workspace. */
   readonly openWorkspaceGitHub: (taskId: string) => void;
   /** A page of GitHub's in the browser. */
   readonly openGitHub: (url: string) => void;
-  /** The plan's repository chip, opened on its menu. */
+  /** The task's repository chip, opened on its menu. */
   readonly chooseRepository: (taskId: string) => void;
-  /** The plan moved to the workspace; answers whether it moved. */
+  /** The task moved to the workspace; answers whether it moved. */
   readonly moveTask: (taskId: string, workspaceId: string) => Promise<boolean>;
 }
 

@@ -343,7 +343,7 @@ export function FeedbackDialog({
   return kind === undefined ? null : (
     // The whole dimmed window takes a dropped screenshot.
     <ModalShell
-      className="confirm-dialog feedback-dialog ph-no-capture"
+      className="feedback-dialog ph-no-capture"
       labelledBy={titleId}
       busy={busy}
       initialFocus={field}

@@ -10,7 +10,7 @@ import { WorkspaceTile } from "./workspace-tile";
 /**
  * workspace-switcher.tsx -- the sidebar's head: the workspace listed, by its tile and name and who shares it, and the menu that lists another.
  *
- * A workspace is a team's shared plans, the first one made for the account
+ * A workspace is a team's shared tasks, the first one made for the account
  * among them, and the sidebar lists one at a time. Its head stands at the
  * sidebar's top left, where Slack, Linear, and Vercel name the scope
  * everything under it belongs to (`docs/proposals/workspace-clarity.md`,

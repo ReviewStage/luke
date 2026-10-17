@@ -18,7 +18,7 @@ import {
 } from "./public-research.js";
 
 /**
- * The planning model's public research at its HTTP boundary: OpenAI's
+ * The brain's public research at its HTTP boundary: OpenAI's
  * Responses API answering a search as a scripted table, and public sites
  * answering page reads the same way, with the resolver a table too, so no
  * test reaches the network or the real DNS. What each test asserts is the

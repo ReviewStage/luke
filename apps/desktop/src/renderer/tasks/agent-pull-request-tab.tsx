@@ -68,6 +68,7 @@ import {
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
 import { PullRequestReview } from "./pull-request-review";
+import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
 import {
   PullRequestStateMenu,
   PullRequestWriteNote,
@@ -812,6 +813,7 @@ function ThreadCard({
               {PULL_REQUEST_WORDS.moreReplies(thread.more)}
             </button>
           )}
+          <ThreadActions thread={thread} />
         </FoldBody>
       </Fold>
     </li>
@@ -1545,71 +1547,76 @@ export function AgentPullRequestTab({
   };
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
+  // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
-    <div className="file-view pull-request-tab ph-no-capture">
-      <PullRequestBar
-        published={bar}
-        writes={writes}
-        review={review}
-        reading={reading}
-        onRefresh={refresh}
-      />
-      <PullRequestWriteNote writes={writes} />
-      {none ? (
-        <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
-      ) : (
-        <>
-          <header className="pull-request-header">
-            <HeaderTitle title={title} />
-            <PullRequestHead parts={parts} now={now} />
-          </header>
-          <PullRequestTabs
-            tabs={tabsOf(parts, published, bar)}
-            view={view}
-            onView={onView}
-            ids={ids}
-          />
-          <div
-            className="pull-request-view"
-            role="tabpanel"
-            id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
-            aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
-            hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
-          >
-            <ConversationView agentId={agentId} parts={parts} url={title?.url} />
-          </div>
-          <div
-            className="pull-request-view"
-            role="tabpanel"
-            id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
-            aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
-            hidden={view !== PULL_REQUEST_VIEW.CHECKS}
-          >
-            <div className="pull-request-page">
-              <ChecksPart
-                agentId={agentId}
-                parts={parts}
-                live={shown && view === PULL_REQUEST_VIEW.CHECKS}
-              />
-            </div>
-          </div>
-        </>
-      )}
-      <div
-        className="pull-request-view"
-        role="tabpanel"
-        id={ids(PULL_REQUEST_VIEW.FILES).panel}
-        aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-        hidden={none || view !== PULL_REQUEST_VIEW.FILES}
-      >
-        <AgentChangesTab
-          agentId={agentId}
-          control={control}
-          shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-          repository={repository}
-          tree={tree}
+    <ThreadWritesProvider value={{ agentId, onWritten: written }}>
+      <div className="file-view pull-request-tab ph-no-capture">
+        <PullRequestBar
+          published={bar}
+          writes={writes}
+          review={review}
+          reading={reading}
+          onRefresh={refresh}
         />
+        <PullRequestWriteNote writes={writes} />
+        {none ? (
+          <EmptyState icon={<GitPullRequestIcon />}>
+            {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
+          </EmptyState>
+        ) : (
+          <>
+            <header className="pull-request-header">
+              <HeaderTitle title={title} />
+              <PullRequestHead parts={parts} now={now} />
+            </header>
+            <PullRequestTabs
+              tabs={tabsOf(parts, published, bar)}
+              view={view}
+              onView={onView}
+              ids={ids}
+            />
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+              hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
+            >
+              <ConversationView agentId={agentId} parts={parts} url={title?.url} />
+            </div>
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+              hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+            >
+              <div className="pull-request-page">
+                <ChecksPart
+                  agentId={agentId}
+                  parts={parts}
+                  live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                />
+              </div>
+            </div>
+          </>
+        )}
+        <div
+          className="pull-request-view"
+          role="tabpanel"
+          id={ids(PULL_REQUEST_VIEW.FILES).panel}
+          aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+          hidden={none || view !== PULL_REQUEST_VIEW.FILES}
+        >
+          <AgentChangesTab
+            agentId={agentId}
+            control={control}
+            shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+            repository={repository}
+            tree={tree}
+          />
+        </div>
       </div>
-    </div>
+    </ThreadWritesProvider>
   );
 }

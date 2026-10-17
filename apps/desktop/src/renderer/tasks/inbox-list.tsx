@@ -57,16 +57,16 @@ import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
 
 /**
- * inbox-list.tsx -- the Inbox's list of items: one row each, under its plan's group header or in one run, with what the list shows and how at its head.
+ * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.
  *
  * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
- * sidebar does. A plan's items stand under the sidebar's own group header
- * (`sidebar-group-header.tsx`), the plan's glyph giving way to its chevron
+ * sidebar does. A task's items stand under the sidebar's own group header
+ * (`sidebar-group-header.tsx`), the task's glyph giving way to its chevron
  * under the pointer, a press folding the group, and each fold kept across
  * launches as a sidebar group's is; an automation's agents stand under its
  * clock tile, which hangs its card. An item is a sidebar row: the tile of
- * the agent that posted it (`actor-ref.tsx`), as the plan's summary or
- * main's read of an agent with no plan names the agent, its title, and how
+ * the agent that posted it (`actor-ref.tsx`), as the task's summary or
+ * main's read of an agent with no task names the agent, its title, and how
  * long ago it last changed, and before its time the face of the teammate
  * whose agent asks it, as the sidebar marks a teammate's task, the reader's
  * own wearing none; a press chooses it, for the pane beside the
@@ -79,9 +79,9 @@ import { cardTitle } from "./tool-call-model";
  * filtered or not; a teammate's open item waits on the teammate, in the
  * body's weight with a hollow dot in the blue's place, and any member may
  * still answer it; an answered one is settled, in the body's weight with
- * no dot. Only an item waiting on the developer wears the dot: a plan or a
+ * no dot. Only an item waiting on the developer wears the dot: a task or a
  * tab with something unseen on it is unread, not waiting, and wears the
- * weight alone. A folded plan
+ * weight alone. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
@@ -151,7 +151,7 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** The agent that posted an item as its holder names it: the plan's summary's line, or main's line for an agent with no plan; none where neither holds it. */
+/** The agent that posted an item as its holder names it: the task's summary's line, or main's line for an agent with no task; none where neither holds it. */
 function itemSubject(
   holder: InboxHolder,
   agentId: string,
@@ -309,7 +309,7 @@ export function InboxItemRow({
 }
 
 /**
- * A holder's group header: a plan's document glyph and name; an
+ * A holder's group header: a task's document glyph and name; an
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the Factory's glyph, the
  * sidebar's row listing every agent, for the agents no automation names,
@@ -590,7 +590,7 @@ function useRowFocusKept(): RowFocus {
   };
 }
 
-/** The list: its head where it has one, then each plan's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
+/** The list: its head where it has one, then each task's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
   chosen,

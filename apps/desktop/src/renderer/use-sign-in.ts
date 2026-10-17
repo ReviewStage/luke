@@ -46,7 +46,7 @@ export function useSignIn(): SignIn {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
           // The browser has the focus the sign-in finished in, and signing in
-          // is an arrival at the plans it just unlocked.
+          // is an arrival at the tasks it just unlocked.
           tell(ACT_KIND.WINDOW_FOCUS_PANEL);
         },
         () => {

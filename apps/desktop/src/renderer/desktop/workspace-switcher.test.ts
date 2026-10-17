@@ -45,7 +45,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The switcher over the plans given, in sight or folded away. */
+/** The switcher over the tasks given, in sight or folded away. */
 function mount(tasks: Partial<TasksControl>) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -248,7 +248,7 @@ test("Enter while an input method composes creates nothing, and a press dragged 
     );
   });
   const backdrop =
-    document.querySelector<HTMLElement>(".confirm-dialog-backdrop") ?? assert.fail("no backdrop");
+    document.querySelector('[aria-modal="true"]')?.parentElement ?? assert.fail("no backdrop");
   act(() => {
     field.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));

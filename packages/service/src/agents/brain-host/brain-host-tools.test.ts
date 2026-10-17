@@ -86,11 +86,11 @@ import { type BrainHost, brainHost } from "./host.js";
 import type { BrainHostSeams } from "./production.js";
 
 /**
- * The planning tools as eve runs them through the host's `runTool`, over the
- * real migrations on PGlite: a call is carried under the plan the admitted
+ * The brain's tools as eve runs them through the host's `runTool`, over the
+ * real migrations on PGlite: a call is carried under the task the admitted
  * conversation belongs to, and answers why it ran nothing, as a result the
- * model reads, for a name the turn was not offered, a conversation no plan
- * names, or an input that does not read. Synthetic accounts and plans
+ * model reads, for a name the turn was not offered, a conversation no task
+ * names, or an input that does not read. Synthetic accounts and tasks
  * throughout.
  */
 
@@ -104,7 +104,7 @@ const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
-/** The installation ids handed out so far: one installation stands for one workspace, so each plan's workspace connects its own. */
+/** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
 let installationsConnected = 0;
 const CRON_SECRET = "cron-secret-1";
 const EVE_ORIGIN = "https://luke.test";
@@ -219,7 +219,7 @@ async function callerOn(
     );
 }
 
-/** A plan's own conversation, opened as the Plans tab opens it, on the repository where one is named. */
+/** A task's own conversation, opened as the Tasks tab opens it, on the repository where one is named. */
 async function taskConversation(
   userId?: string,
   repository?: string,
@@ -248,7 +248,7 @@ const lineSenderUnder = (target: ConversationTarget, clientKey: string) =>
     return id === undefined ? undefined : (yield* lineSendersOf(target, [id])).get(id);
   });
 
-/** An agent started on the plan, the session eve runs it in recorded on its conversation as the store hook records it. */
+/** An agent started on the task, the session eve runs it in recorded on its conversation as the store hook records it. */
 async function agentOn(
   userId: string,
   taskId: string,
@@ -531,7 +531,7 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   const stored = Option.getOrThrow(await database.run(readCodingAgent(userId, agent.id)));
   assert.equal(stored.taskId, task.taskId);
   assert.equal(stored.prompt, null);
-  // The session opened as the deployment for the account, on the agent's conversation, with the plan first.
+  // The session opened as the deployment for the account, on the agent's conversation, with the task first.
   assert.equal(eve.sent.length, 1);
   const [opening] = eve.sent;
   assert.equal(opening?.path, "/eve/coder/v1/session");

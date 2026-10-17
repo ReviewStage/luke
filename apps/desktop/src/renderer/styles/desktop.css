@@ -7795,47 +7795,10 @@ button.automation-run:hover {
 /* Confirm dialog -------------------------------------------------------------- */
 
 /* An irreversible act asks the way every desktop app asks: the window dims
-   behind a centred card. Over the menu and the window's drag strip alike, so
-   it claims its own presses back from the frame. Its motion is spent from the
-   tokens, which reduced motion and a capture run already hold still. The
-   card is never taller than the window less its margins: its body (the
-   question, a list of choices, a note being written) is the part that gives
-   way and scrolls, so its title and its answers stay on screen however short
-   the window is. */
-.confirm-dialog-backdrop {
-  position: fixed;
-  z-index: var(--z-dialog);
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: var(--space-24);
-  background: var(--scrim);
-  animation: confirm-dialog-dim var(--duration-quick) ease-out;
-  -webkit-app-region: no-drag;
-}
-
-.confirm-dialog {
-  display: flex;
-  width: min(400px, 100%);
-  max-height: calc(100vh - 2 * var(--space-24));
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-20);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 14px;
-  background: var(--surface-popover);
-  box-shadow: 0 24px 64px var(--shadow-deep);
-  color: var(--text-primary);
-  font-size: 13px;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit),
-    confirm-dialog-rise var(--duration-fast) var(--spring-fast);
-}
-
-.confirm-dialog:focus {
-  outline: none; /* no ring: a dialog holding focus for its controls */
-}
-
+   behind a centred card, which is `@luke/ui`'s shared dialog
+   (`luke-dialog`). Its body (the question, a list of choices, a note being
+   written) is the part that gives way and scrolls, so its title and its
+   answers stay on screen however short the window is. */
 .confirm-dialog-title {
   margin: 0;
   font-size: 15px;
@@ -7867,12 +7830,6 @@ button.automation-run:hover {
 @keyframes confirm-dialog-dim {
   from {
     opacity: 0;
-  }
-}
-
-@keyframes confirm-dialog-rise {
-  from {
-    transform: scale(0.96);
   }
 }
 
@@ -8792,7 +8749,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 /* A modal's question is answered before anything behind it changes, so
    while one stands an action toast lets the pointer through to the dimmed
    window, as the modal's own Tab already keeps focus off it. */
-body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
+body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: none;
 }
 

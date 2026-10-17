@@ -11,7 +11,7 @@
  * keeps that bundle free of it.
  *
  * Who reaches a conversation is decided here too, for the same bundle: the
- * account that opened it, and every member of the workspace of the plan or
+ * account that opened it, and every member of the workspace of the task or
  * the coding agent that names it, or that names its parent, one hop up, which
  * is a subagent's session. The row's own `user_id` stays the opener's, the
  * address every message, turn, and ask of it is written under.
@@ -88,7 +88,7 @@ const findConversationOwner = SqlSchema.findOneOption({
 /** The conversation a child conversation was delegated from, read beside the child. */
 const parentConversation = alias(conversations, "parent_conversation");
 
-/** The condition that a plan or a coding agent, whichever workspace holds it, names this conversation as its own. */
+/** The condition that a task or a coding agent, whichever workspace holds it, names this conversation as its own. */
 function namedByWork(conversationId: SQLWrapper): SQL {
   const byTask = exists(
     queryBuilder.select({ one: task.id }).from(task).where(eq(task.conversationId, conversationId)),
@@ -117,7 +117,7 @@ function parentStands(): SQL {
   );
 }
 
-/** The condition that a plan or a coding agent the account reaches through its workspace names this conversation as its own. */
+/** The condition that a task or a coding agent the account reaches through its workspace names this conversation as its own. */
 function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL | undefined {
   return or(
     exists(
@@ -138,11 +138,11 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL |
 /**
  * The condition that the account reaches the standing conversation row a
  * statement reads: the conversation, or the standing one it was delegated
- * from, is a plan's or a coding agent's in a workspace the account is a
- * member of; or it is the account's own and no plan or agent names it or
+ * from, is a task's or a coding agent's in a workspace the account is a
+ * member of; or it is the account's own and no task or agent names it or
  * its parent. Note that a conversation work names is reached through the
  * workspace alone, even by the member who opened it, because a member who
- * leaves the workspace leaves its plans' conversations with it.
+ * leaves the workspace leaves its tasks' conversations with it.
  */
 function reachableConversation(userId: string): SQL | undefined {
   return and(
@@ -280,7 +280,7 @@ export function standingSessionsOf(
 /**
  * The eve sessions the standing conversations named run in, whichever
  * member opened each: only for ids a gate already read, such as a shared
- * plan's conversations as its delete gathers them.
+ * task's conversations as its delete gathers them.
  */
 export function standingSessionsNamed(
   conversationIds: readonly string[],

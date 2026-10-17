@@ -2449,6 +2449,79 @@ button.pull-request-check:hover {
   margin: 0 var(--boxed-inset) var(--space-8);
 }
 
+/* Under a thread's comments, what a member does on it
+   (`pull-request-thread-actions.tsx`): a quiet field-shaped Reply… that
+   opens the reply's own field, and Resolve or Unresolve at the row's end;
+   GitHub's refusal of the last one under them. */
+.pull-request-thread-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--boxed-inset);
+  border-top: 1px solid var(--hairline);
+}
+
+.pull-request-thread-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--control-gap);
+}
+
+.pull-request-thread-reply-open {
+  min-width: 0;
+  height: var(--control-height);
+  flex: 1 1 auto;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--input-fill);
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: start;
+  cursor: text;
+}
+
+.pull-request-thread-reply-open:hover {
+  border-color: var(--hairline-strong);
+}
+
+.pull-request-thread-resolve {
+  margin-inline-start: auto;
+}
+
+.pull-request-thread-reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.pull-request-thread-reply-field {
+  box-sizing: border-box;
+  min-height: 72px;
+  max-height: 240px;
+  resize: vertical;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.pull-request-thread-reply-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--control-gap);
+}
+
+.pull-request-thread-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pull-request-thread-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
   margin: 0 0 var(--space-8);
@@ -3596,24 +3669,15 @@ button.attached-file-face:hover img {
    and the file under them, an image fitted to the window, a text file's
    lines scrolling inside the card, any other file its icon over Download. */
 .attachment-viewer {
-  display: flex;
+  width: auto;
   min-width: min(360px, 100%);
   max-width: min(1200px, 100%);
-  max-height: calc(100vh - 2 * var(--space-24));
-  flex-direction: column;
+  gap: 0;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 14px;
-  background: var(--surface-popover);
-  box-shadow: 0 24px 64px var(--shadow-deep);
-  color: var(--text-primary);
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
     menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.attachment-viewer:focus {
-  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .attachment-viewer[data-view="text"] {

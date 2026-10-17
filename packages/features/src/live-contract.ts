@@ -109,7 +109,7 @@ export function hostedVoiceServiceOrigin(options: {
  * connection, which the platform closes at the function's maximum duration.
  */
 export const VOICE_SERVICE_FRAME = {
-  /** The desktop's opening frame for a new session: the offer, the voice, the seed, and the plan the call is about. */
+  /** The desktop's opening frame for a new session: the offer, the voice, the seed, and the task the call is about. */
   SESSION_CREATE: "session.create",
   /** The service's answer once OpenAI has created the session and the sideband stands. */
   SESSION_CREATED: "session.created",
@@ -142,36 +142,36 @@ export const VOICE_SERVICE_FRAME = {
    */
   SESSION_HANG_UP: "session.hangup",
   /**
-   * The service's frame to the desktop after the handshake: the plan's
+   * The service's frame to the desktop after the handshake: the task's
    * document as its notetaker is writing it,
-   * sent again as the draft grows and once more as saved, so the Plans tab
+   * sent again as the draft grows and once more as saved, so the Tasks tab
    * types the plan in while the call goes on rather than waiting for a read.
    */
   PLAN_DRAFT: "plan.draft",
   /**
    * The service's other frame to the desktop: what each part of Luke is
-   * doing now, the voice, the planning model, and the
-   * notetaker, sent whole each time any of them changes, so the Plans tab
+   * doing now, the voice, the brain, and the
+   * notetaker, sent whole each time any of them changes, so the Tasks tab
    * says each part's own state rather than one word for all of them.
    */
   TASK_ACTIVITY: "plan.activity",
   /**
-   * The service's fourth frame to the desktop, on a planning call alone:
-   * code of the plan's repository Luke is about to talk about, with its
-   * lines as the service read them from the planning session's checkout,
-   * sent as he starts to speak, so the Plans tab's code pane draws it as he
+   * The service's fourth frame to the desktop, on a task call alone:
+   * code of the task's repository Luke is about to talk about, with its
+   * lines as the service read them from the brain session's checkout,
+   * sent as he starts to speak, so the Tasks tab's code pane draws it as he
    * says it.
    */
   TASK_CODE: "plan.code",
   /**
-   * The service's fifth frame to the desktop, on a planning call alone: one
-   * planning turn's work as it stands, what the model wrote and each call
-   * it made with its output, sent whole each time it changes, so the Plans
+   * The service's fifth frame to the desktop, on a task call alone: one
+   * brain turn's work as it stands, what the model wrote and each call
+   * it made with its output, sent whole each time it changes, so the Tasks
    * tab's Work tab reads like an agent's own transcript.
    */
   TASK_WORK: "plan.work",
   /**
-   * The service's sixth frame to the desktop, on a planning call alone: the
+   * The service's sixth frame to the desktop, on a task call alone: the
    * developer said they are done and Luke is saying goodbye, so the desktop
    * hangs up through its own hang-up once that goodbye has played, and keeps
    * the call up if the developer speaks first. It carries no words.
@@ -311,11 +311,11 @@ const liveInitialItemSchema = Schema.Union([
 
 /**
  * The desktop's opening frame: the offer, the voice, the seed, and the id of
- * the saved plan the call is about. The service checks the plan is the
+ * the saved task the call is about. The service checks the task is the
  * account's, creates the session under the planning scene, lands its asks in
- * the plan's conversation, and writes the binding on the session's row, so a
- * later `session.attach` is bound to the same plan by that row and never by
- * anything the attaching connection says. The id names the plan and nothing
+ * the task's conversation, and writes the binding on the session's row, so a
+ * later `session.attach` is bound to the same task by that row and never by
+ * anything the attaching connection says. The id names the task and nothing
  * of its document.
  */
 export const sessionCreateFrameSchema = Schema.Struct({
@@ -380,7 +380,7 @@ export const sessionReportFrameSchema = Schema.Union([
 export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
 
 /**
- * The plan's document as the notetaker has it now: a draft while its model is
+ * The task's document as the notetaker has it now: a draft while its model is
  * still writing, and the saved document with the instant it was saved once
  * the save lands, or the document as it stood where the run saved nothing.
  * Each names the save it was drawn over, so a window that saved an edit of
@@ -401,7 +401,7 @@ export const planDraftFrameSchema = Schema.Struct({
 
 export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
 
-/** The activity on the call about the plan named, as the service sends it to the desktop. */
+/** The activity on the call about the task named, as the service sends it to the desktop. */
 export const taskActivityFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_ACTIVITY),
   planId: wireUuidSchema,
@@ -411,9 +411,9 @@ export const taskActivityFrameSchema = Schema.Struct({
 export type TaskActivityFrame = typeof taskActivityFrameSchema.Type;
 
 /**
- * Code Luke put on screen on the call about the plan named, with its lines
- * as the service read them from the plan's repository, and the `show_code`
- * call and turn that showed it, as the plan's work reads them back, so the
+ * Code Luke put on screen on the call about the task named, with its lines
+ * as the service read them from the task's repository, and the `show_code`
+ * call and turn that showed it, as the task's work reads them back, so the
  * desktop holds a call's code and the record's copy of it once.
  */
 export const taskCodeFrameSchema = Schema.Struct({
@@ -424,7 +424,7 @@ export const taskCodeFrameSchema = Schema.Struct({
 
 export type TaskCodeFrame = typeof taskCodeFrameSchema.Type;
 
-/** One planning turn's work on the call about the plan named, as the service sends it to the desktop. */
+/** One brain turn's work on the call about the task named, as the service sends it to the desktop. */
 export const taskWorkFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_WORK),
   planId: wireUuidSchema,
@@ -433,7 +433,7 @@ export const taskWorkFrameSchema = Schema.Struct({
 
 export type TaskWorkFrame = typeof taskWorkFrameSchema.Type;
 
-/** Luke is ending the call about the plan named, once his goodbye has played. */
+/** Luke is ending the call about the task named, once his goodbye has played. */
 export const taskCallEndingFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CALL_ENDING),
   planId: wireUuidSchema,
@@ -651,22 +651,22 @@ export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame
   return admittedAnswer(planDraftFrameSchema, value);
 }
 
-/** What each part of Luke is doing on a planning call, read the same answering way. */
+/** What each part of Luke is doing on a task call, read the same answering way. */
 export function taskActivityFrameFromWire(value: UnparsedWireValue): TaskActivityFrame | undefined {
   return admittedAnswer(taskActivityFrameSchema, value);
 }
 
-/** The code Luke put on screen on a planning call, read the same answering way. */
+/** The code Luke put on screen on a task call, read the same answering way. */
 export function taskCodeFrameFromWire(value: UnparsedWireValue): TaskCodeFrame | undefined {
   return admittedAnswer(taskCodeFrameSchema, value);
 }
 
-/** One planning turn's work on a planning call, read the same answering way. */
+/** One brain turn's work on a task call, read the same answering way. */
 export function taskWorkFrameFromWire(value: UnparsedWireValue): TaskWorkFrame | undefined {
   return admittedAnswer(taskWorkFrameSchema, value);
 }
 
-/** Luke ending a planning call, read the same answering way. */
+/** Luke ending a task call, read the same answering way. */
 export function taskCallEndingFrameFromWire(
   value: UnparsedWireValue,
 ): TaskCallEndingFrame | undefined {

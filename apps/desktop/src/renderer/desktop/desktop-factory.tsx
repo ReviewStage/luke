@@ -656,7 +656,7 @@ const UNREAD_LINE = "Your tasks could not be read.";
 /** What Factory says where a task's questions could not be read, as Home says it of its items. */
 const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
 
-/** The window's Factory, in the plan's place: the line as it stands now. */
+/** The window's Factory, in the task's place: the line as it stands now. */
 export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
   const now = useMinute();
