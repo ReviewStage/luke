@@ -176,9 +176,6 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
-/** How wide the block standing in the plan's tab is while the plan is read: a typical tab's width. */
-const TAB_SKELETON_WIDTH = "120px";
-
 /** The plan's own Inbox lists one plan's items in one run, so nothing in it folds. */
 const NO_FOLDS = () => false;
 
