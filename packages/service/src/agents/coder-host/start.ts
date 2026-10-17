@@ -41,7 +41,9 @@ import type { Task } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../../github/github-app.js";
+import { GitHubApp } from "../../github/github-app.js";
+import { githubReachOrRefusal } from "../../github/github-refusal.js";
+import { readBranchHead } from "../../github/repository-file.js";
 import { workspaceRepository } from "../../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
@@ -113,6 +115,10 @@ import {
  * automation's run is no run of that automation. Its mentions and servers
  * are read from the source's brief and the note, as a fresh start's would
  * be, and never from the replay.
+ * An ask that names a branch has its agent's checkout cloned at that branch
+ * rather than the default one, which the agent's row keeps; the branch is
+ * read on GitHub through the same installation before anything is made, so
+ * one the repository does not hold is refused here rather than at the clone.
  * The MCP servers the words mention are handed to the agent's first turn
  * whatever its switches say, but an automation's run is handed only those
  * its automation's own prompt mentions, never those of the webhook body or
@@ -218,6 +224,8 @@ export type StartAsk = StartPlace & {
   readonly summaryModel?: SummaryModelOf | undefined;
   /** The words the first turn's MCP servers are read from where they are not all the agent is handed: an automation's own prompt, never a webhook body or a GitHub event's words beside it; the prompt and the note otherwise, a source's brief standing for the prompt and its replay never read. */
   readonly serverWords?: string | undefined;
+  /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
+  readonly branch?: string | undefined;
 };
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -275,6 +283,26 @@ interface ReplayFitter {
   readonly prompt: string | undefined;
   readonly fit: (firstMessageWords: string) => Effect.Effect<FittedReplay, never, DatabaseServices>;
 }
+
+/**
+ * The branch named for the agent's checkout, confirmed on GitHub through
+ * the workspace's installation, or refused: as not found where GitHub names
+ * no commit for it, and as GitHub unanswered where it could not be asked.
+ */
+const confirmedBranch = Effect.fnUntraced(function* (
+  workspaceId: string,
+  repository: string,
+  branch: string,
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+  const app = yield* GitHubApp;
+  const reached = yield* githubReachOrRefusal(app.repositoryReadToken(workspaceId, repository));
+  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  const { repository: confirmed, token } = reached.value;
+  const head = yield* readBranchHead(token, confirmed, branch).pipe(
+    Effect.mapError(() => HOSTED_REFUSAL.GITHUB_UNANSWERED),
+  );
+  if (head === undefined) return yield* Effect.fail(HOSTED_REFUSAL.BRANCH_NOT_FOUND);
+});
 
 /** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one; in a workspace, the prompt. */
 const landingOf = Effect.fnUntraced(function* (
@@ -432,6 +460,9 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         ]);
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
+  if (ask.branch !== undefined) {
+    yield* confirmedBranch(landing.workspaceId, landing.repository, ask.branch);
+  }
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note
   // alone; never the replay of another agent, whose words name what it read, not what to hand on.
@@ -474,6 +505,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
+      startBranch: ask.branch,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
       // The servers those words mention are its first turn's, whatever the switches say.
       mentionedServers:

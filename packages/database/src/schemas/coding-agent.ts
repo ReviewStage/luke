@@ -38,7 +38,10 @@ import { task } from "./task.js";
  * exactly one of the two stands; the repository is `owner/name`; the branch
  * is the one checked out in the agent's sandbox as its last turn ended,
  * which is where its pull request is looked up, and null until a turn ends
- * or where the checkout stood detached; the title is the agent's name on
+ * or where the checkout stood detached; the start branch is the one its
+ * starter named for its checkout to be cloned at, such as a stacked pull
+ * request's, and null for the repository's default branch, which every
+ * agent started without one is cloned at; the title is the agent's name on
  * its tab, generated once from what it was handed as its first session
  * starts and renamed by the developer, null until either and after a rename
  * that cleared it. The last step is what the provider counted of the
@@ -195,6 +198,8 @@ export const codingAgent = pgTable(
     repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
     /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),
+    /** The branch the agent's checkout is cloned at, as its starter named it; null for the repository's default branch. */
+    startBranch: text("start_branch"),
     /** The agent's title as its tab shows it; null falls back to the model's name. */
     title: text("title"),
     /** The newest model step of the agent's own conversation; null before its first. */

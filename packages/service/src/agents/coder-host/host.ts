@@ -564,7 +564,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             { kind: MENTION_KIND.TASK, taskId: agent.taskId },
             { workspace, repository: null },
           );
-    const text = coderInstructions(agent.repository, brief, ciReadable, taskLink, coAuthor, chatOn);
+    const text = coderInstructions(
+      agent.repository,
+      brief,
+      ciReadable,
+      taskLink,
+      coAuthor,
+      chatOn,
+      agent.startBranch,
+    );
     return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn };
   };
 
