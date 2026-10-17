@@ -10,6 +10,12 @@
  * through the history is the window arriving where the history already
  * stands. It lives as long as the window does, the way a browser tab's does.
  *
+ * The history is held by the adapter the window's root installs
+ * (`@luke/ui/history-adapter`), each place as its Luke link where a link
+ * names it and the place itself beside it, the way a browser's URL and its
+ * `history.state` stand together: the desktop keeps it in memory, and the
+ * place is what a step back reopens.
+ *
  * Settings is one step however many of its pages are turned: entering it is
  * a visit, and choosing another of its pages turns the page that visit holds
  * in place, so Back from any page of it returns to wherever it was opened
@@ -31,9 +37,18 @@
  * is deleted, as it does a deleted plan.
  */
 
+import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/luke-link";
 import { EXPERIMENT } from "@luke/settings";
 import type { SettingsView } from "@luke/settings/settings-views";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useChatOn } from "./tasks/chat-gate";
 import type { HistorySpot } from "./tasks/use-plan-history";
@@ -45,9 +60,6 @@ import {
   type TasksControl,
 } from "./tasks/use-tasks-tab";
 import { useExperiment } from "./use-app-state";
-
-/** The most places the history holds; the oldest go first. */
-const HISTORY_LIMIT = 50;
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
 export const MOUSE_BUTTON = {
@@ -110,12 +122,10 @@ type Place =
     }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
-interface Trail {
-  readonly places: readonly Place[];
-  readonly at: number;
-}
+/** The places the window has stood on, as its history adapter holds them. */
+type Trail = HistorySnapshot<Place>;
 
-const EMPTY_TRAIL: Trail = { places: [], at: -1 };
+let installed: HistoryAdapter<Place> | undefined;
 
 /** Whether two Automations pages are one step: the list, a new automation's page, or the same automation's, on whichever of its runs. */
 function sameAutomationsPage(one: AutomationsPlace, other: AutomationsPlace): boolean {
@@ -194,24 +204,79 @@ function samePlace(one: Place, other: Place): boolean {
   return true;
 }
 
+/** The page an Automations place's link names: the list, or an automation on the run it was opened on; a new automation's page has none. */
+function automationsLink(page: AutomationsPlace): LinkPlace | undefined {
+  if (page.kind === AUTOMATIONS_PAGE.LIST) return { kind: LINK_PLACE.AUTOMATIONS };
+  if (page.kind === AUTOMATIONS_PAGE.NEW) return undefined;
+  return page.runId === undefined
+    ? { kind: LINK_PLACE.AUTOMATION, automationId: page.automationId }
+    : { kind: LINK_PLACE.AUTOMATION_RUN, automationId: page.automationId, runId: page.runId };
+}
+
+/** The Luke link place a place is shared by, where one names it: the home page, Chat, the Issues list, a new automation's page, and a version history on no version chosen have none. */
+function linkPlaceOf(place: Place): LinkPlace | undefined {
+  switch (place.kind) {
+    case PLACE_KIND.TASK:
+      return { kind: LINK_PLACE.TASK, planId: place.taskId };
+    case PLACE_KIND.VERSION_HISTORY:
+      return place.spot?.revision === undefined
+        ? undefined
+        : { kind: LINK_PLACE.VERSION, planId: place.taskId, revision: place.spot.revision };
+    case PLACE_KIND.INBOX:
+      return { kind: LINK_PLACE.INBOX };
+    case PLACE_KIND.AGENT:
+      return { kind: LINK_PLACE.AGENT, agentId: place.agentId };
+    case PLACE_KIND.PERSON:
+      return { kind: LINK_PLACE.PERSON, userId: place.userId };
+    case PLACE_KIND.FACTORY:
+      return { kind: LINK_PLACE.FACTORY };
+    case PLACE_KIND.AUTOMATIONS:
+      return automationsLink(place.page);
+    case PLACE_KIND.ISSUES:
+      return place.issueId === undefined
+        ? undefined
+        : { kind: LINK_PLACE.ISSUE, issueId: place.issueId };
+    case PLACE_KIND.SETTINGS:
+      return { kind: LINK_PLACE.SETTINGS, page: place.view };
+    case PLACE_KIND.HOME:
+    case PLACE_KIND.CHAT:
+      return undefined;
+  }
+}
+
 /**
- * The trail with the window standing on `place`. A step already standing is
- * the same trail, but for a Settings page turned or a version history moved
+ * The entry a place is held as: its Luke link under the workspace listed,
+ * where a link names it and a workspace is listed, and the place itself as
+ * the state the window reopens it from, since a link cannot say all of it
+ * (a version history's open sections, the name a person's page was opened
+ * with, the workspace a page was read in).
+ */
+function entryOf(place: Place, workspace: string | undefined): HistoryEntry<Place> {
+  const link = linkPlaceOf(place);
+  const address =
+    link === undefined || workspace === undefined ? undefined : linkOf(link, workspace);
+  return { address, state: place };
+}
+
+/**
+ * Records the window standing on `place`. A step already standing is left
+ * as it is, but for a Settings page turned or a version history moved
  * within, which the standing step takes in place, and so does the automation
  * a new automation's page made. Any other place is a visit, whichever door
  * opened it.
  */
-function visited(trail: Trail, place: Place): Trail {
-  const standing = trail.places[trail.at];
+function visit(history: HistoryAdapter<Place>, place: Place, workspace: string | undefined): void {
+  const trail = history.current();
+  const standing = trail.entries[trail.at]?.state;
   if (standing !== undefined && madeFromNew(standing, place)) {
-    return { places: trail.places.with(trail.at, place), at: trail.at };
+    history.replace(entryOf(place, workspace));
+    return;
   }
   if (standing !== undefined && sameStep(standing, place)) {
-    if (samePlace(standing, place)) return trail;
-    return { places: trail.places.with(trail.at, place), at: trail.at };
+    if (!samePlace(standing, place)) history.replace(entryOf(place, workspace));
+    return;
   }
-  const places = [...trail.places.slice(0, trail.at + 1), place].slice(-HISTORY_LIMIT);
-  return { places, at: places.length - 1 };
+  history.push(entryOf(place, workspace));
 }
 
 /**
@@ -224,9 +289,9 @@ function nearest(
   step: -1 | 1,
   reachable: (place: Place) => boolean,
 ): number | undefined {
-  const standing = trail.places[trail.at];
-  for (let at = trail.at + step; at >= 0 && at < trail.places.length; at += step) {
-    const place = trail.places[at];
+  const standing = trail.entries[trail.at]?.state;
+  for (let at = trail.at + step; at >= 0 && at < trail.entries.length; at += step) {
+    const place = trail.entries[at]?.state;
     if (place !== undefined && reachable(place) && !sameStep(standing, place)) return at;
   }
   return undefined;
@@ -246,58 +311,71 @@ export interface WindowHistory extends NavigationHistory {
   onLeaveVersionHistory: () => void;
 }
 
+/** Installs the history this window keeps; its root does this once, before anything is drawn. */
+export function installWindowHistory(history: HistoryAdapter<Place>): void {
+  installed = history;
+}
+
+/** The history this window's root installed. */
+function windowHistory(): HistoryAdapter<Place> {
+  if (installed === undefined) throw new Error("No history is installed in this window.");
+  return installed;
+}
+
 /**
- * The history over where the window stands. `place` is nothing until the
- * window knows where it is, so a launch records no page it never showed.
- * `reachable` says whether a place can still be gone to — a deleted task
- * cannot — and `go` takes the window there; the move's own arrival is then
- * recognised as the place the history already stands on, and records nothing.
+ * The history over where the window stands, held by the window's history
+ * adapter. `place` is nothing until the window knows where it is, so a
+ * launch records no page it never showed. `reachable` says whether a place
+ * can still be gone to — a deleted task cannot — and `go` takes the window
+ * there; the move's own arrival is then recognised as the place the history
+ * already stands on, and records nothing.
  */
 function useHistory(input: {
   place: Place | undefined;
+  /** The workspace listed, by slug where it has one, which a place's link is written under. */
+  workspace: string | undefined;
   reachable: (place: Place) => boolean;
   go: (place: Place) => void;
   /** Asks first, while a page holds unsaved work, before a step moves the trail at all. */
   guard: LeaveGuard["guard"];
 }): NavigationHistory & { backTo: (place: Place) => boolean } {
   const { place, reachable, guard } = input;
-  const [trail, setTrail] = useState<Trail>(EMPTY_TRAIL);
-  // Note that the presses read the latest trail through a ref, because a key
-  // can land between a move and the render that shows it, and the latest
-  // `reachable` and `go` too, so a press stays the same function across renders.
-  const latest = useRef({ trail, reachable, go: input.go });
+  const history = windowHistory();
+  const trail = useSyncExternalStore(history.subscribe, history.current);
+  // Note that the presses read the trail from the adapter as they land, because a
+  // key can land between a move and the render that shows it, and the latest
+  // `reachable`, `go`, and workspace through a ref, so a press stays the same
+  // function across renders.
+  const latest = useRef({ reachable, go: input.go, workspace: input.workspace });
   useLayoutEffect(() => {
-    latest.current = { trail, reachable, go: input.go };
+    latest.current = { reachable, go: input.go, workspace: input.workspace };
   });
 
   useEffect(() => {
-    if (place !== undefined) setTrail((held) => visited(held, place));
-  }, [place]);
+    if (place !== undefined) visit(history, place, latest.current.workspace);
+  }, [history, place]);
 
   // Note that the whole step is what asks, the trail's move with the window's, so a step
   // cancelled at the ask leaves the trail standing where the window still stands.
   const step = useCallback(
     (by: -1 | 1) => {
-      const asked = latest.current;
-      const at = nearest(asked.trail, by, asked.reachable);
-      const target = at === undefined ? undefined : asked.trail.places[at];
+      const asked = history.current();
+      const at = nearest(asked, by, latest.current.reachable);
+      const target = at === undefined ? undefined : asked.entries[at]?.state;
       if (at === undefined || target === undefined) return;
       guard(() => {
-        const held = latest.current;
-        const moved = { places: held.trail.places, at };
-        latest.current = { ...held, trail: moved };
-        setTrail(moved);
-        held.go(target);
+        history.go(at - history.current().at);
+        latest.current.go(target);
       })();
     },
-    [guard],
+    [guard, history],
   );
 
   // A step back to `to`'s step only, answering whether it was the one behind.
   const backTo = (to: Place): boolean => {
-    const held = latest.current;
-    const at = nearest(held.trail, -1, held.reachable);
-    if (at === undefined || !sameStep(held.trail.places[at], to)) return false;
+    const held = history.current();
+    const at = nearest(held, -1, latest.current.reachable);
+    if (at === undefined || !sameStep(held.entries[at]?.state, to)) return false;
     step(-1);
     return true;
   };
@@ -512,6 +590,7 @@ export function useWindowHistory(input: {
   };
   const { backTo, ...history } = useHistory({
     place,
+    workspace: plans.workspace?.slug ?? listedWorkspace,
     reachable,
     go,
     guard: plans.leaveGuard.guard,
