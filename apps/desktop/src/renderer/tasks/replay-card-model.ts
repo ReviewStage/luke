@@ -53,6 +53,9 @@ const CALL_PARTS = {
 /** What the service adds to a call's summary while the call was still under way. */
 const RUNNING_MARK = " (running)";
 
+/** How the service's result of a call still under way begins, which with the mark tells a running call from one whose subject ends in the mark's words. */
+const NO_RESULT_LEAD = "(no result";
+
 /**
  * The kind of call each verb the service says a call in names, the first
  * kind of the transcript's own words to say it, so a replayed call wears
@@ -257,7 +260,16 @@ export function briefAgent(
 function callView(step: ReplayStep): StepView {
   const split = step.summary.indexOf(SPEAKER_SEPARATOR);
   const verb = split < 0 ? step.summary : step.summary.slice(0, split);
-  const running = step.summary.endsWith(RUNNING_MARK);
+  const words = step.words.startsWith(CALL_PARTS.INPUT)
+    ? step.words.slice(CALL_PARTS.INPUT.length)
+    : step.words;
+  // Note that the first result lead is the one, because a call's input is its JSON, which holds no bare newline.
+  const at = words.indexOf(CALL_PARTS.RESULT);
+  const input = at < 0 ? words : words.slice(0, at);
+  const result = at < 0 ? undefined : words.slice(at + CALL_PARTS.RESULT.length);
+  const running =
+    step.summary.endsWith(RUNNING_MARK) &&
+    (result === undefined || result.startsWith(NO_RESULT_LEAD));
   const subject =
     split < 0
       ? ""
@@ -265,12 +277,6 @@ function callView(step: ReplayStep): StepView {
           split + SPEAKER_SEPARATOR.length,
           running ? -RUNNING_MARK.length : undefined,
         );
-  const words = step.words.startsWith(CALL_PARTS.INPUT)
-    ? step.words.slice(CALL_PARTS.INPUT.length)
-    : step.words;
-  const at = words.indexOf(CALL_PARTS.RESULT);
-  const input = at < 0 ? words : words.slice(0, at);
-  const result = at < 0 ? undefined : words.slice(at + CALL_PARTS.RESULT.length);
   const failed = result?.startsWith(CALL_PARTS.FAILED) === true;
   return {
     kind: STEP_VIEW.CALL,

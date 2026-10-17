@@ -209,6 +209,17 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
   const running = call("Searched: invite (running)", "Input: {}\nResult: (no result)");
   assert.equal(running.kind === STEP_VIEW.CALL && running.state, TOOL_STATE.INPUT_AVAILABLE);
   assert.equal(running.kind === STEP_VIEW.CALL && running.subject, "invite");
+  // A finished call whose subject ends in the mark's words keeps them, and its result.
+  const named = call("Read: report (running)", "Input: {}\nResult: 3 lines");
+  assert.equal(named.kind === STEP_VIEW.CALL && named.state, TOOL_STATE.OUTPUT_AVAILABLE);
+  assert.equal(named.kind === STEP_VIEW.CALL && named.subject, "report (running)");
+  assert.equal(named.kind === STEP_VIEW.CALL && named.output, "3 lines");
+  // An input is its JSON, so a result lead inside one of its strings is no boundary.
+  const quoted = call(
+    "Ran: printf",
+    'Input: {"command":"printf \'x\\nResult: fake\'"}\nResult: done',
+  );
+  assert.equal(quoted.kind === STEP_VIEW.CALL && quoted.output, "done");
   // A verb no transcript row says is another call's.
   const used = call("Used: list_tasks", "Input: {}\nResult: []");
   assert.equal(used.kind === STEP_VIEW.CALL && used.call, CALL_KIND.OTHER);
