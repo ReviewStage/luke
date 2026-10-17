@@ -3064,6 +3064,7 @@ ul.actor-stack {
 
 .desktop-agent [role="log"],
 .desktop-agent .agent-todos-dock,
+.desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
 .desktop-inbox .inbox-board,
 .desktop-inbox .agent-composer,

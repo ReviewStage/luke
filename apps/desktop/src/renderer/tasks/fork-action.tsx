@@ -143,10 +143,11 @@ export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
       <SplitIcon className="size-3.5 shrink-0" aria-hidden="true" />
       <span>{FORK_WORDS.TO}</span>
       {chips.map((chip, index) => (
-        <Fragment key={index}>
-          {index === 0 ? null : <span aria-hidden="true">,</span>}
+        // Note that each chip holds the comma after it, so no gap opens before the comma.
+        <span key={index} className="agent-forked-to-item">
           {chip}
-        </Fragment>
+          {index === chips.length - 1 ? null : <span aria-hidden="true">,</span>}
+        </span>
       ))}
     </p>
   );
@@ -183,30 +184,32 @@ export function ForkChip({
           });
   const quote = `“${fork.opening}”`;
   return (
-    <div className="draft-fork-chip" data-fork-chip="">
-      <SplitIcon className="size-3.5 shrink-0" aria-hidden="true" />
-      <span>{FORK_WORDS.OF}</span>
-      {agentChip(fork.agentId, source, cards, open === undefined ? undefined : () => open())}
-      <span>{FORK_WORDS.AT}</span>
-      {open === undefined ? (
-        <span className="draft-fork-quote">{quote}</span>
-      ) : (
-        <Tooltip label={FORK_WORDS.OPEN_SOURCE}>
-          <button type="button" className="draft-fork-quote" onClick={open}>
-            {quote}
+    <div className="draft-fork-dock">
+      <div className="draft-fork-chip" data-fork-chip="">
+        <SplitIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        <span>{FORK_WORDS.OF}</span>
+        {agentChip(fork.agentId, source, cards, open === undefined ? undefined : () => open())}
+        <span>{FORK_WORDS.AT}</span>
+        {open === undefined ? (
+          <span className="draft-fork-quote">{quote}</span>
+        ) : (
+          <Tooltip label={FORK_WORDS.OPEN_SOURCE}>
+            <button type="button" className="draft-fork-quote" onClick={open}>
+              {quote}
+            </button>
+          </Tooltip>
+        )}
+        <Tooltip label={FORK_WORDS.DROP}>
+          <button
+            type="button"
+            className="draft-fork-drop"
+            aria-label={FORK_WORDS.DROP}
+            onClick={onDrop}
+          >
+            <XIcon className="size-3.5" aria-hidden="true" />
           </button>
         </Tooltip>
-      )}
-      <Tooltip label={FORK_WORDS.DROP}>
-        <button
-          type="button"
-          className="draft-fork-drop"
-          aria-label={FORK_WORDS.DROP}
-          onClick={onDrop}
-        >
-          <XIcon className="size-3.5" aria-hidden="true" />
-        </button>
-      </Tooltip>
+      </div>
     </div>
   );
 }
