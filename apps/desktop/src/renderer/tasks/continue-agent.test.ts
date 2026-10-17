@@ -592,28 +592,57 @@ test("an agent with only forks keeps its box, since a fork is no continuation", 
   assert.ok(tab.sendButton(), "the box still takes a message");
 });
 
-test("the continued box's Archive archives the agent, and its Stop stands while a turn still runs", async () => {
+test("the continued box's Archive archives a settled agent at once, asks first where it would stop a running turn, and its Stop stands only while a turn runs", async () => {
   const archived: { agentId: string; archived: boolean }[] = [];
+  const settled = await drawnTab({
+    status: CODING_AGENT_STATUS.COMPLETED,
+    others: [agentOf(NEXT, { from: FROM_SOURCE })],
+    onArchive: (agentId, each) => archived.push({ agentId, archived: each }),
+  });
+  const quiet = settled.continuedNote() ?? assert.fail("the box gives way to its note");
+  assert.equal(settled.named(quiet, "Stop"), undefined, "no turn runs to stop");
+  await act(async () => settled.named(quiet, "Archive")?.click());
+  await settle();
+  assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
+
+  archived.length = 0;
   const stopped: string[] = [];
-  const tab = await drawnTab({
+  const running = await drawnTab({
     status: CODING_AGENT_STATUS.RUNNING,
     others: [agentOf(NEXT, { from: FROM_SOURCE })],
     onArchive: (agentId, each) => archived.push({ agentId, archived: each }),
     onStop: (agentId) => stopped.push(agentId),
   });
-  const note = tab.continuedNote() ?? assert.fail("the box gives way to its note");
-
-  act(() => tab.named(note, "Stop")?.click());
-  await act(async () => tab.named(note, "Archive")?.click());
+  const note = running.continuedNote() ?? assert.fail("the box gives way to its note");
+  act(() => running.named(note, "Stop")?.click());
   assert.deepEqual(stopped, [SOURCE]);
-  assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
 
-  const settled = await drawnTab({
-    status: CODING_AGENT_STATUS.COMPLETED,
+  await act(async () => running.named(note, "Archive")?.click());
+  assert.deepEqual(archived, [], "a running turn is not stopped unasked");
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
+    assert.fail("Archive asks before it stops the turn");
+  await act(async () => running.named(question, "Stop and archive")?.click());
+  await settle();
+  assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
+});
+
+test("a continued agent's end line no longer tells the reader to start a new one", async () => {
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.NOT_STARTED,
+    messages: [],
     others: [agentOf(NEXT, { from: FROM_SOURCE })],
   });
-  const quiet = settled.continuedNote() ?? assert.fail("the box gives way to its note");
-  assert.equal(tab.named(quiet, "Stop"), undefined, "no turn runs to stop");
+  const line = tab.endLine() ?? assert.fail("the empty tab says how it ended");
+
+  assert.match(line.textContent ?? "", /^Failed: the agent never started/);
+  assert.doesNotMatch(line.textContent ?? "", /start a new one/);
+  assert.match(
+    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.NOT_STARTED)?.words ?? "",
+    /start a new one$/,
+    "one not continued still is",
+  );
 });
 
 test("where an archive took the box, the transcript's end names the agents that continued it instead, under the end line or alone, read from the summary where the list does not hold them", async () => {

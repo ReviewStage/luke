@@ -4064,6 +4064,16 @@ button.attached-file-face:hover img {
 /* An archived plan's agent takes no message, so its composer's place says
    why on one quiet row (`banner.tsx`), with Unarchive as the press that
    opens it again. */
+/* The note a continued agent's box gives way to (`continue-agent.tsx`),
+   framed as the box was, on its card, edge and corner, so it stands where
+   the box stood rather than across the column. */
+.continued-composer > .banner-row {
+  padding: var(--space-8) var(--space-8) var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: 12px; /* off-scale: the composer card's corner */
+  background: var(--desktop-sidebar);
+}
+
 .archived-composer .banner-row > svg {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);

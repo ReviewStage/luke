@@ -1,12 +1,11 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
-import { BUTTON_VARIANT, Button, TEXT_TONE, Text } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Button, TEXT_TONE, Text } from "@luke/ui";
 import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
 import { BANNER_LOOK, Banner } from "../banner";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { useAgentArchive } from "../desktop/agent-archive";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model";
 import { useContinueDoor } from "./fork-action";
@@ -171,65 +170,69 @@ export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
 }
 
 /**
- * The quiet note in a continued agent's box: Continued in and the agents'
- * chips, then Stop while a turn still runs, and Archive, which toasts with
- * Undo once it took and says why where it did not. An agent already
- * archived is offered no Archive.
+ * The quiet note in a continued agent's box, framed as the box it replaces:
+ * Continued in and the agents' chips, then Stop while a turn still runs,
+ * and Archive, bordered as a housekeeping press is, which asks first where
+ * archiving would stop a turn (`useAgentArchive`) and toasts with Undo once
+ * it took. An agent already archived is offered no Archive.
  */
 export function ContinuedComposerNote({
   agent,
   doors,
   stop,
-  onArchive,
+  control,
+  shown,
 }: {
   agent: CodingAgentSummary;
   doors: ContinuedDoors;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
   stop?: (() => Promise<void>) | undefined;
-  onArchive: CodingAgentsControl["onArchive"];
+  control: CodingAgentsControl;
+  /** Whether the tab is on screen, which the archive's question goes with. */
+  shown: boolean;
 }): React.JSX.Element {
   const [stopping, setStopping] = useState(false);
-  const toast = useToast();
+  const archive = useAgentArchive(agent, control, shown);
   const pressStop = (run: () => Promise<void>) => {
     setStopping(true);
     run().finally(() => setStopping(false));
   };
-  const archive = () => {
-    void onArchive(agent.id, true).then((result) => {
-      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-      }
-    });
-  };
   return (
-    <Banner
-      look={BANNER_LOOK.COMPOSER}
-      className="continued-composer"
-      glyph={<ArrowRightIcon aria-hidden="true" />}
-      actions={
-        stop === undefined && agent.archivedAt !== undefined ? undefined : (
-          <>
-            {stop === undefined ? null : (
-              <Button
-                busy={stopping}
-                busyLabel={CONTINUED_COPY.STOPPING}
-                onClick={() => pressStop(stop)}
-              >
-                {CONTINUED_COPY.STOP}
-              </Button>
-            )}
-            {agent.archivedAt !== undefined ? null : (
-              <Button variant={BUTTON_VARIANT.PRIMARY} onClick={archive}>
-                {CONTINUED_COPY.ARCHIVE}
-              </Button>
-            )}
-          </>
-        )
-      }
-    >
-      <Text tone={TEXT_TONE.MUTED}>
-        <ContinuedIn {...doors} />
-      </Text>
-    </Banner>
+    <>
+      <Banner
+        look={BANNER_LOOK.COMPOSER}
+        className="continued-composer"
+        glyph={<ArrowRightIcon aria-hidden="true" />}
+        actions={
+          stop === undefined && agent.archivedAt !== undefined ? undefined : (
+            <>
+              {stop === undefined ? null : (
+                <Button
+                  busy={stopping}
+                  busyLabel={CONTINUED_COPY.STOPPING}
+                  onClick={() => pressStop(stop)}
+                >
+                  {CONTINUED_COPY.STOP}
+                </Button>
+              )}
+              {agent.archivedAt !== undefined ? null : (
+                <button
+                  type="button"
+                  className="toolbar-button bordered-button failure-note-remedy"
+                  onClick={archive.action.onSelect}
+                >
+                  {CONTINUED_COPY.ARCHIVE}
+                </button>
+              )}
+            </>
+          )
+        }
+      >
+        <Text tone={TEXT_TONE.MUTED}>
+          <ContinuedIn {...doors} />
+        </Text>
+      </Banner>
+      {archive.dialog}
+    </>
   );
 }

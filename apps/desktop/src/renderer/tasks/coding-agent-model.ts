@@ -286,20 +286,23 @@ export interface EndLineParts {
  * The quiet line a transcript ends on once its turn failed or was stopped,
  * in parts, so its words and its cost can be drawn apart; nothing for an
  * agent still writing or one that completed. A teammate's agent names its
- * starter's key, since it runs on theirs and not the reader's.
+ * starter's key, since it runs on theirs and not the reader's. An agent
+ * another already `continued` is not told to start a new one.
  */
 export function endLineParts(
   status: CodingAgentStatus,
   failure: CodingAgentFailure | undefined,
   turnUsage?: CodingAgentUsage,
   starter?: string,
+  continued = false,
 ): EndLineParts | undefined {
   const cost = costLabel(turnUsage);
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
       return { words: "Stopped", cost, failed: false };
     case CODING_AGENT_STATUS.FAILED: {
-      const words = failure === undefined ? undefined : agentFailureWords(failure, starter);
+      const words =
+        failure === undefined ? undefined : agentFailureWords(failure, starter, continued);
       return { words: words === undefined ? "Failed" : `Failed: ${words}`, cost, failed: true };
     }
     case CODING_AGENT_STATUS.STARTING:

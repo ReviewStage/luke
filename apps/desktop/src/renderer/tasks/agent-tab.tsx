@@ -1419,8 +1419,9 @@ function AgentTranscriptView({
       </ErrorState>
     );
   }
+  // Note that the centred column is wider than the empty state's own, so a one-line failure stays one line.
   return (
-    <ConversationEmptyState>
+    <ConversationEmptyState className="max-w-[440px]">
       {reading && ended === undefined ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
@@ -1517,7 +1518,7 @@ function AgentTabView({
   endTrail?: ReactNode;
   /** What mends the box once it closed for good (`continue-agent.tsx`). */
   closedRemedy?: ReactNode;
-  /** What stands in the box's place once another agent continued this one (`ContinuedComposerNote`); none while none has. */
+  /** What stands in the box's place once another agent continued this one (`ContinuedComposerNote`), which also drops the end line's advice to start a new one; none while none has. */
   continuedNote?: ReactNode;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
@@ -1576,7 +1577,13 @@ function AgentTabView({
                 working={working}
                 sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
                 startedAt={startedAt}
-                ended={endLineParts(agent.status, transcript.failure, transcript.turnUsage, starter)}
+                ended={endLineParts(
+                  agent.status,
+                  transcript.failure,
+                  transcript.turnUsage,
+                  starter,
+                  continuedNote !== undefined,
+                )}
                 endReason={endLineReason(transcript.failure, starter)}
                 onOpenApiKeys={onOpenApiKeys}
                 endTrail={endTrail}
@@ -1821,7 +1828,8 @@ export function AgentTab({
                   ? () => control.onStop(agent.id)
                   : undefined
               }
-              onArchive={control.onArchive}
+              control={control}
+              shown={shown}
             />
           )
         }
