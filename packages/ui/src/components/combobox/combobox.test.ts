@@ -206,3 +206,13 @@ test("a press on an option chooses it and keeps the caret in the field; the poin
   assert.equal(mousedown.defaultPrevented, true);
   assert.deepEqual(chosen, ["Apricot"]);
 });
+
+test("an Escape an input method is composing with is kept from what stands behind even with the list shut", () => {
+  const { field, escapedPast } = mount();
+  type(field(), "kiwi");
+
+  press(field(), { key: "Escape", keyCode: 229 });
+
+  assert.equal(field().getAttribute("aria-expanded"), "false");
+  assert.equal(escapedPast.length, 0);
+});
