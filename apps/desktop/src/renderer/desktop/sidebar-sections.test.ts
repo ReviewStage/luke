@@ -414,6 +414,9 @@ function drag(sidebar: HTMLElement, name: string, y: number): void {
   });
 }
 
+/** A moment after every stamp the fixtures carry, at which a drag's writes are taken. */
+const AFTER_FIXTURES = 10;
+
 const noneAsked = (): Asked => ({ marks: [], moves: [], writes: [] });
 
 /** A task pinned at the first place a drag gives. */
@@ -448,7 +451,11 @@ test("a task dragged from a section onto the top of Pinned leaves the section an
   drag(sidebar, "Invite expiry", 4);
 
   assert.deepEqual(asked.marks, [[INVITES.id, TASK_MARK.PIN]]);
-  assert.deepEqual(asked.moves, [], "a pin never dragged stands on top");
+  assert.deepEqual(
+    asked.moves.map((move) => move.id),
+    [INVITES.id],
+  );
+  assert.ok((asked.moves[0]?.position ?? "~") < PINNED.pinPosition, "it sorts before Pin audit");
   assert.deepEqual(asked.writes, [
     { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES.id, sectionId: null },
   ]);
@@ -480,7 +487,7 @@ test("a pinned task dragged into a section is unpinned and lands where it was le
 
   assert.deepEqual(asked.marks, [[PINNED.id, TASK_MARK.UNPIN]]);
   const after = asked.writes.reduce(
-    (state, write) => applySectionWrite(state, write, Date.now()),
+    (state, write) => applySectionWrite(state, write, AFTER_FIXTURES),
     SECTIONS,
   );
   assert.deepEqual(

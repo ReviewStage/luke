@@ -1,7 +1,12 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { inPinOrder, type PinPlace, pinPositionsForMove } from "@luke/features/pin-order";
+import {
+  inPinOrder,
+  type PinPlace,
+  pinPositionsForInsert,
+  pinPositionsForMove,
+} from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -342,19 +347,12 @@ function pinnedRows(
 }
 
 /**
- * Stands the row at `from` under Pinned at `to`: each pin the drop gives a
- * place takes it, a plan's and an agent's on the account and a tab's on
- * this Mac, so the section draws the new order at once. A drop the service
- * refuses any of puts the tabs' places back too, so the section is left in
- * no order of its own making.
+ * Gives each pin under Pinned the place a drop gave it, a plan's and an
+ * agent's on the account and a tab's on this Mac, so the section draws the
+ * new order at once. A drop the service refuses any of puts the tabs'
+ * places back too, so the section is left in no order of its own making.
  */
-function movePinned(
-  rows: readonly PinnedRow[],
-  from: number,
-  to: number,
-  tasks: TasksControl,
-): void {
-  const positions = pinPositionsForMove(rows, from, to, placeOf);
+function placePins(positions: ReadonlyMap<PinnedRow, string>, tasks: TasksControl): void {
   const tabs = new Map<number, string>();
   const before = new Map<number, string | undefined>();
   const moves = [...positions].flatMap(([row, position]) => {
@@ -368,11 +366,21 @@ function movePinned(
   tasks.onMovePins(moves, () => tasks.sidePanel.onPlacePins(before));
 }
 
+/** Stands the row at `from` under Pinned at `to`. */
+function movePinned(
+  rows: readonly PinnedRow[],
+  from: number,
+  to: number,
+  tasks: TasksControl,
+): void {
+  placePins(pinPositionsForMove(rows, from, to, placeOf), tasks);
+}
+
 /**
  * Pins a plan's or an agent's row carried into Pinned at `at` among the
- * rows it draws, as a pin dragged there would stand: pinned now, which a
- * pin never dragged stands on top as, and given a place, as its neighbours
- * are where they need one, wherever else it lands.
+ * rows it draws: pinned now, and given a place there, as its neighbours are
+ * where they need one, wherever it lands, on top included
+ * (`pinPositionsForInsert`).
  */
 function pinAt(rows: readonly PinnedRow[], row: TaskRow, at: number, tasks: TasksControl): void {
   const place: PinPlace = { at: Date.now() };
@@ -382,7 +390,7 @@ function pinAt(rows: readonly PinnedRow[], row: TaskRow, at: number, tasks: Task
       : { kind: TASK_ROW.TASK, plan: row.plan, pin: undefined, place };
   if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, true);
   else tasks.onMarkTask(row.plan.id, TASK_MARK.PIN);
-  movePinned([moving, ...rows], 0, Math.max(0, Math.min(at, rows.length)), tasks);
+  placePins(pinPositionsForInsert(rows, moving, at, placeOf), tasks);
 }
 
 /** Takes a row out of Pinned: a plan's or an agent's pin on the account, a tab's on this Mac. */
