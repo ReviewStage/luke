@@ -26,7 +26,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { encodeMention, MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -1532,20 +1532,9 @@ test("what an item's box said of a dictation that failed stays with that item, a
   assert.deepEqual(alerts(), [], "the next item's box says nothing of it");
 });
 
-test("in the window's Inbox a skill an answered note names is the chip a sent message draws, which opens its SKILL.md on GitHub", async () => {
+/** The repository's one skill read for the box, and every GitHub page a press opened, written down. */
+function skillReads(): string[] {
   const opened: string[] = [];
-  const answered: InboxItem = {
-    ...RETRY,
-    answer: {
-      reply: INBOX_REPLY.CHOSE,
-      choices: ["Retry 3 times over an hour"],
-      note: "Run /release first.",
-    },
-  };
-  inboxes = new Map([
-    [BILLING.id, [THRESHOLD, answered]],
-    [INVITES.id, [EXPIRY]],
-  ]);
   const bridge = window.luke;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -1571,24 +1560,62 @@ test("in the window's Inbox a skill an answered note names is the chip a sent me
       },
     },
   });
-  const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, "How is a failed email retried?").click());
-  await settle();
+  return opened;
+}
+
+/** The chip of the skill an answered note names, pressed. */
+async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
   await settle();
   const note = itemPane(page).querySelector("[data-inbox-answer] [data-inbox-note]");
   const chip = [...(note?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
-    (button) => button.textContent === "/release",
+    (button) => button.textContent === name,
   );
   assert.ok(chip, "the skill is its chip");
   act(() => chip.click());
+}
 
-  assert.deepEqual(opened, [
-    encodeMention(
-      { kind: MENTION_KIND.FILE, path: ".agents/skills/release/SKILL.md" },
-      { workspace: BILLING.workspaceId, repository: "acme/relay" },
-    ),
+/** Where the release skill's file stands on GitHub. */
+const RELEASE_ON_GITHUB = "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md";
+
+test("in the window's Inbox a skill an answered note names is the chip a sent message draws, which opens its SKILL.md on GitHub", async () => {
+  const answered: InboxItem = {
+    ...RETRY,
+    answer: {
+      reply: INBOX_REPLY.CHOSE,
+      choices: ["Retry 3 times over an hour"],
+      note: "Run /release first.",
+    },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, answered]],
+    [INVITES.id, [EXPIRY]],
   ]);
+  const opened = skillReads();
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await pressNoteSkill(page, "/release");
+
+  assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
+});
+
+test("a skill named by a settled item of an agent with no plan that a link reached opens in the agent's own repository, which its group names none of", async () => {
+  const settled: InboxItem = {
+    ...BUMP,
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: READER,
+    answer: { reply: INBOX_REPLY.ANSWERED, note: "Run /release first." },
+  };
+  agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
+  pageAgents = new Map([[STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }]]);
+  const opened = skillReads();
+  const { page } = mount();
+  await settle();
+  act(() => chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
+  await settle();
+  await pressNoteSkill(page, "/release");
+
+  assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
 });
 
 test("an item that needs no reply says a bare press won't message the agent, and that a note typed in its box will", async () => {
