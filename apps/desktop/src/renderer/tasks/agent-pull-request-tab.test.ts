@@ -509,6 +509,20 @@ it.effect(
         "1m 5s",
         "1m 5s",
       ]);
+
+      yield* Effect.promise(() => choose(tab, "Conversation"));
+      assert.deepEqual(
+        words(tab, '[role="timer"]'),
+        [],
+        "a count behind a hidden tab reads no clock",
+      );
+      yield* TestClock.adjust("1 second");
+      yield* Effect.promise(() => choose(tab, "Checks"));
+      assert.deepEqual(
+        words(tab, '[role="timer"]'),
+        ["1m 7s"],
+        "shown again, it counts from the clock",
+      );
       act(() => root?.unmount());
       root = undefined;
       registry.dispose();
@@ -770,7 +784,7 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
   assert.equal(count("Files changed")?.textContent, "+4 −1");
 
   await choose(tab, "Checks");
-  assert.equal(count("Checks")?.textContent, "3");
+  assert.equal(count("Checks")?.textContent, "1", "beside a failure, how many failed");
   assert.equal(count("Checks")?.getAttribute("data-check-summary"), CHECK_SUMMARY.FAILING);
 
   act(() => option(tab, "Checks").focus());
@@ -785,6 +799,54 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
     "true",
     "the arrows move along the row",
   );
+});
+
+test("the Checks tab counts what its glyph says: beside a wait how many still run, and where all passed how many there are", async () => {
+  const running: CodingAgentOverviewChecks = {
+    checks: [
+      check("build", CHECK_STATE.PENDING),
+      check("e2e", CHECK_STATE.PENDING),
+      check("test", CHECK_STATE.PASSED),
+    ],
+  };
+  const waits = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: running }) }),
+  );
+  await choose(waits, "Checks");
+  const countOf = (tab: HTMLElement) =>
+    option(tab, "Checks").querySelector(".pull-request-tab-count");
+  assert.equal(countOf(waits)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PENDING);
+  assert.equal(countOf(waits)?.textContent, "2");
+
+  act(() => root?.unmount());
+  const passing: CodingAgentOverviewChecks = {
+    checks: [
+      check("lint", CHECK_STATE.PASSED),
+      check("test", CHECK_STATE.PASSED),
+      check("docs", CHECK_STATE.SKIPPED),
+    ],
+  };
+  const passed = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: passing }) }),
+  );
+  await choose(passed, "Checks");
+  assert.equal(countOf(passed)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PASSING);
+  assert.equal(countOf(passed)?.textContent, "3");
+});
+
+test("a check that ran for no time, skipped or cancelled before it began, says no duration", async () => {
+  const none: CodingAgentOverviewChecks = {
+    checks: [
+      { ...check("cancelled", CHECK_STATE.FAILED), completedAt: 1_000 },
+      { ...check("docs", CHECK_STATE.SKIPPED), completedAt: 1_000 },
+      check("test", CHECK_STATE.PASSED),
+    ],
+  };
+  const tab = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: none }) }),
+  );
+  await choose(tab, "Checks");
+  assert.deepEqual(words(tab, ".pull-request-check-time"), ["1m 5s"]);
 });
 
 test("a merged pull request says so on the bar, as its overview read it, says nothing of merging, and one with no description, checks, or comments says so", async () => {

@@ -261,10 +261,14 @@ const CHECKS_UNFOLDED = 5;
 const CHECK_AVATAR_PIXELS = 16;
 const CHECK_AVATAR_DENSITY = 2;
 
-/** How long a check ran, as a working count says it ("42s", "3m 5s", "1h 2m"); none for one still running or never timed. */
+/** The least a check must have run to say how long: a skipped or neutral check, or one cancelled before it began, ran for none. */
+const RAN_AT_LEAST_MS = 1_000;
+
+/** How long a check ran, as a working count says it ("42s", "3m 5s", "1h 2m"); none for one still running, never timed, or that ran for no time. */
 function durationOf(check: PullRequestCheck): string | undefined {
   if (check.startedAt === null || check.completedAt === null) return undefined;
-  return workingTime(check.completedAt - check.startedAt);
+  const ran = check.completedAt - check.startedAt;
+  return ran < RAN_AT_LEAST_MS ? undefined : workingTime(ran);
 }
 
 /** How many of the checks, in the order the service ranks them, stand unfolded: the first five, and past them every one that failed or still runs. */
@@ -474,13 +478,22 @@ function CheckAvatar({ agentId, src }: { agentId: string; src: string }): React.
   );
 }
 
-/** One check: its glyph for where it stands, its App's avatar, its name, its App, and how long it ran, counting each second while it runs; a press opens its page where it has one. */
+/**
+ * One check: its glyph for where it stands, its App's avatar, its name, its
+ * App, and how long it ran, counting each second while it runs and is on
+ * screen; a press opens its page where it has one. Note that a running
+ * count stands only while the Checks tab is shown (`live`), because the
+ * tab stays mounted behind `hidden`, and a count left reading the clock
+ * there would tick for no one.
+ */
 function CheckRow({
   agentId,
   check,
+  live,
 }: {
   agentId: string;
   check: PullRequestCheck;
+  live: boolean;
 }): React.JSX.Element {
   const openLink = useOpenLink();
   const duration = durationOf(check);
@@ -499,7 +512,7 @@ function CheckRow({
       {avatarUrl === undefined ? null : <CheckAvatar agentId={agentId} src={avatarUrl} />}
       <span className="pull-request-check-name">{check.name}</span>
       {check.app === null ? null : <span className="pull-request-quiet">{check.app}</span>}
-      {running ? <RunningTime startedAt={startedAt} /> : null}
+      {running && live ? <RunningTime startedAt={startedAt} /> : null}
       {running || duration === undefined ? null : (
         <span className="pull-request-quiet pull-request-check-time">{duration}</span>
       )}
@@ -527,9 +540,11 @@ function CheckRow({
 function Checks({
   agentId,
   checks,
+  live,
 }: {
   agentId: string;
   checks: readonly PullRequestCheck[];
+  live: boolean;
 }): React.JSX.Element {
   const [unfolded, setUnfolded] = useState(false);
   const listId = useId();
@@ -548,7 +563,7 @@ function Checks({
           <ul id={listId} className="pull-request-check-list">
             {shown.map((check, at) => (
               // Note that two checks may share a name across Apps, so a row is keyed by its place too.
-              <CheckRow key={`${at}`} agentId={agentId} check={check} />
+              <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
             ))}
           </ul>
           {folds ? (
@@ -845,16 +860,20 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
   );
 }
 
-/** The checks section as its read stands: every check once landed, a skeleton of rows while out, its failure with Retry. */
+/** The checks section as its read stands: every check once landed, its running counts moving while the tab is shown (`live`), a skeleton of rows while out, its failure with Retry. */
 function ChecksPart({
   agentId,
   parts,
+  live,
 }: {
   agentId: string;
   parts: OverviewParts;
+  live: boolean;
 }): React.JSX.Element {
   const part = parts.checks;
-  if (part.kind === PART.LANDED) return <Checks agentId={agentId} checks={part.value.checks} />;
+  if (part.kind === PART.LANDED) {
+    return <Checks agentId={agentId} checks={part.value.checks} live={live} />;
+  }
   return (
     <Section title="Checks">
       {part.kind === PART.PENDING ? (
@@ -995,7 +1014,7 @@ type TabCount =
   | { readonly kind: typeof TAB_COUNT.COUNT; readonly count: number }
   | {
       readonly kind: typeof TAB_COUNT.CHECKS;
-      /** How many, once the checks are read; none before. */
+      /** How many stand as its glyph says, once the checks are read; none before. */
       readonly count: number | undefined;
       readonly summary: CheckSummary;
     }
@@ -1011,6 +1030,17 @@ interface TabEntry {
   readonly icon: ReactNode;
   readonly label: string;
   readonly count: TabCount | undefined;
+}
+
+/** How many checks the Checks tab's glyph counts: those that failed beside a failure, those still running beside a wait, and every one where all passed. */
+function summaryCountOf(checks: readonly PullRequestCheck[], summary: CheckSummary): number {
+  if (summary === CHECK_SUMMARY.FAILING) {
+    return checks.filter((check) => check.state === CHECK_STATE.FAILED).length;
+  }
+  if (summary === CHECK_SUMMARY.PENDING) {
+    return checks.filter((check) => check.state === CHECK_STATE.PENDING).length;
+  }
+  return checks.length;
 }
 
 /** The glyph the Checks tab wears for how its checks went, as the pull request's mark tells it; none where there are none. */
@@ -1159,7 +1189,11 @@ function tabsOf(
       count:
         bar === undefined
           ? undefined
-          : { kind: TAB_COUNT.CHECKS, count: checks?.checks.length, summary: bar.checks },
+          : {
+              kind: TAB_COUNT.CHECKS,
+              count: checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
+              summary: bar.checks,
+            },
     },
     {
       view: PULL_REQUEST_VIEW.FILES,
@@ -1325,7 +1359,11 @@ export function AgentPullRequestTab({
             hidden={view !== PULL_REQUEST_VIEW.CHECKS}
           >
             <div className="pull-request-page">
-              <ChecksPart agentId={agentId} parts={parts} />
+              <ChecksPart
+                agentId={agentId}
+                parts={parts}
+                live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+              />
             </div>
           </div>
         </>
