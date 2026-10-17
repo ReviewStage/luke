@@ -757,6 +757,65 @@
   flex-direction: column;
 }
 
+/* The transcript's frame (../ai-elements/conversation.tsx): a log that
+   scrolls inside the room its pane leaves it, its lines a step apart, the way
+   back to its newest line floating over their foot, and the line it says in
+   place of lines. It sits in the components layer, under the window's own
+   rules and utilities, so a pane's log (`.checkpoint-log`,
+   `.agent-log-over-composer`) and a line's own spacing still say the last
+   word, as they did over the utilities this replaced. */
+@layer components {
+  .conversation {
+    position: relative;
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .conversation-log {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
+  }
+
+  .conversation-log > :not(:last-child) {
+    margin-block-end: var(--luke-space-12);
+  }
+
+  .conversation-empty {
+    display: flex;
+    max-width: 280px; /* off-scale: a short line's measure */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-space-12);
+    margin: auto;
+    padding: var(--luke-space-24);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    text-align: center;
+  }
+
+  /* Its own ground under the button, ringed and lifted off the lines, which
+     the button's lit fill is laid over as a title bar's is. */
+  .conversation-scroll {
+    --luke-button-ground: var(--desktop-well);
+    position: absolute;
+    bottom: var(--luke-space-16);
+    left: 50%;
+    display: flex;
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-button-ground);
+    box-shadow:
+      inset 0 0 0 1px var(--luke-color-border),
+      0 6px 16px var(--luke-color-shadow-soft);
+    translate: -50% 0;
+  }
+}
+
 /* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
    to the log's top (../ai-elements/checkpoint.tsx): the fade starts beneath
    the checkpoint's band, so the time stands whole and what scrolls under it
@@ -767,6 +826,9 @@
    both. */
 .checkpoint-log {
   --checkpoint-height: 32px;
+  /* No top padding, because a sticky checkpoint would leave what scrolled
+     under it showing in that band; cards fade beneath it. */
+  padding-top: 0;
   --fade-inset-top: var(--checkpoint-height);
   scroll-padding-top: calc(var(--checkpoint-height) + var(--scroll-fade));
 }
