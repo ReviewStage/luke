@@ -256,7 +256,13 @@ message, on the same terms and bounds (see "Files you attach to a coding
 agent"): an answer carrying one is always handed to the agent, and our
 service also keeps each file, with its name, in our database beside the item,
 where every member of the task's workspace can open it, until the answer is
-taken back or the agent posts the item again. While you are signed in, Luke
+taken back or the agent posts the item again. Any member of the task's
+workspace can also add a message to an item's thread at any point, answered
+or not, with files on the same terms: our service keeps the message's words
+and files with the item under the account of the member who wrote it, which
+every member of the workspace sees by name beside it, and hands it to the
+agent as one of your messages, kept in its transcript. A thread stays until
+the item is deleted with its task. While you are signed in, Luke
 on your Mac keeps a read open to our service for every item waiting in your
 workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on

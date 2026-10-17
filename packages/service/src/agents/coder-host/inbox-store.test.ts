@@ -24,6 +24,7 @@ import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -31,7 +32,8 @@ import {
   type InboxPost,
 } from "@luke/features/inbox-wire";
 import { eq } from "drizzle-orm";
-import { Effect, Option, Result } from "effect";
+import { Duration, Effect, Option, Result } from "effect";
+import { TestClock } from "effect/testing";
 import {
   accountInboxTasks,
   accountWaitingItems,
@@ -40,12 +42,14 @@ import {
   type InboxAgent,
   type InboxFile,
   postInboxItem,
+  postInboxMessage,
   readInboxAttachment,
   readInboxItem,
   taskInboxItems,
   withdrawInboxAnswer,
+  withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
-import { accountInboxPast } from "./inbox-page.js";
+import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
 
 /**
  * The developer's inbox as the store keeps it, through its public functions
@@ -55,8 +59,10 @@ import { accountInboxPast } from "./inbox-page.js";
  * withdrawn under its key, a read keeps every open item however many others
  * changed, every member of the task's workspace reads and answers the items
  * of an agent any of them started, an agent with no task posts to its
- * workspace's members as one on a task does to its task's, and nothing of
- * a workspace the account is not in is read or written.
+ * workspace's members as one on a task does to its task's, a member writes
+ * on an item's thread whatever its status, which moves the item's last
+ * change and nothing else of it, and nothing of a workspace the account is
+ * not in is read or written.
  *
  * Synthetic accounts, tasks, and words throughout.
  */
@@ -526,6 +532,135 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(yield* taskInboxItems(stranger, agent.taskId), []);
         assert.ok(Option.isNone(yield* readInboxItem(stranger, id)));
         assert.ok(Option.isNone(yield* answerInboxItem(stranger, id, 1, done, randomUUID())));
+      }),
+  );
+  it.effect(
+    "a member's message, a teammate's as much as the starter's, stands on the thread of an open item and of an answered one, oldest first and naming its writer, leaves the status, the answer, and the revision as they stood, moves the item's last change and the plan read's cursor, and an outsider writes none",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        const outsider = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const open = yield* postInboxItem(agent, SETTINGS);
+        const settled = yield* postInboxItem(agent, { ...SETTINGS, key: "settled" });
+        assert.ok(Result.isSuccess(open) && Result.isSuccess(settled));
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(agent.userId, settled.success.id, 1, DONE, randomUUID()),
+        );
+        const before = yield* taskInboxPast(agent.userId, agent.taskId, INBOX_CURSOR_START);
+        const write = (userId: string, itemId: string, text: string) =>
+          Effect.gen(function* () {
+            yield* TestClock.adjust(Duration.seconds(1));
+            return yield* postInboxMessage(userId, itemId, { text, clientKey: randomUUID() });
+          });
+
+        assert.ok(Option.isNone(yield* write(outsider, open.success.id, "Not my workspace.")));
+        yield* write(
+          agent.userId,
+          open.success.id,
+          "Is [@main](https://github.com/acme/relay) it?",
+        );
+        const onOpen = Option.getOrThrow(yield* write(teammate, open.success.id, "Main, yes."));
+        const onSettled = Option.getOrThrow(
+          yield* write(teammate, settled.success.id, "One more thing on this."),
+        );
+
+        assert.ok(onOpen.written && onSettled.written);
+        assert.deepEqual(
+          onOpen.item.messages?.map((message) => [
+            message.author,
+            message.member?.userId,
+            message.text,
+          ]),
+          [
+            [
+              INBOX_MESSAGE_AUTHOR.MEMBER,
+              agent.userId,
+              "Is [@main](https://github.com/acme/relay) it?",
+            ],
+            [INBOX_MESSAGE_AUTHOR.MEMBER, teammate, "Main, yes."],
+          ],
+        );
+        assert.deepEqual(
+          [onOpen.item.status, onOpen.item.revision],
+          [INBOX_STATUS.OPEN, open.success.revision],
+        );
+        assert.deepEqual(
+          [
+            onSettled.item.status,
+            onSettled.item.revision,
+            onSettled.item.answer,
+            onSettled.item.answeredBy,
+          ],
+          [answered.status, answered.revision, answered.answer, answered.answeredBy],
+        );
+        assert.ok(onSettled.item.updatedAt > answered.updatedAt, "the message moves the item");
+        assert.equal(onSettled.item.updatedAt, onSettled.item.messages?.[0]?.createdAt);
+        const byStarter = yield* readInboxItem(agent.userId, settled.success.id);
+        const byTeammate = yield* readInboxItem(teammate, settled.success.id);
+        assert.deepEqual(
+          [byStarter, byTeammate].map((read) => Option.getOrThrow(read).item.messages),
+          [onSettled.item.messages, onSettled.item.messages],
+        );
+        const after = yield* taskInboxPast(agent.userId, agent.taskId, INBOX_CURSOR_START);
+        assert.notEqual(after.cursor, before.cursor, "a holder of the cursor before hears it");
+        assert.deepEqual(yield* taskInboxItems(outsider, agent.taskId), []);
+      }),
+  );
+
+  it.effect(
+    "a message's files are kept in the order attached and served to every member, and stay with the thread when the agent posts the item again; a message sent again under its key is written once and moves nothing, and one withdrawn goes with its files",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+        const files = [
+          attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
+          attached("after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG, SHOT),
+        ];
+        const key = randomUUID();
+        yield* TestClock.adjust(Duration.seconds(1));
+
+        const first = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, id, { text: "", clientKey: key, files }),
+        );
+        yield* TestClock.adjust(Duration.seconds(1));
+        const again = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, id, { text: "", clientKey: key, files }),
+        );
+
+        assert.deepEqual([first.written, again.written], [true, false]);
+        assert.deepEqual(again.item, first.item, "a repeat writes nothing and moves nothing");
+        const [message] = first.item.messages ?? [];
+        assert.deepEqual(
+          message?.files?.map((file) => [file.name, file.mediaType]),
+          [
+            ["trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT],
+            ["after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG],
+          ],
+        );
+        const [trace] = message?.files ?? [];
+        assert.ok(trace);
+        const served = yield* readInboxAttachment(agent.userId, id, trace.attachmentId);
+        assert.deepEqual(new Uint8Array(Option.getOrThrow(served).bytes), TRACE);
+
+        const askedAgain = yield* postInboxItem(agent, {
+          ...SETTINGS,
+          title: "Require two reviews",
+        });
+        assert.ok(Result.isSuccess(askedAgain));
+        assert.deepEqual(askedAgain.success.messages, first.item.messages);
+        assert.ok(Option.isSome(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
+
+        yield* withdrawInboxMessage(agent.userId, id, key);
+        assert.equal(
+          Option.getOrThrow(yield* readInboxItem(agent.userId, id)).item.messages,
+          undefined,
+        );
+        assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
       }),
   );
 });

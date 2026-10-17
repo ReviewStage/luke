@@ -118,12 +118,15 @@ import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_LEAD,
   INBOX_REPLY,
   INBOX_RESPONSE,
+  INBOX_STATUS,
   type InboxImageBlock,
   type InboxPost,
   inboxAnsweredSchema,
   inboxAnswerSchema,
+  inboxMessagedSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
@@ -2901,6 +2904,7 @@ const TASK_INBOX = "/api/plans/inbox";
 const INBOX_ITEM = "/api/inbox/item";
 const ACCOUNT_INBOX = "/api/inbox";
 const INBOX_ATTACHMENT = "/api/inbox/attachment";
+const INBOX_MESSAGES = "/api/inbox/messages";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
@@ -2937,7 +2941,34 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           opened.ask(request(ACCOUNT_INBOX, bearer, after === undefined ? undefined : { after })),
           (answered) => readAnswer(accountInboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
         );
-      return { ...opened, agent, target, post, read, answer, waiting };
+      /** A member's message on an item's thread, as the route answers it. */
+      const message = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
+        opened.ask(request(INBOX_MESSAGES, bearer, { method: "POST", id: itemId, body }));
+      /** The agent's transcript as the owner reads it: the developer's lines, and where it stands. */
+      const transcript = () =>
+        Effect.map(
+          opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
+          (answered) => {
+            const page = readAnswer(
+              codingAgentMessagesAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              answered,
+            );
+            return { lines: userTexts(page), status: page.status };
+          },
+        );
+      return {
+        ...opened,
+        agent,
+        target,
+        sessionId,
+        post,
+        read,
+        answer,
+        waiting,
+        message,
+        transcript,
+      };
     });
 
   const QUESTION = {
@@ -3101,6 +3132,167 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         [shot.name],
       );
     }),
+  );
+
+  /** The agent's one turn run to its end, as the relay writes a turn that settled: the agent stopped, and waits on nothing. */
+  const turnEnded = (target: { readonly userId: string; readonly conversationId: string }) =>
+    Effect.gen(function* () {
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      const turnId = randomUUID();
+      const turn = { conversationId: sessionKey(target.conversationId), turnId };
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: 0,
+      });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        sequence: 2,
+        message: userMessage(
+          randomUUID(),
+          SNAPSHOT,
+          userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+        ),
+      });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        sequence: 3,
+        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        responseIds: [],
+        at: 0,
+      });
+    });
+
+  it.effect(
+    "a member's message on an answered item wakes the agent that stopped, reaching it under its own lead with its files, and leaves the item answered at its revision, its thread naming the member; a teammate writes as the starter does, a repeat under its key reaches the agent once, and an outsider, no bearer, and an empty message are refused",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, target, ask, post, answer, read, message, transcript } =
+          yield* openInbox(eve);
+        const asked = yield* post({
+          key: "flag-thread",
+          title: "Turn on the agent-mail flag in staging",
+          response: { type: INBOX_RESPONSE.TODO },
+          needsReply: false,
+        });
+        assert.ok(Result.isSuccess(asked));
+        const { id, key, title } = asked.success;
+        // A bare Done on an item that asks nothing back reaches nobody, so the turn below is the agent's last.
+        const answered = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(id, {
+            revision: asked.success.revision,
+            clientKey: randomUUID(),
+            reply: INBOX_REPLY.DONE,
+          }),
+        ).item;
+        yield* turnEnded(target);
+        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.COMPLETED);
+        const before = eve.sent.length;
+        const trace = {
+          name: "copy-review.txt",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          data: Buffer.from("subject line too long\n").toString("base64"),
+        };
+        const body = {
+          text: "One more: drop the emoji.",
+          attachments: [trace],
+          clientKey: randomUUID(),
+        };
+
+        const sent = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* message(id, body),
+        );
+        assert.deepEqual(
+          [sent.item.status, sent.item.revision, sent.item.answer],
+          [INBOX_STATUS.ANSWERED, answered.revision, answered.answer],
+        );
+        assert.deepEqual(
+          sent.item.messages?.map((each) => [
+            each.member?.userId,
+            each.text,
+            each.files?.map((file) => file.name),
+          ]),
+          [[owner, body.text, [trace.name]]],
+        );
+        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
+        assert.ok(handed.includes(`${INBOX_MESSAGE_LEAD} on \\"${title}\\" (key ${key})`));
+        assert.ok(handed.includes(body.text), "it carries the words");
+        assert.ok(handed.includes("subject line too long"), "it carries the file");
+        const woken = yield* transcript();
+        assert.equal(woken.status, CODING_AGENT_STATUS.RUNNING, "the message woke the agent");
+        assert.ok(woken.lines.some((line) => line?.includes(body.text)));
+
+        yield* message(id, body);
+        assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
+
+        assert.deepEqual(
+          yield* message(id, { text: "Before I joined.", clientKey: randomUUID() }, other),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        yield* joinWorkspace(task.workspaceId, other);
+        yield* TestClock.adjust(Duration.seconds(1));
+        readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* message(id, { text: "Agreed.", clientKey: randomUUID() }, other),
+        );
+        const kept = (yield* read()).items.find((item) => item.id === id);
+        assert.deepEqual(
+          kept?.messages?.map((each) => [each.member?.userId, each.text]),
+          [
+            [owner, body.text],
+            [other, "Agreed."],
+          ],
+        );
+        assert.equal(kept?.status, INBOX_STATUS.ANSWERED);
+
+        assert.deepEqual(
+          yield* ask(
+            request(INBOX_MESSAGES, undefined, {
+              method: "POST",
+              id,
+              body: { text: "Hello.", clientKey: randomUUID() },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        assert.deepEqual(
+          yield* message(id, { text: "  ", clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a message the agent's session did not take is taken back off the thread, so the thread never shows what the agent was not told",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, message } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }),
+        );
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+
+        const sent = yield* message(asked.success.id, {
+          text: "Still there?",
+          clientKey: randomUUID(),
+        });
+
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
+        assert.equal(kept?.messages, undefined);
+      }),
   );
 
   it.effect(

@@ -36,6 +36,7 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -89,10 +90,13 @@ import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
+  type InboxMessageRequest,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxImageTypeSchema,
+  inboxMessagedSchema,
+  inboxMessageRequestSchema,
 } from "./inbox-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
@@ -135,6 +139,7 @@ import {
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
   inboxItemPath,
+  inboxMessagesPath,
   planTemplateRestorePath,
   planTemplateRevisionPath,
   taskAgentsPath,
@@ -939,6 +944,28 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
+    );
+  }
+
+  /**
+   * A message of the account's on one item's thread, open or settled: the
+   * item as it then stands, its thread with the message on it, where the
+   * service wrote it and handed it to the agent; the refusals a message to
+   * the agent answers with otherwise, since it reaches the agent as one.
+   */
+  messageInbox(
+    itemId: string,
+    request: InboxMessageRequest,
+  ): Effect.Effect<CodingAgentInboxMessagedView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxMessageRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: inboxMessagesPath(itemId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxMessagedSchema, INBOX_ANSWER_REFUSALS),
     );
   }
 }
