@@ -1,6 +1,6 @@
 import type { ExperimentChoices } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SettingsRow, SettingsSection } from "@luke/ui";
+import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection } from "@luke/ui";
 import { APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 
@@ -19,7 +19,8 @@ import { Shortcut } from "../shortcut";
  * feature's shortcut is listed only while the account has its experiment on.
  *
  * Each group is `@luke/ui`'s `SettingsSection` and each command its
- * `SettingsRow`, the chord in the row's controls. Note that each row stands
+ * `SettingsRow` at the list density, a reference's line rather than a
+ * setting's, the chord in the row's controls. Note that each row stands
  * in a wrapper wearing its search anchor, because the shared row takes no
  * attribute of a caller's.
  */
@@ -34,7 +35,7 @@ export function WindowShortcutSections({
         <SettingsSection key={group.title} title={group.title}>
           {group.commands.map((command) => (
             <div key={command} {...searchAnchorProps(command)}>
-              <SettingsRow label={APP_SHORTCUTS[command].label}>
+              <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={APP_SHORTCUTS[command].label}>
                 {() => (
                   <Shortcut
                     className="shortcut-value"
