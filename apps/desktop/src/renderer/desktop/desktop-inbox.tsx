@@ -422,9 +422,8 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
         return true;
       }
       case INBOX_PANEL_TARGET.PAGE:
-        // A page an agent showed since the pages were read stands once they are read again.
-        if (pages !== undefined && !pages.some((page) => page.id === target.pageId))
-          onRereadPages();
+        // A page an agent showed since the pages were read, or whose read did not answer, stands once they are read again.
+        if (pages?.some((page) => page.id === target.pageId) !== true) onRereadPages();
         sidePanel.onChoose({ page: target.pageId });
         return true;
       case INBOX_PANEL_TARGET.CHANGES:

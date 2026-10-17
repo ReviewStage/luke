@@ -2513,14 +2513,15 @@ export function useTasksTab(input: {
   // the panel is never shown empty beside the summary that lists the same:
   // the tab last closed on the plan this launch, where ⇧⌘T would open it,
   // else the kind last closed on it, kept across launches, else Call. An
-  // agent's page has no kind to fall back on, so its panel shows empty,
-  // offering what its "+" does.
+  // agent's page, and the Inbox beside an item, have no kind to fall back on,
+  // so their panel shows empty, offering what its "+" does.
   const toggleSidePanel = () => {
     const task = tasks.activeTaskId;
     if (
       sidePanel.open ||
       sidePanel.strip.length > 0 ||
       pageAgents !== undefined ||
+      inboxView !== undefined ||
       task === undefined
     ) {
       sidePanel.onToggle();

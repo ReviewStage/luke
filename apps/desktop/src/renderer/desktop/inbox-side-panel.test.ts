@@ -156,10 +156,10 @@ function answer(request: Act): Promise<ActOutcome> {
 }
 
 /** The window's Inbox on the plan's item, its side panel the window's own hook held by the chosen item's plan, and every place it was asked to leave for. */
-async function inbox() {
+async function inbox({ pages }: { pages: readonly PageLine[] | undefined } = { pages: [FUNNEL] }) {
   const links: ReadLink[] = [];
   const tasks: string[] = [];
-  const left = { links, tasks };
+  const left = { links, tasks, rereads: 0 };
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -195,8 +195,10 @@ async function inbox() {
             onOpen: () => undefined,
             onClose: () => undefined,
             onChoose: setChosen,
-            pages: [FUNNEL],
-            onRereadPages: () => undefined,
+            pages,
+            onRereadPages: () => {
+              left.rereads += 1;
+            },
           },
           sidePanel,
           onShowTask: (taskId) => left.tasks.push(taskId),
@@ -256,4 +258,11 @@ test("a pull request, a page, and a file the item names open as tabs of the pane
     [{ kind: "page", planId: OTHER_PLAN, pageId: FUNNEL.id }],
   );
   assert.equal(panelTabs(container)?.length, 3, "nothing of another plan opens in the panel");
+});
+
+test("a page the item names whose plan's pages did not answer asks for them again, so its tab stands once they do", async () => {
+  const { container, left } = await inbox({ pages: undefined });
+  await pressChip(container, "Invite funnel");
+  assert.equal(left.rereads, 1);
+  assert.equal(left.links.length, 0, "the page is still the panel's to open");
 });
