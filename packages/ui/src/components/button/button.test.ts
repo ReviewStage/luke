@@ -3,7 +3,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { Button, IconButton } from "./button.js";
+import { BUTTON_SHAPE, BUTTON_VARIANT, Button, IconButton } from "./button.js";
 
 /**
  * button.test.ts -- a button that is not tabbable is left out of the tab
@@ -106,4 +106,37 @@ test("a button that keeps focus, pressed with the pointer, leaves the focus on t
   press(buttonNamed(container, "Connect"));
   expect(document.activeElement).toBe(buttonNamed(container, "Connect"));
   expect(pressed).toEqual(["Back", "Connect"]);
+});
+
+test("a toggle is announced pressed while it is on, in any look, and a plain button as no toggle at all", () => {
+  const container = draw(
+    createElement(
+      "div",
+      null,
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Mute microphone",
+        variant: BUTTON_VARIANT.DANGER,
+        shape: BUTTON_SHAPE.ROUND,
+        pressed: false,
+      }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Unmute speaker",
+        variant: BUTTON_VARIANT.DANGER,
+        shape: BUTTON_SHAPE.ROUND,
+        pressed: true,
+      }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "End call",
+        variant: BUTTON_VARIANT.INK,
+        shape: BUTTON_SHAPE.ROUND,
+      }),
+    ),
+  );
+
+  expect(buttonNamed(container, "Mute microphone").getAttribute("aria-pressed")).toBe("false");
+  expect(buttonNamed(container, "Unmute speaker").getAttribute("aria-pressed")).toBe("true");
+  expect(buttonNamed(container, "End call").hasAttribute("aria-pressed")).toBe(false);
 });

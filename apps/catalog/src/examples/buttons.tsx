@@ -1,12 +1,17 @@
 import {
+  BUTTON_SHAPE,
   BUTTON_VARIANT,
   Button,
+  CloseIcon,
   EllipsisIcon,
   GAP,
   IconButton,
   Inline,
+  MicrophoneIcon,
+  MicrophoneOffIcon,
   PlusIcon,
   SidebarIcon,
+  SpeakerIcon,
   Stack,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -19,7 +24,8 @@ import { CatalogSection } from "../section";
 /**
  * buttons.tsx -- every Button look at rest, with a glyph, unavailable,
  * unavailable but focusable, and busy; the IconButton's looks and toggle;
- * and a long label in a narrow column.
+ * the round shape a call's controls take, a danger toggle off and on; and a
+ * long label in a narrow column.
  */
 
 const STATES = [
@@ -67,6 +73,37 @@ function Buttons(): React.JSX.Element {
           <IconButton icon={<PlusIcon />} label="New plan" variant={BUTTON_VARIANT.OUTLINE} />
           <IconButton icon={<TrashIcon />} label="Delete" disabled />
           <IconButton icon={<EllipsisIcon />} label="Loading" busy busyLabel="Loading" />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="buttons-round" title="Round, as a call's controls">
+        <Inline>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            shape={BUTTON_SHAPE.ROUND}
+            icon={<MicrophoneIcon />}
+          >
+            Talk about this task
+          </Button>
+          <IconButton
+            icon={<SpeakerIcon />}
+            label="Mute speaker"
+            variant={BUTTON_VARIANT.DANGER}
+            shape={BUTTON_SHAPE.ROUND}
+            pressed={false}
+          />
+          <IconButton
+            icon={<MicrophoneOffIcon />}
+            label="Unmute microphone"
+            variant={BUTTON_VARIANT.DANGER}
+            shape={BUTTON_SHAPE.ROUND}
+            pressed
+          />
+          <IconButton
+            icon={<CloseIcon />}
+            label="End call"
+            variant={BUTTON_VARIANT.INK}
+            shape={BUTTON_SHAPE.ROUND}
+          />
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-narrow" title="Narrow column, long label">
