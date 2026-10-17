@@ -12,7 +12,16 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { CollapseIcon, EmptyState, ExpandIcon, IconButton, SidePanelIcon } from "@luke/ui";
+import {
+  CollapseIcon,
+  EmptyState,
+  ExpandIcon,
+  IconButton,
+  SidePanelIcon,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -887,7 +896,11 @@ function PanelTabs({
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
-      <p className="side-panel-no-tabs-line">No tabs open</p>
+      <div className="side-panel-no-tabs-line">
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          No tabs open
+        </Text>
+      </div>
       <MenuRowList
         rows={entries.map((entry) => entry.row)}
         onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
@@ -1527,15 +1540,12 @@ function FullScreenToggle({
   useAppCommand(APP_COMMAND.EXIT_FULL_SCREEN, fullScreen && !leaving ? onToggle : undefined);
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_FULL_SCREEN}>
-      <button
-        type="button"
-        className="icon-button side-panel-full-screen"
-        aria-label={label}
-        aria-pressed={fullScreen}
+      <IconButton
+        icon={fullScreen ? <CollapseIcon /> : <ExpandIcon />}
+        label={label}
+        pressed={fullScreen}
         onClick={onToggle}
-      >
-        {fullScreen ? <CollapseIcon /> : <ExpandIcon />}
-      </button>
+      />
     </Tooltip>
   );
 }
