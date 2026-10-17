@@ -2992,14 +2992,6 @@ button.pull-request-check:hover {
   padding: 0 16px 8px;
 }
 
-/* A to-do list a call's row opens onto is a record of one write, so the
-   working mark on its item in progress holds still, on the frame a capture
-   holds it on, while the call's own working mark on the row above runs. Only
-   the docked list, the one the agent is at, keeps the mark moving. */
-[data-todos] > .disclosure-body {
-  --loop-motion: paused;
-}
-
 /* The list opens upward, since the composer under it holds the card's foot
    down. Opening, the card's top edge rises from where it stood to where the
    open card puts it, and its line and the list under it rise with that edge
