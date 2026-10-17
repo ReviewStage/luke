@@ -21,13 +21,13 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxAttachment } from "../schemas/inbox-attachment.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import { task } from "../schemas/plan.js";
-import { taskPin } from "../schemas/plan-pin.js";
 import { conversations } from "../schemas/storage.js";
+import { task } from "../schemas/task.js";
+import { taskPin } from "../schemas/task-pin.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
-import { followPlanArchive } from "./chat-store.js";
+import { followPlanArchive, movePlanChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
@@ -889,7 +889,8 @@ const followingAutomations = SqlSchema.void({
 });
 
 /**
- * The plan's agents and inbox moved along with it to another workspace, so
+ * The plan's agents and inbox moved along with it to another workspace, its
+ * chat after them (`chat-store.ts`'s `movePlanChat`), so
  * no row of the plan's stays tied to the workspace it left, whose deletion
  * would otherwise take them with it.
  */
@@ -966,6 +967,7 @@ export function updateTask<E = never, R = never>(
         }
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId);
+          yield* movePlanChat(taskId, row.organizationId);
         }
         if (changes.archived !== undefined) yield* followPlanArchive(taskId, row.archivedAt);
         return Option.some(yield* taskOf(userId, row));

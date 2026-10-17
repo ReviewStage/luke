@@ -77,9 +77,7 @@ patchedDependencies:
   drizzle-orm@1.0.0-rc.4: patches/drizzle-orm@1.0.0-rc.4.patch
 
 # A dependency is keyed by its peers' names alone, not by the peers' own peer
-# graphs, so one `vitest` serves every workspace. `@vitest/browser-playwright`
-# (@luke/ui's browser tests) brings `vite` in as a peer, and `vite` takes
-# `sass` as an optional peer wherever `next` puts it in the tree; keyed in
-# full, that split `vitest` in two, and `@effect/vitest` read its collector
-# out of the other copy, as the old `@types/node` pin once did.
+# graphs, so one `vitest` serves every workspace. Keyed in full, a peer's own
+# optional peers can split `vitest` in two, and `@effect/vitest` then reads
+# its collector out of the other copy, as the old `@types/node` pin once did.
 dedupePeers: true

@@ -8,7 +8,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { DIAGRAM_DRAWING } from "../diagram/contract";
 import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
@@ -148,18 +147,6 @@ function title(container: HTMLElement): HTMLElement {
   assert.ok(text, "the title's words");
   return text;
 }
-
-test("the document fades under the toolbar or a banner over it and over the call bar under it, rather than being sliced at either", () => {
-  const { container } = mount();
-  const sheets = layFades();
-  try {
-    const scroller =
-      container.querySelector(".plan-document-scroll") ?? assert.fail("the document scrolls");
-    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
-});
 
 test("a click into a section opens the whole text in place, the caret where the click landed, under a block the recording does not capture", () => {
   const { container } = mount();

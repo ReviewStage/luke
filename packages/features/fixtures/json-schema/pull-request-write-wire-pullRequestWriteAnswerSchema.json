@@ -1,0 +1,54 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "done"
+          ]
+        }
+      },
+      "required": [
+        "outcome"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "sign-in-required"
+          ]
+        }
+      },
+      "required": [
+        "outcome"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "refused"
+          ]
+        },
+        "words": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "outcome",
+        "words"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

@@ -18,6 +18,13 @@ import {
   THEME,
 } from "@luke/settings";
 import {
+  DIFF_FONT,
+  DIFF_INDICATORS,
+  DIFF_LAYOUT,
+  DIFF_LINE_HEIGHT,
+  INLINE_DIFF,
+} from "@luke/settings/diff-view";
+import {
   type AppSettings,
   appSettingsView,
   type SettingsResetScope,
@@ -208,8 +215,22 @@ const SAMPLE_VALUE = {
   // On is the default, so Off is the choice that has to survive a reopen.
   agentNotifications: false,
   macCommands: false,
-  // The deployment's own avatar is the default, so a stock one is the choice that has to survive a reopen.
+  // Atlas is the default, so another is the choice that has to survive a reopen.
   videoAvatar: VIDEO_AVATAR.CELIA,
+  // Each diff setting away from its default, the look a review tool's reader picked.
+  lineNumbers: false,
+  wordWrap: false,
+  diffLayout: DIFF_LAYOUT.SPLIT,
+  diffIndicators: DIFF_INDICATORS.CLASSIC,
+  inlineDiff: INLINE_DIFF.CHAR,
+  diffBackgrounds: false,
+  diffDarkTheme: "dracula",
+  diffLightTheme: "one-light",
+  diffFont: DIFF_FONT.MENLO,
+  diffFontSize: "13",
+  diffLineHeight: DIFF_LINE_HEIGHT.SPACIOUS,
+  diffLigatures: true,
+  diffMinimizeComments: true,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
@@ -256,6 +277,20 @@ test("every setting starts at its default, survives a reopen, and can be cleared
       );
     }
   }
+});
+
+// A call reads no choice as Atlas, which compose-live's "a call opens with the avatar asked for" holds.
+test("the Default avatar an earlier build stored reads as no choice", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await storeIn(directory).set("videoAvatar", VIDEO_AVATAR.CELIA);
+  const file = path.join(directory, SETTINGS_FILE_NAME);
+  const stored = await readSettingsFile(directory);
+  assert.ok(stored.includes(`"${VIDEO_AVATAR.CELIA}"`));
+  await fs.writeFile(file, stored.replace(`"${VIDEO_AVATAR.CELIA}"`, '"default"'));
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.get("videoAvatar"), undefined);
+  assert.equal(appSettingsView(await reopened.snapshot()).videoAvatar, undefined);
 });
 
 test("a stored account and a chosen preference survive each other's writes", async (t) => {

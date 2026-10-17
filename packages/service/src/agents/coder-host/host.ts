@@ -56,6 +56,7 @@ import {
   runListAgents,
   runListTasks,
   runMessageAgent,
+  runReadAgent,
   runReadPage,
   runStartAgent,
   runUnarchiveAgent,
@@ -370,6 +371,7 @@ export type InboxCall =
 export interface AgentToolCall {
   readonly tool:
     | typeof CODER_TOOL.LIST_AGENTS
+    | typeof CODER_TOOL.READ_AGENT
     | typeof CODER_TOOL.MESSAGE_AGENT
     | typeof CODER_TOOL.START_AGENT
     | typeof CODER_TOOL.ARCHIVE_AGENT
@@ -383,6 +385,7 @@ export interface AgentToolCall {
 /** Each of the agent tools a coding agent is offered, run under the call it makes. */
 const AGENT_TOOL_RUN = {
   [CODER_TOOL.LIST_AGENTS]: runListAgents,
+  [CODER_TOOL.READ_AGENT]: runReadAgent,
   [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
   [CODER_TOOL.START_AGENT]: runStartAgent,
   [CODER_TOOL.ARCHIVE_AGENT]: runArchiveAgent,

@@ -7,7 +7,9 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
-  codingAgentOverviewAnswerSchema,
+  codingAgentOverviewChecksAnswerSchema,
+  codingAgentOverviewConversationAnswerSchema,
+  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
@@ -36,6 +38,10 @@ import {
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
+import {
+  pullRequestActionRequestSchema,
+  pullRequestWriteAnswerSchema,
+} from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 import { planRevisionSeqSchema } from "./task-wire.js";
 
@@ -337,13 +343,50 @@ export const codingAgentChangesAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentChangesAnswerView = typeof codingAgentChangesAnswerViewSchema.Type;
 
-/** One agent's pull request as its Pull request tab draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
-export const codingAgentOverviewAnswerViewSchema = EffectSchema.Union([
-  codingAgentOverviewAnswerSchema,
+/** One agent's pull request itself as its overview draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
+export const codingAgentOverviewPullRequestAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewPullRequestAnswerSchema,
   failed,
 ]);
 
-export type CodingAgentOverviewAnswerView = typeof codingAgentOverviewAnswerViewSchema.Type;
+export type CodingAgentOverviewPullRequestAnswerView =
+  typeof codingAgentOverviewPullRequestAnswerViewSchema.Type;
+
+/** The checks on one agent's pull request's head, as the window hears them: the checks, why there are none yet, or why there is no answer. */
+export const codingAgentOverviewChecksAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewChecksAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOverviewChecksAnswerView =
+  typeof codingAgentOverviewChecksAnswerViewSchema.Type;
+
+/** One agent's pull request's conversation, as the window hears it: the conversation, why there is none yet, or why there is no answer. */
+export const codingAgentOverviewConversationAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewConversationAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOverviewConversationAnswerView =
+  typeof codingAgentOverviewConversationAnswerViewSchema.Type;
+
+/** One change to an agent's pull request, as the window asks it made: the agent, and the change (`pull-request-write-wire.ts`). */
+export const codingAgentPullRequestActionParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  request: pullRequestActionRequestSchema,
+});
+
+export type CodingAgentPullRequestActionParams =
+  typeof codingAgentPullRequestActionParamsSchema.Type;
+
+/** How GitHub took a change to an agent's pull request, as the window hears it: made, the member to sign in with GitHub again, GitHub's refusal in its words, or why there is no answer. */
+export const codingAgentPullRequestWriteAnswerViewSchema = EffectSchema.Union([
+  pullRequestWriteAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentPullRequestWriteAnswerView =
+  typeof codingAgentPullRequestWriteAnswerViewSchema.Type;
 
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;

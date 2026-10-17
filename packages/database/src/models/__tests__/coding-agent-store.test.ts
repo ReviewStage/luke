@@ -23,8 +23,8 @@ import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { task } from "../../schemas/plan.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
+import { task } from "../../schemas/task.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace } from "../../testing/index.js";
 import {

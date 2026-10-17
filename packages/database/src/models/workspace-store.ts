@@ -25,7 +25,7 @@ import { member, organization, user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import { task } from "../schemas/plan.js";
+import { task } from "../schemas/task.js";
 import { workspaceIntegrationConnection } from "../schemas/workspace-integration.js";
 import {
   PERSONAL_WORKSPACE_METADATA,

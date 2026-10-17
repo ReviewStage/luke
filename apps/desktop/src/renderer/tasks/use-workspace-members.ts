@@ -4,15 +4,14 @@ import { useEffect, useState } from "react";
 import { useAct } from "../act";
 
 /**
- * use-workspace-members.ts -- a workspace's members as a place that draws them holds them: the plan's crumb, and a plan's version history.
+ * use-workspace-members.ts -- a workspace's members as a place that draws them holds them: the plan's member directory, the command palette, and a plan's version history.
  *
  * The members are read once per workspace the place stands in, and again
  * whenever the workspace's own count changes, as a member joining or leaving
  * changes it. Until they answer, or if they never do, the place has none, and
  * draws what it can without them: a count alone, or a teammate's letter where
  * their picture would stand. A read taken before the count last changed is
- * no longer handed on, so nobody who joined since is taken for gone. Each place reads for itself; a version history
- * and the crumb never stand at once, since the history takes the window.
+ * no longer handed on, so nobody who joined since is taken for gone. Each place reads for itself.
  */
 
 /** A workspace's members, read again whenever its count changes; none while unread, refused, or for no workspace. */

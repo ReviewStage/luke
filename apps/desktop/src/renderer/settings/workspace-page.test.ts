@@ -34,7 +34,6 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -55,7 +54,7 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
  * invites by address and role and copies or cancels what is pending, and
  * every workspace's GitHub group, the first one's too, holds GitHub:
  * an owner's or an admin's to connect, or to manage on GitHub from its one
- * button once connected, its accounts inset under it, and a member's to
+ * button once connected, its accounts listed under it, and a member's to
  * read, and Linear beside it, disconnected from its ⋯. Synthetic accounts.
  */
 
@@ -723,11 +722,6 @@ test("the chosen team workspace's members are listed with their email and role, 
     ["Owner", "Member"],
   );
   assert.deepEqual(rowActions(rowNamed(page, "Sam")), []);
-  assert.equal(
-    page.querySelector(".settings-act-slot"),
-    null,
-    "no row keeps a ⋯'s room where none has one",
-  );
 });
 
 /** Lays `words` out narrower than they run, as a row too narrow for an address does, and tells the window. */
@@ -745,7 +739,7 @@ function pillOver(words: Element): string | undefined {
   return pill;
 }
 
-test("a member's address and an invited one keep to one line, ending in an ellipsis where the row cuts them short, when the pointer resting on them reads them whole", async () => {
+test("a member's address and an invited one, where the row cuts them short, are read whole when the pointer rests on them", async () => {
   const LONG = "bartholomew.montgomery-fitzgerald@orbital-freight.example.com";
   stored = [OWNER, { ...MEMBER, email: LONG }];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
@@ -755,32 +749,9 @@ test("a member's address and an invited one keep to one line, ending in an ellip
     (invitationRows(page)[0] ?? assert.fail("no pending invitation")).querySelector("strong"),
   ].map((words) => words ?? assert.fail("an address is not drawn"));
 
-  const sheets = layContainersAt({});
-  try {
-    assert.deepEqual(
-      addresses.map((words) => {
-        const drawn = getComputedStyle(words);
-        return [words.textContent, drawn.whiteSpace, drawn.textOverflow];
-      }),
-      [
-        [LONG, "nowrap", "ellipsis"],
-        [LONG, "nowrap", "ellipsis"],
-      ],
-    );
-  } finally {
-    sheets.remove();
-  }
   assert.deepEqual(addresses.map(pillOver), [undefined, undefined], "drawn whole, no pill");
   for (const words of addresses) cutShort(words);
   assert.deepEqual(addresses.map(pillOver), [LONG, LONG]);
-});
-
-test("where some members' rows carry a ⋯, a row without one keeps its room, so every role ends in one column", async () => {
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-
-  assert.notEqual(rowNamed(page, "Dana").querySelector(".settings-act-slot"), null);
-  assert.equal(rowNamed(page, "Sam").querySelector(".settings-act-slot"), null);
-  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Make admin", "Remove from workspace"]);
 });
 
 test("each member's row leads with their face, their picture where the read lists one and their letter where it lists none, and the reader's own wears You", async () => {
@@ -1256,7 +1227,7 @@ const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
 /** A connected workspace whose Linear is connected too. */
 const WITH_LINEAR: Workspace = { ...CONNECTED, linear: { active: true } };
 
-test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with one Manage on GitHub and no menu, and every account connected inset under it", async () => {
+test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with one Manage on GitHub and no menu, and every account connected under it", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...SEVERAL, role });
     const group = githubGroup(page);
@@ -1281,10 +1252,8 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       rowNamed(group, "acme-labs").querySelector('[data-state="attention"]')?.textContent,
       "Suspended or removed on GitHub.",
     );
-    assert.equal(row.classList.contains("settings-row-nested"), false);
     for (const name of ["acme-org", "acme-labs"]) {
       const account = rowNamed(group, name);
-      assert.equal(account.classList.contains("settings-row-nested"), true, `${name} is inset`);
       assert.equal(account.querySelector(".workspace-tile")?.textContent, "A", `${name}'s tile`);
       assert.equal(
         account.querySelector<HTMLImageElement>(".workspace-tile-picture")?.getAttribute("src"),

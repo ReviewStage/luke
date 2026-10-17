@@ -18,6 +18,7 @@ import {
 } from "../renderer/tasks/use-side-panel";
 import {
   AUTOMATIONS_PAGE,
+  ISSUES_PAGE,
   type TasksControl,
   type VersionHistoryControl,
 } from "../renderer/tasks/use-tasks-tab";
@@ -76,6 +77,7 @@ export function codingAgentsControl(
 ): CodingAgentsControl {
   return {
     me: undefined,
+    chatOn: true,
     agents: [],
     archived: [],
     agentIds: [],
@@ -119,7 +121,11 @@ export function codingAgentsControl(
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readOverview: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewPullRequest: () =>
+      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewChecks: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewConversation: () =>
+      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     changesPeople: new Map(),
     readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -288,6 +294,12 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onClose: ignore,
     },
+    issuesView: {
+      open: false,
+      place: { kind: ISSUES_PAGE.LIST },
+      onOpen: ignore,
+      onClose: ignore,
+    },
     callTaskId: undefined,
     chatView: {
       open: false,
@@ -296,6 +308,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onClose: ignore,
       onChoose: ignore,
+      onShow: ignore,
       onPost: () => Promise.resolve(undefined),
       onAnswer: () => Promise.resolve(undefined),
     },

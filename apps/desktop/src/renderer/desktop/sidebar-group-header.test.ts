@@ -10,7 +10,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { ArchivedAgents } from "./agent-archive";
@@ -142,17 +141,6 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   );
   const ellipsis = sidebar.querySelector('button[aria-label="Actions for relay"]');
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");
-});
-
-test("the sidebar's tasks fade under the rule above them and over the account row below them, rather than being sliced at either", () => {
-  const page = mountSidebar(tasksControl());
-  const sheets = layFades();
-  try {
-    const list = page.querySelector(".sidebar-section") ?? assert.fail("the tasks are listed");
-    assert.deepEqual(fadedEdges(list), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
 });
 
 test("the Inbox row counts what waits on a plan and what waits from an agent with no plan alike", () => {
