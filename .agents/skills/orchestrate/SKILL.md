@@ -101,8 +101,9 @@ Every brief must contain:
    never restacks.
    When the orchestrator says a restack is pending, it pushes or discards any
    work in flight, stops pushing, and replies "holding". When told the
-   restack is done, it runs `git fetch` and `git reset --hard
-   origin/<branch>` before touching the branch again.
+   restack is done, it runs `git fetch origin <branch>` and `git reset
+   --hard FETCH_HEAD` before touching the branch again (its clone may track
+   no other branch than the one it started on).
 3. **Babysit and merge**: watch CI and review comments on the PR, fix what
    fails, and merge as root `AGENTS.md`'s "Merging" says, taking
    merge-on-green at kickoff as the go or holding for an explicit go from the
@@ -153,33 +154,36 @@ If a worker is going the wrong way (out of scope, or against an answer you
 gave it) and a message does not turn it, stop it as the table says, then
 message it the correction; the message starts a new turn on its kept branch.
 
-In Luke, `list_agents` can still show a worker as `running` after its
-session has ended for good: `message_agent` then refuses it with "session has
-ended for good", and `archive_agent` refuses it as still working. Treat that
-refusal as a dead worker. Post an inbox to-do (`post_to_inbox` with a `task`
-response) naming the worker's mention and PR and asking the user to Continue
-it in the app, then wait for it. Never start a replacement worker from
-scratch.
+In Luke, a worker that reads `running` long after its last activity may be
+dead. Send it a one-line status message. If `message_agent` refuses it with
+"session has ended for good", the worker is dead, whether `list_agents` then
+reads it `failed` or still `running`. Post an inbox to-do (`post_to_inbox`
+with a `task` response) naming the worker's mention and PR and asking the
+user to Continue it in the app, then wait for it. Never start a replacement
+worker from scratch. Continue starts a new agent, named after the dead one
+with "(continued)", on its transcript and its work: find it with
+`list_agents`, message it the PR's url and branch to keep pushing to, and
+your agent id to report to, and track it in the dead worker's place. It
+takes over the same PR and opens none of its own.
 
 ## Step 3: Restack
 
 Run one restack at a time per stack. Tell every worker in the stack, and in
 each branch-off stack based on it, that a restack is pending, and wait for
 each to reply "holding"; stop one that does not hold, as the table says. Then
-start a short-lived worker on the stack's top branch (the Step 1 start, named
-"Restack <stack title>"; in Luke, `branch` is the top branch, and its checkout
-is a single-branch clone, possibly shallow, that holds no other branch of the
-stack, so its brief has it first run `git remote set-branches origin '*'`,
-then `git fetch origin`, with `--unshallow` when `git rev-parse
---is-shallow-repository` says `true`; its instructions forbid pushing the
-branch it was started on, so the brief says plainly that this restack force
-pushes every branch of the stack, the top one included) whose brief names the
+start a short-lived restack worker (the Step 1 start, named "Restack <stack
+title>"; in Conductor on the stack's top branch; in Luke without `branch`, on
+`main`, since a Luke agent never pushes the branch it was started on, so its
+checkout is a single-branch clone of `main`, possibly shallow, and its brief
+has it first run `git remote set-branches origin '*'`, then `git fetch
+origin`, with `--unshallow` when `git rev-parse --is-shallow-repository` says
+`true`) whose brief names the
 trunk (`main`, or the parent PR's branch for a branch-off stack whose parent
 has not merged), every unmerged branch bottom to top, and, after a merge, the
 PR to retarget with `gh pr edit <number> --base main`. It first points a
 local branch at each one's remote tip, bottom to top (`git checkout -B
-<branch> origin/<branch>`, which also resets the top branch the worker starts
-on), then adopts them with `gh stack init --base <trunk> <branch> ...` and
+<branch> origin/<branch>`, which in Conductor also resets the top branch the
+worker starts on), then adopts them with `gh stack init --base <trunk> <branch> ...` and
 restacks them in one pass: `gh stack sync` (fetch, cascading rebase, atomic
 push, and relink) when nothing conflicts. When `gh stack sync` reports a
 conflict, it restores every branch; the worker then runs `gh stack rebase`,
@@ -210,7 +214,8 @@ issue, update the issue with the merged PRs.
 
 - Never do the PR's implementation work yourself.
 - Point the user at a worker or PR with a deep link or mention, not an id.
-- One PR per worker. Do not reuse a worker for a second PR.
+- One PR per worker. Do not reuse a worker for a second PR; a continuation
+  of a dead worker takes over its PR.
 - A PR that builds on another gets its worker only after that PR is open.
 - Workers never restack; a restack runs only in a restack worker, while
   every affected worker holds.
