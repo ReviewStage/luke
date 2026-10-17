@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { type Duration, Effect, Schedule } from "effect";
+import type { LiveStatement } from "@luke/database/core/live-statement";
+import { Duration, Effect, Option } from "effect";
+import { LiveWake, UNWATCHED } from "../live/live-wake.js";
 
 /**
  * held-read.ts -- a read the desktop holds open while nothing it reads changed since its cursor: the cursor, and the hold.
@@ -12,7 +14,17 @@ import { type Duration, Effect, Schedule } from "effect";
  * unchanged and the reader asks again. The Inbox and a plan's comments are
  * read this way, so a window hears a teammate's or an agent's change the
  * moment it lands without asking on a clock of its own.
+ *
+ * Where the deployment runs Neon Realtime (`live/live-wake.ts`), a hold
+ * watches statements covering the rows its looks read, and looks again as
+ * they change rather than on its poll, with a look every `LIVE_SAFETY_POLL`
+ * beside, so a change the watch missed is heard late rather than never; a
+ * watch that breaks hands the hold back to its poll. Any wait of the
+ * service's on a row is held the same way (`lookedUntil`).
  */
+
+/** How often a watched wait looks though nothing told it to: what a change the watch missed waits at most. */
+const LIVE_SAFETY_POLL = Duration.seconds(5);
 
 /** How many characters of the digest a cursor carries: far more than any two readings of one plan's rows could share by chance. */
 const CURSOR_CHARS = 32;
@@ -40,6 +52,33 @@ export function cursorOf(stamps: readonly CursorStamp[]): string {
 }
 
 /**
+ * Looks until a look finds something, or the hold ends: between looks it
+ * waits for the next change of the `live` statements where Realtime
+ * watches them, and its `poll` where nothing does. None past the hold.
+ */
+export function lookedUntil<A, E, R>(
+  look: Effect.Effect<Option.Option<A>, E, R>,
+  poll: Duration.Input,
+  hold: Duration.Input,
+  live: readonly LiveStatement[] = [],
+): Effect.Effect<Option.Option<A>, E, R> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const wake = yield* LiveWake;
+      const watch = live.length === 0 ? UNWATCHED : yield* wake.watch(live);
+      while (true) {
+        const found = yield* look;
+        if (Option.isSome(found)) return found;
+        const watched = yield* watch.live;
+        yield* watched
+          ? Effect.raceFirst(watch.changed, Effect.sleep(LIVE_SAFETY_POLL))
+          : Effect.sleep(poll);
+      }
+    }),
+  ).pipe(Effect.timeoutOption(hold), Effect.map(Option.flatten));
+}
+
+/**
  * Waits until the stamps move past the reader's cursor, or the hold ends:
  * each look reads where the rows stand and none of their words, and the
  * caller reads them whole once this returns.
@@ -49,11 +88,10 @@ export function heldUntilMoved<E, R>(
   after: string,
   poll: Duration.Duration,
   hold: Duration.Duration,
+  live: readonly LiveStatement[] = [],
 ): Effect.Effect<void, E, R> {
-  const moved = Effect.map(stamps, (standing) => cursorOf(standing) !== after);
-  return moved.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(poll), until: (changed) => changed }),
-    Effect.timeoutOption(hold),
-    Effect.asVoid,
+  const moved = Effect.map(stamps, (standing) =>
+    cursorOf(standing) === after ? Option.none() : Option.some(true),
   );
+  return Effect.asVoid(lookedUntil(moved, poll, hold, live));
 }

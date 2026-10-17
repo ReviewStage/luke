@@ -16,6 +16,7 @@ import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
 } from "./integrations/integration-connect.js";
+import { liveWakeFromEnvironment } from "./live/live-wake.js";
 import { liveSealingFromEnvironment } from "./live/realtime.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
 
@@ -61,7 +62,10 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
  * `LiveSealing` is the one place Neon Realtime's address and secret are read,
  * so a live read is sealed under the same secret on every route
  * (`live/realtime.ts`); without both it stands as none, and every live read
- * answers unavailable.
+ * answers unavailable. `LiveWake` is the same Realtime seen from the service's
+ * side: one socket per instance, which every held read and every wait on a
+ * row watches its rows over rather than looking on a clock
+ * (`live/live-wake.ts`); without Realtime each looks on its own poll.
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
@@ -83,6 +87,7 @@ export const webServices = Layer.mergeAll(
   workspaceLinearConnectFromEnvironment,
   webLogger,
   liveSealingFromEnvironment,
+  liveWakeFromEnvironment,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
 ).pipe(Layer.provide(webConfigProvider));
 

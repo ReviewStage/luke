@@ -5,10 +5,11 @@ import {
   type DrawingElement,
   drawingElementsSchema,
 } from "@luke/features/board-wire";
-import { eq, sql } from "drizzle-orm";
+import { eq, isNotNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
 import { task, taskBoard } from "../schemas/plan.js";
 import { TaskArchived, type TaskStoreEffect, type TaskStoreFailure } from "./task-store.js";
 import { reachableTask } from "./workspace-store.js";
@@ -133,6 +134,32 @@ const findBoardImage = SqlSchema.findOneOption({
         .limit(1),
     ),
 });
+
+/**
+ * Where the plan's board stands for `readBoardImage`, written for Neon
+ * Realtime to wake a look on: the drawing numbers and whether an image is
+ * kept, never the image itself. None where it names a value Realtime cannot
+ * carry.
+ */
+export function boardImageLiveStatement(
+  userId: string,
+  taskId: string,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          taskId: task.id,
+          appliedDrawing: taskBoard.appliedDrawing,
+          drawingNumber: taskBoard.drawingNumber,
+          imaged: isNotNull(taskBoard.image),
+        }),
+      )
+      .from(task)
+      .leftJoin(taskBoard, eq(taskBoard.taskId, task.id))
+      .where(reachableTask(userId, taskId)),
+  );
+}
 
 /** Luke's drawing written whole, as the next number. */
 function upsertDrawing(drawing: readonly DrawingElement[]) {

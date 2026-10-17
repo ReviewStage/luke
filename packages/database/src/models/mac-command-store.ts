@@ -6,7 +6,8 @@ import {
 import { and, asc, eq, gte, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
@@ -141,6 +142,23 @@ const findResult = SqlSchema.findOneOption({
         ),
     ),
 });
+
+/**
+ * Whether the account's command is settled, written for Neon Realtime to
+ * wake the call waiting on its result: its id and whether a result is kept,
+ * never the result itself. None where it names a value Realtime cannot carry.
+ */
+export function macCommandSettledLiveStatement(
+  userId: string,
+  id: string,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(liveSelection({ id: macCommand.id, settled: isNotNull(macCommand.result) }))
+      .from(macCommand)
+      .where(and(eq(macCommand.id, id), eq(macCommand.userId, userId))),
+  );
+}
 
 const deleteCommand = SqlSchema.void({
   Request: CommandKeySchema,
