@@ -42,6 +42,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -210,31 +211,28 @@ beforeEach(() => {
       return { update: () => undefined, unmount: () => undefined };
     },
   };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
-        if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
-        if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-          changes.push([request.payload.agentId, request.payload.request]);
-          const answer = changeAnswer;
-          return (changeHeld ?? Promise.resolve()).then(() => ({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: answer,
-          }));
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
-          images.push(request.payload.src);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
-        }
-        return Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-        );
-      },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
+      if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
+      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+        changes.push([request.payload.agentId, request.payload.request]);
+        const answer = changeAnswer;
+        return (changeHeld ?? Promise.resolve()).then(() => ({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: answer,
+        }));
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
+        images.push(request.payload.src);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
+      }
+      return Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
+          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+      );
     },
   });
 });

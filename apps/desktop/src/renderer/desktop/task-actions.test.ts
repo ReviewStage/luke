@@ -10,6 +10,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
@@ -445,18 +446,15 @@ test("no sidebar plan wears the attention mark where its own workspace reaches i
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-        }
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+      }
+      copied.push(request.payload.words);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
+    recordSurfaceEvent: () => undefined,
   });
   return copied;
 }
@@ -577,23 +575,20 @@ test("a task's card says you of the reader's own task outside a member directory
 
 /** The bridge answering the members read with `members`, each a member of the workspace. */
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: members.map((member) => ({
-                  ...member,
-                  email: `${member.userId}@example.com`,
-                  role: WORKSPACE_ROLE.MEMBER,
-                })),
-              }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
-        ),
-    },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: members.map((member) => ({
+                ...member,
+                email: `${member.userId}@example.com`,
+                role: WORKSPACE_ROLE.MEMBER,
+              })),
+            }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
+      ),
   });
 }

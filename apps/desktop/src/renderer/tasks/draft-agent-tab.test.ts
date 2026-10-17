@@ -20,6 +20,7 @@ import type { SettingsLink } from "@luke/settings/settings-views";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   installEditorBundle,
@@ -81,45 +82,42 @@ beforeEach(() => {
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: {
-              integrations: {
-                ...UNAVAILABLE,
-                [INTEGRATION_PROVIDER.SLACK]: slack,
-                [INTEGRATION_PROVIDER.GITHUB]: github,
-              },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            integrations: {
+              ...UNAVAILABLE,
+              [INTEGRATION_PROVIDER.SLACK]: slack,
+              [INTEGRATION_PROVIDER.GITHUB]: github,
             },
-          });
+          },
+        });
+      }
+      // A Connect stands Slack pending at the service, and a Cancel disconnects it.
+      if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
+        if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
+          slack = INTEGRATION_STATUS.PENDING;
         }
-        // A Connect stands Slack pending at the service, and a Cancel disconnects it.
-        if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
-          if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
-            slack = INTEGRATION_STATUS.PENDING;
-          }
-          return Promise.resolve(
-            refuseConnect
-              ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
-              : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
-          );
-        }
-        if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
-          slack = INTEGRATION_STATUS.DISCONNECTED;
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { status: INTEGRATION_STATUS.DISCONNECTED },
-          });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      },
-      recordSurfaceEvent: () => undefined,
+        return Promise.resolve(
+          refuseConnect
+            ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
+            : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
+        );
+      }
+      if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
+        slack = INTEGRATION_STATUS.DISCONNECTED;
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { status: INTEGRATION_STATUS.DISCONNECTED },
+        });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
+    recordSurfaceEvent: () => undefined,
   });
 });
 
