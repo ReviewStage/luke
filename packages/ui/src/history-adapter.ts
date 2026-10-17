@@ -1,19 +1,18 @@
 /**
  * history-adapter.ts -- a window's back-and-forward history behind one interface, so the desktop keeps it in memory and a browser can keep it in its URL.
  *
- * Each entry is the place's Luke link where a link names it (`linkOf` in
- * `@luke/features/luke-link`), and a state the link cannot carry, the way a
- * browser's `history.state` sits beside its URL: the link is what a browser
- * would show and share, and the state is what the window reopens from. The
- * window decides what a visit is and which entries it can still go to; the
- * adapter only holds the entries and where the window stands among them.
+ * Each entry is an address, the place's Luke link where the window writes
+ * one, and a state the window reopens the place from, the way a browser's
+ * `history.state` sits beside its URL. The window decides what a visit is
+ * and which entries it can still go to; the adapter only holds the entries
+ * and where the window stands among them.
  *
  * The desktop's window keeps its history in memory for as long as it is
- * open, the way a browser tab does, and holds no more than `limit` entries,
- * dropping the oldest first.
+ * open, the way a browser tab does, writes no address, and holds no more
+ * than `limit` entries, dropping the oldest first.
  */
 
-/** One place the window has stood on: its link, where one names it, and what the link cannot say. */
+/** One place the window has stood on: its link, where the window writes one, and the state it reopens from. */
 export interface HistoryEntry<State> {
   readonly address: string | undefined;
   readonly state: State;

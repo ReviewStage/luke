@@ -34,8 +34,7 @@ afterEach(() => {
 
 /** The window's history over the Tasks tab as `plans` stands, restood by the returned setter, kept in a memory history of its own as a window's root installs one. */
 function mount(initial: TasksControl) {
-  const kept: Parameters<typeof installWindowHistory>[0] = memoryHistory();
-  installWindowHistory(kept);
+  installWindowHistory(memoryHistory());
   let history: WindowHistory | undefined;
   let restand: ((tasks: TasksControl) => void) | undefined;
   function Probe() {
@@ -61,8 +60,6 @@ function mount(initial: TasksControl) {
       return history;
     },
     stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
-    /** The Luke link of the place the history stands on, where one names it. */
-    address: () => kept.current().entries[kept.current().at]?.address,
   };
 }
 
@@ -376,39 +373,4 @@ test("an issue's page is a step of its own beside the Issues list, so Back from 
   act(() => window.history().onForward());
 
   assert.deepEqual(opened, [{ kind: ISSUES_PAGE.LIST }, issue]);
-});
-
-test("each place is held as the Luke link it is shared by under the workspace listed, and the home page, which no link names, as none", () => {
-  const acme = {
-    id: "workspace-acme",
-    name: "Acme",
-    slug: "acme",
-    role: WORKSPACE_ROLE.MEMBER,
-    github: null,
-  };
-  const window = mount(
-    tasksControl({
-      workspace: acme,
-      page: TASKS_PAGE.DOCUMENT,
-      activeTaskId: TASK_ID,
-      boundFor: TASK_ID,
-    }),
-  );
-  assert.equal(window.address(), `https://tryluke.dev/acme/plan/${TASK_ID}`);
-
-  window.stand(tasksControl({ workspace: acme }));
-  assert.equal(window.address(), undefined);
-
-  window.stand(
-    tasksControl({
-      workspace: acme,
-      automationsView: {
-        open: true,
-        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID, runId: "run-1" },
-        onOpen: () => undefined,
-        onClose: () => undefined,
-      },
-    }),
-  );
-  assert.equal(window.address(), `https://tryluke.dev/acme/automation/${AUTOMATION_ID}/run/run-1`);
 });
