@@ -157,7 +157,7 @@ async function drawnTab(input: {
   archived?: readonly CodingAgentSummary[];
   continues?: boolean;
   onUnarchive?: () => void;
-  source?: Partial<CodingAgentSummary> & { continuedBy?: readonly unknown[] };
+  source?: Partial<CodingAgentSummary>;
   onArchive?: (agentId: string, archived: boolean) => void;
   onStop?: (agentId: string) => void;
   answer?: () => Promise<Failure | undefined>;
@@ -303,8 +303,8 @@ test("an agent's continuations are those its summary names, forks left out, then
   const named = {
     ...agentOf(SOURCE),
     continuedBy: [
-      { agentId: LATER, forked: false },
-      { agentId: FORK, forked: true, messageId: TURN },
+      { agentId: LATER, title: null, forked: false },
+      { agentId: FORK, title: "A fork", forked: true, messageId: TURN },
     ],
   };
   const listed = [agentOf(NEXT, { from, createdAt: 3 }), agentOf(LATER, { from, createdAt: 2 })];

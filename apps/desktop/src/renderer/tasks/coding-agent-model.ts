@@ -415,19 +415,6 @@ export function continuationsOf(
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-/** One agent started from another, as the service names it on the source's summary (`continuedBy`): a fork names the message it was cut at. */
-interface ContinuedByEntry {
-  readonly agentId: string;
-  readonly title?: string | null | undefined;
-  readonly forked: boolean;
-  readonly messageId?: string | undefined;
-}
-
-/** A summary that may name the agents started from it (`continuedBy`), which a service older than it leaves out. */
-type ContinuedSummary = CodingAgentSummary & {
-  readonly continuedBy?: readonly ContinuedByEntry[] | undefined;
-};
-
 /**
  * The ids of the agents that continue `agent`, oldest first: those the
  * service names on its summary (`continuedBy`), so a page that lists the
@@ -437,7 +424,7 @@ type ContinuedSummary = CodingAgentSummary & {
  * list alone, and that a fork is never a continuation.
  */
 export function continuedByIds(
-  agent: ContinuedSummary,
+  agent: CodingAgentSummary,
   agents: readonly CodingAgentSummary[] | undefined,
   archived: readonly CodingAgentSummary[] | undefined,
 ): readonly string[] {
@@ -449,9 +436,9 @@ export function continuedByIds(
 }
 
 /** The titles the summary gives the agents that continue it, by id, for a page whose list does not hold them; none for one with no title yet. */
-export function continuedByTitles(agent: ContinuedSummary): ReadonlyMap<string, string> {
+export function continuedByTitles(agent: CodingAgentSummary): ReadonlyMap<string, string> {
   const titled = (agent.continuedBy ?? []).flatMap((each) =>
-    each.title === undefined || each.title === null ? [] : [[each.agentId, each.title] as const],
+    each.title === null ? [] : [[each.agentId, each.title] as const],
   );
   return new Map(titled);
 }
