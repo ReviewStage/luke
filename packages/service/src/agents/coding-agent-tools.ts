@@ -53,7 +53,7 @@ import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import { startCodingAgent } from "./coder-host/start.js";
-import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
+import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
@@ -622,7 +622,7 @@ const standingsOf = (agents: readonly CodingAgent[]) =>
       const status = codingAgentStatusOf(turn, {
         createdAt: agent.createdAt,
         now,
-        lineAwaits: awaiting.has(agent.conversationId),
+        awaitingLineAt: awaiting.get(agent.conversationId),
       });
       // Why the newest turn failed is said only while the agent reads as failed: a line awaiting the next turn makes it running again.
       return {
@@ -1091,10 +1091,12 @@ const idleForArchive = (agent: CodingAgent) =>
   Effect.gen(function* () {
     const turns = yield* latestTurnsOfReached([agent.conversationId]);
     const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);
-    if (awaiting.has(agent.conversationId)) return false;
-    const turn = turns.get(agent.conversationId);
-    if (turn !== undefined) return !RUNNING_TURN_STATUSES.has(turn.status);
     const now = yield* Clock.currentTimeMillis;
+    const turn = turns.get(agent.conversationId);
+    if (lineAwaitsTurn(turn, { now, awaitingLineAt: awaiting.get(agent.conversationId) })) {
+      return false;
+    }
+    if (turn !== undefined) return !RUNNING_TURN_STATUSES.has(turn.status);
     return (
       codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) !==
       CODING_AGENT_STATUS.STARTING
