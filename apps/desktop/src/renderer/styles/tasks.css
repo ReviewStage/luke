@@ -1730,6 +1730,30 @@ button.file-ref:hover .file-ref-path {
   font-size: 12.5px;
 }
 
+/* A part of the overview still being read: its blocks in the type its
+   words will stand in, at the content inset; under the title, the branches'
+   and the people's two lines; in the checks, rows as boxed as theirs will
+   be. A part whose read failed says so in the same place, with its Retry. */
+.pull-request-skeleton,
+.pull-request-failure {
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-skeleton > .skeleton + .skeleton {
+  margin-top: var(--space-6);
+}
+
+.pull-request-head-skeleton,
+.pull-request-title + .pull-request-failure {
+  margin-top: var(--space-8);
+}
+
+.pull-request-checks-skeleton {
+  padding: var(--space-8) var(--boxed-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+}
+
 /* The checks, one boxed list, each row opening the check's page. */
 .pull-request-checks {
   margin: 0;
@@ -1947,22 +1971,7 @@ button.pull-request-check:hover {
   line-height: 16px;
 }
 
-/* A preview's rows (diff-rows.tsx) on the diff colours Files changed draws
-   in: the tint of a line added or removed, and git's note on a line. */
-.pull-request-thread-lines > .code-line[data-diff="added"] {
-  background: var(--diff-added-ground);
-}
-
-.pull-request-thread-lines > .code-line[data-diff="removed"] {
-  background: var(--diff-removed-ground);
-}
-
-.pull-request-thread-lines > .code-line[data-diff="note"] .code-line-text {
-  color: var(--code-line-number);
-  font-style: italic;
-}
-
-/* The preview stands in the box rather than filling a tab, on a File tab's ground. */
+/* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
 .pull-request-thread-lines {
   flex: none;
   overflow-y: visible;

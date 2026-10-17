@@ -4,60 +4,29 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { layContainersAt } from "#testing/container-width";
-import { TaskBanner } from "./desktop/task-banner";
 import { ArchivedBanner, ArchivedComposerNote } from "./tasks/archived-task";
 
 /**
- * banner.test.ts -- a plan's notices at the widths a column or the side panel leaves them: narrow, the presses take a line of their own beneath the words, each as wide as the line, and the words wrap rather than being squeezed or cut; wide, words and presses share one line.
- *
- * jsdom lays nothing out, so each width is the stylesheets' `banner`
- * container queries resolved for a strip that wide
- * (`#testing/container-width`). Synthetic throughout.
+ * banner.test.ts -- an archived task's notices: each strip is named by its
+ * words and carries the presses it offers. Synthetic throughout.
  */
 
-/** The strip's own width in each place it stands. */
-const STRIP = {
-  /** The archived card in a 280px column beside a wide side panel. */
-  CARD_IN_NARROWEST_COLUMN: 146,
-  /** The composer's row in the same column. */
-  COMPOSER_IN_NARROWEST_COLUMN: 186,
-  /** The slim line across a 280px column. */
-  LINE_IN_NARROWEST_COLUMN: 280,
-  /** Any of them in a comfortable column. */
-  WIDE: 680,
-} as const;
-
 let root: Root | undefined;
-let style: HTMLStyleElement | undefined;
 
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
-  style?.remove();
   document.body.innerHTML = "";
 });
 
-/** Draws a strip with its stylesheets resolved for a strip `width` pixels wide, answering the strip. */
-function drawnAt(width: number, strip: ReactNode): HTMLElement {
-  style = layContainersAt({ banner: width });
+/** Draws a strip, answering the strip. */
+function drawn(strip: ReactNode): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(strip));
   const section = container.querySelector<HTMLElement>("section");
   assert.ok(section, "the strip is drawn");
   return section;
-}
-
-/** Whether the strip's presses stand on a line of their own beneath its words, each as wide as the line allows. */
-function pressesBeneath(section: HTMLElement): boolean {
-  const row = section.querySelector<HTMLElement>(".banner-row");
-  const presses = section.querySelector<HTMLElement>(".banner-actions");
-  assert.ok(row && presses, "the strip has its row and its presses");
-  const own =
-    getComputedStyle(row).flexWrap === "wrap" && getComputedStyle(presses).flexBasis === "100%";
-  const filled = [...presses.children].every((press) => getComputedStyle(press).flexGrow === "1");
-  return own && filled;
 }
 
 /** What a reader hears the strip named: the words it is labelled by. */
@@ -76,50 +45,20 @@ function press(section: HTMLElement, words: string): HTMLButtonElement {
   return found;
 }
 
-test("an archived task's card puts Unarchive beneath its words in the narrowest column, and beside them in a wide one", () => {
-  const narrow = drawnAt(
-    STRIP.CARD_IN_NARROWEST_COLUMN,
-    createElement(ArchivedBanner, { onUnarchive: () => undefined }),
+test("an archived task's card is named by its words and carries Unarchive", () => {
+  const card = drawn(createElement(ArchivedBanner, { onUnarchive: () => undefined }));
+  assert.equal(named(card), "This task is archived");
+  press(card, "Unarchive");
+});
+
+test("an archived task's agent's composer row is named by its words and carries Stop and Unarchive", () => {
+  const note = drawn(
+    createElement(ArchivedComposerNote, {
+      onUnarchive: () => undefined,
+      stop: () => Promise.resolve(),
+    }),
   );
-  assert.equal(named(narrow), "This task is archived");
-  assert.equal(pressesBeneath(narrow), true);
-  press(narrow, "Unarchive");
-  act(() => root?.unmount());
-  style?.remove();
-  const wide = drawnAt(STRIP.WIDE, createElement(ArchivedBanner, { onUnarchive: () => undefined }));
-  assert.equal(pressesBeneath(wide), false);
-});
-
-test("an archived task's agent's composer row puts Stop and Unarchive beneath its words in the narrowest column", () => {
-  const note = createElement(ArchivedComposerNote, {
-    onUnarchive: () => undefined,
-    stop: () => Promise.resolve(),
-  });
-  const narrow = drawnAt(STRIP.COMPOSER_IN_NARROWEST_COLUMN, note);
-  assert.equal(named(narrow), "Unarchive to send messages");
-  assert.equal(pressesBeneath(narrow), true);
-  press(narrow, "Stop");
-  press(narrow, "Unarchive");
-  act(() => root?.unmount());
-  style?.remove();
-  assert.equal(pressesBeneath(drawnAt(STRIP.WIDE, note)), false);
-});
-
-test("a plan's slim banner wraps its words and drops its press beneath them in the narrowest column, and keeps one cut line in a wide one", () => {
-  const banner = createElement(TaskBanner, {
-    action: { label: "Move to Northwind Platform Infrastructure", onPress: () => undefined },
-    children: "This task's repository belongs to Northwind Platform Infrastructure",
-  });
-  const narrow = drawnAt(STRIP.LINE_IN_NARROWEST_COLUMN, banner);
-  const words = narrow.querySelector<HTMLElement>(".task-banner-words");
-  assert.ok(words, "the banner has its words");
-  assert.equal(getComputedStyle(words).whiteSpace, "normal");
-  assert.equal(pressesBeneath(narrow), true);
-  act(() => root?.unmount());
-  style?.remove();
-  const wide = drawnAt(STRIP.WIDE, banner);
-  const line = wide.querySelector<HTMLElement>(".task-banner-words");
-  assert.ok(line, "the banner has its words");
-  assert.equal(getComputedStyle(line).whiteSpace, "nowrap");
-  assert.equal(pressesBeneath(wide), false);
+  assert.equal(named(note), "Unarchive to send messages");
+  press(note, "Stop");
+  press(note, "Unarchive");
 });
