@@ -1,3 +1,4 @@
+import { ANCHORED_POPOVER_EXAMPLE } from "./examples/anchored-popover";
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { BADGES_EXAMPLE } from "./examples/badges";
@@ -34,6 +35,7 @@ export interface Example {
 
 export const EXAMPLES: readonly Example[] = [
   ARTWORK_EXAMPLE,
+  ANCHORED_POPOVER_EXAMPLE,
   TYPOGRAPHY_EXAMPLE,
   LAYOUT_EXAMPLE,
   BADGES_EXAMPLE,

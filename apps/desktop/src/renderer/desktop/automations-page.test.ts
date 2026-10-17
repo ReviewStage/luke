@@ -1730,7 +1730,7 @@ test("a default model that could not be read is said as unknown, and a model can
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
       return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
-    if (this.classList.contains("anchored-popover"))
+    if (this.classList.contains("luke-anchored-popover"))
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
