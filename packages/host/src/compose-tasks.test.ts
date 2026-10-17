@@ -28,6 +28,7 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
+import type { TaskListLiveAnswer } from "@luke/features/task-list-live";
 import {
   PLAN_ACTOR,
   type PlanRevisionAnswer,
@@ -72,6 +73,7 @@ import { readEither } from "@luke/wire/effect";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
+import type { LiveClient } from "./live-follow.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 /** The text the edit tests' plan opens on. */
@@ -113,6 +115,8 @@ interface FakeService extends TasksClient {
   /** The agents with no plan the list carries beside the plans. */
   tasklessAgents: TasklessAgent[];
   listFails: boolean;
+  /** What the service answers when the list is asked for sealed, to follow over Neon Realtime; unanswered by default, as a service without Realtime answers. */
+  liveList: TaskCallResult<TaskListLiveAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
   /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
@@ -252,6 +256,7 @@ function fakeService(tasks: Task[]): FakeService {
     agents: {},
     tasklessAgents: [],
     listFails: false,
+    liveList: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     deleteFails: false,
     listGate: Effect.void,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
@@ -625,6 +630,7 @@ function fakeService(tasks: Task[]): FakeService {
         yield* service.listGate;
         return answer;
       }),
+    listLive: () => Effect.sync(() => service.liveList),
     open: (taskId) =>
       Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
         service.reads.push(`open:${taskId}`);
@@ -803,7 +809,10 @@ interface StandingCall {
   closing?: Effect.Effect<void>;
 }
 
-function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
+function subject(
+  service: FakeService,
+  options: { signedIn?: boolean; call?: StandingCall; openLive?: (url: string) => LiveClient } = {},
+) {
   return Effect.gen(function* () {
     const told: TasksView[] = [];
     const waiters: {
@@ -815,6 +824,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
     const tasks = yield* composeTasks({
       kernel: {
         runMode: { sendsNetwork: true },
+        now: () => LIVE_NOW,
         emit: (kind, payload) => {
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
           const read = readEither(tasksViewSchema)(payload);
@@ -829,6 +839,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       conversations,
+      ...(options.openLive === undefined ? undefined : { openLive: options.openLive }),
       endTaskCall: (taskId) =>
         Effect.gen(function* () {
           const about = standing.about?.taskId;
@@ -2307,5 +2318,167 @@ it.effect(
       );
       const open = last()?.document;
       assert.equal(open?.status === TASKS_READ.READY ? open.task?.workspaceId : undefined, ACME.id);
+    }),
+);
+
+/** The host's clock as the live list is read at: renewals are timed by it, and the list's own instants by the test's clock set to it. */
+const LIVE_NOW = 1_800_000_000_000;
+
+/** The plan list sealed as the service answers it, each statement named by the part it follows. */
+const SEALED_LIST: TaskListLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    plans: { capability: "plans", queryFingerprint: "plans", expiresAt: LIVE_NOW + 60_000 },
+    agents: { capability: "agents", queryFingerprint: "agents", expiresAt: LIVE_NOW + 60_000 },
+  },
+};
+
+/** Realtime as a script: each part's subscription by its capability, and a way to deliver rows to one or stop it for good. */
+function fakeRealtime() {
+  const listeners = new Map<
+    string,
+    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
+  >();
+  const open = (): LiveClient => ({
+    subscribe: (query) => ({
+      onChange: (listener) => {
+        listeners.set(query.capability, listener);
+        return () => listeners.delete(query.capability);
+      },
+      renew: () => Promise.resolve(),
+      unsubscribe: () => void listeners.delete(query.capability),
+    }),
+    close: () => undefined,
+  });
+  /** Waits for both parts to be subscribed, as the follow forked from a refresh subscribes them. */
+  const subscribed = Effect.gen(function* () {
+    for (let turn = 0; turn < 100 && listeners.size < 2; turn += 1) yield* Effect.yieldNow;
+    assert.equal(listeners.size, 2, "both parts of the list are subscribed");
+  });
+  const deliver = (part: string, data: readonly unknown[]) => {
+    const listener = listeners.get(part);
+    assert.ok(listener, `no subscription to ${part}`);
+    listener({ status: "live", data });
+  };
+  const fail = (part: string) => listeners.get(part)?.({ status: "error", data: [] });
+  /** Lets what was delivered reach the view, through the fibers that carry it. */
+  const settled = Effect.gen(function* () {
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+  });
+  return { open, subscribed, deliver, fail, settled };
+}
+
+/** One plan as the plans statement delivers its row. */
+function planRow(id: string, name: string) {
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name,
+    repository: null,
+    ownerId: "user-dana",
+    ownerName: "Dana",
+    pinnedAt: null,
+    pinPosition: null,
+    archivedAt: null,
+    createdAt: 1_000,
+    updatedAt: 2_000,
+  };
+}
+
+/** One agent of the plan as the agents statement delivers its row, started `ago` before the list is read, with no turn yet. */
+function agentRow(planId: string, ago: number) {
+  return {
+    id: "3f1d2c4b-5a6e-4f70-8a91-b2c3d4e5f607",
+    planId,
+    workspaceId: "workspace-personal",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    contextWindow: null,
+    title: "Invite flow",
+    prompted: false,
+    repository: "acme/relay",
+    starterId: "user-dana",
+    starterName: "Dana",
+    automationId: null,
+    automationName: null,
+    archivedAt: null,
+    archivedBy: null,
+    archiverName: null,
+    disabledServers: null,
+    published: null,
+    pinnedAt: null,
+    pinPosition: null,
+    createdAt: LIVE_NOW - ago,
+    turnId: null,
+    turnStatus: null,
+    cancelRequested: null,
+    queuedAt: null,
+    startedAt: null,
+    settledAt: null,
+    lineAwaits: false,
+  };
+}
+
+it.effect(
+  "a list the service seals is drawn from its live rows: a refresh reads it no more, and an agent with no turn reads failed once its grace ends with nothing read",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.liveList = { ok: true, answer: SEALED_LIST };
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", [planRow(INVITES, "Teammate invitations, live")]);
+      realtime.deliver("agents", [agentRow(INVITES, 60_000)]);
+      yield* realtime.settled;
+      const drawn = last()?.tasks[0];
+      assert.equal(drawn?.name, "Teammate invitations, live");
+      assert.deepEqual(
+        [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
+        [1, [CODING_AGENT_STATUS.STARTING]],
+      );
+
+      const listedBefore = service.reads.filter((read) => read === "list").length;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_DELETE, { taskId: BILLING });
+      yield* TestClock.adjust(Duration.minutes(5));
+      yield* realtime.settled;
+
+      const ended = last()?.tasks[0]?.agents;
+      assert.deepEqual(
+        [ended?.working, ended?.agents.map((line) => line.status)],
+        [0, [CODING_AGENT_STATUS.FAILED]],
+      );
+      assert.equal(service.reads.filter((read) => read === "list").length, listedBefore);
+    }),
+);
+
+it.effect(
+  "a list whose subscription stops for good is read again by the next refresh, and a service that seals none is read as before",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.liveList = { ok: true, answer: SEALED_LIST };
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", [planRow(INVITES, "Teammate invitations, live")]);
+      realtime.deliver("agents", []);
+      yield* realtime.settled;
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
+
+      realtime.fail("plans");
+      yield* realtime.settled;
+      service.liveList = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED };
+      const listedBefore = service.reads.filter((read) => read === "list").length;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+
+      assert.equal(service.reads.filter((read) => read === "list").length, listedBefore + 1);
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations");
     }),
 );

@@ -124,8 +124,10 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
+import { followTaskList } from "./task-list-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named plans, read from the service: the list, the one active plan, and its document, drawn as the notetaker writes it during a call.
@@ -135,7 +137,10 @@ import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
  * this concern owes the panel is to show those writes as they happen. Every write happens during a planning call, and the notetaker's
  * drafts arrive on that call's own socket and are drawn in place: the list
  * and the open plan are read when the Plans tab shows, when a plan opens, and
- * when one starts, and never on a clock. The open plan's whiteboard is read
+ * when one starts, and never on a clock. The list itself is followed over
+ * Neon Realtime from the first refresh until a sign-out where the service
+ * seals it (`task-list-follow.ts`), and is then read by none of those asks;
+ * they read it only where the service seals nothing. The open plan's whiteboard is read
  * with its document, and again whenever the call's activity says a draw by
  * the planning model just settled or the planning model stopped working, since
  * a draw happens only inside its turn; the panel saves the board's scene
@@ -276,6 +281,7 @@ const tasksOpenParamsSchema = Schema.Struct({ taskId: Schema.NonEmptyString });
 export type TasksClient = Pick<
   HostedTaskClient,
   | "list"
+  | "listLive"
   | "open"
   | "create"
   | "delete"
@@ -336,7 +342,7 @@ export type TasksClient = Pick<
 export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   conversations: TasksConversationClient;
@@ -346,6 +352,8 @@ export interface TasksDependencies {
    * is left standing.
    */
   endTaskCall: (taskId: string | undefined) => Effect.Effect<void>;
+  /** Realtime's client for the plan list's subscriptions; Realtime's own where none is handed in. */
+  openLive?: (url: string) => LiveClient;
 }
 
 export interface TasksComposer extends Composer {
@@ -512,8 +520,39 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return summary;
   }
 
+  /**
+   * Whether the list stands followed over Neon Realtime (`task-list-follow.ts`),
+   * which then answers every change of it, so no read of it is made: the
+   * reads below stand in only while it does not.
+   */
+  let listLive = false;
+
+  /** The one follow of the list, started on the first refresh and stopped by a sign-out. */
+  const listFollow = yield* FiberHandle.make<never>();
+
+  const followList = followTaskList({
+    live: () =>
+      Effect.map(Effect.provide(client.listLive(), FetchHttpClient.layer), (sealed) =>
+        sealed.ok ? sealed.answer : { failure: sealed.failure },
+      ),
+    openLive: dependencies.openLive ?? openRealtimeClient,
+    now: kernel.now,
+    standing: (live) => {
+      listLive = live;
+    },
+    publish: (listed) =>
+      write({
+        tasks: listed.plans,
+        tasklessAgents: listed.planlessAgents ?? [],
+        listStatus: TASKS_READ.READY,
+      }),
+  });
+
   const readList = Effect.gen(function* () {
+    if (listLive) return;
     const listed = yield* Effect.provide(client.list(), FetchHttpClient.layer);
+    // A list followed live since this read left is newer than what it read.
+    if (listLive) return;
     // A failed read keeps the list it last read: the panel says the read
     // failed beside the plans it already drew rather than emptying them.
     write(
@@ -1070,6 +1109,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.TASKS_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
+        yield* FiberHandle.run(listFollow, followList, { onlyIfMissing: true });
         const open = view.activeTaskId;
         if (open !== undefined) yield* openConversation(open);
         const tasks = serial(
@@ -1974,6 +2014,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     reset: Effect.gen(function* () {
       yield* endTaskCall(undefined);
       yield* FiberHandle.clear(conversationRead);
+      yield* FiberHandle.clear(listFollow);
       yield* serial(
         Effect.sync(() => {
           workspacesAskedAt = undefined;
