@@ -86,13 +86,14 @@ import { type StartFrom, startFromOf } from "./replay.js";
  * workspace's installation as a task's is.
  * A Start from another agent of the task, to continue it or to fork it at
  * one of its messages, hands the new agent that agent's brief with its
- * transcript replayed after it (`replay.ts`), the note after both with the
- * files the note carries, and runs it on that agent's choice and servers
- * unless the ask names its own; the source's choice never becomes the
- * account's default, and an agent started from an automation's run is no
- * run of that automation. Its mentions and servers are read from the
- * source's brief and the note, as a fresh start's would be, and never from
- * the replay.
+ * transcript replayed after it (`replay.ts`) and its work, what it had not
+ * pushed included, copied to a branch of its own (`snapshot.ts`), the note
+ * after both with the files the note carries, and runs it on that agent's
+ * choice and servers unless the ask names its own; the source's choice
+ * never becomes the account's default, and an agent started from an
+ * automation's run is no run of that automation. Its mentions and servers
+ * are read from the source's brief and the note, as a fresh start's would
+ * be, and never from the replay.
  * The MCP servers the words mention are handed to the agent's first turn
  * whatever its switches say, but an automation's run is handed only those
  * its automation's own prompt mentions, never those of the webhook body or
@@ -324,7 +325,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const from =
     ask.taskId === null || ask.from === undefined
       ? undefined
-      : yield* startFromOf(userId, ask.taskId, ask.from, ask.attachments ?? []);
+      : yield* startFromOf(userId, ask.taskId, ask.from, ask.attachments ?? [], ask.idempotencyKey);
   // An agent started from another runs on that agent's choice unless the Start names one.
   const choice = yield* acceptedAgentChoice(userId, ask.choice ?? from?.choice);
   const landing = yield* landingOf(userId, ask, from);
