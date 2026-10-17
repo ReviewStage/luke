@@ -3,7 +3,11 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE, type IssueListView } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMember,
+} from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
@@ -35,6 +39,24 @@ const WORKSPACE: Workspace = {
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
+
+/** The moment the window's clock stands at in a test that reads how long ago something was. */
+const NOW = Date.UTC(2026, 9, 14, 12);
+
+/** The signed-in reader's account. */
+const READER = "user-grace";
+
+/** The workspace's members, as their read answers them. */
+const MEMBERS: readonly WorkspaceMember[] = [
+  {
+    userId: "user-ada",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+    pictureUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+  },
+  { userId: READER, name: "Grace Hopper", email: "grace@example.com", role: WORKSPACE_ROLE.OWNER },
+];
 
 function issue(number: number, patch: Partial<Issue> = {}): Issue {
   return {
@@ -129,6 +151,12 @@ beforeEach(() => {
           if (held === undefined) return Promise.resolve(done);
           return new Promise((resolve) => held.push(() => resolve(done)));
         }
+        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+        }
+        if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+        }
         if (request.kind === ACT_KIND.ISSUES_READ) {
           reads.push(request.payload.issueId);
           const found = standing.find((each) => each.id === request.payload.issueId);
@@ -177,6 +205,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   act(() => root?.unmount());
   root = undefined;
@@ -204,6 +233,7 @@ function Pages({
   const control = tasksControl({ workspace });
   const plans = tasksControl({
     workspace,
+    me: READER,
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -613,21 +643,37 @@ test("Escape in the title puts back the title it opened on, sends nothing, and l
   assert.equal(closed, 0);
 });
 
-test("under the title an issue's page says who filed it and when, and when it last changed, a task's own words", async () => {
-  const now = Date.now();
+test("under the title an issue's page says who filed it, by their face as the members read them, and when it was filed and last changed, a task's own words", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
   const filed = issue(1, {
     creator: { userId: "user-ada", name: "Ada Lovelace" },
-    createdAt: now - 3 * DAY - HOUR,
-    updatedAt: now - 2 * HOUR - MINUTE,
+    createdAt: NOW - 3 * DAY - HOUR,
+    updatedAt: NOW - 2 * HOUR - MINUTE,
   });
   standing = [filed];
   const page = await openIssue(filed.id);
 
   assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
+  const picture = page.querySelector<HTMLImageElement>(".issue-byline img.actor-picture");
+  assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
+});
+
+test("an issue the reader filed names them as you", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  const filed = issue(1, {
+    creator: { userId: READER, name: "Grace Hopper" },
+    createdAt: NOW - 2 * DAY - HOUR,
+    updatedAt: NOW - 2 * DAY - HOUR,
+  });
+  standing = [filed];
+  const page = await openIssue(filed.id);
+
+  assert.deepEqual(bylineOf(page), ["Created by you · 2d ago"]);
 });
 
 test("an issue whose creator is gone and unchanged since it was filed says only when it was created, until a change lands", async () => {
-  const filedAt = Date.now() - 5 * HOUR - MINUTE;
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  const filedAt = NOW - 5 * HOUR - MINUTE;
   const filed = issue(1, { creator: null, createdAt: filedAt, updatedAt: filedAt });
   standing = [filed];
   const page = await openIssue(filed.id);
