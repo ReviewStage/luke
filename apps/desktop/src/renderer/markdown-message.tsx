@@ -364,16 +364,12 @@ interface TaskItem {
 /** Each task item's checkbox, by the tree's own node. */
 const TASK_ITEMS = new WeakMap<HastElement, TaskItem>();
 
-/** A list item's own words, without the words of a list nested in it. */
-function itemWords(item: HastElement): string {
-  return item.children
-    .map((child) =>
-      child.type === "element" && (child.tagName === "ul" || child.tagName === "ol")
-        ? ""
-        : wordsOf(child),
-    )
-    .join("")
-    .trim();
+/** A list item's own words, a picture's alt text among them, without the words of a list nested in it. */
+function itemWords(node: HastElementChild): string {
+  if (node.type === "text") return node.value;
+  if (node.type !== "element" || node.tagName === "ul" || node.tagName === "ol") return "";
+  if (node.tagName === "img") return isWireString(node.properties.alt) ? node.properties.alt : "";
+  return node.children.map(itemWords).join("");
 }
 
 /**
@@ -393,7 +389,7 @@ function placeTasks(parent: HastParent, item: HastElement | undefined): void {
       own &&
       at !== undefined
     ) {
-      TASK_ITEMS.set(child, { at, label: itemWords(own) });
+      TASK_ITEMS.set(child, { at, label: own.children.map(itemWords).join("").trim() });
     }
     placeTasks(child, own);
   }

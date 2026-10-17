@@ -772,8 +772,13 @@ export function PlanBody({
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
   const followedJumps = useRef(jumps);
-  /** The text the last tick was sent from and the text it asked for, which a tick pressed before it lands goes on from. */
-  const ticked = useRef<{ readonly from: string; readonly to: string } | undefined>(undefined);
+  /** The plan as last drawn, which a tick waiting on the one before it reads as it goes. */
+  const shown = useRef(task);
+  shown.current = task;
+  /** The tick out, and the text the last saved tick was sent from and the text it saved, which the next goes on from until the plan comes back. */
+  const ticks = useRef<{ flight: Promise<boolean>; last?: { from: string; to: string } }>({
+    flight: Promise.resolve(true),
+  });
 
   useEffect(() => {
     const element = scroller.current;
@@ -859,26 +864,32 @@ export function PlanBody({
   const cut = editable && editing.editor === undefined && !behind ? planSections(text ?? "") : [];
   const taskToggler = (section: number): TaskToggler | undefined => {
     const unit = cut[section];
-    const body = task.document.body;
     if (onEdit === undefined || unit === undefined || unit.text !== views[section]?.words) {
       return undefined;
     }
-    return (at) => {
-      // Note that a tick pressed while the last is still out goes on from the text that one asked for, so two quick presses send two changes rather than one twice.
-      const last = ticked.current;
+    // Note that ticks go one at a time, each from the text the last saved, so
+    // two quick presses send two changes, and a door that keeps one text
+    // (the plan template's) is never asked from a text it has not kept yet.
+    const tick = (at: number): Promise<boolean> => {
+      const now = shown.current;
+      if (now.id !== task.id) return Promise.resolve(false);
+      const { last } = ticks.current;
+      const body = now.document.body;
       const base = last !== undefined && last.from === body ? last.to : body;
       const value = toggledTask(base, unit.from + at);
       if (value === undefined) return Promise.resolve(false);
-      ticked.current = { from: body, to: value };
-      const saved = onEdit({ document: { base, value } }).then(
-        (answer) => "saved" in answer,
+      return onEdit({ document: { base, value } }).then(
+        (answer) => {
+          if ("saved" in answer) ticks.current.last = { from: body, to: value };
+          return "saved" in answer;
+        },
         () => false,
       );
-      // A tick refused is no text to go on from.
-      return saved.then((done) => {
-        if (!done && ticked.current?.to === value) ticked.current = undefined;
-        return done;
-      });
+    };
+    return (at) => {
+      const flight = ticks.current.flight.then(() => tick(at));
+      ticks.current.flight = flight;
+      return flight;
     };
   };
   // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
