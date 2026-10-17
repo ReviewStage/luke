@@ -6,6 +6,7 @@ import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { appBridge } from "./app-bridge";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime";
 
 /** The two bridge calls a window reads its state through, and nothing else. */
@@ -41,8 +42,8 @@ type AppStateUnavailable = AppStateUnread | Cause.NoSuchElementError;
 const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
   Atom.make({
     subscribe: (onDelivered: (delivered: AppStateSnapshot) => void) =>
-      window.luke.onAppState(onDelivered),
-    read: () => window.luke.requestAppState(),
+      appBridge().onAppState(onDelivered),
+    read: () => appBridge().requestAppState(),
   }),
 );
 

@@ -25,6 +25,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
@@ -160,13 +161,10 @@ async function inbox({ pages }: { pages: readonly PageLine[] | undefined } = { p
   const links: ReadLink[] = [];
   const tasks: string[] = [];
   const left = { links, tasks, rereads: 0 };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: answer,
-    },
+  fakeAppBridge({
+    onMenuCommand: () => () => undefined,
+    recordSurfaceEvent: () => undefined,
+    act: answer,
   });
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);

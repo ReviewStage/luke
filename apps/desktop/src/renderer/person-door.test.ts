@@ -7,6 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { ActorRef } from "./actor-ref";
 import { MemberDirectory } from "./member-directory";
@@ -49,13 +50,10 @@ beforeEach(() => {
   names = [];
   workspaces = [];
   github = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) github.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) github.push(request.payload.url);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
 });

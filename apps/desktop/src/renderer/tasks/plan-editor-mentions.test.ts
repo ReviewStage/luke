@@ -11,6 +11,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { installEditorBundle, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
@@ -35,32 +36,29 @@ const roots: Root[] = [];
 beforeEach(() => {
   installEditorBundle();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.TASKS_TREE
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: {
-                  folder: {
-                    path: "",
-                    repository: "acme/relay",
-                    branch: "main",
-                    entries: [
-                      { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
-                      { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
-                      { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
-                    ],
-                    truncated: false,
-                  },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.TASKS_TREE
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                folder: {
+                  path: "",
+                  repository: "acme/relay",
+                  branch: "main",
+                  entries: [
+                    { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
+                    { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
+                    { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
+                  ],
+                  truncated: false,
                 },
-              }
-            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-        ),
-      recordSurfaceEvent: () => undefined,
-    },
+              },
+            }
+          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      ),
+    recordSurfaceEvent: () => undefined,
   });
 });
 
