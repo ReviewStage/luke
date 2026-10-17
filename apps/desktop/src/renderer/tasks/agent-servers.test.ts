@@ -91,7 +91,6 @@ beforeEach(() => {
             }
           : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
       ),
-    recordSurfaceEvent: () => undefined,
   });
 });
 

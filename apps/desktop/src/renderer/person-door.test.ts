@@ -8,6 +8,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { ActorRef } from "./actor-ref";
 import { MemberDirectory } from "./member-directory";
@@ -50,6 +51,7 @@ beforeEach(() => {
   names = [];
   workspaces = [];
   github = [];
+  fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
     act: (request: Act) => {
       if (request.kind === ACT_KIND.GITHUB_OPEN) github.push(request.payload.url);

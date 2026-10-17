@@ -9,6 +9,7 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -26,6 +27,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -212,7 +214,6 @@ const PAGE: PlanMentionsValue = {
 /** The words drawn as a transcript draws them on the plan's page, in a window holding `STATE`. */
 async function drawn(text: string): Promise<HTMLElement> {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(STATE),
     act: (request: Act): Promise<ActOutcome> => {
@@ -220,6 +221,7 @@ async function drawn(text: string): Promise<HTMLElement> {
       return Promise.resolve(answer(request));
     },
   });
+  fakeAppPlatform({ pageFrameUrl });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const words: ReactNode = createElement(PlanMentions, {

@@ -85,7 +85,6 @@ afterEach(() => {
 /** The agent's turn as the tab draws it, over a page of the task and that turn, for an agent of `status`. */
 async function drawnTurn(status: CodingAgentStatus): Promise<HTMLElement> {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ

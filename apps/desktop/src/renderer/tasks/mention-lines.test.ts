@@ -49,7 +49,6 @@ beforeEach(() => {
   fakeAppBridge({
     act: (_request: Act): Promise<ActOutcome> =>
       Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-    recordSurfaceEvent: ignore,
   });
 });
 

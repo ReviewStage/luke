@@ -105,7 +105,6 @@ function button(container: HTMLElement, words: string): HTMLButtonElement | unde
 beforeEach(() => {
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-    recordSurfaceEvent: () => undefined,
   });
 });
 

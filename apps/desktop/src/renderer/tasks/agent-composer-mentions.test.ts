@@ -38,6 +38,7 @@ import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import {
   composerEditor,
@@ -211,6 +212,7 @@ beforeEach(() => {
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
+  fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
       told.push(request);
@@ -263,7 +265,6 @@ beforeEach(() => {
                   : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
       );
     },
-    recordSurfaceEvent: ignore,
   });
 });
 

@@ -81,7 +81,7 @@ beforeEach(() => {
     configurable: true,
     value: () => ({ matches: false, addEventListener: ignore, removeEventListener: ignore }),
   });
-  fakeAppBridge({ act: answer, onMenuCommand: () => ignore, recordSurfaceEvent: ignore });
+  fakeAppBridge({ act: answer });
 });
 
 const unmounts: (() => void)[] = [];

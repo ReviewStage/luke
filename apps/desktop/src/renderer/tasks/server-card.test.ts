@@ -102,7 +102,6 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({
-    recordSurfaceEvent: ignore,
     act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
   });
 });

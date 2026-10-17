@@ -11,6 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
@@ -447,15 +448,9 @@ test("no sidebar plan wears the attention mark where its own workspace reaches i
 function installClipboard(): string[] {
   const copied: string[] = [];
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      }
-      copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-    recordSurfaceEvent: () => undefined,
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   return copied;
 }
 

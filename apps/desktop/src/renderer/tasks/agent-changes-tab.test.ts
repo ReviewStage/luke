@@ -143,7 +143,7 @@ beforeEach(() => {
     const width = this.classList.contains("diff-view") ? boxWidth : 0;
     return new DOMRect(0, 0, width, 0);
   });
-  fakeAppBridge({ recordSurfaceEvent: () => undefined });
+  fakeAppBridge({});
   handSettings();
 });
 

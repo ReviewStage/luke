@@ -202,7 +202,6 @@ async function forkedAtInTab(
   messages: readonly CodingAgentMessage[],
 ): Promise<readonly (string | null)[]> {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   const agent = summary(SOURCE, { status, brief: CODING_AGENT_BRIEF.PROMPT });

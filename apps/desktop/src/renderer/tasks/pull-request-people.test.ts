@@ -88,7 +88,6 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ

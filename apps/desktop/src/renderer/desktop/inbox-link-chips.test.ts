@@ -135,8 +135,6 @@ async function inbox(options: {
       value: { items, cursor: "1" } satisfies CodingAgentInboxAnswerView,
     });
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
     act: (request: Act): Promise<ActOutcome> => {

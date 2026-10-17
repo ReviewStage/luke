@@ -151,7 +151,6 @@ beforeEach(() => {
       heldReads.push(() => resolve(answer));
       return promise;
     },
-    recordSurfaceEvent: () => undefined,
   });
 });
 

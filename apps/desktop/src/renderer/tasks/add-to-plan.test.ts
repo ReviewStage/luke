@@ -61,7 +61,6 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
-    recordSurfaceEvent: () => undefined,
   });
 });
 

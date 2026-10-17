@@ -59,7 +59,6 @@ beforeEach(() => {
         value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(settingsView()) },
       });
     },
-    recordSurfaceEvent: () => undefined,
   });
 });
 

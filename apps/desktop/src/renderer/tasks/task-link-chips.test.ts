@@ -50,7 +50,6 @@ beforeEach(() => {
   installEditorLayout();
   fakeAppBridge({
     act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-    recordSurfaceEvent: () => undefined,
   });
 });
 

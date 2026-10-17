@@ -98,7 +98,6 @@ beforeEach(() => {
           : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
       });
     },
-    onMenuCommand: () => () => undefined,
   });
 });
 

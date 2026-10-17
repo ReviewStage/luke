@@ -161,7 +161,6 @@ async function drawnTab(input: {
   messages?: readonly CodingAgentMessage[];
 }) {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (_request: Act): Promise<ActOutcome> =>
       Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
