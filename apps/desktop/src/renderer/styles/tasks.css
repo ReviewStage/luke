@@ -167,7 +167,7 @@
   position: absolute;
   z-index: -1;
   inset: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-control-radius);
   background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
   content: "";
