@@ -31,6 +31,7 @@
     "./held-link": "./src/held-link.js",
     "./link-route": "./src/link-route.js",
     "./inbox-panel-link": "./src/inbox-panel-link.js",
+    "./pull-request-link": "./src/pull-request-link.js",
     "./link-glue": "./src/link-glue.js",
     "./link-face": "./src/link-face.js",
     "./quote-face": "./src/quote-face.js",

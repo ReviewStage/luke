@@ -313,6 +313,53 @@ export function listRecentMessages(
   );
 }
 
+const findTurnOpeners = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    turnIds: Schema.Array(Schema.String),
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .selectDistinctOn([messages.turnId], MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            inArray(messages.turnId, [...options.turnIds]),
+            isNotNull(messages.finishedAt),
+            eq(messages.role, MESSAGE_ROLE.USER),
+          ),
+        )
+        .orderBy(messages.turnId, asc(messages.seq)),
+    ),
+});
+
+/**
+ * The line that opened each turn asked, oldest first: the first finished
+ * user row that names the turn, since a line a turn took in mid-run names
+ * none. A turn no line opened, or one of another conversation, answers
+ * nothing.
+ */
+export function listTurnOpeners(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  turnIds: readonly string[],
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+  if (turnIds.length === 0) return Effect.succeed({ ok: true, value: [] });
+  return Effect.flatMap(findTurnOpeners({ conversationId, userId, turnIds }), (selected) =>
+    readSelected(
+      selected.toSorted((first, second) => first.seq - second.seq),
+      tools,
+    ),
+  );
+}
+
 const findMessagesBefore = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,

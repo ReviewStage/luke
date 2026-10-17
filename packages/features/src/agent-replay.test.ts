@@ -50,8 +50,63 @@ test("a first message reads back as its brief, its replay, and its note, whateve
   assert.deepEqual(firstMessageParts(text), {
     brief,
     replay,
-    note: { heading: START_NOTE_HEADING.AGENT, text: "Look at the tests." },
+    note: {
+      heading: START_NOTE_HEADING.AGENT,
+      text: "Look at the tests.",
+      files: { text: 0, other: 0 },
+    },
   });
+});
+
+test("a note behind its marker is read with no replay, with how many files are its own, and a brief whose prose holds a note's heading is never split on it", () => {
+  const brief = "Write the guide.\n\n## Note from the developer\n\nExplain this heading.";
+  const text = firstMessageText(
+    brief,
+    undefined,
+    "And the 🚀 emoji.",
+    START_NOTE_HEADING.DEVELOPER,
+    {
+      text: 1,
+      other: 2,
+    },
+  );
+
+  assert.deepEqual(firstMessageParts(text), {
+    brief,
+    note: {
+      heading: START_NOTE_HEADING.DEVELOPER,
+      text: "And the 🚀 emoji.",
+      files: { text: 1, other: 2 },
+    },
+  });
+  assert.deepEqual(firstMessageParts(brief), { brief });
+  assert.deepEqual(firstMessageParts(text.replace("chars=", "chars=1")), {
+    brief: text.replace("chars=", "chars=1"),
+  });
+});
+
+test("a note behind no marker after a replay, as agents started before the marker were handed, is still read, with none of the files", () => {
+  const replayed = firstMessageText("Fix it.", replay, undefined);
+  const text = `${replayed}\n\n${START_NOTE_HEADING.DEVELOPER}\n\nCarry on.`;
+
+  assert.deepEqual(firstMessageParts(text).note, {
+    heading: START_NOTE_HEADING.DEVELOPER,
+    text: "Carry on.",
+    files: { text: 0, other: 0 },
+  });
+});
+
+test("a marked note after a replay whose marker does not add up leaves the message whole rather than reading it as an unmarked note", () => {
+  const damaged = firstMessageText("Fix it.", replay, "Carry on.").replace(
+    "other-files=0 chars=9 -->",
+    "other-files=0 chars=1 -->",
+  );
+
+  assert.deepEqual(firstMessageParts(damaged), { brief: damaged });
+
+  const replayed = firstMessageText("Fix it.", replay, undefined);
+  const legacy = `${replayed}\n\n${START_NOTE_HEADING.DEVELOPER}\n\n<!-- luke:note this is an example -->`;
+  assert.equal(firstMessageParts(legacy).note?.text, "<!-- luke:note this is an example -->");
 });
 
 test("a replay with no note and no fork reads back without either", () => {

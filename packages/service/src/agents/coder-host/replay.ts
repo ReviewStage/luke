@@ -67,7 +67,8 @@ import { CURSOR_START } from "./transcript.js";
  * plan as it stands now, or the source's prompt with the text files
  * attached to it, an automation run's prompt as it was handed, without the
  * replay or note the source's own first message carried. A note the source
- * was handed is its first step instead. A source that was itself started
+ * was handed behind its marker, or after a replay, is its first step
+ * instead. A source that was itself started
  * from another hands on the steps its own replay kept ahead of its own, so
  * a chain reads as one transcript, and the bound is applied once over the
  * whole of it: the oldest steps go first. Each line sent to the agent and
@@ -277,22 +278,18 @@ interface HandedBrief {
   readonly note: ReplayStep | undefined;
 }
 
-/** A source's own first message split as the format reads it, its note told apart by the heading's last place where no replay fixes where it starts. */
+/**
+ * A source's own first message split as the format reads it: its note is
+ * told apart only behind its marker, or after a replay, which fixes where
+ * it starts. Note that a source handed an unmarked note with no replay, as
+ * agents started before the marker were, keeps that note inside its brief,
+ * because a heading in prose cannot be told from one that opens a note,
+ * and the brief whole is what that agent was asked.
+ */
 function briefOf(handed: string): HandedBrief {
   const read = firstMessageParts(handed);
-  if (read.replay !== undefined) {
-    const note = read.note === undefined ? undefined : noteStep(read.note.heading, read.note.text);
-    return { brief: read.brief, carried: read.replay, note };
-  }
-  const found = Object.values(START_NOTE_HEADING)
-    .map((heading) => ({ heading, at: handed.lastIndexOf(`\n\n${heading}\n\n`) }))
-    .reduce((latest, each) => (each.at > latest.at ? each : latest));
-  if (found.at < 0) return { brief: handed, carried: undefined, note: undefined };
-  return {
-    brief: handed.slice(0, found.at),
-    carried: undefined,
-    note: noteStep(found.heading, handed.slice(found.at + found.heading.length + 4)),
-  };
+  const note = read.note === undefined ? undefined : noteStep(read.note.heading, read.note.text);
+  return { brief: read.brief, carried: read.replay, note };
 }
 
 /** The note a source was handed as the step it opens on. */

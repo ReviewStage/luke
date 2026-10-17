@@ -14,7 +14,16 @@ import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { CollapseIcon, EmptyState, ExpandIcon, IconButton, SidePanelIcon } from "@luke/ui";
+import {
+  CollapseIcon,
+  EmptyState,
+  ExpandIcon,
+  IconButton,
+  SidePanelIcon,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -91,6 +100,7 @@ import {
 } from "../tasks/transcript-copy";
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
+import { OpenHereProvider } from "../tasks/use-open-link";
 import {
   type DrawnTabs,
   drawsChanges,
@@ -952,7 +962,11 @@ function PanelTabs({
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
-      <p className="side-panel-no-tabs-line">No tabs open</p>
+      <div className="side-panel-no-tabs-line">
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          No tabs open
+        </Text>
+      </div>
       <MenuRowList
         rows={entries.map((entry) => entry.row)}
         onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
@@ -1421,17 +1435,19 @@ function TabContent({
     );
   }
   if (isChangesTab(tab)) {
+    // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
-      <AgentPullRequestTab
-        key={tab.changes}
-        agentId={tab.changes}
-        control={agents}
-        shown={shown}
-        repository={repository}
-        tree={fileTree}
-        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
-        onView={(view) => onPullRequestView(tab.changes, view)}
-      />
+      <OpenHereProvider key={tab.changes} value={undefined}>
+        <AgentPullRequestTab
+          agentId={tab.changes}
+          control={agents}
+          shown={shown}
+          repository={repository}
+          tree={fileTree}
+          view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
+          onView={(view) => onPullRequestView(tab.changes, view)}
+        />
+      </OpenHereProvider>
     );
   }
   if (isFileTab(tab)) {
@@ -1612,15 +1628,12 @@ function FullScreenToggle({
   useAppCommand(APP_COMMAND.EXIT_FULL_SCREEN, fullScreen && !leaving ? onToggle : undefined);
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_FULL_SCREEN}>
-      <button
-        type="button"
-        className="icon-button side-panel-full-screen"
-        aria-label={label}
-        aria-pressed={fullScreen}
+      <IconButton
+        icon={fullScreen ? <CollapseIcon /> : <ExpandIcon />}
+        label={label}
+        pressed={fullScreen}
         onClick={onToggle}
-      >
-        {fullScreen ? <CollapseIcon /> : <ExpandIcon />}
-      </button>
+      />
     </Tooltip>
   );
 }
