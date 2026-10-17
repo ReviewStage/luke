@@ -1,17 +1,13 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import {
-  SOCIAL_PROVIDER_LABEL,
-  type SocialProvider,
-  socialProviderFromState,
-} from "@luke/features/sign-in-provider";
-import { ProviderMark } from "@luke/ui";
-import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { type SocialProvider, socialProviderFromState } from "@luke/features/sign-in-provider";
+import { AuthPage, ProviderMark } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
+import { ProviderButton } from "./sign-in-choices";
 import "./styles.css";
 
 // The provider client forwards the authorization server's signed `oauth_query`
@@ -53,54 +49,36 @@ function SignIn(): React.JSX.Element {
     }
   };
 
+  // The full mark, not a pair of dots: the card is the one thing on the
+  // page, so it carries the same face the product and the landing page wear.
+  // The closing note is its own line rather than a run-on: with no provider
+  // to continue with there is no action block between it and the copy above.
   return (
-    <main className={AUTH_SHELL}>
-      <section className={AUTH_CARD} aria-labelledby="auth-title">
-        {/* The full mark, not a pair of dots: the card is the one thing on the
-            page, so it carries the same face the product and the landing page
-            wear. */}
-        {provider ? (
+    <AuthPage
+      mark={
+        provider ? (
           <ConnectionGraphic
             mark={<ProviderMark provider={provider} className="size-10 shrink-0" />}
           />
         ) : (
-          <div className="inline-flex w-13" aria-hidden="true">
+          <span className="inline-flex w-13">
             <LukeMark className="h-auto w-full" />
-          </div>
-        )}
-        <h1 id="auth-title" className={AUTH_TITLE}>
-          Sign in to Luke
-        </h1>
-        {provider ? null : (
-          <p className="m-0 text-muted-foreground">
-            Luke could not verify which provider you chose. Return to Luke and try again.
-          </p>
-        )}
-        {provider ? (
-          <div className="mt-8 mb-4 grid gap-3">
-            <button
-              type="button"
-              className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
-              disabled={pending !== undefined}
-              onClick={() => void begin()}
-            >
-              <ProviderMark provider={provider} className="size-[15px] shrink-0" />
-              {pending ? "Opening…" : `Continue with ${SOCIAL_PROVIDER_LABEL[provider]}`}
-            </button>
-          </div>
-        ) : null}
-        {failure ? (
-          <p className="m-0 text-attention" role="alert">
-            {failure}
-          </p>
-        ) : null}
-        {/* Its own line rather than a run-on: with no provider to continue
-            with there is no action block between it and the copy above. */}
-        <small className="mt-4 block text-muted-foreground">
-          You can close this window after Luke confirms the sign-in.
-        </small>
-      </section>
-    </main>
+          </span>
+        )
+      }
+      title="Sign in to Luke"
+      description={
+        provider
+          ? undefined
+          : "Luke could not verify which provider you chose. Return to Luke and try again."
+      }
+      error={failure}
+      footnote="You can close this window after Luke confirms the sign-in."
+    >
+      {provider ? (
+        <ProviderButton provider={provider} pending={pending} onPress={() => void begin()} />
+      ) : null}
+    </AuthPage>
   );
 }
 

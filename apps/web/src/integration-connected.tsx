@@ -71,9 +71,11 @@ function IntegrationConnected(): React.JSX.Element {
             <LukeMark className="h-auto w-full" />
           </div>
         ) : (
-          <ConnectionGraphic
-            mark={<ProviderMark provider={landing.provider} className="size-10 shrink-0" />}
-          />
+          <div className="mb-5">
+            <ConnectionGraphic
+              mark={<ProviderMark provider={landing.provider} className="size-10 shrink-0" />}
+            />
+          </div>
         )}
         <h1 id="landing-title" className={AUTH_TITLE}>
           {titleOf(landing)}
