@@ -12,7 +12,7 @@ import {
 export function App(): React.JSX.Element {
   return (
     <div className="min-h-screen">
-      <SiteHeader current={SITE_PAGE.HOME} />
+      <SiteHeader current={{ page: SITE_PAGE.HOME }} />
 
       <main className="shell">
         {/* The copy runs left, the way a page of prose does. The demo is wider
@@ -56,7 +56,7 @@ export function App(): React.JSX.Element {
         </section>
       </main>
 
-      <SiteFooter current={SITE_PAGE.HOME} />
+      <SiteFooter current={{ page: SITE_PAGE.HOME }} />
     </div>
   );
 }
