@@ -1,0 +1,65 @@
+/* segmented.css -- a segmented control: a trough holding a few segments,
+   the chosen one filled, the rest quiet until hovered. Too wide for its row,
+   it gives way to the row's width and its segments wrap onto a second line
+   inside the trough, so the last of them never stands past the row's edge. */
+
+@layer components {
+  .luke-segmented {
+    display: inline-flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    gap: var(--luke-space-2);
+    min-inline-size: 0;
+    max-width: 100%;
+    padding: var(--luke-space-2);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-fill-hover);
+  }
+
+  .luke-segment {
+    height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+    margin: 0;
+    padding: 0 var(--luke-space-12);
+    border: 0;
+    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+    /* Note that a segment draws the keyboard's ring inside itself, because
+       its trough leaves it no room for one outside. */
+    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+    background: none;
+    color: var(--luke-color-text-muted);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-hover, 0s) ease,
+      color var(--duration-hover, 0s) ease;
+  }
+
+  [data-luke-profile="desktop"] .luke-segment {
+    cursor: default;
+  }
+
+  /* The site's muted ink holds AA on its page's ground and not on the
+     trough, so its segments are drawn in the text's own ink, the chosen one
+     standing out by its fill. */
+  [data-luke-profile="web"] .luke-segment {
+    color: var(--luke-color-text);
+  }
+
+  .luke-segment:hover:not(:disabled) {
+    color: var(--luke-color-text);
+  }
+
+  .luke-segment[aria-checked="true"] {
+    background: var(--luke-color-fill-strong);
+    color: var(--luke-color-text);
+  }
+
+  .luke-segment:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
