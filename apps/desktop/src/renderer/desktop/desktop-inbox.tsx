@@ -15,6 +15,7 @@ import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
+import { appPlatform } from "../app-platform";
 import { AutomationDirectory } from "../automation-directory";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
@@ -180,7 +181,7 @@ const NO_OPEN_AGENTS: readonly string[] = [];
 /** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them. */
 export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const view = tasks.inboxView;
-  const { act, tell } = useAct();
+  const { act } = useAct();
   const openLink = useOpenLink();
   const now = useMinute();
   const choices = useInboxViewChoices();
@@ -514,7 +515,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                           { kind: MENTION_KIND.FILE, path: skill.path },
                           place,
                         );
-                        tell(ACT_KIND.GITHUB_OPEN, { url });
+                        appPlatform().openGitHub(url);
                       }}
                     >
                       <InboxPane

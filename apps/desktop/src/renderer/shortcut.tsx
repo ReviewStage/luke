@@ -13,8 +13,8 @@
  * the rest.
  */
 
+import { type ShortcutChord, shortcutAccelerator, shortcutGlyphs } from "@luke/settings/shortcuts";
 import type React from "react";
-import { type ShortcutChord, shortcutAccelerator, shortcutGlyphs } from "#shared/shortcuts";
 
 /** Which chord: the window's own, or a system-wide key's accelerator as Settings stores it. */
 type ShortcutOf =

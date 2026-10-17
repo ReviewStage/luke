@@ -9,12 +9,14 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
@@ -119,87 +121,79 @@ beforeEach(() => {
   heldCreates = undefined;
   changeRefused = false;
   copied = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.ISSUES_LIST) {
-          listed.push(request.payload.workspaceId);
-          const value = lists.shift() ?? {
-            issues: standing.filter((each) => each.archivedAt === null),
-          };
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.ISSUES_LIST) {
+        listed.push(request.payload.workspaceId);
+        const value = lists.shift() ?? {
+          issues: standing.filter((each) => each.archivedAt === null),
+        };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.ISSUES_CREATE) {
+        creates.push(request.payload);
+        if (createRefused) {
+          const value = { failure: ISSUE_CALL_FAILURE.INVALID };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
-        if (request.kind === ACT_KIND.ISSUES_CREATE) {
-          creates.push(request.payload);
-          if (createRefused) {
-            const value = { failure: ISSUE_CALL_FAILURE.INVALID };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-          }
-          const { title, status, priority } = request.payload;
-          const made = issue(standing.length + 1, {
-            title,
-            updatedAt: 1_000,
-            ...(status === undefined ? undefined : { status }),
-            ...(priority === undefined ? undefined : { priority }),
-          });
-          standing = [made, ...standing];
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
-          const held = heldCreates;
-          if (held === undefined) return Promise.resolve(done);
-          return new Promise((resolve) => held.push(() => resolve(done)));
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
-        }
-        if (request.kind === ACT_KIND.ISSUES_READ) {
-          reads.push(request.payload.issueId);
-          const found = standing.find((each) => each.id === request.payload.issueId);
-          const value =
-            found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.ISSUES_CHANGE) {
-          changes.push(request.payload);
-          const { issueId, change } = request.payload;
-          const was = standing.find((each) => each.id === issueId);
-          if (changeRefused) {
-            const refused = {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
-            };
-            const held = heldChanges;
-            if (held === undefined) return Promise.resolve(refused);
-            return new Promise((resolve) => held.push(() => resolve(refused)));
-          }
-          if (was === undefined) {
-            const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-          }
-          const { archived, ...fields } = change;
-          const changed: Issue = {
-            ...was,
-            ...fields,
-            archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
-            updatedAt: was.updatedAt + 1,
+        const { title, status, priority } = request.payload;
+        const made = issue(standing.length + 1, {
+          title,
+          updatedAt: 1_000,
+          ...(status === undefined ? undefined : { status }),
+          ...(priority === undefined ? undefined : { priority }),
+        });
+        standing = [made, ...standing];
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
+        const held = heldCreates;
+        if (held === undefined) return Promise.resolve(done);
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+      }
+      if (request.kind === ACT_KIND.ISSUES_READ) {
+        reads.push(request.payload.issueId);
+        const found = standing.find((each) => each.id === request.payload.issueId);
+        const value =
+          found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.ISSUES_CHANGE) {
+        changes.push(request.payload);
+        const { issueId, change } = request.payload;
+        const was = standing.find((each) => each.id === issueId);
+        if (changeRefused) {
+          const refused = {
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
           };
-          standing = standing.map((each) => (each.id === issueId ? changed : each));
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
           const held = heldChanges;
-          if (held === undefined) return Promise.resolve(done);
-          return new Promise((resolve) => held.push(() => resolve(done)));
+          if (held === undefined) return Promise.resolve(refused);
+          return new Promise((resolve) => held.push(() => resolve(refused)));
         }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        if (was === undefined) {
+          const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        const { archived, ...fields } = change;
+        const changed: Issue = {
+          ...was,
+          ...fields,
+          archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
+          updatedAt: was.updatedAt + 1,
+        };
+        standing = standing.map((each) => (each.id === issueId ? changed : each));
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
+        const held = heldChanges;
+        if (held === undefined) return Promise.resolve(done);
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });

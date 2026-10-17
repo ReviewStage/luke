@@ -48,6 +48,7 @@ import {
 import { type ReactNode, useCallback, useId, useState } from "react";
 import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Skeleton, SkeletonRegion } from "../skeleton";
@@ -432,7 +433,6 @@ function PullRequestBar({
   reading: boolean;
   onRefresh: () => void;
 }): React.JSX.Element {
-  const { tell } = useAct();
   return (
     <div className="file-view-bar pull-request-bar">
       {published === undefined ? null : (
@@ -448,7 +448,7 @@ function PullRequestBar({
                 type="button"
                 className="icon-button"
                 aria-label="Open on GitHub"
-                onClick={() => tell(ACT_KIND.GITHUB_OPEN, { url: published.url })}
+                onClick={() => appPlatform().openGitHub(published.url)}
               >
                 <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
               </button>

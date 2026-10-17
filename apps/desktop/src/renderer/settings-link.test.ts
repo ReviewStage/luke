@@ -8,6 +8,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settin
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { WorkspacePage } from "./settings/workspace-page";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
@@ -34,12 +35,8 @@ interface Landing {
 const roots: Root[] = [];
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }),
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }),
   });
 });
 

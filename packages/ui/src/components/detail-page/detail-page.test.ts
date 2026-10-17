@@ -3,6 +3,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { PAGE_FRAME } from "../page-frame/page-frame.js";
 import { DetailPage, type DetailSecondary } from "./detail-page.js";
 
 /**
@@ -10,7 +11,8 @@ import { DetailPage, type DetailSecondary } from "./detail-page.js";
  * secondary column a landmark of its own named by its label and holding only
  * its own content, a page with none has no such landmark, an empty slot draws
  * nothing, and each column takes the keyboard so it can be scrolled by its
- * keys. Synthetic plans.
+ * keys. Under the window's toolbar the page draws no title of its own,
+ * stands the toolbar, and is named by its label. Synthetic plans.
  */
 
 const roots: Root[] = [];
@@ -100,4 +102,28 @@ test("the main content and the secondary column each take the keyboard's focus",
   expect(document.activeElement).toBe(main);
   details.focus();
   expect(document.activeElement).toBe(details);
+});
+
+test("under the toolbar the page is a region named by its label, with no title of its own", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(DetailPage, {
+        frame: PAGE_FRAME.TOOLBAR,
+        label: "Launch checklist",
+        toolbar: createElement("header", null, createElement("button", { type: "button" }, "Edit")),
+        secondary: FACTS,
+        children: createElement("p", null, "Step 1"),
+      }),
+    ),
+  );
+  const region = find(container, "section");
+  expect(nameOf(region)).toBe("Launch checklist");
+  expect(container.querySelector("h1")).toBeNull();
+  expect(find(region, "header button").textContent).toBe("Edit");
+  expect(find(region, "[tabindex]", "Step 1").textContent).toBe("Step 1");
+  expect(nameOf(find(region, "aside"))).toBe("Details");
 });

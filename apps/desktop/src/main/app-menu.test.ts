@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
-import type { MenuItemConstructorOptions } from "electron";
-import { describe, test } from "vitest";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -12,7 +9,10 @@ import {
   shortcutAccelerator,
   shortcutShown,
   shownShortcutGroups,
-} from "#shared/shortcuts";
+} from "@luke/settings/shortcuts";
+import { experimentsOn } from "@luke/settings/testing";
+import type { MenuItemConstructorOptions } from "electron";
+import { describe, test } from "vitest";
 import { ellipsized } from "#testing/action-label";
 import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
 

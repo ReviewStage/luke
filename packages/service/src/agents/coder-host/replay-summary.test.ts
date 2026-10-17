@@ -86,7 +86,7 @@ it.effect("steps past one call's room are summarized in chunks, then combined ol
 );
 
 it.effect(
-  "chunks past the cap leave out the oldest steps, the summary says how many, and each chunk's summary is held to its share of the combining call",
+  "chunks past the cap leave out the oldest steps, the summary says how many and stands for the rest alone, and each chunk's summary is held to its share of the combining call",
   () =>
     Effect.gen(function* () {
       const { summary, asked, bounds } = scripted((prompt) =>
@@ -100,7 +100,7 @@ it.effect(
         written.value.text,
         /^\(The oldest 2 steps were too many to summarize and are left out\.\)/u,
       );
-      assert.equal(written.value.steps, steps.length);
+      assert.equal(written.value.steps, steps.length - 2, "the two left out are not summarized");
       assert.equal(asked.length, REPLAY_FIT.MAX_CHUNKS + 1);
       const chunkBound = bounds[0] ?? 0;
       assert.ok(
@@ -109,6 +109,28 @@ it.effect(
       );
       assert.equal(bounds.at(-1), REPLAY_FIT.SUMMARY_OUTPUT_TOKENS);
       assert.ok(!asked.some((prompt) => prompt.includes("Step 0.") || prompt.includes("Step 1.")));
+    }),
+);
+
+it.effect(
+  "a carried recap in a chunk past the cap is left out with its steps, and the summary stands for none of them",
+  () =>
+    Effect.gen(function* () {
+      const { summary, asked } = scripted((prompt) =>
+        prompt.includes("Part 1:") ? "Whole recap." : "Part.",
+      );
+      const earlier = { text: "The first twenty steps built the store.", steps: 20 };
+      // Each step fills a chunk, the recap riding in the first: one chunk past the cap.
+      const steps = Array.from({ length: REPLAY_FIT.MAX_CHUNKS + 1 }, (_, at) => said(at, 20_000));
+      const written = yield* summarizeSteps(summary, steps, windowFor(25_000), earlier);
+
+      assert.ok(Option.isSome(written));
+      assert.match(
+        written.value.text,
+        /^\(The oldest 21 steps were too many to summarize and are left out\.\)/u,
+      );
+      assert.equal(written.value.steps, REPLAY_FIT.MAX_CHUNKS);
+      assert.ok(!asked.some((prompt) => prompt.includes("built the store")));
     }),
 );
 
