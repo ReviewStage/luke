@@ -9,7 +9,7 @@ import type {
 } from "@luke/settings/diff-view";
 
 /**
- * contract.ts -- what the Files changed view and the diff bundle say to each other: the one mount call, and the handle the view redraws the diff through.
+ * contract.ts -- what the Files changed view and the diff bundle say to each other: a mount for one patch and one for a list of files, and the handles the view redraws them through.
  *
  * A changed file's patch is drawn by Pierre's diffs (`@pierre/diffs`), with
  * Shiki colouring it, which is too large for the bundle every window parses,
@@ -45,6 +45,24 @@ export interface DiffLook {
   readonly ligatures: boolean;
 }
 
+/** Whether two looks draw a diff alike: every setting the same, each appearance's theme among them. */
+export function sameLook(a: DiffLook, b: DiffLook): boolean {
+  return (
+    a.layout === b.layout &&
+    a.indicators === b.indicators &&
+    a.inlineDiff === b.inlineDiff &&
+    a.backgrounds === b.backgrounds &&
+    a.lineNumbers === b.lineNumbers &&
+    a.wrap === b.wrap &&
+    a.themes.dark === b.themes.dark &&
+    a.themes.light === b.themes.light &&
+    a.font === b.font &&
+    a.fontSize === b.fontSize &&
+    a.lineHeight === b.lineHeight &&
+    a.ligatures === b.ligatures
+  );
+}
+
 /** Which side of a diff a selected line is counted on: the old side's, a removed line's, or the new side's. */
 export const DIFF_SELECTION_SIDE = {
   DELETIONS: "deletions",
@@ -66,6 +84,22 @@ export interface DiffAnnotation {
   readonly line: number;
 }
 
+/** Whether two runs of notes stand under the same lines by the same keys. */
+export function sameNotes(a: readonly DiffAnnotation[], b: readonly DiffAnnotation[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((note, at) => {
+      const other = b[at];
+      return (
+        other !== undefined &&
+        note.key === other.key &&
+        note.side === other.side &&
+        note.line === other.line
+      );
+    })
+  );
+}
+
 /** What the view hands the bundle: one file's patch, headed as git writes one, how to draw it, the lines lit in it, if any, and whether it is an excerpt. */
 export interface DiffViewProps {
   readonly patch: string;
@@ -73,10 +107,42 @@ export interface DiffViewProps {
   readonly selected?: DiffSelection | undefined;
   /** Whether the patch is an excerpt, a few lines of a file as a review thread's, drawn with nothing said of the lines around them. */
   readonly excerpt?: boolean | undefined;
-  /** The notes drawn under lines, each by its key, whose element `renderAnnotation` hands over; none for none. */
-  readonly annotations?: readonly DiffAnnotation[] | undefined;
-  /** The element a note's key is drawn in, kept by the view and filled by it, which the bundle stands under its line. */
-  readonly renderAnnotation?: ((key: string) => HTMLElement) | undefined;
+}
+
+/**
+ * The line a note stands on to stand above a file's first hunk rather than
+ * under a line: Pierre's own place for a note on the whole file, which is
+ * drawn under the file's header whether or not the file has any hunks.
+ */
+export const FILE_NOTE_LINE = 0;
+
+/** One file of a list: its path, which keys it; its patch, headed as git writes one, with no hunks where it has none to draw; whether only its header is drawn; and its notes. */
+export interface DiffListFile {
+  readonly path: string;
+  readonly patch: string;
+  readonly collapsed: boolean;
+  readonly annotations: readonly DiffAnnotation[];
+}
+
+/**
+ * What the view hands the bundle for a list of files: the files in order,
+ * how to draw them, the element each file's header is drawn in and each
+ * note, both kept by the view and filled by it, and the door told which file
+ * stands at the top of the list as it scrolls.
+ */
+export interface DiffListProps {
+  readonly files: readonly DiffListFile[];
+  readonly look: DiffLook;
+  readonly renderHeader: (path: string) => HTMLElement;
+  readonly renderAnnotation: (path: string, key: string) => HTMLElement;
+  readonly onTopFile: (path: string) => void;
+}
+
+/** The list as mounted: drawn again for new props, scrolled to a file's header, and taken down. */
+export interface DiffListHandle {
+  readonly update: (props: DiffListProps) => void;
+  readonly reveal: (path: string) => void;
+  readonly unmount: () => void;
 }
 
 /** The diff as mounted: drawn again for new props, and taken down. */
@@ -92,4 +158,10 @@ export interface DiffViewModule {
    * find reads (`../find-matches.ts`'s `FIND_SHADOW_ATTRIBUTE`).
    */
   readonly mount: (host: HTMLElement, props: DiffViewProps) => DiffViewHandle;
+  /**
+   * Draws the files under `host`, which is the list's scroller, each in a
+   * shadow root of its own the tab's find reads, only those near the view
+   * drawn at all.
+   */
+  readonly mountList: (host: HTMLElement, props: DiffListProps) => DiffListHandle;
 }

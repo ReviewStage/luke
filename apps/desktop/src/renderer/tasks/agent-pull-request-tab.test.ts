@@ -52,7 +52,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
 import type { SideBundles } from "../bundle-loader";
-import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
+import type { DiffListProps, DiffViewModule, DiffViewProps } from "../diff-view/contract";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect";
 import { MemberDirectory } from "../member-directory";
 import { rendererRuntime } from "../renderer-runtime";
@@ -201,6 +201,14 @@ const DIFF_STAND_IN: DiffViewModule = {
     previews.push(props);
     return { update: () => undefined, unmount: () => undefined };
   },
+  mountList: (_host, props) => {
+    lists.push(props);
+    return {
+      update: (next) => lists.push(next),
+      reveal: () => undefined,
+      unmount: () => undefined,
+    };
+  },
 };
 
 let bundles: SideBundles;
@@ -216,6 +224,8 @@ let changes: (readonly [string, PullRequestActionRequest])[] = [];
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
 /** What the service waits on before it answers a change, where a test holds it; none answers at once. */
 let changeHeld: Promise<void> | undefined;
+/** What Files changed handed the diff bundle's list, mount first, each draw after it. */
+let lists: DiffListProps[] = [];
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -226,6 +236,7 @@ beforeEach(() => {
   previews = [];
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+  lists = [];
   changeHeld = undefined;
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
@@ -2107,14 +2118,12 @@ test("Files changed draws each review thread under its line, its comments throug
     act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
   };
 
-  const file = previews.find(
-    (each) => each.annotations !== undefined && each.annotations.length > 0,
-  );
+  const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
+  const file = drawn.files.find((each) => each.path === "src/invite.ts");
   assert.deepEqual(file?.annotations, [
     { key: `${PAGE}#discussion_r1`, side: "additions", line: 13 },
   ]);
-  const note =
-    file?.renderAnnotation?.(`${PAGE}#discussion_r1`) ?? assert.fail("the thread is drawn");
+  const note = drawn.renderAnnotation("src/invite.ts", `${PAGE}#discussion_r1`);
   assert.equal(
     note.querySelector('.pull-request-thread-comment [data-streamdown="strong"]')?.textContent,
     "once",
@@ -2153,11 +2162,12 @@ test("a review thread on its line in Files changed is replied on and resolved fr
   );
   await act(async () => option(tab, "Files changed").click());
   await settle();
-  const note =
-    previews
-      .find((each) => each.annotations?.some((one) => one.line === 13))
-      ?.renderAnnotation?.(`${PAGE}#discussion_r1`) ??
-    assert.fail("the thread is drawn on its line");
+  const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
+  assert.ok(
+    drawn.files.some((file) => file.annotations.some((one) => one.line === 13)),
+    "the thread is drawn on its line",
+  );
+  const note = drawn.renderAnnotation("src/invite.ts", `${PAGE}#discussion_r1`);
 
   writeReply(note, "Renamed.");
   act(() => threadPress(note, "Reply").click());
