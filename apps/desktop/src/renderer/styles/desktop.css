@@ -3124,7 +3124,7 @@ ul.actor-stack {
    so it lines up with a long sent message's left edge rather than a width of
    its own: the measure is the sent message's (`Message`'s `is-user`), and a
    card folded or open spans all of it. */
-.agent-origin > .agent-origin-card {
+.agent-origin > .plan-card {
   width: 100%;
 }
 

@@ -11,7 +11,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
-import { Plan, PlanContent, PlanHeader } from "../ai-elements/task";
+import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/task";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { useFindOpen } from "../find-in-tab";
 import { useMemberDirectory } from "../member-directory";
@@ -451,9 +451,11 @@ export function ReplayCard({
   const summary = summaryLine(replay);
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin">
-      <Plan data-replay-card="" aria-label={replayVerb(replay)} className="agent-origin-card">
+      <Plan data-replay-card="" aria-label={replayVerb(replay)}>
         <PlanHeader>
-          <SplitIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <PlanIcon>
+            <SplitIcon />
+          </PlanIcon>
           <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
             <span className="text-muted-foreground">{replayVerb(replay)} </span>
             {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the chip's own press from also folding the card; the chip is the control. */}
@@ -464,7 +466,7 @@ export function ReplayCard({
             <span className="text-muted-foreground"> · {replayCount(replay)}</span>
           </span>
         </PlanHeader>
-        <PlanContent className="flex flex-col gap-3">
+        <PlanContent layout={PLAN_BODY_LAYOUT.STACK}>
           <p className="m-0 text-[12px] text-muted-foreground">{replayLede(name)}</p>
           {summary === undefined || replay.summary === undefined ? null : (
             <SummaryRow line={summary} text={replay.summary.text} />
