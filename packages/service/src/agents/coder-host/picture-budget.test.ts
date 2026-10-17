@@ -62,7 +62,7 @@ interface Received {
 }
 
 function collect(blocks: readonly Block[] | string | undefined, into: Received): void {
-  if (blocks === undefined || typeof blocks === "string") return;
+  if (!Array.isArray(blocks)) return;
   for (const block of blocks) {
     if (block.type === "image" && block.source?.data !== undefined)
       into.pictures.push(block.source.data);

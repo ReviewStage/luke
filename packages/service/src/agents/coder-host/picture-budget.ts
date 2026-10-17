@@ -51,7 +51,9 @@ type ResultFilePart = Extract<ResultPart, { type: "file" }>;
 /** The bytes a picture's data takes on the wire: base64 as written, raw bytes as base64 will write them, none for a URL or a reference the provider fetches. */
 function wireBytesOf(data: FilePart["data"]): number {
   if (data.type !== "data") return 0;
-  return typeof data.data === "string" ? data.data.length : Math.ceil(data.data.byteLength / 3) * 4;
+  return data.data instanceof Uint8Array
+    ? Math.ceil(data.data.byteLength / 3) * 4
+    : data.data.length;
 }
 
 /** Whether a file part is a picture. */
@@ -69,7 +71,7 @@ function leftOutWords(filename: string | undefined): string {
 function pictureSizesOf(prompt: ModelCallOptions["prompt"]): number[] {
   const sizes: number[] = [];
   for (const message of prompt) {
-    if (typeof message.content === "string") continue;
+    if (message.role === "system") continue;
     for (const part of message.content) {
       if (part.type === "file" && isPicture(part)) sizes.push(wireBytesOf(part.data));
       if (part.type !== "tool-result" || part.output.type !== "content") continue;
