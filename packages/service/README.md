@@ -973,6 +973,30 @@ sign-in it began earlier on `unavailable`, and no agent of its is handed
 the provider's server (`src/agents/agent-runtime/servers.ts`); the desktop draws no row
 for it. Disconnect and deleting the account still revoke its grant.
 
+## Luke as a Linear agent (trial)
+
+`POST /api/linear/agent` (`src/linear/linear-agent-app.ts`) is the webhook of a
+Linear OAuth app built on Linear's agent platform: delegating an issue to the
+app, or @mentioning it, sends an `AgentSessionEvent`. The route compares
+`Linear-Signature` against the HMAC-SHA256 of the body's own bytes under
+`LINEAR_AGENT_WEBHOOK_SECRET` in constant time before it reads anything, and
+refuses a delivery whose `webhookTimestamp` stands more than a minute from now
+(`invalid-token`, 401). A `created` session on an issue starts a task in
+`LINEAR_AGENT_WORKSPACE_ID`, owned by `LINEAR_AGENT_USER_ID`, who must be a
+member of it, with the issue attached as the New task picker attaches one;
+then the app sets the session's external link to the task's address and posts
+a `response` activity naming it. Where the task could not be started the
+session gets an `error` activity; any other delivery, a `prompted` follow-up
+among them, is answered 200 and read no further.
+
+It is a trial over one Linear workspace and one Luke workspace, so nothing of
+its own is stored: the app speaks as itself with a client-credentials token
+minted on each delivery from `LINEAR_AGENT_CLIENT_ID` and
+`LINEAR_AGENT_CLIENT_SECRET`, which Linear issues for the workspace the app was
+made in. A deployment missing any of the five variables answers every delivery
+`unavailable` (503). Nothing of a delivery is logged; a failure logs its step
+alone.
+
 ## The coding-agent service
 
 `apps/dev/` is the second standalone eve app, built and deployed as the `dev`

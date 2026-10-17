@@ -155,6 +155,7 @@
     "./integrations/mcp-tool-parameters": "./src/integrations/mcp-tool-parameters.js",
     "./integrations/mcp-tools": "./src/integrations/mcp-tools.js",
     "./integrations/workspace-linear-app": "./src/integrations/workspace-linear-app.js",
+    "./linear/linear-agent-app": "./src/linear/linear-agent-app.js",
     "./maintenance/maintenance-app": "./src/maintenance/maintenance-app.js",
     "./maintenance/maintenance-bounds": "./src/maintenance/maintenance-bounds.js",
     "./maintenance/maintenance-sweep": "./src/maintenance/maintenance-sweep.js",

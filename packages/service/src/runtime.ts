@@ -16,6 +16,7 @@ import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
 } from "./integrations/integration-connect.js";
+import { linearAgentFromEnvironment } from "./linear/linear-agent-app.js";
 import { sentryLogger } from "./observability/sentry.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
 
@@ -77,6 +78,7 @@ export const webServices = Layer.mergeAll(
   githubAppFromEnvironment,
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
+  linearAgentFromEnvironment,
   webLogger,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
 ).pipe(Layer.provide(webConfigProvider));

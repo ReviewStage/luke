@@ -348,6 +348,10 @@
     "dest": "/api/default.js?route=issues"
   },
   {
+    "src": "/api/linear/agent",
+    "dest": "/api/default.js?route=linear/agent"
+  },
+  {
     "src": "/api/mac-commands",
     "dest": "/api/default.js?route=mac-commands"
   },
