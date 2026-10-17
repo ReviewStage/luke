@@ -1436,13 +1436,16 @@ test("a schedule's day, time, and zone are saved as picked and typed, and a cust
 
   pick(page, "Repeats", "Custom");
   type(page.querySelector("input[aria-label='Cron']"), "15 2 * * 1-5");
+  const created = places.at(-1);
+  assert.equal(created?.kind, AUTOMATIONS_PAGE.EDIT);
   act(() => button("Save").click());
   await settle();
 
-  assert.deepEqual(changes.at(-1)?.change.trigger, {
-    kind: AUTOMATION_TRIGGER.SCHEDULE,
-    cron: "15 2 * * 1-5",
-    timezone: "Asia/Tokyo",
+  assert.deepEqual(changes.at(-1), {
+    automationId: "automationId" in created ? created.automationId : undefined,
+    change: {
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "15 2 * * 1-5", timezone: "Asia/Tokyo" },
+    },
   });
 });
 
