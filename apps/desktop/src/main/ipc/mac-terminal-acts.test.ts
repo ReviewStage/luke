@@ -154,7 +154,7 @@ it.effect("an open runs the branch's script, its output out on the port and typi
     assert.ok(terminal !== undefined && port !== undefined);
     assert.match(terminal.script, /'\/state\/clones\/acme\/app'/u);
     assert.match(terminal.script, /'luke\/add-thing'/u);
-    assert.match(terminal.script, /'\/state\/worktrees\/acme\/app\/luke%2Fadd-thing'/u);
+    assert.match(terminal.script, /'\/state\/worktrees\/acme\/app'/u);
     assert.match(terminal.script, /pnpm dev/u);
 
     terminal.output("ready");
