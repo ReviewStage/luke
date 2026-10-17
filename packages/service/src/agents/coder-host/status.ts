@@ -48,7 +48,8 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * was its, and ended without the store hearing it received. A failed turn
  * is also read for why, as one of the wire's fixed words: the sweep's own
  * word for a turn it settled, else the host's refusal sentences where the
- * turn's detail carries one, GitHub's or the sandbox's, else the model
+ * turn's detail carries one, GitHub's or the sandbox's, else a provider's
+ * refusal of a prompt longer than the model's window, else the model
  * call, which is what every other eve failure of a coding turn is. An
  * unanswered line after a turn that did not fail has no word, and its end
  * line says Failed alone. Nothing of the detail itself leaves here.
@@ -155,7 +156,19 @@ export function codingAgentStatusOf(
     : status;
 }
 
-/** The host's refusal sentences a failed turn's detail may carry, by the word the wire says for each. */
+/**
+ * What a provider says, in the error eve keeps in a failed turn's detail,
+ * when the prompt is longer than the model's window: Anthropic's
+ * "prompt is too long: 1368155 tokens > 1000000 maximum", and OpenAI's
+ * error code and words for the same.
+ */
+const CONTEXT_OVERFLOW_WORDS: readonly string[] = [
+  "prompt is too long",
+  "context_length_exceeded",
+  "maximum context length",
+];
+
+/** The host's refusal sentences, and a provider's words for a prompt past the window, a failed turn's detail may carry, by the word the wire says for each. */
 const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])[] = [
   [
     CODING_AGENT_FAILURE.GITHUB,
@@ -166,6 +179,7 @@ const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])
       REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE,
     ],
   ],
+  [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW, CONTEXT_OVERFLOW_WORDS],
   [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY, [CODER_REFUSAL.FAST_ON_OWN_KEY]],
   [CODING_AGENT_FAILURE.FAST_NOT_ENABLED, [CODER_REFUSAL.FAST_NOT_ENABLED]],
   [

@@ -1,14 +1,16 @@
 import type { CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { Duration } from "effect";
 import { expect, test } from "vitest";
+import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
 import { CODER } from "./bounds.js";
-import { codingAgentActivityAt, codingAgentStatusOf } from "./status.js";
+import { codingAgentActivityAt, codingAgentFailureOf, codingAgentStatusOf } from "./status.js";
 
 /**
  * status.test.ts -- when a coding agent last did something settled: started,
  * handed a message, or its turn ended, and never a moment a turn streams;
- * and how long a line of the developer's awaiting its turn reads it running.
+ * how long a line of the developer's awaiting its turn reads it running; and
+ * why a failed turn failed, a prompt past the model's window told apart.
  */
 
 const LINE_GRACE_MS = Duration.toMillis(CODER.LINE_GRACE);
@@ -102,4 +104,26 @@ test("a line sent while the newest turn was queued, and never taken, reads the a
     codingAgentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
   expect(at(9_000 + LINE_GRACE_MS)).toBe(CODING_AGENT_STATUS.RUNNING);
   expect(at(9_001 + LINE_GRACE_MS)).toBe(CODING_AGENT_STATUS.FAILED);
+});
+
+/** A turn the model call failed, eve's detail as given. */
+const failedOnModel = (failureDetail: string) => ({
+  status: TURN_STATUS.FAILED,
+  failure: BRAIN_REQUEST_FAILURE.MODEL,
+  failureDetail,
+});
+
+test("a prompt the provider refused as longer than the window reads as a context overflow, any other model failure as the model's", () => {
+  // The words of the continue Anthropic refused in production, as eve keeps them.
+  const refused = failedOnModel(
+    "MODEL_CALL_FAILED [statusCode] prompt is too long: 1368155 tokens > 1000000 maximum",
+  );
+  const openAi = failedOnModel(
+    "MODEL_CALL_FAILED [code] context_length_exceeded This model's maximum context length is 272000 tokens.",
+  );
+  const overloaded = failedOnModel("MODEL_CALL_FAILED [statusCode] Overloaded");
+
+  expect(codingAgentFailureOf(refused)).toBe(CODING_AGENT_FAILURE.CONTEXT_OVERFLOW);
+  expect(codingAgentFailureOf(openAi)).toBe(CODING_AGENT_FAILURE.CONTEXT_OVERFLOW);
+  expect(codingAgentFailureOf(overloaded)).toBe(CODING_AGENT_FAILURE.MODEL);
 });
