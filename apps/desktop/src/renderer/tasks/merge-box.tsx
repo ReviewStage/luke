@@ -279,7 +279,7 @@ export function MergeActions({
             body: `GitHub merges it into ${pullRequest.base} as you, at commit ${asked.headSha.slice(0, 7)}. A merge can't be undone from here.`,
             verb: METHOD_WORDS[asked.method],
             running: "Merging",
-            tone: DIALOG_TONE.DANGER,
+            tone: DIALOG_TONE.PRIMARY,
           }}
         />
       )}
