@@ -16,9 +16,13 @@
  * `authenticateGitHub` and the Terminal tab set it, so no token enters the
  * sandbox's files or a command's words. A sandbox this step woke is stopped
  * again once it is done, however it ended, unless a developer's terminal
- * holds it or a turn of the source began meanwhile; one already up stays as
- * it was. The whole step is bounded, so a Start waits on it no longer than
- * that, and whatever goes wrong is a miss the caller names, never a failure.
+ * holds it, a turn of the source began meanwhile, or another Start's copy
+ * still holds it past this one's own hold; one already up stays as it was.
+ * Files named the way credentials are kept are never copied. No copy is
+ * made where the task moved to another repository since the source
+ * started, since the new agent's checkout would not hold the branch. The
+ * whole step is bounded, so a Start waits on it no longer than that, and
+ * whatever goes wrong is a miss the caller names, never a failure.
  */
 
 import { createHash } from "node:crypto";
@@ -26,7 +30,8 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { type CodingAgent, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
-import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
+import { holdSandbox, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
+import { readTask } from "@luke/database/models/task-store";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, Duration, Effect, Option, type Redacted, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -51,9 +56,11 @@ export const SNAPSHOT = {
   STOP_TIMEOUT: Duration.seconds(10),
 } as const;
 
-/** Why the source's work was not copied: the Start already made its agent, the source never opened a sandbox, the copy failed, or it ran past its bound. */
+/** Why the source's work was not copied: the Start already made its agent, the task moved repository since the source started, the source never opened a sandbox, the copy failed, or it ran past its bound. */
 export const SNAPSHOT_MISS = {
   STARTED: "started",
+  /** The task moved to another repository than the source's, which the new agent's checkout would not hold the branch in. */
+  MOVED: "moved",
   NO_SANDBOX: "no-sandbox",
   FAILED: "failed",
   TIMED_OUT: "timed-out",
@@ -87,12 +94,29 @@ export interface SnapshotAsk<R> {
 const UP_STATUSES: ReadonlySet<string> = new Set(["pending", "running"]);
 
 /**
+ * Files the copy never picks up from the working tree, by glob, because
+ * they are named the way credentials are kept and a push would publish
+ * them: one tracked already stays as `HEAD` holds it.
+ */
+const UNCOPIED_PATHS: readonly string[] = [
+  "**/.env",
+  "**/.env.local",
+  "**/.env.*.local",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.p12",
+  "**/id_rsa",
+  "**/id_ed25519",
+];
+
+/**
  * The copy, run in the checkout with the branch and the message as its two
  * arguments: the work recorded on an index of its own in a directory made
  * for it, committed on `HEAD` where the tree differs, pushed to the branch,
  * and the commit and `HEAD` printed on one line. The push skips the
  * repository's own hooks, which are the agent's to run, and forces, because
  * the branch is named for this one Start and a retry of it pushes again.
+ * What it adds leaves out the files named like credentials above.
  */
 const SNAPSHOT_SCRIPT = [
   "set -eu",
@@ -102,7 +126,7 @@ const SNAPSHOT_SCRIPT = [
   "export GIT_INDEX_FILE",
   "head=$(git rev-parse --verify HEAD)",
   'git read-tree "$head"',
-  "git add -A",
+  `git add -A -- . ${UNCOPIED_PATHS.map((path) => `':(exclude,glob)${path}'`).join(" ")}`,
   "tree=$(git write-tree)",
   'if [ "$tree" = "$(git rev-parse "$head^{tree}")" ]; then commit=$head; else commit=$(git commit-tree "$tree" -p "$head" -m "$2"); fi',
   'git push --quiet --no-verify --force origin "$commit:refs/heads/$1"',
@@ -258,13 +282,27 @@ export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(fu
     if (Option.isSome(yield* readCodingAgentByKey(userId, idempotencyKey))) {
       return missed(SNAPSHOT_MISS.STARTED);
     }
+    // Note that the new agent clones the task's repository as it stands now, so a branch pushed to the
+    // one the source cloned before the task moved would be none of its checkout's.
+    const task = yield* readTask(userId, source.taskId ?? "");
+    const repository = Option.isSome(task) ? task.value.task.repository : null;
+    if (repository?.toLowerCase() !== source.repository.toLowerCase()) {
+      return missed(SNAPSHOT_MISS.MOVED);
+    }
     const [session] = yield* standingSessionsOf(source.userId, [source.conversationId]);
     if (session === undefined) return missed(SNAPSHOT_MISS.NO_SANDBOX);
     const api = yield* vercelSandboxApi(deploymentOidcToken);
     const target = { userId, conversationId: source.conversationId };
+    // The copy holds the sandbox as a terminal does for as long as it may take, so a copy beside it
+    // for another Start reads it held past its own hold and leaves it up, and a sandbox no copy
+    // stopped is stopped by the terminal sweep once the hold lapses.
+    const heldUntil = new Date(
+      (yield* Clock.currentTimeMillis) +
+        Duration.toMillis(Duration.sum(SNAPSHOT.TIMEOUT, SNAPSHOT.STOP_TIMEOUT)),
+    );
+    yield* holdSandbox(source.conversationId, heldUntil);
     const keepUp = Effect.gen(function* () {
-      const now = new Date(yield* Clock.currentTimeMillis);
-      if (yield* sandboxHeld(source.conversationId, now)) return true;
+      if (yield* sandboxHeld(source.conversationId, heldUntil)) return true;
       const turns = yield* latestTurnsOfReached([source.conversationId]);
       return TURN_UNDER_WAY.has(turns.get(source.conversationId)?.status ?? "");
     });

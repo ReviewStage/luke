@@ -22,7 +22,7 @@ import { SNAPSHOT, SNAPSHOT_MISS, type SnapshotOutcome, snapshotSource } from ".
  * Sandbox's REST API answering from a script and the sandbox's shell standing
  * as a real POSIX shell with git, in a checkout and a remote the test made
  * (`testing/source-sandbox.ts`): what it committed, changed, staged, and
- * made, bar what git ignores, lands as one commit on the branch asked for,
+ * made, bar what git ignores and files named like credentials, lands as one commit on the branch asked for,
  * and the source's own index and working tree are as they were; a checkout
  * with nothing uncommitted pushes its `HEAD`; a retry pushes over its own
  * branch; a stopped sandbox is woken and stopped again unless it must stay
@@ -85,7 +85,7 @@ function pushed({ remote, sh }: SourceCheckout): string {
 }
 
 it.effect(
-  "a running source's committed, changed, staged, and new files land as one commit on the branch, what git ignores left out, its own index and tree untouched and the sandbox left running",
+  "a running source's committed, changed, staged, and new files land as one commit on the branch, what git ignores and files named like credentials left out, its own index and tree untouched and the sandbox left running",
   (t) =>
     Effect.gen(function* () {
       const source = yield* checkoutFor(t);
@@ -96,6 +96,9 @@ it.effect(
       writeFileSync(join(checkout, "expiry.test.ts"), "test('expires');\n");
       mkdirSync(join(checkout, "dist"));
       writeFileSync(join(checkout, "dist", "bundle.js"), "built\n");
+      writeFileSync(join(checkout, ".env"), "SECRET=fixture\n");
+      mkdirSync(join(checkout, "certs"));
+      writeFileSync(join(checkout, "certs", "dev.pem"), "fixture\n");
       const before = standing(source);
       const sandbox = sourceSandbox(source, "running");
 

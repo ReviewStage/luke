@@ -119,8 +119,8 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [RETIRED_CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
 ]);
 
-/** A patch header naming a file, as `apply_patch` spells one. */
-const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete|Move to) File: (.+)$/u;
+/** A patch header naming a file, as `apply_patch` spells one: a file added, updated, or deleted, or where an update moves it to. */
+const PATCH_FILE_HEADER = /^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$/u;
 
 const CALL_ENTRY_WORDS = {
   EDITED: "Edited",
@@ -380,6 +380,20 @@ const recordsOf = (source: CodingAgent) =>
     return [...rows.values()].sort((first, second) => first.seq - second.seq);
   });
 
+/**
+ * How a branch of the repository is checked out in the new agent's
+ * checkout, which is cloned with the default branch alone, so the branch is
+ * added to what the remote fetches, fetched, and tracked as it is switched to.
+ */
+function fetchWords(branch: string): string {
+  return `fetch and check that branch out with \`git remote set-branches --add origin ${branch} && git fetch origin ${branch} && git switch ${branch}\`, since your checkout was cloned with the default branch alone`;
+}
+
+/** The words with their first letter capital. */
+function capitalized(words: string): string {
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
 /** Where the source's work stands for the new agent: the branch its checkout was copied to, or, where it could not be, the branch and pull request it left. */
 function whereOf(
   source: CodingAgent,
@@ -394,15 +408,15 @@ function whereOf(
       : "which held nothing it had not committed";
     const own = source.branch === null ? "" : ` Its own branch was \`${source.branch}\`${pull}.`;
     return (
-      `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: check that branch ` +
-      `out and build on it, and open your pull request from it as usual.${own}`
+      `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}, ` +
+      `build on it, and open your pull request from it as usual.${own}`
     );
   }
   if (source.branch === null) {
     return "It left no branch to build on, and its work could not be copied from its sandbox, so start from the repository's default branch.";
   }
   return (
-    `Its branch is \`${source.branch}\`${pull}. Check that branch out and continue there rather than ` +
+    `Its branch is \`${source.branch}\`${pull}. ${capitalized(fetchWords(source.branch))} and continue there rather than ` +
     "starting a new one; what it had not pushed could not be copied from its sandbox, so only what it pushed stands."
   );
 }

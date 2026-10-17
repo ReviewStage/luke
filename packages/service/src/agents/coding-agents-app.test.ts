@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
@@ -45,6 +45,7 @@ import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { openTaskConversation, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -145,7 +146,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { afterEach, vi } from "vitest";
+import { afterEach, type TestContext, vi } from "vitest";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
@@ -4299,29 +4300,40 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
-  it.effect(
-    "a continue copies the source's checkout, what it had not committed included, to a branch of its own from the sandbox it wakes and stops again, names that branch to build on, and keeps it on its record",
-    (t) =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureOidcToken());
-        const checkout = sourceCheckout(
-          yield* Effect.promise(() => temporaryDirectory(t, "copy-")),
-        );
-        writeFileSync(join(checkout.checkout, "invites.ts"), "export const ttl = 7;\n");
-        const sandbox = sourceSandbox(checkout, "stopped");
-        const { owner, task, ask, eve, source, stored } = yield* sourceAgentOn((sent) =>
-          sandbox.answer(sent.url, sent.method, sent.body),
-        );
-        yield* claimRuntimeSession(stored, "wrun_source", new Date());
-
+  /** A source whose stopped sandbox holds a change it never committed, over a checkout and remote on disk, and a continue of it. */
+  const copyScenario = (t: TestContext) =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureOidcToken());
+      const checkout = sourceCheckout(yield* Effect.promise(() => temporaryDirectory(t, "copy-")));
+      writeFileSync(join(checkout.checkout, "invites.ts"), "export const ttl = 7;\n");
+      const sandbox = sourceSandbox(checkout, "stopped");
+      const opened = yield* sourceAgentOn((sent) =>
+        sandbox.answer(sent.url, sent.method, sent.body),
+      );
+      yield* claimRuntimeSession(opened.stored, "wrun_source", new Date());
+      const continued = Effect.gen(function* () {
         const started = readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(
-            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          yield* opened.ask(
+            startAs(opened.owner, opened.task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: opened.source.id },
+            }),
           ),
         ).agent;
-        const preamble = openedParts(eve).parts.replay?.preamble ?? "";
+        return { started, preamble: openedParts(opened.eve).parts.replay?.preamble ?? "" };
+      });
+      return { ...opened, checkout, sandbox, continued };
+    });
+
+  it.effect(
+    "a continue copies the source's checkout, what it had not committed included, to a branch of its own from the sandbox it wakes and stops again, names that branch and how a fresh checkout fetches it, and keeps it on its record",
+    (t) =>
+      Effect.gen(function* () {
+        const { checkout, sandbox, continued } = yield* copyScenario(t);
+
+        const { started, preamble } = yield* continued;
 
         const branch = started.from?.branch ?? "";
         assert.match(branch, /^luke\/teammate-invitations-continued-[0-9a-f]{8}$/u);
@@ -4331,14 +4343,61 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ),
         );
         assert.ok(preamble.includes(`Its own branch was \`${PUBLISHED.branch}\``));
-        assert.equal(
-          checkout.sh(checkout.remote, "git", "show", `refs/heads/${branch}:invites.ts`),
-          "export const ttl = 7;",
+        // The words the preamble hands on, run in a checkout cloned as an agent's is, find the copy.
+        const fetch = /`(git remote set-branches [^`]+)`/u.exec(preamble)?.[1] ?? "";
+        const fresh = join(checkout.root, "fresh");
+        checkout.sh(
+          checkout.root,
+          "git",
+          "clone",
+          "--quiet",
+          "--single-branch",
+          "--branch",
+          "main",
+          checkout.remote,
+          fresh,
         );
+        checkout.sh(fresh, "sh", "-c", fetch);
+        assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), branch);
+        assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
         assert.deepEqual(
           [sandbox.ran, sandbox.stops],
           [[SOURCE_SANDBOX.WOKEN], [SOURCE_SANDBOX.WOKEN]],
         );
+      }),
+  );
+
+  it.effect(
+    "a sandbox held past the copy's own hold, by a developer's terminal or another Start's copy, is woken for the copy and left up",
+    (t) =>
+      Effect.gen(function* () {
+        const { stored, sandbox, continued } = yield* copyScenario(t);
+        yield* holdSandbox(stored.conversationId, new Date(Date.now() + 10 * 60_000));
+
+        const { started } = yield* continued;
+
+        assert.ok(started.from?.branch !== undefined);
+        assert.deepEqual([sandbox.ran, sandbox.stops], [[SOURCE_SANDBOX.WOKEN], []]);
+      }),
+  );
+
+  it.effect(
+    "a source whose task moved to another repository since it started is copied nowhere, its sandbox left asleep, and taken up from the branch it pushed",
+    (t) =>
+      Effect.gen(function* () {
+        const { source, sandbox, continued } = yield* copyScenario(t);
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ repository: "Acme/Former" })
+            .where(eq(codingAgent.id, source.id)),
+        );
+
+        const { started, preamble } = yield* continued;
+
+        assert.equal(started.from?.branch, undefined);
+        assert.match(preamble, /what it had not pushed could not be copied from its sandbox/u);
+        assert.deepEqual([sandbox.ran, sandbox.stops, sandbox.state.status], [[], [], "stopped"]);
       }),
   );
 
@@ -4379,6 +4438,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             input: patch(["src/invites.ts"]),
             output: "ok",
           },
+          {
+            type: "tool-apply_patch",
+            toolCallId: "call-6",
+            state: "output-available",
+            input: {
+              patchText:
+                "*** Begin Patch\n*** Update File: src/old.ts\n*** Move to: src/new.ts\n*** End Patch",
+            },
+            output: "ok",
+          },
         ]);
         const fork = (messageId: string) =>
           ask(
@@ -4408,7 +4477,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.match(parts.replay?.preamble ?? "", /You are a fork/u);
         assert.match(
           parts.replay?.preamble ?? "",
-          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`; undo/u,
+          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`; undo/u,
         );
         for (const named of [laterLine, randomUUID()]) {
           assert.deepEqual(
