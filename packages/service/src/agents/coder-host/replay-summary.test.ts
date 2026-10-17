@@ -1,18 +1,78 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { REPLAY_STEP_KIND, type ReplayStep, stepsBytes } from "@luke/features/agent-replay";
+import {
+  REPLAY_STEP_KIND,
+  REPLAY_TOOL_STATE,
+  type ReplayStep,
+  stepsBytes,
+  summaryBytes,
+  toolStep,
+} from "@luke/features/agent-replay";
 import { MockLanguageModelV4 } from "ai/test";
 import { Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { fitReplay, REPLAY_FIT, type SummaryModel, summarizeSteps } from "./replay-summary.js";
+import {
+  type FittedSteps,
+  fitReplay,
+  measuredBoundBytes,
+  REPLAY_FIT,
+  replayBudgetBytes,
+  replayTokens,
+  type SummaryModel,
+  summarizeSteps,
+  withinWindow,
+} from "./replay-summary.js";
 
 /**
  * replay-summary.test.ts -- the steps a replay cannot keep, summarized on a scripted model in
  * chunks sized to its window, a few at a time and then combined, the oldest chunks past the cap
  * left out and said so, and nothing written where a call fails or the whole runs past its time;
  * and the steps kept beside a summary, counted within the bound. The model is a script that keeps
- * what it was asked, at the SDK's own boundary; nothing reaches a database. Synthetic steps.
+ * what it was asked, at the SDK's own boundary; nothing reaches a database. Synthetic steps,
+ * sized to the continues production refused as too long for their window (`PRODUCTION`).
  */
+
+/**
+ * The continue Anthropic refused: a first message of about 3.03 MB that it counted at 1,368,155
+ * tokens against a window of 1,000,000, continuing a source that had compacted, whose raw steps
+ * came to 3.45 MB while the context it last measured was 142,000 tokens.
+ */
+const PRODUCTION = {
+  REFUSED_BYTES: 3_030_000,
+  REFUSED_TOKENS: 1_368_155,
+  WINDOW_TOKENS: 1_000_000,
+  SOURCE_RAW_BYTES: 3_450_000,
+  SOURCE_MEASURED_TOKENS: 142_000,
+  INSTRUCTIONS_TOKENS: 24_000,
+} as const;
+
+/** The bytes a token of that refused message took, as the provider counted them. */
+const PROVIDER_BYTES_PER_TOKEN = PRODUCTION.REFUSED_BYTES / PRODUCTION.REFUSED_TOKENS;
+
+/** A tool call whose input and result are JSON, as most of a replay is, about `size` bytes of it. */
+const jsonCall = (at: number, size = 2_500): ReplayStep =>
+  toolStep({
+    summary: `Ran: pnpm test --step ${at}`,
+    state: REPLAY_TOOL_STATE.DONE,
+    input: JSON.stringify({ command: `pnpm test --step ${at}`, description: "Run the tests" }),
+    output: JSON.stringify({
+      stdout: Array.from({ length: Math.ceil(size / 40) }, (_, line) => `ok ${line} - case ${at}`),
+      exitCode: 0,
+      status: "completed",
+    }),
+  });
+
+/** Steps of tool JSON adding up to about `bytes`. */
+const jsonSteps = (bytes: number): ReplayStep[] => {
+  const steps: ReplayStep[] = [];
+  let used = 0;
+  while (used < bytes) {
+    const step = jsonCall(steps.length);
+    steps.push(step);
+    used += stepsBytes([step]);
+  }
+  return steps;
+};
 
 /** A step of the agent's own words, `size` characters long. */
 const said = (at: number, size = 1_000): ReplayStep => ({
@@ -50,7 +110,7 @@ function scripted(answer: (prompt: string) => string | undefined) {
 /** A window whose share eve compacts at leaves room for about `chunkBytes` of steps per summary call. */
 const windowFor = (chunkBytes: number) =>
   Math.ceil(
-    (chunkBytes / 4 + REPLAY_FIT.SUMMARY_OUTPUT_TOKENS + REPLAY_FIT.SUMMARY_PROMPT_TOKENS) / 0.9,
+    (chunkBytes / 2 + REPLAY_FIT.SUMMARY_OUTPUT_TOKENS + REPLAY_FIT.SUMMARY_PROMPT_TOKENS) / 0.9,
   );
 
 it.effect(
@@ -104,7 +164,7 @@ it.effect(
       assert.equal(asked.length, REPLAY_FIT.MAX_CHUNKS + 1);
       const chunkBound = bounds[0] ?? 0;
       assert.ok(
-        chunkBound * REPLAY_FIT.MAX_CHUNKS <= 25_000 / 4,
+        chunkBound * REPLAY_FIT.MAX_CHUNKS <= 25_000 / 2,
         `each chunk writes at most ${chunkBound}`,
       );
       assert.equal(bounds.at(-1), REPLAY_FIT.SUMMARY_OUTPUT_TOKENS);
@@ -215,3 +275,96 @@ it.effect(
       assert.equal(fallback.kept.at(-1), many.at(-1));
     }),
 );
+
+it.effect(
+  "the estimate counts the refused replay at no fewer tokens than its provider did, and a replay of tool JSON fitted by it stays under the window",
+  () =>
+    Effect.gen(function* () {
+      assert.ok(replayTokens(PRODUCTION.REFUSED_BYTES) >= PRODUCTION.REFUSED_TOKENS);
+
+      const steps = jsonSteps(PRODUCTION.REFUSED_BYTES);
+      const budget = replayBudgetBytes(
+        PRODUCTION.WINDOW_TOKENS,
+        PRODUCTION.INSTRUCTIONS_TOKENS,
+        20_000,
+      );
+      const fitted = yield* fitReplay(steps, undefined, budget, () =>
+        Effect.succeed(Option.none()),
+      );
+
+      assert.ok(fitted.kept.length < steps.length, "the whole did not fit, and was cut");
+      const counted =
+        PRODUCTION.INSTRUCTIONS_TOKENS +
+        (stepsBytes(fitted.kept) + 20_000) / PROVIDER_BYTES_PER_TOKEN;
+      assert.ok(
+        counted < PRODUCTION.WINDOW_TOKENS,
+        `the provider would count ${Math.round(counted)} tokens`,
+      );
+    }),
+);
+
+it.effect(
+  "a compacted source of 3.45 MB replays verbatim no more than the context it last measured, the rest summarized, the whole far under the window",
+  () =>
+    Effect.gen(function* () {
+      const steps = jsonSteps(PRODUCTION.SOURCE_RAW_BYTES);
+      const measured = { inputTokens: PRODUCTION.SOURCE_MEASURED_TOKENS, compacted: true };
+      const bound = measuredBoundBytes(measured, stepsBytes(steps));
+      assert.ok(bound !== undefined);
+      const budget = replayBudgetBytes(
+        PRODUCTION.WINDOW_TOKENS,
+        PRODUCTION.INSTRUCTIONS_TOKENS,
+        20_000,
+      );
+      const summarized: number[] = [];
+      const fitted = yield* fitReplay(steps, undefined, Math.min(budget, bound), (dropped) => {
+        summarized.push(dropped.length);
+        return Effect.succeed(Option.some({ text: "Recap.", steps: dropped.length }));
+      });
+
+      assert.deepEqual(summarized, [steps.length - fitted.kept.length]);
+      assert.equal(fitted.summary?.steps, steps.length - fitted.kept.length);
+      assert.equal(fitted.kept.at(-1), steps.at(-1), "the newest steps are the ones kept");
+      const replayed = stepsBytes(fitted.kept) + summaryBytes(fitted.summary);
+      assert.ok(replayTokens(replayed) <= PRODUCTION.SOURCE_MEASURED_TOKENS);
+      assert.ok(replayed / PROVIDER_BYTES_PER_TOKEN < PRODUCTION.WINDOW_TOKENS / 4);
+
+      // A source that never compacted, whose steps are what it last measured, is bounded by the window alone.
+      const whole = jsonSteps(200_000);
+      assert.equal(
+        measuredBoundBytes(
+          { inputTokens: replayTokens(stepsBytes(whole)), compacted: false },
+          stepsBytes(whole),
+        ),
+        undefined,
+      );
+      // One whose raw steps far outgrow what it last measured is bounded by that, compacted or not.
+      assert.equal(
+        measuredBoundBytes(
+          { inputTokens: PRODUCTION.SOURCE_MEASURED_TOKENS, compacted: false },
+          PRODUCTION.SOURCE_RAW_BYTES,
+        ),
+        bound,
+      );
+    }),
+);
+
+it("a first prompt still past the window drops the oldest steps kept, then the summary, until it fits", () => {
+  const steps = jsonSteps(100_000);
+  const fitted: FittedSteps = { kept: steps, summary: { text: "Recap.", steps: 7 } };
+  const fixedTokens = 10_000;
+  const promptTokens = (held: FittedSteps) =>
+    fixedTokens + replayTokens(stepsBytes(held.kept) + summaryBytes(held.summary));
+  const window = promptTokens(fitted);
+
+  assert.equal(withinWindow(fitted, promptTokens, window), fitted, "a prompt that fits stands");
+
+  const fewer = withinWindow(fitted, promptTokens, window - 10_000);
+  assert.ok(promptTokens(fewer) <= window - 10_000);
+  assert.ok(fewer.kept.length > 0 && fewer.kept.length < steps.length);
+  assert.equal(fewer.kept.at(-1), steps.at(-1));
+  assert.deepEqual(fewer.summary, fitted.summary);
+
+  const bare = withinWindow(fitted, promptTokens, fixedTokens);
+  assert.deepEqual(bare, { kept: [], summary: undefined });
+});

@@ -25,6 +25,8 @@ import {
   type Replay,
   START_NOTE_HEADING,
   type StartNoteHeading,
+  stepsBytes,
+  summaryBytes,
 } from "@luke/features/agent-replay";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
@@ -65,19 +67,24 @@ import {
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { fenceable } from "../fenced-text.js";
-import { mentionedContext, mentionedServers } from "../mentioned-context.js";
+import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
 import { type FittedReplay, replayOf, type StartFrom, startFromOf } from "./replay.js";
 import {
+  type FittedSteps,
   filesBytes,
   fitReplay,
+  fromEveEstimate,
+  measuredBoundBytes,
   REPLAY_FIT,
   replayBudgetBytes,
+  replayTokens,
   type SummaryModelOf,
   summarizeSteps,
+  withinWindow,
 } from "./replay-summary.js";
 
 /**
@@ -278,10 +285,12 @@ interface StartLanding {
   readonly startedFrom: StoredStartedFrom | undefined;
 }
 
-/** The agent a Start takes over from as its landing reads it: the source's prompt, the new agent's brief in the plan's place where it was handed one, and how its replay is fitted to the words of the first message beside it. */
+/** The agent a Start takes over from as its landing reads it: the source's prompt, the new agent's brief in the plan's place where it was handed one, and how its replay is fitted to the first message it is written into, which `firstMessage` writes for a replay or none. */
 interface ReplayFitter {
   readonly prompt: string | undefined;
-  readonly fit: (firstMessageWords: string) => Effect.Effect<FittedReplay, never, DatabaseServices>;
+  readonly fit: (
+    firstMessage: (replay: Replay | undefined) => string,
+  ) => Effect.Effect<FittedReplay, never, DatabaseServices>;
 }
 
 /**
@@ -334,12 +343,13 @@ const landingOf = Effect.fnUntraced(function* (
   if (task.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   const brief = fitter === undefined ? place.prompt : fitter.prompt;
   const words = brief ?? planBrief(task, linearIssue);
-  // The replay is fitted to what the new agent's first message holds beside it.
-  const fitted =
-    fitter === undefined ? undefined : yield* fitter.fit(`${words}${place.note ?? ""}`);
+  const heading = place.noteHeading ?? START_NOTE_HEADING.DEVELOPER;
+  const written = (replayed: Replay | undefined) =>
+    firstMessageText(words, replayed, place.note, heading, noteFiles);
+  // The replay is fitted to the new agent's first message as it is written around it.
+  const fitted = fitter === undefined ? undefined : yield* fitter.fit(written);
   const prompt = brief;
   const replay: Replay | undefined = fitted?.replay;
-  const heading = place.noteHeading ?? START_NOTE_HEADING.DEVELOPER;
   return {
     startedFrom: fitted?.startedFrom,
     workspaceId: task.workspaceId,
@@ -348,16 +358,8 @@ const landingOf = Effect.fnUntraced(function* (
     mover: ownerId === userId ? userId : undefined,
     place:
       prompt === undefined
-        ? {
-            taskId: place.taskId,
-            planSnapshot: firstMessageText(words, replay, place.note, heading, noteFiles),
-            prompt: null,
-          }
-        : {
-            taskId: place.taskId,
-            planSnapshot: null,
-            prompt: firstMessageText(prompt, replay, place.note, heading, noteFiles),
-          },
+        ? { taskId: place.taskId, planSnapshot: written(replay), prompt: null }
+        : { taskId: place.taskId, planSnapshot: null, prompt: written(replay) },
   };
 });
 
@@ -367,13 +369,42 @@ function noteFilesOf(files: readonly CodingAgentAttachment[]): NoteFiles {
   return { text, other: files.length - text };
 }
 
+/** The bytes of a text in UTF-8. */
+function utf8Bytes(text: string): number {
+  return new TextEncoder().encode(text).byteLength;
+}
+
+/**
+ * The newest step the source's work measured, read down its lineage from
+ * the source to the first agent that ran one, since a source that never ran
+ * a step carried the work of the agent before it; nothing where none did or
+ * none reads.
+ */
+const measuredStepOf = Effect.fnUntraced(function* (
+  userId: string,
+  lineage: readonly CodingAgent[],
+) {
+  for (const agent of lineage) {
+    const context = yield* readCodingAgentContext(userId, agent.id).pipe(
+      Effect.orElseSucceed(() => Option.none()),
+    );
+    if (Option.isSome(context) && context.value.lastStep !== null) {
+      return { step: context.value.lastStep, compacted: context.value.compactedAt !== null };
+    }
+  }
+  return undefined;
+});
+
 /**
  * How the replay of the agent a Start takes over from is fitted: against
  * the window of the model the new agent runs on, as the catalog lists it,
- * less the instructions the source's last step was told, or a fallback
- * where it ran none, with the steps that do not fit summarized on the
- * model `summaryModel` finds at the model's lowest effort, where it finds
- * one (`replay-summary.ts`).
+ * less the instructions the source's work last measured, or a fallback
+ * where it measured none, and within the context it last measured where
+ * eve compacted it (`measuredBoundBytes`), with the steps that do not fit
+ * summarized on the model `summaryModel` finds at the model's lowest
+ * effort, where it finds one (`replay-summary.ts`); then the whole first
+ * prompt, the files and what a mention may add included, held to the
+ * window (`withinWindow`).
  */
 const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -390,35 +421,52 @@ const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     choice.contextWindow ?? CONTEXT_WINDOW.LONG,
   );
   const lowest = offered.find((model) => model.id === choice.model)?.efforts[0] ?? choice.effort;
-  const context = yield* readCodingAgentContext(userId, from.source.id).pipe(
-    Effect.orElseSucceed(() => Option.none()),
-  );
-  const step = Option.isSome(context) ? context.value.lastStep : null;
+  const measured = yield* measuredStepOf(userId, from.lineage);
   const instructions =
-    step === null
+    measured === undefined
       ? REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS
-      : step.systemPromptTokens + step.toolDefinitionTokens;
+      : fromEveEstimate(measured.step.systemPromptTokens + measured.step.toolDefinitionTokens);
+  const bound = measuredBoundBytes(
+    measured === undefined
+      ? undefined
+      : { inputTokens: measured.step.inputTokens, compacted: measured.compacted },
+    stepsBytes(from.steps) + summaryBytes(from.carriedSummary),
+  );
   const model =
     summaryModel === undefined ? undefined : yield* summaryModel(userId, choice, lowest);
+  // Note that what a mention adds is written after the replay is fitted, so its bound is held back for it.
+  const besideBytes = filesBytes(files) + MENTIONED_BOUNDS.PART_CHARS;
   return {
     prompt: from.prompt,
-    fit: (firstMessageWords) =>
-      Effect.map(
-        fitReplay(
+    fit: (firstMessage) =>
+      Effect.gen(function* () {
+        const budget = replayBudgetBytes(
+          windowTokens,
+          instructions,
+          utf8Bytes(firstMessage(undefined)) + filesBytes(files),
+        );
+        const fitted = yield* fitReplay(
           from.steps,
           from.carriedSummary,
-          replayBudgetBytes(
-            windowTokens,
-            instructions,
-            new TextEncoder().encode(firstMessageWords).byteLength + filesBytes(files),
-          ),
+          bound === undefined ? budget : Math.min(budget, bound),
           (dropped, earlier) =>
             model === undefined
               ? Effect.succeed(Option.none())
               : summarizeSteps(model, dropped, windowTokens, earlier),
-        ),
-        ({ kept, summary }) => replayOf(from, kept, summary),
-      ),
+        );
+        const promptTokens = (steps: FittedSteps) =>
+          instructions +
+          replayTokens(
+            utf8Bytes(firstMessage(replayOf(from, steps.kept, steps.summary).replay)) + besideBytes,
+          );
+        const held = withinWindow(fitted, promptTokens, windowTokens);
+        if (held !== fitted) {
+          yield* Effect.logWarning(
+            `a replay was cut to fit the window: ${held.kept.length} of ${fitted.kept.length} steps kept, its summary ${held.summary === undefined ? "left out" : "kept"}`,
+          );
+        }
+        return replayOf(from, held.kept, held.summary);
+      }),
   };
 });
 

@@ -36,7 +36,9 @@ import {
   lineSendersOf,
   readCodingAgent,
   readCodingAgentByKey,
+  recordCodingAgentCompaction,
   recordCodingAgentPublished,
+  recordCodingAgentStep,
   renameCodingAgent,
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
@@ -5369,9 +5371,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
         assert.match(replay?.steps.at(-1)?.summary ?? "", /^Said: Step 29\./u);
         assert.match(replay?.preamble ?? "", /written by Luke rather than by that agent/u);
-        assert.equal(asked.length, 1);
         assert.match(asked[0]?.prompt ?? "", /Step 0\./u);
-        assert.doesNotMatch(asked[0]?.prompt ?? "", /Step 29\./u);
+        assert.ok(
+          asked.every((call) => !/Step 29\./u.test(call.prompt)),
+          "a step kept is not summarized",
+        );
       }),
   );
 
@@ -5432,6 +5436,66 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         });
 
         assert.ok((started.from?.steps ?? without) < without, "the file took room the steps had");
+      }),
+  );
+
+  it.effect(
+    "a continue of an agent that never ran a turn is sent to the branch and pull request of the agent that one took up, not the default branch",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source } = yield* sourceAgent;
+        const continueFrom = (agentId: string) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+        // The middle agent's session never ran a turn: it has no rows, no branch, and no sandbox.
+        const never = yield* continueFrom(source.id);
+        yield* continueFrom(never.id);
+        const preamble = openedParts(eve).parts.replay?.preamble ?? "";
+
+        assert.match(
+          preamble,
+          /It never made a branch of its own: it took up the work of the coding agent/u,
+        );
+        assert.ok(preamble.includes(`(agent id ${source.id})`));
+        assert.ok(preamble.includes(`git switch '${PUBLISHED.branch}'`));
+        assert.ok(preamble.includes(`/pull/${PUBLISHED.number}`));
+        assert.doesNotMatch(preamble, /start from the repository's default branch/u);
+      }),
+  );
+
+  it.effect(
+    "a source eve compacted replays verbatim no more than the context it last measured, where the same source uncompacted replays whole",
+    () =>
+      Effect.gen(function* () {
+        const { owner, eve, first, continueFrom } = yield* longSource();
+        const stepAt = (inputTokens: number, at: number) =>
+          recordCodingAgentStep(owner, first.id, {
+            inputTokens,
+            outputTokens: 500,
+            systemPromptTokens: 2_000,
+            toolDefinitionTokens: 1_000,
+            briefTokens: 100,
+            at,
+          });
+        // Its thirty steps of about five thousand bytes each, as its model last read them whole.
+        yield* stepAt(LONG_TURNS * 2_600, 1_000);
+        const whole = yield* continueFrom(first.id, { model: SOL, effort: "low" });
+        assert.equal(whole.from?.steps, LONG_TURNS, "a source that never compacted replays whole");
+
+        // eve folded all but the newest into a summary, and the next step read far less.
+        const measured = 6_000;
+        yield* recordCodingAgentCompaction(owner, first.id, new Date(2_000));
+        yield* stepAt(measured, 3_000);
+        const bounded = yield* continueFrom(first.id, { model: SOL, effort: "low" });
+        const replay = openedParts(eve).parts.replay;
+
+        assert.equal(bounded.from?.totalSteps, LONG_TURNS);
+        assert.ok((bounded.from?.steps ?? LONG_TURNS) < LONG_TURNS);
+        assert.ok(stepsBytes(replay?.steps ?? []) <= measured * 2);
+        assert.match(replay?.steps.at(-1)?.summary ?? "", /^Said: Step 29\./u);
       }),
   );
 

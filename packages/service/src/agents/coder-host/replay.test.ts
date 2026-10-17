@@ -1,14 +1,19 @@
 /**
  * replay.test.ts -- the preamble a replay hands on, told from the steps it kept, the summary of
- * the ones before them, and how many there were. Synthetic agent and steps; nothing reaches a
- * database.
+ * the ones before them, and how many there were, and where it sends the new agent for a source
+ * that only carried another agent's work. Synthetic agent and steps; nothing reaches a database.
  */
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { REPLAY_STEP_KIND, type ReplayStep } from "@luke/features/agent-replay";
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CONTEXT_WINDOW,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { it } from "vitest";
 import { replayOf, type StartFrom } from "./replay.js";
 import { SNAPSHOT_MISS } from "./snapshot.js";
@@ -49,6 +54,7 @@ const source: CodingAgent = {
 /** A continue of the source with `total` steps, none copied. */
 const startFrom = (total: number): StartFrom => ({
   source,
+  lineage: [source],
   prompt: undefined,
   attachments: [],
   steps: Array.from({ length: total }, (_, at) => said(at)),
@@ -60,6 +66,7 @@ const startFrom = (total: number): StartFrom => ({
   told: {
     published: null,
     copy: { copied: false, miss: SNAPSHOT_MISS.NO_SANDBOX },
+    carried: undefined,
     forked: { at: false, edited: undefined },
     unkept: [],
     messageId: undefined,
@@ -86,4 +93,59 @@ it("a summary beside steps left out is told as some of those that did not fit, n
 
   const none = replayOf(from, kept, undefined).replay.preamble;
   assert.match(none, /The oldest 20 of its 30 steps are left out to fit\./u);
+});
+
+it("a source that never made a branch of its own sends the new agent to the work it carried, never to the default branch", () => {
+  const origin: CodingAgent = {
+    ...source,
+    id: randomUUID(),
+    title: "Add PR tab",
+    branch: "luke/pull-request-tab",
+  };
+  const pullRequest: CodingAgentPullRequest = {
+    number: 3030,
+    title: "Add a PR tab",
+    url: "https://github.com/acme/app/pull/3030",
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.NONE,
+    additions: 120,
+    deletions: 4,
+    changedFiles: 6,
+  };
+  const from = startFrom(3);
+  const carriedFrom = (copiedBranch: string | undefined) =>
+    replayOf(
+      {
+        ...from,
+        lineage: [source, origin],
+        told: {
+          ...from.told,
+          carried: { agent: origin, published: pullRequest, copiedBranch },
+        },
+      },
+      from.steps,
+      undefined,
+    ).replay.preamble;
+
+  const pushed = carriedFrom(undefined);
+  assert.match(
+    pushed,
+    /It never made a branch of its own: it took up the work of the coding agent "Add PR tab"/u,
+  );
+  assert.match(pushed, /git switch 'luke\/pull-request-tab'/u);
+  assert.ok(pushed.includes("#3030 (https://github.com/acme/app/pull/3030)"));
+  assert.doesNotMatch(pushed, /start from the repository's default branch/u);
+
+  const copied = carriedFrom("luke/add-pr-tab-continued-1a2b3c4d");
+  assert.match(copied, /copied for it to the branch `luke\/add-pr-tab-continued-1a2b3c4d`/u);
+  assert.match(copied, /git switch 'luke\/add-pr-tab-continued-1a2b3c4d'/u);
+  assert.match(
+    copied,
+    /That agent's own branch is `luke\/pull-request-tab`, with its pull request #3030/u,
+  );
+
+  assert.match(
+    replayOf(from, from.steps, undefined).replay.preamble,
+    /start from the repository's default branch/u,
+  );
 });

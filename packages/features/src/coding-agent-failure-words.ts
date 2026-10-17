@@ -21,6 +21,7 @@ const AGENT_FAILURE_WORDS = {
     "Fast isn't available on your own API key; choose the model with Fast off",
   [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
     "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
+  [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "the conversation was too long for the model",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 

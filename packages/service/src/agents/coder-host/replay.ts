@@ -87,7 +87,12 @@ import { CURSOR_START } from "./transcript.js";
  * checks that branch out and goes on there. A fork's copy is the code as it
  * stands now, which may be ahead of the message it was forked at, so its
  * preamble names the files the source's own file tools edited after that
- * message, for the new agent to undo where its direction needs it.
+ * message, for the new agent to undo where its direction needs it. A source
+ * that made no branch of its own, as one that failed or never ended a turn,
+ * is read back through the agents it was started from (`lineageOf`), and
+ * the preamble names the work it carried, the copy made for it or the
+ * branch and pull request of the agent it took up, rather than sending the
+ * new agent to the default branch.
  */
 
 /** The bounds a replay keeps to. */
@@ -98,6 +103,8 @@ export const REPLAY_BOUNDS = {
   MAX_ROWS: 10_000,
   /** The most files a fork's preamble names as edited after its message; the rest are counted. */
   EDITED_FILES: 50,
+  /** The most agents a chain is read back through for the work a source that made no branch of its own carried. */
+  CHAIN_DEPTH: 8,
 } as const;
 
 /** The widest page the store answers. */
@@ -147,6 +154,10 @@ const NOTE_SPEAKER: ReadonlyMap<StartNoteHeading, string> = new Map([
 ]);
 
 const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** What a source that left no branch, carried none, and could not be copied is taken up from. */
+const NO_BRANCH_WORDS =
+  "It left no branch to build on, and its work could not be copied from its sandbox, so start from the repository's default branch.";
 
 /** A text cut to the bound on one line, ending in an ellipsis where it was cut. */
 function cutLine(text: string, maximumChars: number): string {
@@ -458,26 +469,71 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** Where the source's work stands for the new agent: the branch its checkout was copied to, or, where it could not be, the branch and pull request it left. */
+/** An agent as the preamble names it: its title, or its model where it has none, and its id. */
+function agentName(agent: CodingAgent): string {
+  return `"${agent.title ?? agent.model}" (agent id ${agent.id})`;
+}
+
+/** A pull request as it follows the branch it is from; nothing where there is none. */
+function pullWords(published: CodingAgentPullRequest | null): string {
+  return published === null
+    ? ""
+    : `, with its pull request #${published.number} (${published.url})`;
+}
+
+/** The work a source that made no branch of its own took up: the agent it came from, that agent's pull request, and the branch that agent's work was copied to for the source, where it was. */
+interface CarriedWork {
+  readonly agent: CodingAgent;
+  readonly published: CodingAgentPullRequest | null;
+  readonly copiedBranch: string | undefined;
+}
+
+/** Where the work a source carried stands, for a source that made no branch of its own: the copy made for it of the agent it took up, or that agent's own branch and pull request. */
+function carriedWhere(carried: CarriedWork): string {
+  const { agent, copiedBranch } = carried;
+  const lead = `It never made a branch of its own: it took up the work of the coding agent ${agentName(agent)}`;
+  const own =
+    agent.branch === null
+      ? ""
+      : ` That agent's own branch is \`${agent.branch}\`${pullWords(carried.published)}.`;
+  if (copiedBranch !== undefined) {
+    return (
+      `${lead}, whose checkout was copied for it to the branch \`${copiedBranch}\`. ${capitalized(fetchWords(copiedBranch))}, ` +
+      `build on it, and open your pull request from it as usual.${own}`
+    );
+  }
+  if (agent.branch === null) return NO_BRANCH_WORDS;
+  return (
+    `${lead}, whose branch is \`${agent.branch}\`${pullWords(carried.published)}. ${capitalized(fetchWords(agent.branch))} ` +
+    "and continue there rather than starting a new one; only what that agent pushed stands."
+  );
+}
+
+/** Where the source's work stands for the new agent: the branch its checkout was copied to, or, where it could not be, the branch and pull request it left, or those of the work it carried where it made no branch of its own. */
 function whereOf(
   source: CodingAgent,
   published: CodingAgentPullRequest | null,
   copy: SnapshotOutcome,
+  carried: CarriedWork | undefined,
 ): string {
-  const pull =
-    published === null ? "" : `, with its pull request #${published.number} (${published.url})`;
+  const pull = pullWords(published);
   if (copy.copied) {
     const what = copy.uncommitted
       ? "with what it had not committed or pushed recorded as one snapshot commit on top"
       : "which held nothing it had not committed";
-    const own = source.branch === null ? "" : ` Its own branch was \`${source.branch}\`${pull}.`;
+    const own =
+      source.branch !== null
+        ? ` Its own branch was \`${source.branch}\`${pull}.`
+        : carried === undefined || carried.agent.branch === null
+          ? ""
+          : ` It made no branch of its own; the coding agent it took up, ${agentName(carried.agent)}, worked on \`${carried.agent.branch}\`${pullWords(carried.published)}.`;
     return (
       `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}, ` +
       `build on it, and open your pull request from it as usual.${own}`
     );
   }
   if (source.branch === null) {
-    return "It left no branch to build on, and its work could not be copied from its sandbox, so start from the repository's default branch.";
+    return carried === undefined ? NO_BRANCH_WORDS : carriedWhere(carried);
   }
   return (
     `Its branch is \`${source.branch}\`${pull}. ${capitalized(fetchWords(source.branch))} and continue there rather than ` +
@@ -509,15 +565,16 @@ function preambleOf(
   source: CodingAgent,
   published: CodingAgentPullRequest | null,
   copy: SnapshotOutcome,
+  carried: CarriedWork | undefined,
   forked: { readonly at: boolean; readonly edited: readonly string[] | undefined },
   counts: { readonly kept: number; readonly total: number; readonly summarized: number },
   unkept: readonly string[],
 ): string {
-  const name = `"${source.title ?? source.model}" (agent id ${source.id})`;
+  const name = agentName(source);
   const lead = forked.at
     ? `You are a fork of the coding agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
     : `You continue the work of the coding agent ${name}, which stopped before it was done.`;
-  const where = `${whereOf(source, published, copy)}${forkCaveat(forked.at, forked.edited)}`;
+  const where = `${whereOf(source, published, copy, carried)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
   const unfit = counts.total - counts.kept;
   // Note that a summary beside steps left out may cover the newest of those that did not fit rather than the oldest, so it names none as the oldest.
@@ -545,6 +602,8 @@ function preambleOf(
 /** What a Start from another agent is handed and runs on: the source's brief, the replay, the source's files that fit beside the note's, the choice and servers it runs on unless the Start names its own, the words its servers are read from, and what the new agent keeps of where it came from. */
 export interface StartFrom {
   readonly source: CodingAgent;
+  /** The agents the source's work came down through, the source first, read back while one made no branch of its own (`lineageOf`); whose context the replay is bounded by is read from the first that measured one. */
+  readonly lineage: readonly CodingAgent[];
   /** The source's prompt as the new agent's prompt; none where the source was handed the plan, which the new agent is handed as it stands now. */
   readonly prompt: string | undefined;
   readonly attachments: readonly CodingAgentAttachment[];
@@ -565,6 +624,8 @@ export interface StartFrom {
 interface ReplayTold {
   readonly published: CodingAgentPullRequest | null;
   readonly copy: SnapshotOutcome;
+  /** The work a source that made no branch of its own carried, where an agent before it left a branch. */
+  readonly carried: CarriedWork | undefined;
   readonly forked: { readonly at: boolean; readonly edited: readonly string[] | undefined };
   readonly unkept: readonly string[];
   readonly messageId: string | undefined;
@@ -589,7 +650,15 @@ export function replayOf(
 ): FittedReplay {
   const { source, told, totalSteps } = from;
   const counts = { kept: kept.length, total: totalSteps, summarized: summary?.steps ?? 0 };
-  const preamble = preambleOf(source, told.published, told.copy, told.forked, counts, told.unkept);
+  const preamble = preambleOf(
+    source,
+    told.published,
+    told.copy,
+    told.carried,
+    told.forked,
+    counts,
+    told.unkept,
+  );
   const message = told.messageId === undefined ? undefined : { messageId: told.messageId };
   return {
     replay: {
@@ -664,6 +733,39 @@ const editedAfter = (source: CodingAgent, cutSeq: number) =>
     return past.read.ok && past.read.value.length === 0 ? [...files] : undefined;
   });
 
+/**
+ * The agents a source's work came down through, the source first: each
+ * one it was started from read on while the newest read made no branch of
+ * its own, as one that failed or never ended a turn did not, up to
+ * `REPLAY_BOUNDS.CHAIN_DEPTH` and on the source's plan alone; and the work
+ * it carried, where one of them left a branch, its own or the copy of its
+ * work made for the agent after it. Note that a source with no branch of
+ * its own is read past, because the new agent sent to the default branch
+ * would lose the work the source only carried.
+ */
+const lineageOf = (userId: string, source: CodingAgent) =>
+  Effect.gen(function* () {
+    const lineage: CodingAgent[] = [source];
+    let at = source;
+    for (let depth = 0; depth < REPLAY_BOUNDS.CHAIN_DEPTH; depth += 1) {
+      const link = at.startedFrom;
+      if (at.branch !== null || link === null) break;
+      const [found] = yield* listPublishedCodingAgentsById(userId, [link.agentId]);
+      if (found === undefined || found.agent.taskId !== source.taskId) break;
+      lineage.push(found.agent);
+      if (found.agent.branch !== null || link.branch !== undefined) {
+        const carried: CarriedWork = {
+          agent: found.agent,
+          published: found.published,
+          copiedBranch: link.branch,
+        };
+        return { lineage, carried };
+      }
+      at = found.agent;
+    }
+    return { lineage, carried: undefined };
+  });
+
 /** The steps a source's transcript replays, cut after the message named: refused where that message is none of its journals. */
 function transcriptSteps(
   records: readonly StoredMessageRecord[],
@@ -705,6 +807,9 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
+  const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
+    lineageOf(userId, source),
+  );
   const read = yield* hostedStoreOrUnavailable(recordsOf(source, from.messageId));
   if (read === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const { records, cutSeq } = read;
@@ -730,6 +835,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq));
   return {
     source,
+    lineage,
     prompt: source.prompt === null ? undefined : handed.brief,
     attachments: files.attachments,
     steps: [...carried, ...mine],
@@ -741,6 +847,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     told: {
       published,
       copy,
+      carried: carriedWork,
       forked: { at: forked, edited },
       unkept: files.unkept,
       messageId: from.messageId,

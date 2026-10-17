@@ -181,6 +181,8 @@ export const CODING_AGENT_FAILURE = {
   FAST_ON_OWN_KEY: "fast_own_key",
   /** The provider refused fast mode for the organization of the key the step ran on. */
   FAST_NOT_ENABLED: "fast_not_enabled",
+  /** The provider refused the step's prompt as longer than the model's context window. */
+  CONTEXT_OVERFLOW: "context_overflow",
   OTHER: "other",
 } as const;
 
