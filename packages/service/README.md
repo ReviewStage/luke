@@ -1293,7 +1293,12 @@ the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
 task's plan as the Markdown Copy puts on the clipboard
-(`@luke/features/plan-markdown`), makes the agent and its conversation
+(`@luke/features/plan-markdown`), with the Linear issue a plan was started
+from after it (`linearIssueBrief`): the issue as a mention, a branch named
+`luke/<key>-<slug>` and a `Fixes <key>` or `Part of <key>` line in the pull
+request, by which Linear's own GitHub integration links the pull request and
+moves the issue's status, and the issue's description fenced as data; then
+makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start
 naming a prompt (`task`), the developer's own words bounded as a message is, opens the
