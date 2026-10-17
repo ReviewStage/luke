@@ -5,9 +5,10 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { SplitIcon } from "lucide-react";
+import { SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { ActorLine, ActorRef } from "../actor-ref";
+import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader } from "../ai-elements/task";
 import { TOOL_BLOCK } from "../ai-elements/tool";
@@ -21,6 +22,7 @@ import {
   replayVerb,
   STEP_VIEW,
   stepView,
+  summaryLine,
 } from "./replay-card-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks";
@@ -213,6 +215,27 @@ function StepRow({ step }: { step: ReplayStep }): React.JSX.Element {
   }
 }
 
+/**
+ * The summary Luke wrote of the oldest steps the replay could not keep,
+ * folded under one quiet line saying how many it stands for and whose
+ * words they are, as a webhook's body folds inside a run's prompt; its
+ * words drawn as a transcript's are, once opened.
+ */
+function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.Element {
+  return (
+    <Fold className="text-[12.5px]" data-replay-summary="">
+      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+        <FoldChevron />
+        <TextQuoteIcon className="size-4 shrink-0" aria-hidden="true" />
+        {line}
+      </FoldSummary>
+      <FoldBody className="px-1 py-1">
+        <TranscriptWords text={text} />
+      </FoldBody>
+    </Fold>
+  );
+}
+
 /** The foot: the branch and pull request the source published, where known, and the way to its whole transcript. */
 function ReplayFoot({
   agentId,
@@ -313,6 +336,7 @@ export function ReplayCard({
           )
       : openSource;
   const left = leftOutLine(replay);
+  const summary = summaryLine(replay);
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin">
       <Plan data-replay-card="" aria-label={replayVerb(replay)} className="agent-origin-card">
@@ -330,6 +354,9 @@ export function ReplayCard({
         </PlanHeader>
         <PlanContent className="flex flex-col gap-3">
           <p className="m-0 text-[12px] text-muted-foreground">{replayLede(name)}</p>
+          {summary === undefined || replay.summary === undefined ? null : (
+            <SummaryRow line={summary} text={replay.summary.text} />
+          )}
           {left === undefined ? null : (
             <p className="m-0 text-[12px] italic text-muted-foreground">{left}</p>
           )}
