@@ -27,6 +27,10 @@ import {
   type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatParams,
+  type CodingAgentChatPostParams,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageParams,
@@ -36,6 +40,8 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
+  type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
@@ -62,11 +68,14 @@ import {
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
+  codingAgentChatAnswerViewSchema,
+  codingAgentChatWriteAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxMessagedViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
@@ -592,6 +601,10 @@ export interface HostOperator {
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
   ): Effect.Effect<CodingAgentInboxAnsweredView>;
+  /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
+  codingAgentInboxMessage(
+    params: CodingAgentInboxMessageParams,
+  ): Effect.Effect<CodingAgentInboxMessagedView>;
   /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
   codingAgentAccountInbox(
     params: CodingAgentAccountInboxParams,
@@ -604,6 +617,12 @@ export interface HostOperator {
   codingAgentPicture(
     params: CodingAgentPictureParams,
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
+  /** A workspace's chat past a cursor, held by the service while nothing moved; or why there is none. */
+  codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
+  /** A write to a workspace's chat as the account's own member; what it came to, or why there is no answer. */
+  codingAgentChatPost(
+    params: CodingAgentChatPostParams,
+  ): Effect.Effect<CodingAgentChatWriteAnswerView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -1668,9 +1687,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("choices" in params ? { choices: params.choices } : undefined),
           ...("values" in params ? { values: params.values } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
+          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
+      ),
+    codingAgentInboxMessage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+          itemId: params.itemId,
+          text: params.text,
+          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
+          clientKey: params.clientKey,
+        }),
+        codingAgentAnswer(codingAgentInboxMessagedViewSchema),
       ),
     codingAgentAccountInbox: (params) =>
       Effect.map(
@@ -1689,6 +1719,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
         codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
+      ),
+    codingAgentChat: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
+          workspaceId: params.workspaceId,
+          after: params.after,
+        }),
+        codingAgentAnswer(codingAgentChatAnswerViewSchema),
+      ),
+    codingAgentChatPost: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_POST, {
+          workspaceId: params.workspaceId,
+          write: params.write,
+        }),
+        codingAgentAnswer(codingAgentChatWriteAnswerViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

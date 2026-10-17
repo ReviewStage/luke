@@ -1,6 +1,7 @@
 import {
   FormField,
   GAP,
+  SettingsRow,
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_FONT,
@@ -15,7 +16,8 @@ import { CatalogSection } from "../section";
 /**
  * text-fields.tsx -- a TextField empty with a placeholder, filled, invalid,
  * unavailable, as a secret, as code in the mono face, and as a time of day; a TextArea, standing and growing with its
- * words; and both in a narrow column.
+ * words; a TextField in a settings row, invalid while the row says its error;
+ * and both in a narrow column.
  */
 
 /** A field the example holds the value of, as a caller would. */
@@ -127,6 +129,27 @@ function TextFields(): React.JSX.Element {
                 rows={5}
                 grow
               />
+            )}
+          </Held>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="text-settings-row" title="In a settings row, invalid">
+        <div className="catalog-column">
+          <Held start="every night">
+            {(value, onChange) => (
+              <SettingsRow label="Cron" error="That isn't a schedule Luke can read.">
+                {(control) => (
+                  <TextField
+                    label="Cron"
+                    describedBy={control["aria-describedby"]}
+                    invalid={control["aria-invalid"]}
+                    font={TEXT_FIELD_FONT.MONO}
+                    spellCheck={false}
+                    value={value}
+                    onChange={onChange}
+                  />
+                )}
+              </SettingsRow>
             )}
           </Held>
         </div>

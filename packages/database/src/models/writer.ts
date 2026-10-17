@@ -229,6 +229,8 @@ interface TurnEnqueue {
 interface TurnCancelRequest {
   readonly turnId: string;
   readonly at: Date;
+  /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it, written beside the instant. */
+  readonly key?: string;
 }
 
 type TurnCancelResult = Result.Result<StoreWriteEffect, typeof NO_CONVERSATION | typeof NO_TURN>;
@@ -308,14 +310,20 @@ type UserMessageWriteResult = Result.Result<
  * What sent a line to a coding agent, as its row keeps it: the member by
  * their account, Luke, an automation by its name as it stands at the send,
  * GitHub by the login of who caused what it tells of, or another coding
- * agent by its name as it stands at the send.
+ * agent by its name as it stands at the send, and by its id and the model
+ * it runs on then where the send knows them, as a chat notice may not.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
-  | { readonly kind: typeof MESSAGE_SENDER.AGENT; readonly name: string };
+  | {
+      readonly kind: typeof MESSAGE_SENDER.AGENT;
+      readonly agentId?: string | undefined;
+      readonly name: string;
+      readonly model?: string | undefined;
+    };
 
 /** The name a line's row keeps beside its sender's kind: an automation's or an agent's, or the GitHub login; none for any other. */
 function senderNameOf(sender: LineSender | undefined): string | null {
@@ -612,15 +620,20 @@ const MessageInsertSchema = Schema.Struct({
   sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
   senderUserId: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
+  senderModel: Schema.NullOr(Schema.String),
+  senderAgentId: Schema.NullOr(Schema.String),
 });
 
 const lockConversation = SqlSchema.findOneOption({
   Request: ConversationTargetSchema,
-  Result: RowIdSchema,
+  Result: Schema.Struct({
+    id: Schema.String,
+    kind: Schema.Literals(Object.values(CONVERSATION_KIND)),
+  }),
   execute: (target) =>
     Database.use((db) =>
       db
-        .select({ id: conversations.id })
+        .select({ id: conversations.id, kind: conversations.kind })
         .from(conversations)
         .where(
           and(
@@ -759,6 +772,8 @@ const insertMessageRow = SqlSchema.findOneOption({
           sender: row.sender,
           senderUserId: row.senderUserId,
           senderName: row.senderName,
+          senderModel: row.senderModel,
+          senderAgentId: row.senderAgentId,
         })
         .returning({ id: messages.id }),
     ),
@@ -1100,6 +1115,8 @@ interface WriterContext {
   /** The instant this locked write stamps every row it touches. */
   readonly now: Date;
   readonly target: ConversationTarget;
+  /** What the conversation is: a coding agent's own, whose failed turn keeps its words, or one of the brain's. */
+  readonly kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 }
 
 /** What one of this writer's statements answers: an effect over the transaction it runs in. */
@@ -1234,6 +1251,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: nullable(row.sender?.kind),
     senderUserId: row.sender?.kind === MESSAGE_SENDER.MEMBER ? row.sender.userId : null,
     senderName: senderNameOf(row.sender),
+    senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.model ?? null) : null,
+    senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.agentId ?? null) : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq };
@@ -1357,11 +1376,14 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
     responseIds: event.responseIds,
   });
-  // A journal still open here belongs to a turn that answered nothing, so
-  // the words its steps formed while it ran leave it, and what it keeps is
-  // what it did. One the answer already closed is revised in place, because
-  // a reader may have taken it before the row settled, and what the row now
-  // says of it travels with it.
+  // A journal still open here belongs to a turn that answered nothing. A
+  // brain's keeps what it did and the words its steps formed leave it,
+  // because a new session's seed reads them as said and the voice could
+  // speak them. A coding agent's keeps its words as well, because they are
+  // the partial work its tab shows and a Continue or a Fork replays. One
+  // the answer already closed is revised in place, because a reader may
+  // have taken it before the row settled, and what the row now says of it
+  // travels with it.
   const open = yield* messageByClientId(context, event.turnId);
   if (Option.isSome(open) && open.value.finishedAt !== null) {
     yield* reviseJournal({ id: open.value.id, conversationId: context.target.conversationId });
@@ -1371,8 +1393,9 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
       event.status === BRAIN_REQUEST_STATUS.CANCELLED
         ? UNANSWERED_REASON.CANCELLED
         : UNANSWERED_REASON.ENDED;
-    const parts = open.value.parts.flatMap((part) => {
-      if (part.type === UI_PART_TYPE.TEXT) return [];
+    const keepsWords = context.kind === CONVERSATION_KIND.CODING_AGENT;
+    const parts = open.value.parts.flatMap((part): Parts => {
+      if (part.type === UI_PART_TYPE.TEXT) return keepsWords ? [part] : [];
       return isStoredToolPart(part) && !isSettledToolPartState(part.state)
         ? [unansweredToolPart(part, reason)]
         : [part];
@@ -1387,18 +1410,23 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
 
-/** The newest step's calls still unanswered, settled as an abandoned attempt's; a journal with none, or closed, is a repeat. */
+/** The newest step's calls still unanswered, settled as an abandoned attempt's, and a coding agent's words of that attempt dropped; a journal with neither, or closed, is a repeat. */
 const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   row: MessageRow,
 ): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const boundary = row.parts.findLastIndex((part) => part.type === UI_PART_TYPE.STEP_START);
-  const parts = row.parts.map((part, index) =>
-    index > boundary && isStoredToolPart(part) && !isSettledToolPartState(part.state)
-      ? unansweredToolPart(part, UNANSWERED_REASON.RETRIED)
-      : part,
-  );
-  const settled = parts.some((part, index) => part !== row.parts[index]);
+  // Note that a coding agent's abandoned words leave with the attempt, since its failed turn keeps its words and the retry's own, which may be shorter, could not replace them.
+  const dropsWords = context.kind === CONVERSATION_KIND.CODING_AGENT;
+  const parts = row.parts.flatMap((part, index): Parts => {
+    if (index <= boundary) return [part];
+    if (dropsWords && part.type === UI_PART_TYPE.TEXT) return [];
+    return isStoredToolPart(part) && !isSettledToolPartState(part.state)
+      ? [unansweredToolPart(part, UNANSWERED_REASON.RETRIED)]
+      : [part];
+  });
+  const settled =
+    parts.length !== row.parts.length || parts.some((part, index) => part !== row.parts[index]);
   if (!settled || row.finishedAt !== null) return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
   return yield* amendJournal(context, row, parts);
 });
@@ -1419,6 +1447,9 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
  * nothing will answer, so it is settled here as a turn's end settles one,
  * rather than left running until the turn ends, which for a coding agent is
  * its whole run: a worker such a call delegated reads as starting until then.
+ * A coding agent's words of the abandoned attempt leave the step too, since
+ * the model never read them and the new attempt drafts its own, so a turn
+ * that then fails keeps the words of the attempt it failed on.
  * Note that a call the new attempt asks for again under the same id finds it
  * settled, which no provider's fresh answer does, since each mints its own.
  */
@@ -2251,13 +2282,14 @@ const stampTurnCancel = SqlSchema.findAll({
     turnId: Schema.String,
     conversationId: Schema.String,
     at: Schema.Date,
+    key: Schema.NullOr(Schema.String),
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (row) =>
     Database.use((db) =>
       db
         .update(turns)
-        .set({ cancelRequestedAt: row.at })
+        .set({ cancelRequestedAt: row.at, cancelRequestKey: row.key })
         .where(
           and(
             eq(turns.id, row.turnId),
@@ -2270,10 +2302,11 @@ const stampTurnCancel = SqlSchema.findAll({
 });
 
 /**
- * The Stop on a turn's row: the instant it was asked, written once, so the
- * record says a Stop was asked whatever eve does with it. A second Stop finds
- * the first instant standing and writes nothing; a turn the conversation does
- * not hold is refused.
+ * The Stop on a turn's row: the instant it was asked, and the key of the
+ * tool call that asked it where one did, written once, so the record says a
+ * Stop was asked whatever eve does with it. A second Stop finds the first
+ * instant standing and writes nothing, its key included; a turn the
+ * conversation does not hold is refused.
  */
 const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(function* (
   context: WriterContext,
@@ -2284,6 +2317,7 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(fun
     turnId: cancel.turnId,
     conversationId: context.target.conversationId,
     at: cancel.at,
+    key: cancel.key ?? null,
   });
   return Result.succeed(
     stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
@@ -2314,7 +2348,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
           const locked = yield* lockConversation(target);
           if (Option.isNone(locked)) return Result.fail(NO_CONVERSATION);
           const now = yield* DateTime.nowAsDate;
-          return yield* write({ tools, now, target });
+          return yield* write({ tools, now, target, kind: locked.value.kind });
         }),
       ),
     );
