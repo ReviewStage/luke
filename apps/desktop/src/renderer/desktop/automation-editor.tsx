@@ -63,8 +63,10 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
+  AnchoredPopover,
   ConfirmDialog,
   EllipsisIcon,
+  POPOVER_ALIGN,
   ProviderMark,
   SidePanelIcon,
   useConfirmDialog,
@@ -73,7 +75,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";

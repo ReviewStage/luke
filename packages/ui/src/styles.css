@@ -8,6 +8,7 @@
    can. An app imports this after its reset and before its utilities. */
 
 @import "./components/visually-hidden.css";
+@import "./components/anchored-popover/anchored-popover.css";
 @import "./components/layout/layout.css";
 @import "./components/list-row/list-row.css";
 @import "./components/text/text.css";

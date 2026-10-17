@@ -1574,7 +1574,7 @@ test("a press outside the review panel closes it, its words kept, and one on a s
     if (this.classList.contains("pull-request-review")) {
       return DOMRect.fromRect({ x: 600, y: 300, width: 80, height: 28 });
     }
-    if (this.classList.contains("anchored-popover")) {
+    if (this.classList.contains("luke-anchored-popover")) {
       return DOMRect.fromRect({ x: 0, y: 0, width: 480, height: 600 });
     }
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
@@ -1583,10 +1583,10 @@ test("a press outside the review panel closes it, its words kept, and one on a s
     const tab = await draw(controlAnswering());
     const panel = openReview(tab);
     const layer =
-      tab.querySelector<HTMLElement>(".anchored-popover") ??
+      tab.querySelector<HTMLElement>(".luke-anchored-popover") ??
       assert.fail("the panel hangs from Review");
     assert.equal(layer.dataset.side, "below");
-    assert.equal(layer.style.getPropertyValue("--popover-room"), `${768 - 328 - 4 - 8}px`);
+    assert.equal(layer.style.getPropertyValue("--luke-popover-room"), `${768 - 328 - 4 - 8}px`);
 
     writeReview(panel, "Half a thought");
     act(() => {
