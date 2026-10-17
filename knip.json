@@ -82,6 +82,7 @@
         "{,subagents/*/}instructions.ts",
         "{,subagents/*/}instructions/*.ts",
         "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "instrumentation/*.ts",
         "evals/evals.config.ts",
         "evals/*.eval.ts"
       ],
@@ -106,6 +107,7 @@
         "{,subagents/*/}instructions.ts",
         "{,subagents/*/}instructions/*.ts",
         "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "instrumentation/*.ts",
         "evals/evals.config.ts",
         "evals/*.eval.ts"
       ],

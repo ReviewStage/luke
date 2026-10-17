@@ -36,6 +36,7 @@ import {
   FolderIcon,
   HashIcon,
   InboxIcon,
+  ListTodoIcon,
   MessageSquareIcon,
   ZapIcon,
 } from "lucide-react";
@@ -585,6 +586,8 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
       return <GearIcon />;
     case LINK_PLACE.PERSON:
       return <UserIcon />;
+    case LINK_PLACE.ISSUE:
+      return <ListTodoIcon aria-hidden="true" />;
   }
 }
 

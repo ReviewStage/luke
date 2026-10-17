@@ -2261,6 +2261,14 @@ export function useTasksTab(input: {
       case LINK_PLACE.FACTORY:
         standInFor({ kind: STAND_IN.FACTORY });
         return;
+      // An issue's page reads the workspace listed, so the link's is listed first; an issue of any other says it is not in this workspace.
+      case LINK_PLACE.ISSUE:
+        listLinked(workspace);
+        standInFor({
+          kind: STAND_IN.ISSUES,
+          place: { kind: ISSUES_PAGE.ISSUE, issueId: place.issueId },
+        });
+        return;
       // Settings is the window's, not the Plans tab's, so its link is opened there.
       case LINK_PLACE.SETTINGS:
         return;

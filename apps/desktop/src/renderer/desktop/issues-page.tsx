@@ -1,6 +1,7 @@
 import { ISSUE_CALL_FAILURE, type IssueCallFailure } from "@luke/features/issue-view";
-import type { Issue } from "@luke/features/issue-wire";
+import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { Schema } from "effect";
 import {
   ListIcon,
   ListTodoIcon,
@@ -11,6 +12,7 @@ import {
 import { useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { LinkWorkspaceProvider } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
@@ -19,6 +21,7 @@ import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail } from "./issue-detail";
 import { IssueList } from "./issue-list";
@@ -34,11 +37,14 @@ import { useRowKeys } from "./use-row-keys";
  * (`EXPERIMENT.ISSUES`): every door to it is gated on the account's switch,
  * and its toolbar says so with a quiet badge and Send feedback. New issue,
  * or C pressed anywhere on the page but a field, opens a card as New task
- * does (`new-issue-dialog.tsx`), whose issue lands in its group at once.
+ * does (`new-issue-dialog.tsx`), whose issue lands in its group at once; a
+ * board column's + opens it with that column's status chosen.
  * ↑ and ↓ move through the rows from anywhere on the
  * page, and Return opens the one reached on its own page
  * (`issue-detail.tsx`), from which Escape comes back to the list with that
- * row holding the keyboard.
+ * row holding the keyboard. Board or List, as View options last chose, is
+ * kept in the renderer's own storage as the Inbox's view choices are
+ * (`folded-groups.ts`), so the page opens in it again on this Mac.
  */
 
 /** What takes typing, where C is a letter rather than the command: a field, or words edited where they stand. */
@@ -49,13 +55,19 @@ function typedInto(element: HTMLElement): boolean {
   return element.isContentEditable || element.closest(TYPED_INTO) !== null;
 }
 
-/** How the page lays its issues out: a board of a column for each status, as it opens, or the list under a heading for each. */
+/** How the page lays its issues out: a board of a column for each status, as it first opens, or the list under a heading for each. */
 const ISSUES_LAYOUT = {
   BOARD: "board",
   LIST: "list",
 } as const;
 
 type IssuesLayout = (typeof ISSUES_LAYOUT)[keyof typeof ISSUES_LAYOUT];
+
+/** Where the layout last chosen is kept in the renderer's storage. */
+const LAYOUT_KEY = "luke.issuesLayout";
+
+/** The layout last chosen. */
+const storedLayout = Schema.fromJsonString(Schema.Literals(Object.values(ISSUES_LAYOUT)));
 
 /** What the toolbar's layout menu is called. */
 const VIEW_OPTIONS = "View options";
@@ -70,6 +82,11 @@ const GONE_LINE = "This issue is gone, or not in this workspace.";
 /** What a change the service did not keep says. */
 const UNCHANGED_LINE = "Couldn't change the issue. Try again.";
 
+/** The new issue's card as asked for: the status it opens on, or none for the card's own. */
+interface Composing {
+  readonly status: IssueStatus | undefined;
+}
+
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
   plans,
@@ -78,6 +95,7 @@ function ListPage({
   layout,
   onLayout,
   onCompose,
+  onComposeIn,
 }: {
   plans: TasksControl;
   issues: ReturnType<typeof useIssues>;
@@ -86,6 +104,8 @@ function ListPage({
   onLayout: (layout: IssuesLayout) => void;
   /** Opens the new issue's card; none while no workspace is listed to file one in. */
   onCompose: (() => void) | undefined;
+  /** Opens the card with a board column's status chosen; none while no workspace is listed. */
+  onComposeIn: ((status: IssueStatus) => void) | undefined;
 }): React.JSX.Element {
   const view = plans.issuesView;
   useAppCommand(APP_COMMAND.EXIT_ISSUES, view.onClose);
@@ -120,10 +140,12 @@ function ListPage({
           </button>
         </div>
       </header>
-      {/* The board scrolls in Factory's own scroller, whose width stacks its columns on a narrow window. */}
+      {/* The board scrolls sideways in its own scroller, each column scrolling its cards; a failure is said in the list's. */}
       <div
         className={
-          onBoard ? "factory-scroll scroll-fade-top" : "automations-scroll scroll-fade-top"
+          onBoard && read !== undefined && "issues" in read
+            ? "issue-board-scroll"
+            : "automations-scroll scroll-fade-top"
         }
       >
         {read === undefined ? null : "failure" in read ? (
@@ -135,6 +157,7 @@ function ListPage({
             now={now}
             focused={focused}
             onOpen={open}
+            onCompose={onComposeIn}
           />
         ) : read.issues.length === 0 ? (
           // Note that an empty board still stands its columns, each saying it holds none, so only the list says there are none yet.
@@ -294,13 +317,25 @@ function DetailPage({
  * issue hands its row the keyboard.
  */
 export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
+  // Every Copy link on these pages is written under the listed workspace, whose issues they are.
+  return (
+    <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
+      <IssuesPages tasks={plans} />
+    </LinkWorkspaceProvider>
+  );
+}
+
+/** The Issues pages themselves, under the workspace their links are written in. */
+function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   const view = plans.issuesView;
   const workspace = plans.workspace;
   const issues = useIssues(workspace?.id);
   const [cameFrom, setCameFrom] = useState<string | undefined>(undefined);
-  const [composing, setComposing] = useState(false);
-  // Note that the layout is the page's own, so an issue opened from it goes back to it.
-  const [layout, setLayout] = useState<IssuesLayout>(ISSUES_LAYOUT.BOARD);
+  const [composing, setComposing] = useState<Composing | undefined>(undefined);
+  // Note that the layout is the page's own, so an issue opened from it goes back to it, and the board until one is first chosen.
+  const [layout, setLayout] = useState<IssuesLayout>(() =>
+    readKept(LAYOUT_KEY, storedLayout, ISSUES_LAYOUT.BOARD),
+  );
   const pages = useRef<HTMLDivElement>(null);
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;
@@ -310,14 +345,17 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
    * is a letter as well as the command: one typed in a title, the
    * description, or the card's own field is that letter and nothing more.
    */
-  const compose = () => {
+  const compose = (status?: IssueStatus) => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused !== document.body) {
       if (!pages.current?.contains(focused) || typedInto(focused)) return;
     }
-    setComposing(true);
+    setComposing({ status });
   };
-  const onCompose = workspace === undefined || composing ? undefined : compose;
+  const onCompose =
+    workspace === undefined || composing !== undefined ? undefined : () => compose();
+  // Note that a column's + stands while the card does, which covers it, so the heads hold still under the card.
+  const onComposeIn = workspace === undefined ? undefined : compose;
   useAppCommand(APP_COMMAND.NEW_ISSUE, onCompose);
   const onCreate = (draft: IssueDraft) => {
     if (workspace === undefined) return Promise.resolve(false);
@@ -342,8 +380,10 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
             // Note that the row the page came back from is let go, so the new layout's row takes no keyboard from the menu.
             setCameFrom(undefined);
             setLayout(chosen);
+            writeKept(LAYOUT_KEY, storedLayout, chosen);
           }}
           onCompose={onCompose}
+          onComposeIn={onComposeIn}
         />
       ) : (
         // Keyed by the issue, so another issue's page holds nothing of the last's.
@@ -358,11 +398,12 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
       {/* Keyed by the workspace, so a title typed in one is never filed in another. */}
       <NewIssueDialog
         key={workspace?.id}
-        open={composing}
+        open={composing !== undefined}
+        status={composing?.status}
         onCreate={onCreate}
         onClose={() => {
           // Note that a card filed in a workspace no longer listed puts away no card of the one listed now.
-          if (listedNow.current === workspace?.id) setComposing(false);
+          if (listedNow.current === workspace?.id) setComposing(undefined);
         }}
       />
     </div>

@@ -67,7 +67,7 @@ test("an identifier is the workspace's prefix and the issue's number", () => {
   assert.equal(issueIdentifier("  ", 9), "ISSUE-9");
 });
 
-test("a board stands a column for every status in the list's order, an empty one among them, each sorted as the list sorts", () => {
+test("a board stands a column for every status in the order work moves through them, an empty one among them, each sorted as the list sorts", () => {
   const columns = issueColumns([
     issue(1, { status: ISSUE_STATUS.DONE }),
     issue(2, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.LOW }),
@@ -77,9 +77,9 @@ test("a board stands a column for every status in the list's order, an empty one
   assert.deepEqual(
     columns.map((column) => [column.status, column.issues.map((one) => one.number)]),
     [
-      [ISSUE_STATUS.IN_PROGRESS, []],
-      [ISSUE_STATUS.TODO, [3, 2]],
       [ISSUE_STATUS.BACKLOG, []],
+      [ISSUE_STATUS.TODO, [3, 2]],
+      [ISSUE_STATUS.IN_PROGRESS, []],
       [ISSUE_STATUS.DONE, [1]],
       [ISSUE_STATUS.CANCELED, []],
     ],

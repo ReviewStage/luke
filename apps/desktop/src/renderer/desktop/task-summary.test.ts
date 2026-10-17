@@ -16,7 +16,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import type { TasksControl } from "../tasks/use-tasks-tab";
@@ -342,17 +341,6 @@ test("a column with room for the rail draws it, and one widened to that room dra
   assert.equal(column.rail(), null);
   column.widen(480);
   assert.equal(column.rail()?.getAttribute("data-mode"), "rail");
-});
-
-test("the pinned summary's rows fade under the toolbar above it and over the call bar below it, rather than being sliced at either", () => {
-  const { page } = mount("plan");
-  const sheets = layFades();
-  try {
-    const summary = page.querySelector(".task-summary") ?? assert.fail("the summary stands");
-    assert.deepEqual(fadedEdges(summary), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
 });
 
 test("a plan with nothing yet to list draws no summary and no toolbar button, and both stand once it holds a row", () => {

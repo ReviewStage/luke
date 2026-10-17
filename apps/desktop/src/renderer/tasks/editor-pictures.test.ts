@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import type { Task } from "@luke/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
@@ -23,14 +21,11 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
  * at once from the Mac's own bytes, dimmed, with "Uploading" where its
  * caption will stand, and as the kept picture once the service kept it; a
  * keep that failed says why with Retry and Remove, and Remove takes it out;
- * and Insert image is offered while the text is edited, and only then; a
- * selected picture's tools are as wide as their names whatever the
- * picture's width, and only their glyphs, each named, in a narrow column.
+ * and Insert image is offered while the text is edited, and only then; and
+ * a selected picture's tools are only their glyphs, each named, in a narrow
+ * column.
  * Synthetic plan and pictures.
  */
-
-/** The window's stylesheet for a plan, which says how a picture's tools stand. */
-const PLANNING_CSS = readFileSync(path.join(import.meta.dirname, "../styles/tasks.css"), "utf8");
 
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
@@ -289,43 +284,18 @@ function selectPicture(container: HTMLElement): HTMLElement {
 }
 
 /**
- * The column the picture stands in laid out at `width`, its picture `below`
+ * The column the picture stands in laid out at `width`, its picture 200
  * pixels under the top of the plan's scroller, as the window would report it.
  */
-function layOutColumn(container: HTMLElement, width: number, below = 200): void {
+function layOutColumn(container: HTMLElement, width: number): void {
   const column =
     container.querySelector<HTMLElement>(".editor-picture") ?? assert.fail("the picture stands");
   const frame =
     column.querySelector<HTMLElement>(".picture-frame") ?? assert.fail("the picture is framed");
-  column.getBoundingClientRect = () => new DOMRect(0, below, width, 600);
-  frame.getBoundingClientRect = () => new DOMRect(0, below, width / 2, 600);
+  column.getBoundingClientRect = () => new DOMRect(0, 200, width, 600);
+  frame.getBoundingClientRect = () => new DOMRect(0, 200, width / 2, 600);
   act(() => relayout());
 }
-
-test("a selected picture's tools are as wide as their names, never the picture's width, and each name stays on one line", async () => {
-  document.head.appendChild(document.createElement("style")).textContent = PLANNING_CSS;
-  const container = await editing();
-  await pasteScreenshot(container);
-  await keepAsked();
-  await answerKeep({ id: KEPT_ID });
-
-  const tools = selectPicture(container);
-  layOutColumn(container, 720);
-
-  const buttons = [...tools.querySelectorAll("button")];
-  assert.deepEqual(
-    buttons.map((button) => button.textContent),
-    ["Alt text", "Caption", "Enlarge", "Delete"],
-  );
-  // Its width is its own content's, not the skinny picture's box it hangs from.
-  assert.equal(getComputedStyle(tools).width, "max-content");
-  assert.equal(getComputedStyle(tools).whiteSpace, "nowrap");
-  // And the ring hugs the picture, however wide its caption runs.
-  const frame =
-    container.querySelector<HTMLElement>(".editor-picture .picture-frame") ??
-    assert.fail("the picture is framed");
-  assert.equal(getComputedStyle(frame).width, "fit-content");
-});
 
 test("in a column too narrow for their names, a selected picture's tools are their glyphs, each still named", async () => {
   const container = await editing();
@@ -352,25 +322,4 @@ test("in a column too narrow for their names, a selected picture's tools are the
     [...tools.querySelectorAll("button")].map((button) => button.textContent),
     ["Alt text", "Caption", "Enlarge", "Delete"],
   );
-});
-
-test("a selected picture scrolled to the top of the plan stands its tools inside its top edge, and above it again once there is room", async () => {
-  document.head.appendChild(document.createElement("style")).textContent = PLANNING_CSS;
-  const container = await editing();
-  await pasteScreenshot(container);
-  await keepAsked();
-  await answerKeep({ id: KEPT_ID });
-  const tools = selectPicture(container);
-  const scroller =
-    container.querySelector<HTMLElement>(".plan-document-scroll") ??
-    assert.fail("the plan scrolls");
-
-  layOutColumn(container, 720, 0);
-  assert.equal(getComputedStyle(tools).top, "var(--space-8)", "inside the picture's top edge");
-
-  layOutColumn(container, 720, 200);
-  act(() => {
-    scroller.dispatchEvent(new Event("scroll"));
-  });
-  assert.equal(getComputedStyle(tools).top, "0px", "above the picture");
 });

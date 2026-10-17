@@ -1,0 +1,173 @@
+/**
+ * pull-request-writes.ts -- a change to a pull request on GitHub, on the token of the member who asked for it: one GraphQL call, its refusals told apart.
+ *
+ * Every write here runs on a member's own GitHub App user token
+ * (`github-app.ts`'s `userToken`), handed in by the one seam that resolves it
+ * (`agents/pull-request-write.ts`), never on an installation token, so what
+ * the member may do on GitHub bounds what they do through Luke. A write is
+ * one call of GitHub's GraphQL API (`githubWrite`) composed over the App
+ * module's own kit (`githubPost`, `send`), so a token leaves this module no
+ * more than it leaves that one. What GitHub answers is told apart three
+ * ways: a token GitHub will not take (401), which the member mends by
+ * signing in with GitHub again; a change GitHub refused, in its own words,
+ * whether as GraphQL errors on a 200 or as a refusal status with a message
+ * (a missing permission, a branch protection, a rate limit); and a GitHub
+ * that could not be reached or answered in no shape the call reads.
+ * Nothing of the token, the request, or GitHub's body reaches a log line.
+ */
+
+import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
+import { Data, Effect, type Redacted, Schema } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import {
+  GITHUB_FAILURE,
+  GITHUB_HTTP_STATUS,
+  GitHubUnavailable,
+  githubPost,
+  send,
+} from "./github-app.js";
+
+/** GitHub's GraphQL endpoint, under the API's origin. */
+const GRAPHQL_PATH = "/graphql";
+
+/** GitHub would not take the member's token: expired, revoked, or never one of the App's. */
+class GitHubTokenRefused extends Data.TaggedError("GitHubTokenRefused") {
+  override get message(): string {
+    return "GitHub refused the member's token";
+  }
+}
+
+/** GitHub refused the change itself; its words, cut to the bound, are the member's to read. */
+class GitHubWriteRefused extends Data.TaggedError("GitHubWriteRefused")<{
+  readonly words: string;
+}> {
+  override get message(): string {
+    return "GitHub refused the change";
+  }
+}
+
+/** What a write on a member's token can fail with. */
+export type GitHubWriteFailure = GitHubTokenRefused | GitHubWriteRefused | GitHubUnavailable;
+
+/** A GraphQL answer's frame: its data, which the caller's schema reads, and its errors, each with its words. */
+const GraphqlAnswerSchema = Schema.Struct({
+  data: Schema.optional(Schema.Unknown),
+  errors: Schema.optional(Schema.Array(Schema.Struct({ message: Schema.String }))),
+});
+
+/** A refusal status's body, as far as its words. */
+const RefusalSchema = Schema.Struct({ message: Schema.String });
+
+/** Words GitHub said, joined and cut to the bound. */
+function refusalOf(messages: readonly string[]): GitHubWriteRefused {
+  return new GitHubWriteRefused({
+    words: messages.join(" ").slice(0, PULL_REQUEST_WRITE_BOUNDS.MAX_REFUSAL_CHARS),
+  });
+}
+
+function unreadable(status: number): GitHubUnavailable {
+  return new GitHubUnavailable({ reason: GITHUB_FAILURE.UNREADABLE, status });
+}
+
+/**
+ * The answer to a GraphQL call read for what it said: a 401 is the token
+ * refused, any other status that is not OK a refusal in GitHub's words where
+ * it gave some, and an OK answer carrying errors a refusal in theirs.
+ */
+const readWrite = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
+  response: HttpClientResponse.HttpClientResponse,
+  data: Schema.Codec<A, unknown>,
+): Effect.fn.Return<A, GitHubWriteFailure> {
+  if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
+    return yield* new GitHubTokenRefused();
+  }
+  if (response.status < 200 || response.status >= 300) {
+    const refusal = yield* HttpClientResponse.schemaBodyJson(RefusalSchema)(response).pipe(
+      Effect.mapError(
+        () => new GitHubUnavailable({ reason: GITHUB_FAILURE.STATUS, status: response.status }),
+      ),
+    );
+    return yield* refusalOf([refusal.message]);
+  }
+  const answer = yield* HttpClientResponse.schemaBodyJson(GraphqlAnswerSchema)(response).pipe(
+    Effect.mapError(() => unreadable(response.status)),
+  );
+  const errors = answer.errors ?? [];
+  if (errors.length > 0) return yield* refusalOf(errors.map((error) => error.message));
+  return yield* Schema.decodeUnknownEffect(data)(answer.data).pipe(
+    Effect.mapError(() => unreadable(response.status)),
+  );
+});
+
+/**
+ * One call of GitHub's GraphQL API on the member's token: the document and
+ * its variables, its data read under the schema given. Every write on a
+ * pull request goes through here, so every one tells GitHub's refusals
+ * apart the same way.
+ */
+const githubWrite = <A>(
+  token: Redacted.Redacted,
+  document: string,
+  variables: Readonly<Record<string, string | number | boolean>>,
+  data: Schema.Codec<A, unknown>,
+): Effect.Effect<A, GitHubWriteFailure, HttpClient.HttpClient> =>
+  Effect.scoped(
+    Effect.flatMap(
+      send(githubPost(GRAPHQL_PATH, token, { query: document, variables })),
+      (answer) => readWrite(answer, data),
+    ),
+  );
+
+const NODE_ID_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } }
+}`;
+
+/** GraphQL answers a repository or pull request it cannot resolve as null, at times with no error beside it. */
+const NodeIdSchema = Schema.Struct({
+  repository: Schema.NullOr(
+    Schema.Struct({ pullRequest: Schema.NullOr(Schema.Struct({ id: Schema.String })) }),
+  ),
+});
+
+/** What the member is told where GitHub answered no such pull request and said nothing of why. */
+const NOT_RESOLVED = "Could not resolve to a pull request your GitHub account can see.";
+
+/**
+ * The pull request's GraphQL id, which every mutation names it by, read on
+ * the member's token, so a repository or pull request out of their sight is
+ * GitHub's refusal in its own words before anything is changed.
+ */
+export const pullRequestNodeId = /* @__PURE__ */ Effect.fn("web/pullRequestNodeId")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Effect.fn.Return<string, GitHubWriteFailure, HttpClient.HttpClient> {
+  const [owner = "", name = ""] = fullName.split("/");
+  const read = yield* githubWrite(token, NODE_ID_QUERY, { owner, name, number }, NodeIdSchema);
+  const id = read.repository?.pullRequest?.id;
+  if (id === undefined) return yield* refusalOf([NOT_RESOLVED]);
+  return id;
+});
+
+const READY_FOR_REVIEW_MUTATION = `mutation($id: ID!) {
+  markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { isDraft } }
+}`;
+
+const CONVERT_TO_DRAFT_MUTATION = `mutation($id: ID!) {
+  convertPullRequestToDraft(input: { pullRequestId: $id }) { pullRequest { isDraft } }
+}`;
+
+/** A pull request marked ready for review, or turned back into a draft where `draft` asks, on the member's token. */
+export const setPullRequestDraft = /* @__PURE__ */ Effect.fn("web/setPullRequestDraft")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  draft: boolean,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(
+    token,
+    draft ? CONVERT_TO_DRAFT_MUTATION : READY_FOR_REVIEW_MUTATION,
+    { id: pullRequestId },
+    Schema.Unknown,
+  );
+});
