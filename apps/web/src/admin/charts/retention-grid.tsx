@@ -1,6 +1,7 @@
 import type { AdminMetrics, AdminRetentionCell } from "@luke/service/admin/admin-metrics";
 import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
 import { Fragment } from "react";
+import { ChartEmpty, ChartFrame } from "./chart-frame";
 
 /**
  * The floor under a cell's fill, so a small nonzero share still reads as a
@@ -65,7 +66,9 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
  * cell the share of them that used the hosted tier that many weeks after
  * signing up. The grid is triangular because the builder emits no cell for a
  * week the calendar has not reached, and the current week's cells wear a
- * dashed border because their week is still accruing.
+ * dashed border because their week is still accruing. The page's section
+ * heading names it, so its card carries no title, and the grid scrolls inside
+ * the card rather than squeezing its cells in a narrow column.
  */
 export function RetentionGrid({
   retention,
@@ -75,18 +78,20 @@ export function RetentionGrid({
   const totalAccounts = retention.cohorts.reduce((total, cohort) => total + cohort.size, 0);
   if (totalAccounts === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
-        No accounts created in the last {retention.weeks} weeks yet.
-      </div>
+      <ChartFrame>
+        <ChartEmpty>No accounts created in the last {retention.weeks} weeks yet.</ChartEmpty>
+      </ChartFrame>
     );
   }
 
   const offsets = Array.from({ length: retention.weeks }, (_, offset) => offset);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="overflow-x-auto">
+    <ChartFrame>
+      {/* Note that the scroller bleeds across the card's inset, because cells
+      scrolled out of a narrow card should pass under its edge, not stop short of it. */}
+      <div className="-mx-5 overflow-x-auto px-5">
         <div
-          className="grid min-w-[640px] gap-1 p-5 text-xs tabular-nums"
+          className="grid min-w-[640px] gap-1 text-xs tabular-nums"
           style={{
             gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
           }}
@@ -121,6 +126,6 @@ export function RetentionGrid({
           ))}
         </div>
       </div>
-    </div>
+    </ChartFrame>
   );
 }

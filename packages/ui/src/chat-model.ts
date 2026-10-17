@@ -145,9 +145,15 @@ function bySeq(one: ChatMessage, other: ChatMessage): number {
   return one.seq - other.seq;
 }
 
-/** Whether the reader has yet to read a message: posted past its cursor by someone else. */
+/** How far the reader has read a channel: its own cursor there where it read further, else its cursor everywhere. */
+function readSeqIn(chat: ChatAnswer, channelId: string): number {
+  const own = chat.reads?.find((each) => each.channelId === channelId)?.readSeq ?? 0;
+  return Math.max(chat.readSeq, own);
+}
+
+/** Whether the reader has yet to read a message: posted or changed past its cursor in the message's channel by someone else, as the service counts it. */
 function unreadBy(chat: ChatAnswer, message: ChatMessage): boolean {
-  return message.seq > chat.readSeq && message.authorId !== chat.self;
+  return message.touchedSeq > readSeqIn(chat, message.channelId) && message.authorId !== chat.self;
 }
 
 /** The member of a direct message who is not the reader, by id; none for a channel. */

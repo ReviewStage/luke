@@ -1,10 +1,12 @@
 import {
   BUTTON_VARIANT,
   Button,
+  SETTINGS_SECTION_FRAME,
   SettingsRow,
   type SettingsRowControl,
   SettingsSection,
   Switch,
+  TextArea,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -12,9 +14,9 @@ import { CatalogSection } from "../section";
 
 /**
  * settings-section.tsx -- a headed section of rows, one with no heading,
- * one holding a single row, and one with a long heading and long rows in a
+ * one holding a single row, one with a long heading and long rows in a
  * column narrower than the 380px a row's controls drop below its words
- * under.
+ * under, and one with no card around a text area that draws its own frame.
  */
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
@@ -36,6 +38,20 @@ function SwitchRow({ label, description }: { label: string; description?: string
     <SettingsRow label={label} description={description}>
       {(control) => <HeldSwitch label={label} control={control} />}
     </SettingsRow>
+  );
+}
+
+/** A text area holding its own words. */
+function HeldTextArea() {
+  const [text, setText] = useState("");
+  return (
+    <TextArea
+      label="Prompt"
+      rows={4}
+      placeholder="Find the flakiest test in CI this week and fix it."
+      value={text}
+      onChange={setText}
+    />
   );
 }
 
@@ -76,6 +92,13 @@ function SettingsSections(): React.JSX.Element {
               {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Choose repositories</Button>}
             </SettingsRow>
             <SwitchRow label="Notify me" />
+          </SettingsSection>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-section-frameless" title="No card, one text area">
+        <div className="catalog-settings">
+          <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
+            <HeldTextArea />
           </SettingsSection>
         </div>
       </CatalogSection>

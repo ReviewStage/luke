@@ -5,8 +5,8 @@
  * addons, which are too large for the bundle every window parses, so they
  * ship as a bundle of their own (`terminal.js` and `terminal.css`, built from
  * `./index.ts` and `./index.css`) that the tab loads the first time a
- * terminal is shown, as a File tab loads its tree. That bundle sets one
- * global, `window.lukeTerminal`, and this file is the whole of what the two
+ * terminal is shown, as a File tab loads its tree. That bundle exports one
+ * module, `terminal`, and this file is the whole of what the two
  * share: no xterm type crosses, only text, bytes, and sizes, and nothing here
  * imports anything, so the bundle carries none of the panel's libraries.
  *
@@ -75,19 +75,7 @@ export interface TerminalHandle {
   readonly unmount: () => void;
 }
 
-/** What the terminal bundle sets on `window` once it has loaded. */
+/** What the terminal bundle's entry exports, which the panel imports the first time it is needed (`../bundle-loader.ts`). */
 export interface TerminalModule {
   readonly mount: (host: HTMLElement, props: TerminalProps) => TerminalHandle;
 }
-
-declare global {
-  interface Window {
-    lukeTerminal?: TerminalModule;
-  }
-}
-
-/** The files the terminal bundle is, beside `index.html`. */
-export const TERMINAL_ASSET = {
-  SCRIPT: "terminal.js",
-  STYLESHEET: "terminal.css",
-} as const;
