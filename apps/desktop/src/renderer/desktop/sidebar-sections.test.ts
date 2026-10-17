@@ -677,3 +677,46 @@ test("Enter in the Emoji tab's search chooses the first emoji it found", async (
   assert.equal(made?.kind, TASK_SECTION_WRITE.CREATE);
   assert.deepEqual(made.icon, { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🛻" });
 });
+
+test("the arrows move the grid's one tab stop with the focus", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([]);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  await settleLoaded();
+  const folder = dialogButton("Folder");
+  act(() => folder.focus());
+  act(() => {
+    folder.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  });
+
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Star");
+  assert.equal(dialogButton("Star").getAttribute("tabindex"), "0");
+  assert.equal(folder.getAttribute("tabindex"), "-1");
+});
+
+test("editing a section in an emoji the grid leaves out names it in the emoji field", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const newest: TaskSections = {
+    sections: [
+      {
+        id: LAUNCH,
+        workspaceId: WORKSPACE.id,
+        title: "Launch",
+        icon: { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🫩" },
+        createdAt: 1,
+      },
+    ],
+    entries: SECTIONS.entries,
+  };
+  const sidebar = await mountSidebar([], newest);
+  const actions = sidebar.querySelector<HTMLButtonElement>('[aria-label="Actions for Launch"]');
+  assert.ok(actions);
+
+  act(() => actions.click());
+  act(() => item("Edit section").click());
+  await settleLoaded();
+
+  assert.equal(dialogField("Any emoji").value, "🫩");
+});

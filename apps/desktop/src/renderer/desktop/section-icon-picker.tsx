@@ -37,7 +37,7 @@ import {
   StarIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { rendererRuntime } from "../renderer-runtime";
 import { Tooltip } from "../tooltip";
 
@@ -369,6 +369,24 @@ function stepGrid(event: React.KeyboardEvent<HTMLFieldSetElement>): void {
   choices[Math.min(Math.max(from + step, 0), choices.length - 1)]?.focus();
 }
 
+/**
+ * Makes the choice that took focus the grid's one tab stop, so Tab out and
+ * Shift+Tab back lands where the arrows left it. Note that this is written
+ * on the buttons themselves rather than drawn, because drawing it would
+ * draw every one of some two thousand buttons again on each arrow press;
+ * the next choice made draws the stop again as the icon chosen.
+ */
+function standTabStop(event: React.FocusEvent<HTMLFieldSetElement>): void {
+  const focused = event.target;
+  if (!(focused instanceof HTMLButtonElement)) return;
+  for (const stop of event.currentTarget.querySelectorAll<HTMLButtonElement>(
+    'button[tabindex="0"]',
+  )) {
+    stop.tabIndex = -1;
+  }
+  focused.tabIndex = 0;
+}
+
 /** The name of the choice a pointer or the keyboard rests on, read off the button under it. */
 function restingLabel(event: React.SyntheticEvent): string | undefined {
   if (!(event.target instanceof Element)) return undefined;
@@ -399,9 +417,18 @@ export function SectionIconPicker({
   const [color, setColor] = useState(
     icon?.kind === TASK_SECTION_ICON_KIND.GLYPH ? icon.color : undefined,
   );
-  const [typed, setTyped] = useState("");
+  // Note that the field opens on the emoji chosen, which may be one the grid leaves out, newer than every Mac draws.
+  const [typed, setTyped] = useState(icon?.kind === TASK_SECTION_ICON_KIND.EMOJI ? icon.emoji : "");
   const [resting, setResting] = useState<string | undefined>(undefined);
   const grid = useRef<HTMLDivElement | null>(null);
+  // A choice made anywhere but the field leaves the field empty, so it never names an emoji no longer chosen.
+  const choose = useCallback(
+    (next: TaskSectionIcon | undefined) => {
+      setTyped("");
+      onIcon(next);
+    },
+    [onIcon],
+  );
   const recolor = (next: TaskSectionIconColor | undefined) => {
     setColor(next);
     if (icon?.kind === TASK_SECTION_ICON_KIND.GLYPH) onIcon(glyphIcon(icon.glyph, next));
@@ -437,7 +464,7 @@ export function SectionIconPicker({
             className="section-icon-choice"
             aria-label="No icon"
             aria-pressed={icon === undefined}
-            onClick={() => onIcon(undefined)}
+            onClick={() => choose(undefined)}
           >
             <BanIcon />
           </button>
@@ -459,14 +486,17 @@ export function SectionIconPicker({
         onKeyDown={stepGrid}
         onPointerOver={(event) => setResting(restingLabel(event))}
         onPointerLeave={() => setResting(undefined)}
-        onFocus={(event) => setResting(restingLabel(event))}
+        onFocus={(event) => {
+          standTabStop(event);
+          setResting(restingLabel(event));
+        }}
       >
         <legend className="visually-hidden">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</legend>
         <div ref={grid} className="section-icon-scroll">
           {tab === ICON_TAB.ICONS ? (
-            <GlyphPanel query={query} icon={icon} color={color} onIcon={onIcon} />
+            <GlyphPanel query={query} icon={icon} color={color} onIcon={choose} />
           ) : (
-            <EmojiPanel query={query} icon={icon} onIcon={onIcon} />
+            <EmojiPanel query={query} icon={icon} onIcon={choose} />
           )}
         </div>
       </fieldset>
