@@ -46,6 +46,10 @@ import {
   type TasksTreeParams,
   type TasksWorkspaceAnswer,
   type TasksWorkspaceCreateParams,
+  type TasksWorkspaceEnvironmentAnswer,
+  type TasksWorkspaceEnvironmentParams,
+  type TasksWorkspaceEnvironmentRemoveParams,
+  type TasksWorkspaceEnvironmentSaveParams,
   type TasksWorkspaceGitHubConnectAnswer,
   type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationCancelParams,
@@ -129,6 +133,15 @@ export interface TasksActsDependencies {
     ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
     workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
+    workspaceEnvironmentRead(
+      params: TasksWorkspaceEnvironmentParams,
+    ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
+    workspaceEnvironmentSave(
+      params: TasksWorkspaceEnvironmentSaveParams,
+    ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
+    workspaceEnvironmentRemove(
+      params: TasksWorkspaceEnvironmentRemoveParams,
+    ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
     workspaceMembers(
       params: TasksWorkspaceMembersParams,
     ): Effect.Effect<TasksWorkspaceMembersAnswer>;
@@ -215,6 +228,9 @@ type TasksActKind =
   | typeof ACT_KIND.WORKSPACE_LINEAR_CONNECT
   | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
+  | typeof ACT_KIND.WORKSPACE_ENVIRONMENT_READ
+  | typeof ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE
+  | typeof ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_PHOTO_READ
@@ -235,6 +251,9 @@ type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_LINEAR_CONNECT
   | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
+  | typeof ACT_KIND.WORKSPACE_ENVIRONMENT_READ
+  | typeof ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE
+  | typeof ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
@@ -617,6 +636,30 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
         "issues" in answer
           ? Effect.succeed(answer.issues)
           : refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_ISSUES, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_ENVIRONMENT_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_ENVIRONMENT_READ, sender);
+      return Effect.flatMap(host.workspaceEnvironmentRead(params), (answer) =>
+        "entries" in answer
+          ? Effect.succeed(answer)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_ENVIRONMENT_READ, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE, sender);
+      return Effect.flatMap(host.workspaceEnvironmentSave(params), (answer) =>
+        "entries" in answer
+          ? Effect.succeed(answer)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE, sender);
+      return Effect.flatMap(host.workspaceEnvironmentRemove(params), (answer) =>
+        "entries" in answer
+          ? Effect.succeed(answer)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE, answer.failure),
       );
     },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: (params, sender) => {

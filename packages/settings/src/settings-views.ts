@@ -87,6 +87,8 @@ export const SETTINGS_SECTION = {
   LEAVE: "workspace-leave",
   /** A workspace's GitHub, the group once called GitHub repositories and still anchored by its name: the GitHub accounts connected, and Connect or Manage on GitHub, where accounts are added and repositories chosen. */
   GITHUB_REPOSITORIES: "workspace-github-repositories",
+  /** The environment variables and secrets every coding agent of a workspace runs its commands with. */
+  ENVIRONMENT: "workspace-environment",
   /** Where each repository is cloned on this Mac and the command that runs it, which Open on this Mac reads. */
   MAC_REPOSITORIES: "workspace-mac-repositories",
 } as const;

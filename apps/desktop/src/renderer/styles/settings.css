@@ -524,6 +524,50 @@
   font-family: var(--font-mono);
 }
 
+/* Settings › Workspace › Environment: the add or edit form, its name, kind,
+   and value on one line and Cancel and Save under them at its end, inside
+   the group's rule as API keys' form is. A variable's value reads in the
+   code face, cut to the line rather than wrapping the row. */
+.settings-card > .environment-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+}
+
+.environment-form .settings-input {
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0 var(--space-8);
+  border-radius: var(--control-radius);
+  font-family: var(--font-mono);
+}
+
+.environment-form .environment-name {
+  flex: 0 1 220px;
+}
+
+.environment-form .environment-value {
+  flex: 1 1 200px;
+}
+
+.environment-form-actions {
+  display: flex;
+  flex-basis: 100%;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+
+.environment-shown-value {
+  display: inline-block;
+  max-width: 32ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 /* Settings › Workspace › Invitations: the invite form, an address field
    taking the row's room, then the role's chip and Invite, the field drawn
    as API keys' is. The chip is a field chip of one width, as every Settings

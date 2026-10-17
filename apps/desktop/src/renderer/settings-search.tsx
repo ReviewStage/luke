@@ -288,6 +288,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
+    input.workspace
+      ? {
+          id: SETTINGS_SECTION.ENVIRONMENT,
+          label: "Environment",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: [
+            "Environment",
+            "environment variables env secrets tokens api keys cloud sandbox coding agents",
+          ],
+        }
+      : undefined,
     // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
     ...shownShortcutGroups(input.settings.experiments).flatMap((group) =>
       group.commands.map((command) => ({

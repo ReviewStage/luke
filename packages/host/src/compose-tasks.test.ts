@@ -52,6 +52,10 @@ import {
   tasksViewSchema,
 } from "@luke/features/tasks-view";
 import type { TaskTranscript } from "@luke/features/transcript-wire";
+import {
+  WORKSPACE_ENVIRONMENT_KIND,
+  type WorkspaceEnvironmentEntry,
+} from "@luke/features/workspace-environment-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
   type FormerMember,
@@ -185,6 +189,8 @@ interface FakeService extends TasksClient {
   former: Record<string, FormerMember[]>;
   /** The Linear issues each workspace's connection reaches; a workspace absent has no Linear to read. */
   linearIssues: Record<string, LinearIssueSummary[]>;
+  /** Each workspace's environment variables and secrets, by its id, as the service answers them. */
+  environment: Record<string, WorkspaceEnvironmentEntry[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
   /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
@@ -330,6 +336,7 @@ function fakeService(tasks: Task[]): FakeService {
     members: {},
     former: {},
     linearIssues: {},
+    environment: {},
     invitations: {},
     photos: {},
     notPermitted: false,
@@ -453,6 +460,36 @@ function fakeService(tasks: Task[]): FakeService {
           return issues === undefined
             ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
             : ({ ok: true, answer: issues } as const);
+        }),
+      environment: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`environment:${workspaceId}`);
+          return { ok: true, answer: { entries: service.environment[workspaceId] ?? [] } } as const;
+        }),
+      // A save is recorded by its name alone, as the service logs it; a secret is answered by its hint.
+      saveEnvironment: ({ workspaceId, name, kind, secretValue }) =>
+        Effect.sync(() => {
+          service.reads.push(`environment-save:${workspaceId}:${name}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const entry: WorkspaceEnvironmentEntry =
+            kind === WORKSPACE_ENVIRONMENT_KIND.SECRET
+              ? { name, kind, hint: `…${secretValue.slice(-4)}`, readable: true, updatedAt: 1 }
+              : { name, kind, value: secretValue, readable: true, updatedAt: 1 };
+          const kept = (service.environment[workspaceId] ?? []).filter(
+            (each) => each.name !== name,
+          );
+          service.environment[workspaceId] = [...kept, entry];
+          return { ok: true, answer: { entries: service.environment[workspaceId] } } as const;
+        }),
+      removeEnvironment: ({ workspaceId, name }) =>
+        Effect.sync(() => {
+          service.reads.push(`environment-remove:${workspaceId}:${name}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const kept = (service.environment[workspaceId] ?? []).filter(
+            (each) => each.name !== name,
+          );
+          service.environment[workspaceId] = kept;
+          return { ok: true, answer: { entries: kept } } as const;
         }),
       people: (workspaceId) =>
         Effect.sync(() => {
@@ -1651,6 +1688,55 @@ it.effect(
         `members:${ACME.id}`,
         `remove:${ACME.id}:${GRACE.userId}`,
         "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
+  "a workspace's environment is read, saved, and removed on the service with nothing else read again, and a save the account may not make answers why",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call } = yield* subject(service);
+
+      const saved = yield* call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_SAVE, {
+        workspaceId: ACME.id,
+        name: "STRIPE_KEY",
+        kind: WORKSPACE_ENVIRONMENT_KIND.SECRET,
+        secretValue: "sk_test_0000wxyz",
+      });
+      const read = yield* call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_READ, {
+        workspaceId: ACME.id,
+      });
+      const removed = yield* call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_REMOVE, {
+        workspaceId: ACME.id,
+        name: "STRIPE_KEY",
+      });
+      service.notPermitted = true;
+      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_SAVE, {
+        workspaceId: ACME.id,
+        name: "APP_MODE",
+        kind: WORKSPACE_ENVIRONMENT_KIND.VARIABLE,
+        secretValue: "dev",
+      });
+
+      const secret = {
+        name: "STRIPE_KEY",
+        kind: WORKSPACE_ENVIRONMENT_KIND.SECRET,
+        hint: "…wxyz",
+        readable: true,
+        updatedAt: 1,
+      };
+      assert.deepEqual(saved, { entries: [secret] });
+      assert.deepEqual(read, { entries: [secret] });
+      assert.deepEqual(removed, { entries: [] });
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(service.reads, [
+        `environment-save:${ACME.id}:STRIPE_KEY`,
+        `environment:${ACME.id}`,
+        `environment-remove:${ACME.id}:STRIPE_KEY`,
+        `environment-save:${ACME.id}:APP_MODE`,
       ]);
     }),
 );

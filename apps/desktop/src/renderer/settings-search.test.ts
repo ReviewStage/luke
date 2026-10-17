@@ -192,3 +192,11 @@ test("no two rows the search can land on wear the same id", () => {
     [],
   );
 });
+
+test("Environment variables and secrets find the Workspace page's Environment group for every workspace, a member's too", () => {
+  for (const workspace of [FIRST, TEAM]) {
+    for (const query of ["Environment variables", "secrets"]) {
+      assert.deepEqual(workspaceFound(query, workspace), [SETTINGS_SECTION.ENVIRONMENT]);
+    }
+  }
+});

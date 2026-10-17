@@ -175,6 +175,9 @@ import {
   tasksTreeAnswerSchema,
   tasksTreeParamsSchema,
   tasksWorkspaceCreateParamsSchema,
+  tasksWorkspaceEnvironmentParamsSchema,
+  tasksWorkspaceEnvironmentRemoveParamsSchema,
+  tasksWorkspaceEnvironmentSaveParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
   tasksWorkspaceLeaveParamsSchema,
@@ -201,6 +204,10 @@ import {
   terminalShellParamsSchema,
   terminalsActAnswerSchema,
 } from "@luke/features/terminal-acts";
+import {
+  type WorkspaceEnvironmentAnswer,
+  workspaceEnvironmentAnswerSchema,
+} from "@luke/features/workspace-environment-wire";
 import {
   type WorkspaceInvitation,
   workspaceInvitationSchema,
@@ -393,6 +400,9 @@ export const ACT_KIND = {
   WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
   WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
   WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
+  WORKSPACE_ENVIRONMENT_READ: "workspace.environmentRead",
+  WORKSPACE_ENVIRONMENT_SAVE: "workspace.environmentSave",
+  WORKSPACE_ENVIRONMENT_REMOVE: "workspace.environmentRemove",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
@@ -987,6 +997,21 @@ export const ACT = {
     payload: actSchema(tasksLinearIssuesParamsSchema),
     result: wireResult<readonly LinearIssueSummary[]>(isReadable(linearIssuesSchema)),
     refusal: "Could not read that workspace's Linear issues on this system.",
+  },
+  [ACT_KIND.WORKSPACE_ENVIRONMENT_READ]: {
+    payload: actSchema(tasksWorkspaceEnvironmentParamsSchema),
+    result: wireResult<WorkspaceEnvironmentAnswer>(isReadable(workspaceEnvironmentAnswerSchema)),
+    refusal: "Could not read that workspace's environment on this system.",
+  },
+  [ACT_KIND.WORKSPACE_ENVIRONMENT_SAVE]: {
+    payload: actSchema(tasksWorkspaceEnvironmentSaveParamsSchema),
+    result: wireResult<WorkspaceEnvironmentAnswer>(isReadable(workspaceEnvironmentAnswerSchema)),
+    refusal: "Could not save that environment value on this system.",
+  },
+  [ACT_KIND.WORKSPACE_ENVIRONMENT_REMOVE]: {
+    payload: actSchema(tasksWorkspaceEnvironmentRemoveParamsSchema),
+    result: wireResult<WorkspaceEnvironmentAnswer>(isReadable(workspaceEnvironmentAnswerSchema)),
+    refusal: "Could not remove that environment value on this system.",
   },
   [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
     payload: actSchema(tasksWorkspaceMembersParamsSchema),

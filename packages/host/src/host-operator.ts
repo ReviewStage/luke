@@ -165,6 +165,10 @@ import {
   type TasksView,
   type TasksWorkspaceAnswer,
   type TasksWorkspaceCreateParams,
+  type TasksWorkspaceEnvironmentAnswer,
+  type TasksWorkspaceEnvironmentParams,
+  type TasksWorkspaceEnvironmentRemoveParams,
+  type TasksWorkspaceEnvironmentSaveParams,
   type TasksWorkspaceGitHubConnectAnswer,
   type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationCancelParams,
@@ -201,6 +205,7 @@ import {
   tasksTreeAnswerSchema,
   tasksViewSchema,
   tasksWorkspaceAnswerSchema,
+  tasksWorkspaceEnvironmentAnswerSchema,
   tasksWorkspaceGitHubConnectAnswerSchema,
   tasksWorkspaceInvitationAnswerSchema,
   tasksWorkspaceInvitationsAnswerSchema,
@@ -432,6 +437,18 @@ export interface HostOperator {
   workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** The Linear issues a workspace's connection reaches; or why there are none. */
   workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
+  /** A workspace's environment variables and secrets; or why there are none. */
+  workspaceEnvironmentRead(
+    params: TasksWorkspaceEnvironmentParams,
+  ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
+  /** One environment variable or secret saved, the value carried once; the list as it then stands, or why it is unchanged. */
+  workspaceEnvironmentSave(
+    params: TasksWorkspaceEnvironmentSaveParams,
+  ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
+  /** One environment variable or secret removed; the list as it then stands, or why it is unchanged. */
+  workspaceEnvironmentRemove(
+    params: TasksWorkspaceEnvironmentRemoveParams,
+  ): Effect.Effect<TasksWorkspaceEnvironmentAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
@@ -1210,6 +1227,31 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("identifier" in params ? { identifier: params.identifier } : undefined),
         }),
         workspaceAnswer(tasksLinearIssuesAnswerSchema),
+      ),
+    workspaceEnvironmentRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_READ, {
+          workspaceId: params.workspaceId,
+        }),
+        workspaceAnswer(tasksWorkspaceEnvironmentAnswerSchema),
+      ),
+    workspaceEnvironmentSave: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_SAVE, {
+          workspaceId: params.workspaceId,
+          name: params.name,
+          kind: params.kind,
+          secretValue: params.secretValue,
+        }),
+        workspaceAnswer(tasksWorkspaceEnvironmentAnswerSchema),
+      ),
+    workspaceEnvironmentRemove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_ENVIRONMENT_REMOVE, {
+          workspaceId: params.workspaceId,
+          name: params.name,
+        }),
+        workspaceAnswer(tasksWorkspaceEnvironmentAnswerSchema),
       ),
     workspaceMembers: (params) =>
       Effect.map(
