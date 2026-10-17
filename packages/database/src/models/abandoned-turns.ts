@@ -1,7 +1,7 @@
 import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_STATUS, BRAIN_RUN_EVENT } from "@luke/features/brain";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_STATUS } from "@luke/wire";
-import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -24,7 +24,11 @@ import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
  * agent's turn whose session eve says it no longer runs is settled on the
  * same write at once, failed for its session's end rather than abandoned
  * (`settleEndedSessionTurn`), since eve's word is final where the sweep's
- * bound is only a guess.
+ * bound is only a guess. A turn a Stop was asked of is settled sooner, and
+ * as cancelled: eve confirms a cancel within seconds by ending the turn, so
+ * a Stop still unconfirmed past its bound is one whose session is gone, as
+ * a session that died in a deploy is, and the turn ends as the Stop asked
+ * rather than standing running until the abandonment bound.
  */
 
 export const TURN_ABANDON = {
@@ -44,28 +48,46 @@ export const TURN_ABANDON = {
    * it is a run whose end is not coming.
    */
   CODING_AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
+  /**
+   * How long a turn may stand running after a Stop was asked of it before
+   * the sweep settles it as cancelled. eve's own cancel ends the turn within
+   * seconds, so a Stop still unconfirmed this long found no session to
+   * stop, whatever eve answered it.
+   */
+  CANCEL_AFTER_MS: 5 * 60 * 1000,
   /** The most turns one sweep settles; the rest wait for the next minute. */
   LIMIT: 50,
 } as const;
 
-const AbandonedTurnRowSchema = Schema.Struct({
+const LostTurnSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   conversationId: Schema.String,
 });
 
-/** The running turns started before the instant of their conversation's kind, longest running first, of conversations still standing; a cleared conversation's turns go with its purge. */
+const AbandonedTurnRowSchema = Schema.Struct({
+  ...LostTurnSchema.fields,
+  cancelRequestedAt: Schema.NullOr(Schema.Date),
+});
+
+/** The running turns started before the instant of their conversation's kind, or whose Stop was asked before its own instant, longest running first, of conversations still standing; a cleared conversation's turns go with its purge. */
 const abandonedTurns = SqlSchema.findAll({
   Request: Schema.Struct({
     startedBefore: Schema.Date,
     codingAgentStartedBefore: Schema.Date,
+    cancelRequestedBefore: Schema.Date,
     limit: Schema.Int,
   }),
   Result: AbandonedTurnRowSchema,
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({ id: turns.id, userId: turns.userId, conversationId: turns.conversationId })
+        .select({
+          id: turns.id,
+          userId: turns.userId,
+          conversationId: turns.conversationId,
+          cancelRequestedAt: turns.cancelRequestedAt,
+        })
         .from(turns)
         .innerJoin(conversations, eq(conversations.id, turns.conversationId))
         .where(
@@ -81,6 +103,10 @@ const abandonedTurns = SqlSchema.findAll({
                 eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
                 lt(turns.startedAt, request.codingAgentStartedBefore),
               ),
+              and(
+                isNotNull(turns.cancelRequestedAt),
+                lt(turns.cancelRequestedAt, request.cancelRequestedBefore),
+              ),
             ),
           ),
         )
@@ -90,10 +116,20 @@ const abandonedTurns = SqlSchema.findAll({
 });
 
 /** A turn whose end is not coming: its id, and the conversation and account it stands in. */
-export type LostTurn = typeof AbandonedTurnRowSchema.Type;
+export type LostTurn = typeof LostTurnSchema.Type;
+
+/** How a lost turn ends: cancelled where its Stop went unconfirmed, failed for the reason given otherwise. */
+type LostTurnEnd =
+  | { readonly status: typeof BRAIN_REQUEST_STATUS.CANCELLED }
+  | {
+      readonly status: typeof BRAIN_REQUEST_STATUS.FAILED;
+      readonly failure:
+        | typeof BRAIN_REQUEST_FAILURE.ABANDONED
+        | typeof BRAIN_REQUEST_FAILURE.SESSION_ENDED;
+    };
 
 /**
- * The turn settled as failed for the reason given, through the write the
+ * The turn settled as the end given, through the write the
  * relay's own end takes; whether this write settled it, a turn already
  * ended being a repeat. The end stands alone in the turn's sequence: the
  * relay's count of what it told is not known here, and the writer settles
@@ -102,7 +138,7 @@ export type LostTurn = typeof AbandonedTurnRowSchema.Type;
 const settledLost = (
   writer: Pick<StoreWriter, "consume">,
   turn: LostTurn,
-  failure: typeof BRAIN_REQUEST_FAILURE.ABANDONED | typeof BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+  end: LostTurnEnd,
   now: number,
 ) =>
   Effect.map(
@@ -113,8 +149,7 @@ const settledLost = (
         conversationId: sessionKey(turn.conversationId),
         turnId: turn.id,
         sequence: 1,
-        status: BRAIN_REQUEST_STATUS.FAILED,
-        failure,
+        ...end,
         responseIds: [],
         at: now,
       },
@@ -132,7 +167,7 @@ export interface AbandonedTurnSweepOptions {
   readonly limit?: number | undefined;
 }
 
-/** Settles every running turn started more than its kind's bound ago as failed for abandonment; answers how many it settled. */
+/** Settles every running turn whose Stop went unconfirmed past its bound as cancelled, and every other one started more than its kind's bound ago as failed for abandonment; answers how many it settled. */
 export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandonedTurns")(function* (
   store: AbandonedTurnSweepStore,
   options: AbandonedTurnSweepOptions,
@@ -140,14 +175,21 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
   const turns = yield* abandonedTurns({
     startedBefore: new Date(options.now - TURN_ABANDON.AFTER_MS),
     codingAgentStartedBefore: new Date(options.now - TURN_ABANDON.CODING_AGENT_AFTER_MS),
+    cancelRequestedBefore: new Date(options.now - TURN_ABANDON.CANCEL_AFTER_MS),
     limit: options.limit ?? TURN_ABANDON.LIMIT,
   });
   let settled = 0;
-  for (const turn of turns) {
+  const cancelRequestedBefore = options.now - TURN_ABANDON.CANCEL_AFTER_MS;
+  for (const { cancelRequestedAt, ...turn } of turns) {
+    // Note that a Stop past its bound wins over abandonment, because the turn ends as the developer asked.
+    const cancelled =
+      cancelRequestedAt !== null && cancelRequestedAt.getTime() < cancelRequestedBefore;
     const written = yield* settledLost(
       store.writer,
       turn,
-      BRAIN_REQUEST_FAILURE.ABANDONED,
+      cancelled
+        ? { status: BRAIN_REQUEST_STATUS.CANCELLED }
+        : { status: BRAIN_REQUEST_STATUS.FAILED, failure: BRAIN_REQUEST_FAILURE.ABANDONED },
       options.now,
     );
     if (written) settled += 1;
@@ -168,6 +210,11 @@ export const settleEndedSessionTurn = /* @__PURE__ */ Effect.fn("web/settleEnded
     turn: LostTurn,
     now: number,
   ): Effect.fn.Return<boolean, QueryError | Schema.SchemaError, DatabaseServices> {
-    return yield* settledLost(writer, turn, BRAIN_REQUEST_FAILURE.SESSION_ENDED, now);
+    return yield* settledLost(
+      writer,
+      turn,
+      { status: BRAIN_REQUEST_STATUS.FAILED, failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED },
+      now,
+    );
   },
 );

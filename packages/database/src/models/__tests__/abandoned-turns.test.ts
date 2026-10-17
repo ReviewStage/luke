@@ -22,7 +22,8 @@ import { type ConversationTarget, type StoreWriter, storeWriter } from "../write
 
 /**
  * How a coding agent's turn whose end is never coming is settled, over a
- * real dialect: by the sweep once it ran past its bound, and at once when
+ * real dialect: by the sweep once it ran past its bound, by the sweep as
+ * cancelled once a Stop eve never confirmed is past its own, and at once when
  * eve said its session ended for good.
  *
  * Synthetic accounts, conversations, and turns throughout.
@@ -129,6 +130,30 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           TURN_STATUS.FAILED,
           BRAIN_REQUEST_FAILURE.ABANDONED,
         ]);
+      }),
+  );
+
+  it.effect(
+    "the sweep settles a turn whose Stop eve never confirmed as cancelled once past the Stop's bound, and not before",
+    () =>
+      Effect.gen(function* () {
+        const writer = yield* storeWriter({ tools: {} });
+        const target = yield* openAgentConversation;
+        const turnId = yield* turnIn(writer, target, TURN_STATUS.RUNNING);
+        const stoppedAt = STARTED_AT + 60_000;
+        yield* writer.requestTurnCancel(target, { turnId, at: new Date(stoppedAt) });
+
+        yield* sweepAbandonedTurns({ writer }, { now: stoppedAt + TURN_ABANDON.CANCEL_AFTER_MS });
+        assert.deepEqual(
+          yield* newestTurnOf(target),
+          [TURN_STATUS.RUNNING, null],
+          "eve may still confirm it",
+        );
+        yield* sweepAbandonedTurns(
+          { writer },
+          { now: stoppedAt + TURN_ABANDON.CANCEL_AFTER_MS + 1 },
+        );
+        assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.CANCELLED, null]);
       }),
   );
 });
