@@ -3000,7 +3000,7 @@ ul.actor-stack {
    window's: the same strip stands in a 280px column beside a wide side panel
    and across a whole window. */
 .banner {
-  --banner-gap: var(--space-8);
+  --banner-gap: var(--luke-icon-gap);
   container: banner / inline-size;
 }
 
@@ -3015,11 +3015,7 @@ ul.actor-stack {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-2);
-}
-
-.banner-words p {
-  margin: 0;
+  gap: var(--luke-space-2);
 }
 
 .banner-actions {
@@ -3027,7 +3023,7 @@ ul.actor-stack {
   min-width: 0;
   flex: 0 1 auto;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-control-gap);
 }
 
 /* Narrow, the presses leave the words' line for one of their own beneath
@@ -3043,7 +3039,6 @@ ul.actor-stack {
   }
 
   .banner .banner-actions > * {
-    max-width: none;
     flex: 1 1 0%;
   }
 
@@ -3057,61 +3052,41 @@ ul.actor-stack {
    the panel fills the window, on a faint attention tint with a hairline of
    it beneath. Its words are cut short rather than wrapped while the line is
    wide enough to read them, so the line keeps its height, and its one press
-   stands at its end, a quiet bordered button as a devtool's notice draws
-   one. */
+   stands at its end, an outlined button. */
 .task-banner {
   flex: 0 0 auto;
-  min-height: 32px; /* off-scale: a 22px press and its inset */
-  padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
-  border-bottom: 1px solid color-mix(in srgb, var(--state-attention) 30%, var(--hairline));
-  background: color-mix(in srgb, var(--state-attention) 9%, var(--desktop-ground));
-  color: var(--text-body);
-  font-size: 12.5px;
+  padding: var(--luke-space-2) var(--column-inset) var(--luke-space-2) var(--content-inset);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--luke-color-attention) 30%, var(--luke-color-border));
+  background: color-mix(in srgb, var(--luke-color-attention) 9%, var(--desktop-ground));
 }
 
 .task-banner .banner-row {
-  min-height: 24px; /* off-scale: the line's height less its inset */
+  min-height: var(--luke-control-height);
 }
 
 .task-banner-words {
+  margin: 0;
   overflow: hidden;
+  color: var(--luke-color-text-body);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .task-banner-words .workspace-ref {
   max-width: none;
-  color: var(--text-primary);
-  font-weight: 560;
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-medium);
 }
 
 /* The press gives way too while it shares the line, its words cut short at
    the end rather than the press pushed out of the column, and never takes
    more than half the line, which its presses' box holds it to; the whole of
    them stays its text, which a reader hears. */
-.task-banner-action {
-  min-width: 0;
-  flex: 0 1 auto;
-  height: 22px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 var(--space-8);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 6px;
-  background: none;
-  color: var(--text-primary);
-  font: inherit;
-  font-weight: 560;
-  white-space: nowrap;
-  transition: background-color var(--duration-hover) ease;
-}
-
 .task-banner .banner-actions {
   max-width: 50%;
-}
-
-.task-banner-action:hover {
-  background: var(--raised);
 }
 
 @container banner (max-width: 479px) {
@@ -3127,12 +3102,12 @@ ul.actor-stack {
    one action the plan takes, the way Notion marks a page in the trash, and
    the plan template's says what the template is for. */
 .document-banner {
-  --banner-gap: var(--space-12);
+  --banner-gap: var(--luke-space-12);
   box-sizing: border-box;
   width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
-  margin: var(--space-16) auto 0;
-  padding: var(--space-12) var(--space-12) var(--space-12) var(--space-16);
-  border: 1px solid var(--hairline-strong);
+  margin: var(--luke-space-16) auto 0;
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-16);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 12px;
   background: var(--desktop-well);
 }
@@ -3143,25 +3118,14 @@ ul.actor-stack {
   height: 32px;
   flex: none;
   place-items: center;
-  border-radius: 50%;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text-muted);
 }
 
 .document-banner-glyph svg {
-  width: 16px;
-  height: 16px;
-}
-
-.document-banner-title {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.document-banner-detail {
-  color: var(--text-secondary);
-  font-size: 12.5px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 /* The document's column answers its own width (`@container plan-document`
@@ -6526,7 +6490,6 @@ button.automation-run:hover {
 .task-page-head .template-note {
   width: auto;
   margin: var(--space-16) 0 0;
-  line-height: normal;
   scroll-margin-top: calc(var(--space-32) + 3 * var(--control-height));
 }
 
