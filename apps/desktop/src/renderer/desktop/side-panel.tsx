@@ -374,7 +374,7 @@ export function changesTabOf(
 
 /**
  * Opens an agent's Pull request tab, the one that stands for its pull
- * request (`changesTabOf`), on the view given: the overview its pull
+ * request (`changesTabOf`), on the view given: the conversation its pull
  * request's chip asks for, or the files its Changes chip does.
  */
 export function showPullRequest(
@@ -618,7 +618,13 @@ function stripTabs(input: {
       ).then((messages) =>
         messages === undefined
           ? undefined
-          : agentTranscript({ title: label, messages, brief: undefined, task }),
+          : agentTranscript({
+              title: label,
+              messages,
+              brief: undefined,
+              task,
+              chatOn: agents.chatOn,
+            }),
       );
     return {
       tab,
@@ -987,6 +993,8 @@ export function workerCardReading(
         messages,
         brief: undefined,
         task: worker.task,
+        // A worker's own lines carry no chat notice, which reaches the agent's turn alone.
+        chatOn: false,
       }),
   };
 }
@@ -1094,7 +1102,13 @@ function subagentCardReading(
       choice: delegationChoices(delegation, tab.subagent, agents, held).delegated,
       transcript:
         messages &&
-        agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
+        agentTranscript({
+          title: label,
+          messages,
+          brief: undefined,
+          task: delegation.task,
+          chatOn: agents.chatOn,
+        }),
     };
   };
 }
@@ -1334,7 +1348,7 @@ function TabContent({
         shown={shown}
         repository={repository}
         tree={fileTree}
-        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.OVERVIEW}
+        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
         onView={(view) => onPullRequestView(tab.changes, view)}
       />
     );

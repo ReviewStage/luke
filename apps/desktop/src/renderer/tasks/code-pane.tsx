@@ -95,14 +95,14 @@ export function scrollerOf(element: HTMLElement): HTMLElement | undefined {
  * copy would close up the blank lines between the code; drawn in `pre-wrap`,
  * a lone newline takes no more room than the line.
  */
-export const BLANK_LINE_TEXT = "\n";
+const BLANK_LINE_TEXT = "\n";
 
 /**
  * A line's number in the gutter, a File tab's, a card's, or either side of
  * a diff's: left out of a selection and of the find, so neither a copy nor
  * a search ever holds it; none draws the gutter empty.
  */
-export function CodeLineNumber({ line }: { line: number | undefined }): React.JSX.Element {
+function CodeLineNumber({ line }: { line: number | undefined }): React.JSX.Element {
   return (
     <span className="code-line-number" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
       {line}

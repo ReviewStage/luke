@@ -1,0 +1,143 @@
+{
+  "type": "object",
+  "properties": {
+    "pullRequest": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "app": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 255
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "passed",
+                      "failed",
+                      "skipped"
+                    ]
+                  },
+                  "url": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "startedAt": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "completedAt": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "avatarUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "app",
+                  "state",
+                  "url",
+                  "startedAt",
+                  "completedAt"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 100
+            },
+            "deployments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "environment": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "pending",
+                      "failed",
+                      "inactive"
+                    ]
+                  },
+                  "url": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "avatarUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "environment",
+                  "state",
+                  "url"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 10
+            }
+          },
+          "required": [
+            "checks"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "pullRequest"
+  ],
+  "additionalProperties": false
+}

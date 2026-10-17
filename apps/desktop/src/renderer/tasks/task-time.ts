@@ -62,10 +62,10 @@ const NOW_WORD = "now";
 /** What a line says after a count of how long ago. */
 const AGO_WORD = " ago";
 
-/** A date as a row names it, with its year only where it is not `now`'s. */
-function dateText(at: number, now: number): string {
+/** A date as a row names it, with its year only where it is not `now`'s and the row has room for it. */
+function dateText(at: number, now: number, year: boolean): string {
   const sameYear = new Date(at).getFullYear() === new Date(now).getFullYear();
-  return (sameYear ? DAY_OF_YEAR : DAY_WITH_YEAR).format(at);
+  return (sameYear || !year ? DAY_OF_YEAR : DAY_WITH_YEAR).format(at);
 }
 
 /** The local midnight a moment's day began at. */
@@ -84,11 +84,12 @@ function sinceCount(elapsed: number): string | undefined {
 /**
  * How long ago `at` was, in a row's few letters: "now" inside a minute, then
  * "5m", "3h", "2d", "3w", and past four weeks the date, with its year only
- * where it is not this one.
+ * where it is not this one, unless `year` is false for a place kept to a
+ * fixed few letters, which says the full moment elsewhere.
  */
-export function sinceText(at: number, now: number): string {
+export function sinceText(at: number, now: number, { year = true } = {}): string {
   const elapsed = Math.max(0, now - at);
-  if (elapsed >= WEEKS_COUNTED) return dateText(at, now);
+  if (elapsed >= WEEKS_COUNTED) return dateText(at, now, year);
   return sinceCount(elapsed) ?? NOW_WORD;
 }
 
@@ -133,7 +134,8 @@ export function callHeading(startedAt: number, now: number): string {
   const time = TIME_OF_DAY.format(startedAt);
   if (daysAgo === 0) return `Today, ${time}`;
   if (daysAgo === 1) return `Yesterday, ${time}`;
-  const day = daysAgo > 1 && daysAgo < 7 ? WEEKDAY.format(startedAt) : dateText(startedAt, now);
+  const day =
+    daysAgo > 1 && daysAgo < 7 ? WEEKDAY.format(startedAt) : dateText(startedAt, now, true);
   return `${day}, ${time}`;
 }
 
