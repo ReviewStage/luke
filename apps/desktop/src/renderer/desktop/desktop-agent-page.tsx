@@ -3,7 +3,7 @@ import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { EllipsisIcon, ErrorState, useMenu } from "@luke/ui";
+import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -328,9 +328,9 @@ export function DesktopAgentPage({
         {agents.listMissing ? (
           <NotFound thing={NOT_FOUND_THING.AGENT} />
         ) : agents.listFailed ? (
-          <div className="agent-page-note">
-            <ErrorState onRetry={agents.onRetryList}>{NOT_READ}</ErrorState>
-          </div>
+          <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {NOT_READ}
+          </ErrorState>
         ) : (
           <Spinner label="Loading agent" size={SPINNER_SIZE.INLINE} />
         )}

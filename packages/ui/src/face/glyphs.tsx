@@ -175,6 +175,21 @@ export function RetryIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * A ring round a mark of exclamation: something did not land. Its paths are
+ * Lucide's `circle-alert` (https://lucide.dev, ISC licence, copyright (c)
+ * Lucide Contributors 2022), drawn in our stroke.
+ */
+export function AlertIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-glyph">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </Glyph>
+  );
+}
+
 /** Stands down without choosing: the cancel a control becomes mid-action. */
 export function CloseIcon(): React.JSX.Element {
   return (

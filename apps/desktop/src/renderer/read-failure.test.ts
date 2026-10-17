@@ -118,10 +118,11 @@ function readFailure(page: HTMLElement) {
   const [alert] = alerts;
   assert.ok(alert);
   const presses = [...alert.querySelectorAll<HTMLButtonElement>("button")];
-  const words = [...alert.childNodes]
-    .filter((node) => !(node instanceof HTMLButtonElement))
-    .map((node) => node.textContent)
-    .join("");
+  // The alert's words are what it says with its presses taken out, however it nests them.
+  const said = alert.cloneNode(true);
+  assert.ok(said instanceof HTMLElement);
+  for (const press of said.querySelectorAll("button")) press.remove();
+  const words = said.textContent;
   return {
     words,
     presses: presses.map((each) => each.textContent),

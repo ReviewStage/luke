@@ -223,7 +223,7 @@ export function AutomationRunsPanel({
         {!created ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : runs === undefined ? null : "failed" in runs ? (
-          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.INLINE}>
+          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             Its runs could not be read.
           </ErrorState>
         ) : runs.runs.length === 0 ? (
