@@ -19,10 +19,12 @@ import type { KeyboardEvent, MouseEvent, ReactNode, RefCallback } from "react";
  * every length in it and takes no class or style.
  *
  * A keyboard-driven list (arrows or j/k between rows, a key to act on the
- * one focused) reaches the element that takes a row's focus, its press, or
- * its item where it opens nothing, through `ref`, and hears that element's
- * keys through `onKeyDown`; `onContextMenu` hears a right-click anywhere on
- * the row, its acts included, so the app can open its own menu there.
+ * one focused) reaches a row's press through `ref` and hears the keys
+ * pressed on it through `onKeyDown`; a row that opens nothing takes no
+ * focus, so its `ref` reaches its item, to scroll or measure, and it hears
+ * no keys, which would only be its acts'. `onContextMenu` hears a
+ * right-click anywhere on the row, its acts included, so the app can open
+ * its own menu there.
  */
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -71,9 +73,9 @@ export function ListRow({
   onPress?: (() => void) | undefined;
   /** Whether the row is the one open now, drawn and announced as current. */
   current?: boolean | undefined;
-  /** Handed the element that takes the row's focus: its press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
+  /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
   ref?: RefCallback<HTMLElement> | undefined;
-  /** A key pressed while the row's focus is on the element `ref` reaches. */
+  /** A key pressed on the row's press; a row that opens nothing hears none. */
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   /** A right-click, or the menu key, anywhere on the row. */
   onContextMenu?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
@@ -99,7 +101,6 @@ export function ListRow({
       ref={onPress ? undefined : ref}
       className="luke-list-row"
       data-current={current === true ? "true" : undefined}
-      onKeyDown={onPress ? undefined : onKeyDown}
       onContextMenu={onContextMenu}
     >
       {onPress ? (

@@ -236,3 +236,23 @@ test("a key pressed on a row reaches its handler, and a right-click anywhere on 
   });
   expect(heard).toEqual(["key j", "menu", "menu"]);
 });
+
+test("a row that opens nothing hears no keys, not even its acts'", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        title: "Ada Lovelace",
+        onKeyDown: (event) => heard.push(`key ${event.key}`),
+        actions: createElement(IconButton, { icon: glyph(), label: "More for ada" }),
+      }),
+    }),
+  );
+  act(() => {
+    button(container, "More for ada").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "j", bubbles: true }),
+    );
+  });
+  expect(heard).toEqual([]);
+});
