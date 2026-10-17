@@ -3535,27 +3535,34 @@ ol.transcript-list {
 
 /* A forked draft's chip over its box: what it forks, the message's opening
    words, and the × that lets the fork go, docked on the composer's own
-   inset as the to-do list is. */
+   inset as the to-do list is. The × is the shared quiet IconButton, held to
+   the chip's end by its seat (fork-action.tsx). */
 .draft-fork-dock {
-  padding: 0 16px 8px;
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
 }
 
 .draft-fork-chip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  padding: 4px 4px 4px 8px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: 12.5px;
+  gap: var(--luke-space-4);
+  padding: 0 0 0 var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  color: var(--luke-color-text-muted);
+  font-size: 12.5px; /* off-scale: a transcript's meta line */
+}
+
+.draft-fork-glyph {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .draft-fork-quote {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3566,18 +3573,7 @@ button.draft-fork-quote:hover {
 
 .draft-fork-drop {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
   margin-left: auto;
-  border-radius: 4px;
-  color: var(--text-tertiary);
-}
-
-.draft-fork-drop:hover {
-  background: var(--section-fill);
-  color: var(--text-primary);
 }
 
 /* The room under the transcript for the composer, with no rule between
