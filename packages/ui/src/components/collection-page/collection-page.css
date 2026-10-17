@@ -49,8 +49,9 @@
 
   /* The title's acts are centred on its first line, whatever a control's
      height is beside the title's leading. Where they leave the title less
-     than a short word's room they wrap under it, and wrap among themselves
-     past the line's width, so no act stands outside the page. */
+     than 240px, a long title's room to wrap between words, they wrap under
+     it, and wrap among themselves past the line's width, so no act stands
+     outside the page. */
   .luke-collection-page-header {
     display: flex;
     flex-wrap: wrap;
@@ -60,8 +61,8 @@
   }
 
   .luke-collection-page-heading {
-    flex: 1 1 0;
-    min-width: min(100%, 120px);
+    flex: 1 1 240px;
+    min-width: min(100%, 240px);
     overflow-wrap: anywhere;
   }
 
