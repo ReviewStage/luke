@@ -1139,8 +1139,7 @@ test("start_agent run twice at once under one call's key keeps one new task: the
   const { caller } = agents;
   const name = "Invite expiry migration";
   const prompt = "Write the migration that adds the invitation's expiry.";
-  // The other run of the same call lands its agent, on a new task of its own, while this run
-  // confirms its repository: after this run found no agent under the key, before it made one.
+  // The other run lands its agent, on a task of its own, while this run confirms its repository.
   let racing = false;
   let raced: { readonly agentId: string; readonly taskId: string } | undefined;
   const eve = await fakeCoderEve(workspaceId, [], async () => {

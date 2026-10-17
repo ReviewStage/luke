@@ -1150,7 +1150,15 @@ export function runMessageAgent(
   );
 }
 
-/** One call of `start_agent`: an agent started under the call's own key on the caller's own task, another of its workspace, or a new one made for it, or why nothing was started. */
+/**
+ * One call of `start_agent`: an agent started under the call's own key on
+ * the caller's own task, another of its workspace, or a new one made for it,
+ * or why nothing was started. A new task stands only under the agent its own
+ * call made: one whose start failed, or that found an agent a concurrent run
+ * of the same call made meanwhile on a task of its own, goes (and is left
+ * where an agent stands on it after all), and the call answers whatever agent
+ * its key now stands for, with that agent's own task, or else the refusal.
+ */
 export function runStartAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -1207,10 +1215,7 @@ export function runStartAgent(
         branch: asked.success.branch,
         ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
-      // A new task stands only under the agent its own call made. One whose start failed, or that
-      // found an agent a retry of the same call made meanwhile on a task of its own, goes (and is
-      // left where an agent stands on it after all), and the call answers whatever agent its key
-      // now stands for, with that agent's own task, or else the refusal.
+      // A new task stands only under the agent its own call made (see above).
       if (made !== undefined && (Result.isFailure(started) || !started.success.created)) {
         yield* discardNewTask(userId, made.id);
         const standing = yield* startedBefore(call, true);
