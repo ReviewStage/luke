@@ -519,13 +519,17 @@ function preambleOf(
     : `You continue the work of the coding agent ${name}, which stopped before it was done.`;
   const where = `${whereOf(source, published, copy)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
+  const unfit = counts.total - counts.kept;
+  // Note that a summary beside steps left out may cover the newest of those that did not fit rather than the oldest, so it names none as the oldest.
   const summarized =
     counts.summarized === 0
       ? ""
-      : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by Luke rather than by that agent: read it as a recap, not its words.`;
+      : left > 0
+        ? ` ${unfit} of its ${counts.total} steps did not fit: a summary of ${counts.summarized} of them comes first, written by Luke rather than by that agent, so read it as a recap, not its words; the other ${left} are left out.`
+        : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by Luke rather than by that agent: read it as a recap, not its words.`;
   const dropped =
-    left > 0
-      ? ` ${counts.summarized === 0 ? "The oldest" : "Besides those the summary covers,"} ${left} of its ${counts.total} steps are left out to fit.`
+    left > 0 && counts.summarized === 0
+      ? ` The oldest ${left} of its ${counts.total} steps are left out to fit.`
       : "";
   const files =
     unkept.length === 0

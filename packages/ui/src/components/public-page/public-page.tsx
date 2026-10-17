@@ -55,6 +55,29 @@ export function PublicSection({
   );
 }
 
+/**
+ * The site's banner, standing still at the top of the document's scroll:
+ * `children` on the page's column, over a wash of the ground across the page.
+ * A page drawn on PublicPage hands its banner to it; a page that still draws
+ * its own main stands this above it, so both start on one edge.
+ */
+export function PublicBanner({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <header className="luke-public-page-banner">
+      <div className="luke-public-page-column luke-public-page-banner-column">{children}</div>
+    </header>
+  );
+}
+
+/** The site's footer: `children` on the page's column, under a rule across the page. */
+export function PublicFooter({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <footer className="luke-public-page-footer">
+      <div className="luke-public-page-column luke-public-page-footer-column">{children}</div>
+    </footer>
+  );
+}
+
 /** A public page: `banner` over the `title`, `lead`, and sections, over `footer`. */
 export function PublicPage({
   banner,
@@ -78,11 +101,7 @@ export function PublicPage({
 }): React.JSX.Element {
   return (
     <div className="luke-public-page">
-      {said(banner) ? (
-        <header className="luke-public-page-banner">
-          <div className="luke-public-page-column luke-public-page-banner-column">{banner}</div>
-        </header>
-      ) : null}
+      {said(banner) ? <PublicBanner>{banner}</PublicBanner> : null}
       <main className="luke-public-page-column luke-public-page-main">
         {said(title) || said(lead) ? (
           <div className="luke-public-page-intro">
@@ -96,11 +115,7 @@ export function PublicPage({
         ) : null}
         {said(children) ? <div className="luke-public-page-sections">{children}</div> : null}
       </main>
-      {said(footer) ? (
-        <footer className="luke-public-page-footer">
-          <div className="luke-public-page-column luke-public-page-footer-column">{footer}</div>
-        </footer>
-      ) : null}
+      {said(footer) ? <PublicFooter>{footer}</PublicFooter> : null}
     </div>
   );
 }

@@ -12,10 +12,8 @@
  * is on.
  */
 
+import { channels } from "@luke/host/bridge";
 import { type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
-import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
-import { channels } from "#shared/bridge";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -27,7 +25,9 @@ import {
   type ShortcutChord,
   shortcutAccelerator,
   shortcutShown,
-} from "#shared/shortcuts";
+} from "@luke/settings/shortcuts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
 
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
 

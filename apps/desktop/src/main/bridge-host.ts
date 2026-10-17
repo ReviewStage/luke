@@ -1,15 +1,15 @@
 import { type Act, parsedAct } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import type { UnparsedWireValue } from "@luke/wire";
-import type { Effect } from "effect";
-import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import {
   BRIDGE,
   type Bridge,
   type BridgeArgumentsFor,
   type BridgeMethod,
   type BridgeResultFor,
-} from "#shared/bridge";
+} from "@luke/host/bridge";
+import type { UnparsedWireValue } from "@luke/wire";
+import type { Effect } from "effect";
+import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import type { ActRouter, ActSender } from "./act-router";
 import { windowAppState } from "./app-state";
 

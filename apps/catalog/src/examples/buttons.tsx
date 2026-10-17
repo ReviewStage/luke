@@ -1,6 +1,7 @@
 import {
   BUTTON_VARIANT,
   Button,
+  ButtonLink,
   EllipsisIcon,
   GAP,
   IconButton,
@@ -19,7 +20,7 @@ import { CatalogSection } from "../section";
 /**
  * buttons.tsx -- every Button look at rest, with a glyph, unavailable,
  * unavailable but focusable, and busy; the IconButton's looks and toggle;
- * and a long label in a narrow column.
+ * ButtonLink's looks; and a long label in a narrow column.
  */
 
 const STATES = [
@@ -67,6 +68,15 @@ function Buttons(): React.JSX.Element {
           <IconButton icon={<PlusIcon />} label="New plan" variant={BUTTON_VARIANT.OUTLINE} />
           <IconButton icon={<TrashIcon />} label="Delete" disabled />
           <IconButton icon={<EllipsisIcon />} label="Loading" busy busyLabel="Loading" />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="buttons-link" title="As a link">
+        <Inline>
+          {Object.values(BUTTON_VARIANT).map((variant) => (
+            <ButtonLink key={variant} variant={variant} href="#buttons-link">
+              {variant}
+            </ButtonLink>
+          ))}
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-narrow" title="Narrow column, long label">
