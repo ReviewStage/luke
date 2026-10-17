@@ -1073,3 +1073,57 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
   assert.ok(page.querySelector(".home-section"), "the list stands");
   assert.equal(document.activeElement?.closest("[data-issue-id]") ?? null, null);
 });
+
+test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
+  mount();
+  await settle();
+
+  act(() => button("New issue in Done").click());
+
+  assert.equal(document.activeElement, composerField(), "the title takes the keyboard");
+  assert.equal(picked(document.body, "Status"), "Done");
+  assert.equal(picked(document.body, "Priority"), "No priority");
+});
+
+test("Return on a card a column's + opened files the issue with that column's status, and it lands in that column", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.DONE })];
+  const page = mount();
+  await settle();
+
+  act(() => button("New issue in Done").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  typeInto(field, "Ship the changelog");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(creates, [
+    {
+      workspaceId: WORKSPACE.id,
+      title: "Ship the changelog",
+      status: ISSUE_STATUS.DONE,
+      priority: ISSUE_PRIORITY.NONE,
+    },
+  ]);
+  assert.equal(composerField(), null, "the card closes once the issue is kept");
+  assert.deepEqual(
+    columns(page).find(([head]) => head.startsWith("Done")),
+    ["Done2", ["ACME-2", "ACME-1"]],
+  );
+});
+
+test("the toolbar's New issue and C still open the card on Backlog", async () => {
+  mount();
+  await settle();
+
+  act(() => button("New issue").click());
+  const fromButton = picked(document.body, "Status");
+  press("Escape", composerField() ?? document.body);
+  await settle();
+  press("c", document.body);
+
+  assert.equal(fromButton, "Backlog");
+  assert.equal(picked(document.body, "Status"), "Backlog");
+});

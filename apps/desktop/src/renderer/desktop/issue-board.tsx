@@ -1,7 +1,9 @@
 import { ISSUE_STATUS_WORDS, issueColumns, issueIdentifier } from "@luke/features/issue-list-model";
-import type { Issue } from "@luke/features/issue-wire";
+import type { Issue, IssueStatus } from "@luke/features/issue-wire";
+import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
+import { Tooltip } from "../tooltip";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
 
 /**
@@ -14,13 +16,19 @@ import { PriorityMark, StatusGlyph } from "./issue-pickers";
  * the page's height and scrolls its own cards, so its head stays in view. A
  * card is a row of the sidebar's own on two lines, its identifier, mark,
  * and time over its whole title, since a column is too narrow for the
- * list's one line. ↑ and ↓ move through a column's cards,
+ * list's one line. A column's head ends in a + that opens the new issue's
+ * card with that column's status chosen. ↑ and ↓ move through a column's cards,
  * ← and → to the nearest card of the next column holding any, from the
  * window itself as from a card, and Return opens the card reached.
  */
 
 /** What a column with no issue says in its own place. */
 const NO_ISSUES = "No issues";
+
+/** What a column's + is called, by the column it files into. */
+function newIssueIn(status: IssueStatus): string {
+  return `New issue in ${ISSUE_STATUS_WORDS[status]}`;
+}
 
 /** A card, as the list's rows are drawn: a button inside its item. */
 const CARDS = ".sidebar-task";
@@ -157,13 +165,18 @@ function IssueCard({
   );
 }
 
-/** The board: a column for every status, each headed by its glyph, its name, and how many issues stand in it, a column holding none saying so instead. */
+/**
+ * The board: a column for every status, each headed by its glyph, its name,
+ * how many issues stand in it, and a + filing a new one into it; a column
+ * holding none says so in place of its count.
+ */
 export function IssueBoard({
   issues,
   workspaceName,
   now,
   focused,
   onOpen,
+  onCompose,
 }: {
   issues: readonly Issue[];
   workspaceName: string;
@@ -171,6 +184,8 @@ export function IssueBoard({
   /** The issue whose card takes the keyboard as the board is drawn: the one the page came back from. */
   focused: string | undefined;
   onOpen: (issue: Issue) => void;
+  /** Opens the new issue's card with a column's status chosen; none while no workspace is listed to file one in. */
+  onCompose: ((status: IssueStatus) => void) | undefined;
 }): React.JSX.Element {
   return (
     <div className="issue-board">
@@ -186,6 +201,18 @@ export function IssueBoard({
             <span className="factory-name">{ISSUE_STATUS_WORDS[column.status]}</span>
             {column.issues.length === 0 ? null : (
               <span className="factory-count">{column.issues.length}</span>
+            )}
+            {onCompose === undefined ? null : (
+              <Tooltip label={newIssueIn(column.status)}>
+                <button
+                  type="button"
+                  className="icon-button issue-column-new"
+                  aria-label={newIssueIn(column.status)}
+                  onClick={() => onCompose(column.status)}
+                >
+                  <PlusIcon className="icon-button-glyph" />
+                </button>
+              </Tooltip>
             )}
           </h2>
           {column.issues.length === 0 ? (
