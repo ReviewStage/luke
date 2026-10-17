@@ -69,7 +69,7 @@ export const voiceSessions = pgTable(
      * the binding and find no plan to land in. The session goes once it has
      * ended: with the plan's delete, or the sweep after it (`soft-delete.ts`).
      */
-    taskId: uuid("plan_id"),
+    taskId: uuid("task_id"),
     liveSessionId: text("live_session_id").notNull().unique(),
     delegationMode: text("delegation_mode").$type<VoiceDelegationMode>().notNull(),
     startedAt: timestamptz("started_at").notNull().defaultNow(),

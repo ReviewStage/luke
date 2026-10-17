@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { bytea, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
-import { task } from "./plan.js";
+import { task } from "./task.js";
 
 /**
  * plan-attachment.ts -- one picture of a plan's: the bytes a pasted or dropped image is, kept beside the plan its text names it in.
@@ -29,7 +29,7 @@ export const planAttachment = pgTable(
   "plan_attachment",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    taskId: uuid("plan_id")
+    taskId: uuid("task_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
     /** The member who uploaded it; null once their account is gone. */
@@ -45,7 +45,7 @@ export const planAttachment = pgTable(
   },
   (table) => [
     // A plan's pictures are read, counted, and stamped by the plan.
-    index("plan_attachment_plan").on(table.taskId),
+    index("plan_attachment_task").on(table.taskId),
     // The sweep reads the uploads no save named, oldest first.
     index("plan_attachment_unsaved").on(table.createdAt).where(sql`${table.savedAt} is null`),
     check(

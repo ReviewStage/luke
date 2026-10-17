@@ -972,8 +972,10 @@ const diffSideSchema = EffectSchema.Literals(Object.values(DIFF_SIDE));
  * which its `diffHunk` is counted against, and the side each counts on;
  * the hunk GitHub froze when it was made, ending at its line, empty where
  * GitHub kept none; whether it was resolved, and whether a later push
- * outdated it; its comments, oldest first, up to the bound; and how many
- * more GitHub holds (`more`).
+ * outdated it; its comments, oldest first, up to the bound; how many
+ * more GitHub holds (`more`); and GitHub's own id for it, which a reply,
+ * a resolve, or an unresolve names it by, absent from a service before
+ * those.
  */
 const reviewThreadSchema = EffectSchema.Struct({
   path: EffectSchema.String,
@@ -990,6 +992,7 @@ const reviewThreadSchema = EffectSchema.Struct({
     EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_THREAD_COMMENTS),
   ),
   more: countedNumber,
+  id: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type ReviewThread = typeof reviewThreadSchema.Type;

@@ -19,8 +19,8 @@ import {
 import { createdAt, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { automation } from "./automation.js";
-import { task } from "./plan.js";
 import { conversations } from "./storage.js";
+import { task } from "./task.js";
 
 /**
  * coding-agent.ts -- one coding agent started on a plan, linking its conversation to the plan it works.
@@ -136,7 +136,7 @@ export const codingAgent = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     /** The plan the agent works on; null for an agent an automation started with no plan. */
-    taskId: uuid("plan_id").references(() => task.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     /** The workspace the agent belongs to, its plan's or its automation's. */
     organizationId: text("organization_id")
       .notNull()
@@ -164,7 +164,7 @@ export const codingAgent = pgTable(
     /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead. */
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
-    prompt: text("task"),
+    prompt: text("prompt"),
     /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`. */
     repository: text("repository").notNull(),
     /** Every repository the agent works in, `owner/name` each, the first where it starts; one until full multi-repo. */
@@ -196,7 +196,7 @@ export const codingAgent = pgTable(
     // One agent per Start: a retry carrying the same key finds this row.
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one plan's agents in the order they were started.
-    index("coding_agent_plan_created").on(table.taskId, table.createdAt),
+    index("coding_agent_task_created").on(table.taskId, table.createdAt),
     // A workspace's agents with no plan are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
   ],
