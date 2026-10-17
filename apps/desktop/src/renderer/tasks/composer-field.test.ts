@@ -6,21 +6,23 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import {
   composerEditor,
-  installEditorBundle,
   installEditorLayout,
   QUIET_COMPOSER,
   typeInComposer,
 } from "#testing/composer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { PLAN_EDITOR_ASSET } from "../plan-editor/contract";
+import { onSideBundles } from "#testing/side-bundles";
+import { sideBundles } from "../bundle-loader";
+import type { PlanEditorModule } from "../plan-editor/contract";
+import { planEditor } from "../plan-editor/index";
 import { AgentComposer } from "./agent-composer";
 import { useAgentComposer } from "./use-agent-composer";
 
 /**
  * A box drawn before the editor bundle has landed: its field stands inert at
  * its own size with its placeholder, and the editor mounts and takes the
- * caret as the bundle's script runs. The bundle is read once per window, so
- * this file draws the box before installing it, as the script would.
+ * caret as the bundle lands. The box is drawn over an importer the test
+ * answers once it has looked at the box, as the bundle's chunk would land.
  */
 
 const roots: Root[] = [];
@@ -57,7 +59,15 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(createElement(Box)));
+  const landing = Promise.withResolvers<PlanEditorModule>();
+  let asked = false;
+  const bundles = sideBundles({
+    planEditor: () => {
+      asked = true;
+      return landing.promise;
+    },
+  });
+  await act(async () => root.render(onSideBundles(bundles, createElement(Box))));
 
   const field = container.querySelector<HTMLElement>(".agent-composer-input");
   assert.equal(field?.getAttribute("aria-busy"), "true", "the field stands inert");
@@ -73,12 +83,8 @@ test("a box drawn before the editor bundle lands is inert with its placeholder, 
     "nothing can be dictated into a box with no editor",
   );
 
-  const script = document.head.querySelector(`script[src="${PLAN_EDITOR_ASSET.SCRIPT}"]`);
-  assert.ok(script, "the editor bundle was asked for");
-  installEditorBundle();
-  act(() => {
-    script.dispatchEvent(new Event("load"));
-  });
+  assert.ok(asked, "the editor bundle was asked for");
+  landing.resolve(planEditor);
   await settle();
 
   assert.equal(document.activeElement, composerEditor(container));

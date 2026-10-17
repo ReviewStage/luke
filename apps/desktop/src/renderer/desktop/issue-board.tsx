@@ -13,8 +13,8 @@ import type { IssueChange } from "./use-issues";
  * issue-board.tsx -- a workspace's issues as a board: a column for every status, in the order work moves through them, each column's cards in the list's order.
  *
  * Each column is headed and boxed as Factory's stations are
- * (`desktop-factory.tsx`), in the shared type roles and button, and the columns stand side by side at every
- * width, the board scrolling sideways in its own scroller (`issues.css`)
+ * (`desktop-factory.tsx`), in the shared type roles and button, and the
+ * columns stand side by side at every width, the board scrolling sideways in its own scroller (`issues.css`)
  * rather than stacking them into a second copy of the list. A column fills
  * the page's height and scrolls its own cards, so its head stays in view. A
  * card is a row of the sidebar's own on two lines, its identifier, mark,
