@@ -12,6 +12,7 @@ import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { MarkdownMessage } from "../markdown-message";
@@ -62,24 +63,20 @@ function standHost(
   asked: string[],
   unanswered: ReadonlySet<string> = new Set(),
 ): void {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        asked.push(request.payload.attachmentId);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: pictures.has(request.payload.attachmentId)
-            ? { contentType: "image/png", base64: PNG_BASE64 }
-            : {
-                failure: unanswered.has(request.payload.attachmentId) ? "unanswered" : "not-found",
-              },
-        });
-      },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      asked.push(request.payload.attachmentId);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: pictures.has(request.payload.attachmentId)
+          ? { contentType: "image/png", base64: PNG_BASE64 }
+          : {
+              failure: unanswered.has(request.payload.attachmentId) ? "unanswered" : "not-found",
+            },
+      });
     },
   });
 }
