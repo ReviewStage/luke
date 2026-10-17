@@ -459,14 +459,23 @@ export const CHAT_QUERY = { WORKSPACE_ID: "workspaceId", AFTER: "after" } as con
 /** Where a reader of a workspace's chat stands, as the service last handed it back. */
 export const chatCursorSchema = filledText(CHAT_BOUNDS.MAX_CURSOR_CHARS);
 
+/** How far the reader has read one channel on that channel's own cursor, where that is past its floor. */
+export const chatChannelReadSchema = EffectSchema.Struct({
+  channelId: wireUuidSchema,
+  readSeq: countedNumber,
+});
+
 /**
  * A workspace's chat as the window reads it past a cursor: the reader's own
- * member and how far it has read, every member and channel it sees, the
- * messages posted or changed past the cursor, and the cursor to read on from.
+ * member and how far it has read everywhere, each channel it has read
+ * further on that channel's own cursor, every member and channel it sees,
+ * the messages posted or changed past the cursor, and the cursor to read on
+ * from. A service that predates per-channel cursors sends no `reads`.
  */
 export const chatAnswerSchema = EffectSchema.Struct({
   self: wireUuidSchema,
   readSeq: countedNumber,
+  reads: EffectSchema.optionalKey(EffectSchema.Array(chatChannelReadSchema)),
   members: EffectSchema.Array(chatMemberSchema),
   channels: EffectSchema.Array(chatChannelSchema),
   messages: EffectSchema.Array(chatMessageSchema),
@@ -570,7 +579,7 @@ export const chatResolveRequestSchema = EffectSchema.Struct({
   }),
 });
 
-/** A person's window saying they have read to a place: in the channel named, or across every channel where none is. */
+/** A person's window saying they have read to a place: in the channel shown, or every channel where it names none. */
 export const chatReadToRequestSchema = EffectSchema.Struct({
   readTo: countedNumber,
   channelId: EffectSchema.optionalKey(wireUuidSchema),
@@ -605,13 +614,16 @@ export const chatReceiptSchema = EffectSchema.Struct({
  * telling the first left undone and steering no one twice; an answer, the ask as it then stands and whether the answer was
  * taken, which it is not at a revision its poster has moved past or on an
  * ask no longer open; a resolve, the ask resolved; and a read, where the
- * person's cursor then stands.
+ * person's cursor then stands everywhere, and each channel past it.
  */
 export const chatWriteAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema }),
   EffectSchema.Struct({ ask: chatMessageSchema, taken: EffectSchema.Boolean }),
   EffectSchema.Struct({ resolved: chatMessageSchema }),
-  EffectSchema.Struct({ readSeq: countedNumber }),
+  EffectSchema.Struct({
+    readSeq: countedNumber,
+    reads: EffectSchema.optionalKey(EffectSchema.Array(chatChannelReadSchema)),
+  }),
 ]);
 
 /** @public */

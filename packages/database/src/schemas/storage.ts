@@ -154,6 +154,23 @@ export const messages = pgTable(
      */
     senderName: text("sender_name"),
     /**
+     * The catalog id of the model the coding agent that sent the line ran
+     * on then, which its harness is read off; null on every other row, and
+     * on an agent's line sent before it was kept. Note that it is kept as it
+     * stood, as `senderName` is, rather than read through the agent, because
+     * an agent's model may change and a transcript already read never reads
+     * a line again for it.
+     */
+    senderModel: text("sender_model"),
+    /**
+     * The coding agent that sent the line, by its id, which a reader opens
+     * it and reads its card by; null on every other row, and on an agent's
+     * line sent before it was kept. Note that it is no reference, as
+     * `senderName` is none: an agent goes with its task, and a line it sent
+     * another then names an agent no longer there, which reads as none.
+     */
+    senderAgentId: uuid("sender_agent_id"),
+    /**
      * The steps of its turn begun before the turn took the line in, on a
      * developer's line a coding agent's turn under way took after its first
      * step, so a reader draws the line among the turn's work where it
@@ -223,6 +240,13 @@ export const turns = pgTable(
     /** What the failure was, at whatever length it came; `failure` is the word, this is the detail. */
     failureDetail: text("failure_detail"),
     cancelRequestedAt: timestamptz("cancel_requested_at"),
+    /**
+     * eve's id for the tool call whose Stop stamped `cancel_requested_at`,
+     * where an agent's `stop_agent` made it: the call run again finds the turn
+     * it stopped by this key, and never stops a newer one in its place. Null
+     * for a Stop the developer pressed, or none.
+     */
+    cancelRequestKey: text("cancel_request_key"),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
     fastRefused: boolean("fast_refused").notNull().default(false),
   },

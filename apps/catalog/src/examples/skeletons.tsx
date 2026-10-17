@@ -28,6 +28,9 @@ function Skeletons(): React.JSX.Element {
             <Skeleton shape={SKELETON_SHAPE.CONTROL} />
           </span>
           <Skeleton shape={SKELETON_SHAPE.CIRCLE} />
+          <span className="catalog-skeleton-block">
+            <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+          </span>
         </Inline>
       </CatalogSection>
       <CatalogSection id="skeleton-type" title="Lines in their type">

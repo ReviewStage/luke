@@ -14,7 +14,7 @@ import type {
  * composer-field.tsx -- the field of a box written to an agent, its message box's or the Inbox's answer box's: the editor bundle's composer mounted in the card, the words it hands back, and the commands that change them from outside.
  *
  * The field is TipTap (`../plan-editor/composer-editor.ts`), from the editor
- * bundle the panel starts loading as it first paints (`../editor-bundle.ts`).
+ * bundle the panel starts loading as it first paints (`../bundle-loader.ts`).
  * In the rare frame before it lands, the field is drawn at its own size with
  * its placeholder, inert and out of the Tab order, and the editor takes the
  * caret as it mounts, unless the developer is typing somewhere else or the

@@ -228,6 +228,11 @@
   position: relative;
 }
 
+/* A plan's task item the developer can tick from the drawn plan says so. */
+.plan-unit li.task-list-item input[type="checkbox"]:enabled {
+  cursor: pointer;
+}
+
 /* A section's heading wraps short of the row at its end, so the byline and
    the ⋯ never stand over its words, however long it runs. The room is kept
    whether or not they are shown, and in the editor too, so no heading
@@ -634,30 +639,30 @@
 }
 
 /* A task item as TipTap draws it: its box in a label and its words in a block
-   of their own after it, which would stand a line under a bullet. Laid side by
-   side, the box takes the bullet's place in the read view's size and green
-   (`markdown.css`), and the words their line beside it. */
+   of their own after it. The label stands in the bullet's gutter exactly where
+   the read view stands its box (`markdown.css`), in its size and accent, so
+   the words keep their place as the section opens to be edited. */
 .plan-document-text li[data-checked] {
-  display: flex;
+  position: relative;
   list-style: none;
 }
 
 .plan-document-text li[data-checked] > label {
-  flex: none;
-  margin: 0 0.45em 0 -1.45em;
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
 }
 
 .plan-document-text li[data-checked] > label > input {
+  display: block;
   width: 0.95em;
   height: 0.95em;
   margin: 0;
-  vertical-align: -0.1em;
-  accent-color: var(--state-complete);
+  font: inherit;
+  accent-color: var(--luke-color-accent);
 }
 
 .plan-document-text li[data-checked] > div {
-  flex: 1;
-  min-width: 0;
   margin-top: 0;
 }
 
@@ -791,6 +796,10 @@
     text-align: center;
   }
 
+  .conversation-empty-wide {
+    max-width: 440px; /* off-scale: a one-line failure's measure */
+  }
+
   /* Its own ground under the button, ringed and lifted off the lines, which
      the button's lit fill is laid over as a title bar's is. */
   .conversation-scroll {
@@ -870,7 +879,10 @@
   white-space: nowrap;
 }
 
+/* The card clips at its rounded edge, against which its header's actions
+   stand flush, so a ring inside it is drawn inside its control. */
 .code-card {
+  --focus-ring-offset: var(--focus-ring-inset);
   overflow: hidden;
   border: 1px solid var(--luke-color-border);
   border-radius: 10px; /* off-scale: a card a step rounder than its controls */
@@ -1535,13 +1547,12 @@ button.file-ref:hover .file-ref-path {
   user-select: text;
 }
 
-/* The tree's search field and its filter, in one row over the tree, as
-   tall as it stood when its well was a step shorter. */
+/* The tree's search field and its filter, in one row over the tree. */
 .file-tree-search {
   display: flex;
   align-items: center;
   gap: var(--luke-control-gap);
-  padding: var(--luke-space-2) var(--luke-space-6);
+  padding: var(--luke-space-4) var(--luke-space-6);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -3428,43 +3439,129 @@ ol.transcript-list {
 
 /* Coding agents --------------------------------------------------------- */
 
-/* The quiet line a transcript ends on once its turn was stopped or failed. */
+/* The block a transcript ends on once its turn was stopped or failed, or
+   once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
+   end line, then under it the row the end leads on to, Continue in new
+   agent or Continued in. In an empty transcript the two stand as siblings
+   in the empty state's own centred column instead. */
+.agent-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+/* Note that it keeps the gap the log's `space-y-3` leaves under every block
+   but its last, which the reset below takes, so a failure's press never
+   touches the pull request's row under it. */
+[role="log"] > :is(.agent-end, .agent-end-line):not(:last-child) {
+  margin-bottom: 0.75rem;
+}
+
+/* The end line: a failure's mark, its words, then what the turn cost after
+   a dot, flowing as one sentence, so a long failure wraps under its own
+   words and the mark never parts from the first of them. Note that the
+   14px mark is lowered to sit centred on the words' x-height, and that
+   only a failure is drawn in the danger ink: a stop is the developer's own
+   doing. */
 .agent-end-line {
   margin: 0;
   color: var(--text-tertiary);
   font-size: 12.5px;
+  line-height: 18px; /* off-scale: the transcript's meta line */
 }
 
-/* Note that it keeps the gap the log's `space-y-3` leaves under every block
-   but its last, which the reset above takes, so a failure's press never
-   touches the pull request's row under it. */
-[role="log"] > .agent-end-line:not(:last-child) {
-  margin-bottom: 0.75rem;
+.agent-end-line > .failed-mark {
+  margin-right: var(--space-4);
+  vertical-align: -3px; /* off-scale: centres a 14px mark on 12.5px words */
 }
 
-/* Where an agent may be continued (`continue-agent.tsx`), at the end of a
-   failed turn's end line or a closed box's note: Continue in new agent, or
-   the chips of the agents that continued it, wrapping as one group. */
+.agent-end-line[data-failed] > .agent-end-words {
+  color: var(--danger-text);
+}
+
+.agent-end-dot {
+  margin: 0 var(--space-4);
+}
+
+.agent-end-cost {
+  white-space: nowrap;
+}
+
+.agent-end-remedy {
+  margin-left: var(--space-8);
+  vertical-align: middle;
+}
+
+/* Where an agent may be continued (`continue-agent.tsx`), under a failed
+   turn's end line or in a closed box's note: Continue in new agent, and
+   why it did not start where it did not. */
 .agent-continue {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4) var(--space-8);
-  vertical-align: middle;
-}
-
-.agent-end-line > .agent-continue {
-  margin-left: var(--space-8);
 }
 
 .agent-continue-note {
   color: var(--danger-text);
 }
 
-/* Continued in names agents, which is no failure, so it is not drawn in a
-   closed box's danger colour. */
-.failure-note .agent-continue[data-continued] {
-  color: var(--text-secondary);
+/* The row naming the agents that continued this one, at the transcript's
+   end where an archive took the box: an arrow, as Forked to leads on its
+   split, then Continued in and the chips, which take their baseline from
+   their names, so every word stands on one line. */
+.agent-continued {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.agent-continued > svg {
+  align-self: center;
+}
+
+/* Continued in and its chips, in the row above or the continued box's note. */
+.agent-continued-in {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.agent-continued-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+}
+
+/* A box closed for good (`agent-composer.tsx`) wears the held look a box
+   sending does, faded, so the note and Continue under it read as the way
+   on. Note that it still takes a press, because its controls are disabled
+   one by one and its branch and changes chips still open what they name. */
+.agent-composer[data-closed] > form {
+  opacity: 0.6;
+}
+
+/* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
+   and files faded, as words that did not go, and the quiet mark under
+   them in the danger red a failure note speaks in. */
+.agent-undelivered {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 12.5px;
+}
+
+.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
+  opacity: 0.6;
 }
 
 /* A finished turn's line (`working-time.tsx`) breaks between how long it
@@ -3537,6 +3634,7 @@ ol.transcript-list {
 
 .draft-fork-quote {
   min-width: 0;
+  background: none;
   overflow: hidden;
   color: var(--luke-color-text);
   text-overflow: ellipsis;
@@ -3881,6 +3979,19 @@ button.draft-fork-quote:hover {
 
 .agent-composer-input[aria-disabled="true"] {
   opacity: 0.6;
+}
+
+/* Note that the editor keeps its spaces as typed, as TipTap's own base rules
+   would were they let in (`composer-editor.ts`'s `injectCSS`), so the space a
+   chosen chip is followed by stands at the end of a line rather than
+   collapsing, and the caret is drawn after it, not against the chip. */
+.composer-editor {
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.composer-editor [contenteditable="false"] {
+  white-space: normal;
 }
 
 .agent-composer-input p {
@@ -4630,6 +4741,16 @@ button.attached-file-face:hover img {
 /* An archived plan's agent takes no message, so its composer's place says
    why on one quiet row (`banner.tsx`), with Unarchive as the press that
    opens it again. */
+/* The note a continued agent's box gives way to (`continue-agent.tsx`),
+   framed as the box was, on its card, edge and corner, so it stands where
+   the box stood rather than across the column. */
+.continued-composer > .banner-row {
+  padding: var(--space-8) var(--space-8) var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: 12px; /* off-scale: the composer card's corner */
+  background: var(--desktop-sidebar);
+}
+
 .archived-composer .banner-row > svg {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);

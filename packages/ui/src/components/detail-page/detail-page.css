@@ -6,7 +6,8 @@
    page queries its own width rather than the viewport's, so a page in a
    narrow pane narrows as it would in a narrow window; a container query
    cannot read a custom property, so the widths it narrows under are
-   literals here. */
+   literals here. Under the window's toolbar the page draws no header, and
+   content that scrolls sideways stands across the room. */
 
 @layer components {
   .luke-detail-page {
@@ -43,6 +44,11 @@
     );
   }
 
+  /* Across the whole room, the inset alone stands either side. */
+  .luke-detail-page[data-width="full"] > * {
+    --luke-detail-page-side: var(--luke-detail-page-inset);
+  }
+
   /* Under 480px of room a desktop page gives back half its inset. */
   @container (max-width: 479px) {
     .luke-detail-page > * {
@@ -66,9 +72,11 @@
   }
 
   /* The title's acts are centred on its first line, whatever a control's
-     height is beside the title's leading, and wrap under it when they would
-     leave a long title too little room, and wrap among themselves past the
-     line's width, so no act stands outside the page. */
+     height is beside the title's leading. They share the title's line
+     while the title fits beside them unbroken, however narrow the page;
+     a title too long for that takes the line and they wrap under it, and
+     wrap among themselves past the line's width, so no act stands outside
+     the page. */
   .luke-detail-page-header {
     display: flex;
     flex-wrap: wrap;
@@ -78,8 +86,8 @@
   }
 
   .luke-detail-page-heading {
-    flex: 1 1 240px;
-    min-width: min(100%, 240px);
+    flex: 1 1 auto;
+    min-width: 0;
     overflow-wrap: anywhere;
   }
 
@@ -153,6 +161,17 @@
     overflow-wrap: anywhere;
   }
 
+  /* Under a toolbar each column opens a section's gap below its hairline,
+     inside its own scroll so the wheel works right up to it. */
+  .luke-detail-page[data-frame="toolbar"] .luke-detail-page-content {
+    padding-top: var(--luke-section-gap);
+  }
+
+  /* Content across the room scrolls sideways in its own column. */
+  .luke-detail-page[data-width="full"] .luke-detail-page-main {
+    overflow-x: auto;
+  }
+
   /* In a pane too narrow for two columns, the secondary one follows the
      main in the one scroll, both at the page's inset. */
   @container (max-width: 719px) {
@@ -169,6 +188,13 @@
     .luke-detail-page-secondary {
       overflow: visible;
       padding-inline: var(--luke-detail-page-side);
+    }
+
+    /* The secondary column follows the main one's end gap, no more. */
+    .luke-detail-page[data-frame="toolbar"]
+      .luke-detail-page-secondary
+      > .luke-detail-page-content {
+      padding-top: 0;
     }
   }
 }
