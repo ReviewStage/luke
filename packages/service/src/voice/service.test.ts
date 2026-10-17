@@ -79,7 +79,7 @@ const SEED = [
   },
 ];
 
-/** A plan the account holds, untouched since it was started. */
+/** A task the account holds, untouched since it was started. */
 const TASK: Task = {
   id: "7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d",
   workspaceId: "workspace-personal",
@@ -90,7 +90,7 @@ const TASK: Task = {
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
-/** The desktop's opening frame for a call about the plan the account holds. */
+/** The desktop's opening frame for a call about the task the account holds. */
 function createFrame(input: WireRecord[] = SEED): WireRecord {
   return {
     type: VOICE_SERVICE_FRAME.SESSION_CREATE,

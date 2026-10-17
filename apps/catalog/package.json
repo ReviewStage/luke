@@ -1,13 +1,13 @@
 {
   "name": "@luke/catalog",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "Every shared component of @luke/ui, drawn at both profiles in both themes on synthetic data; built, never deployed",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "typecheck": "tsc --project tsconfig.json",
-    "test:vitest": "vitest run"
+    "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
@@ -22,10 +22,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "5.1.2",
-    "@vitest/browser-playwright": "5.0.0",
-    "playwright": "1.64.1",
     "typescript": "catalog:",
-    "vite": "7.3.1",
-    "vitest": "catalog:"
+    "vite": "7.3.1"
   }
 }

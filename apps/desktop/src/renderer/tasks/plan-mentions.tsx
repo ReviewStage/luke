@@ -26,14 +26,14 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenTask } from "./use-open-link";
 
 /**
- * plan-mentions.tsx -- what a plan's page hands every place on it that picks or draws a mention: the plan, its saved text, and what opening a mention does.
+ * plan-mentions.tsx -- what a task's page hands every place on it that picks or draws a mention: the task, its saved text, and what opening a mention does.
  *
  * The plan's own words draw their mentions through the document
  * (`plan-body.tsx`); an agent's message box on the same page picks them with
  * `@` (`agent-composer.tsx`), the plan's pages and agents among them, and its transcript draws the ones a message
- * holds as chips (`transcript-blocks.tsx`). Those stand far from the plan's
+ * holds as chips (`transcript-blocks.tsx`). Those stand far from the task's
  * page in the tree, so the page hands them this, as it hands them its skills
- * (`skill-chip.tsx`'s `SkillFiles`). A place off a plan's page reads nothing,
+ * (`skill-chip.tsx`'s `SkillFiles`). A place off a task's page reads nothing,
  * picks no mention, and draws a mention's link as words.
  *
  * The page of an agent no plan holds, as an automation's run starts one,
@@ -49,13 +49,13 @@ import { useOpenTask } from "./use-open-link";
  * agent's tab at a time, so the box drawn is the current agent's.
  */
 
-/** A plan's page's mentions: the plan, its text as saved, and the doors its chips open through. */
+/** A task's page's mentions: the task, its text as saved, and the doors its chips open through. */
 export interface PlanMentionsValue {
   readonly taskId: string;
   readonly taskName: string;
-  /** The slug of the plan's workspace, which a mention of it is written under. */
+  /** The slug of the task's workspace, which a mention of it is written under. */
   readonly workspace: string;
-  /** The plan's repository, `owner/name`; null before one is chosen. */
+  /** The task's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
   /** The id of the workspace whose installation the repository is read through, where no plan names it (`NO_PLAN`). */
   readonly workspaceId?: string | undefined;
@@ -85,7 +85,7 @@ interface MentionBoxes {
 const MentionBoxContext = createContext<MentionBoxes | undefined>(undefined);
 
 /**
- * Hands every place under it the plan's page's mentions. Note that the text
+ * Hands every place under it the task's page's mentions. Note that the text
  * is the plan's saved words, never an open editor's, because the agent is
  * handed the sections of the plan as saved, and a section the box offered
  * that the send cannot find would reach the agent as gone.
@@ -106,7 +106,7 @@ export function PlanMentions({
   );
 }
 
-/** The plan's page's mentions; nothing off a plan's page. */
+/** The task's page's mentions; nothing off a task's page. */
 export function usePlanMentions(): PlanMentionsValue | undefined {
   return useContext(PlanMentionsContext);
 }
@@ -114,10 +114,10 @@ export function usePlanMentions(): PlanMentionsValue | undefined {
 /** Where no plan's page stands, or a page stands with no plan, its plan: none, so a section of any plan is drawn as found, and none is offered. */
 export const NO_TASK = "";
 
-/** The anchors of no plan. */
+/** The anchors of no task. */
 const NO_ANCHORS: ReadonlySet<string> = new Set();
 
-/** What a press on a plan's chip does with no opener at hand, as in a test of one surface: nothing. */
+/** What a press on a task's chip does with no opener at hand, as in a test of one surface: nothing. */
 const OPEN_NOTHING = (): void => undefined;
 
 /** A place no plan holds, as an agent an automation started stands in: its workspace's slug, which a mention is written under, its id, which its repository is read through, and the repository. */
@@ -229,7 +229,7 @@ export function useMentionAgentsReader(
   return workspaceId === undefined ? undefined : read;
 }
 
-/** A plan a place off its page draws the words of, as the plan's version history does: its id, where its mentions are written, and its sections' anchors as they stand. */
+/** A task a place off its page draws the words of, as the plan's version history does: its id, where its mentions are written, and its sections' anchors as they stand. */
 export interface MentionedTask {
   readonly taskId: string;
   readonly place: MentionPlace;
@@ -237,11 +237,11 @@ export interface MentionedTask {
 }
 
 /**
- * The doors a mention's chip opens through where it is drawn: the plan's
- * page's, or, off one, the window's own: a plan or a section opened by the
+ * The doors a mention's chip opens through where it is drawn: the task's
+ * page's, or, off one, the window's own: a task or a section opened by the
  * window's opener, and no file, since no File tab stands there. A place
  * off the page drawing one plan's words, as its version history does,
- * names the plan, so a file of its repository is still the file and a
+ * names the task, so a file of its repository is still the file and a
  * section the plan no longer holds is drawn gone; with none, as in the
  * workspace's Inbox, no repository is at hand, so a GitHub page is drawn as
  * GitHub's.
@@ -262,7 +262,7 @@ export function useMentionDoors(task?: MentionedTask): MentionDoors {
   return page ?? windowDoors;
 }
 
-/** What draws a link in Markdown drawn here as its mention's chip, through the doors `useMentionDoors` hands for the plan given. */
+/** What draws a link in Markdown drawn here as its mention's chip, through the doors `useMentionDoors` hands for the task given. */
 export function useMentionLink(task?: MentionedTask): LinkDrawer {
   const doors = useMentionDoors(task);
   return useMemo(() => mentionLinkDrawer(doors), [doors]);
@@ -282,7 +282,7 @@ export function useMentionBox(receive: MentionBox): void {
   }, [stand]);
 }
 
-/** Hands a mention to the agent's message box drawn on the page; nothing while no box stands there, or off a plan's page. */
+/** Hands a mention to the agent's message box drawn on the page; nothing while no box stands there, or off a task's page. */
 export function useMentionDrop(): ((mention: MentionNode) => void) | undefined {
   return useContext(MentionBoxContext)?.box;
 }

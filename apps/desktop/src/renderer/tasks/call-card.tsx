@@ -13,7 +13,7 @@ import { RUN_CARD, RunCard } from "./turn-card";
 import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time";
 
 /**
- * call-card.tsx -- a call's span in a plan's logs, the Call tab's and the Code tab's alike: the divider it begins at, and the quiet line it closes with once it has ended, hanging its card.
+ * call-card.tsx -- a call's span in a task's logs, the Call tab's and the Code tab's alike: the divider it begins at, and the quiet line it closes with once it has ended, hanging its card.
  *
  * A call begins at a Checkpoint saying the day and time it started, marked
  * live at its right while it stands, in the developer's colour beside the

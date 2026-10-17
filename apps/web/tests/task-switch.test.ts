@@ -10,9 +10,9 @@ import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { Effect, Option } from "effect";
 
 /**
- * A plan as one document: a new plan is a copy of its account's template,
+ * A task as one document: a new task is a copy of its account's template,
  * through the store's own functions over a real dialect. Synthetic accounts
- * and plans throughout.
+ * and tasks throughout.
  */
 
 const RELAY = { name: "Teammate invitations" } as const;
@@ -24,7 +24,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** The plan as the window opens it, failing the test where it does not read. */
+/** The task as the window opens it, failing the test where it does not read. */
 const opened = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (stored) => Option.getOrThrow(stored).task);
 

@@ -1,0 +1,66 @@
+/* empty-state.css -- the room an empty place fills, the glyph, heading, line,
+   and action standing centred a little above that room's middle, and the
+   glyph drawn large and faint. */
+
+@layer components {
+  /* The room above the state and the room below it are shared two to three,
+     so it stands where the eye takes the middle to be. Where the room is
+     shorter than the state, both shares are nothing and the state scrolls
+     rather than run under what stands above it. */
+  .luke-empty-state {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    overflow-y: auto;
+  }
+
+  .luke-empty-state::before,
+  .luke-empty-state::after {
+    content: "";
+  }
+
+  .luke-empty-state::before {
+    flex: 2 1 0;
+  }
+
+  .luke-empty-state::after {
+    flex: 3 1 0;
+  }
+
+  /* Never wider than the room, so a narrow pane wraps the words rather than
+     painting them past its edge. */
+  .luke-empty-state-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--luke-space-12);
+    box-sizing: border-box;
+    max-width: min(280px, 100%);
+    margin: auto;
+    padding: var(--luke-space-24);
+    text-align: center;
+  }
+
+  .luke-empty-state-words {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+  }
+
+  /* The place's glyph, large and fainter than the faintest ink, which no
+     token is. The stroke is thinned so the glyph keeps the weight of the
+     place's own at more than twice its size. */
+  .luke-empty-state-icon {
+    display: flex;
+    color: var(--luke-color-text-subtle);
+    opacity: 0.6;
+  }
+
+  .luke-empty-state-icon svg {
+    width: 40px;
+    height: 40px;
+    stroke-width: 1.4;
+  }
+}

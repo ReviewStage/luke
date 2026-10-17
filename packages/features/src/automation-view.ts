@@ -27,9 +27,9 @@ import { wireUuidSchema } from "./service-wire.js";
 export const AUTOMATION_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a shape not read. */
   UNANSWERED: "unanswered",
-  /** The automation, or the plan or workspace it names, is gone or not the account's to reach. */
+  /** The automation, or the task or workspace it names, is gone or not the account's to reach. */
   NOT_FOUND: "not-found",
-  /** The plan it stands on names no repository, so no agent could work on it. */
+  /** The task it stands on names no repository, so no agent could work on it. */
   NO_REPOSITORY: "no-repository",
   /** A repository it names is one its workspace's installation does not reach. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
@@ -48,7 +48,7 @@ const failed = EffectSchema.Struct({
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
 });
 
-/** The list asked for: the account's automations, or one plan's, or one workspace's. */
+/** The list asked for: the account's automations, or one task's, or one workspace's. */
 export const automationListParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.optionalKey(wireUuidSchema),
   workspaceId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),

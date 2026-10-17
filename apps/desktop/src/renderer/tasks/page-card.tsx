@@ -1,8 +1,8 @@
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine, type PageShower } from "@luke/features/page-wire";
+import { HoverCard, HoverCardHead } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { useState } from "react";
-import { CardHead, HoverCard } from "../hover-card";
 import { PAGE_SANDBOX } from "./page-pane";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
@@ -85,7 +85,7 @@ export function PageCard({ taskId, page }: CardPage): React.JSX.Element {
   const sub = subWords(page, useKnownNames().agents);
   return (
     <HoverCard data-page-card="" data-tab-card="">
-      <CardHead
+      <HoverCardHead
         glyph={<AppWindowIcon aria-hidden="true" />}
         name={page.title}
         // Note that the words stand in a span of their own, so a long agent's name wraps inside the card.

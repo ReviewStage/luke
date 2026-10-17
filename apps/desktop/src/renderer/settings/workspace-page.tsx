@@ -16,7 +16,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { ProviderMark, TrashIcon } from "@luke/ui";
+import { ConfirmDialog, ProviderMark, TrashIcon, useConfirmDialog, useMenu } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -35,7 +35,7 @@ import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { CHIP_LOOK, Chip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu } from "../desktop/action-menu";
 import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
@@ -44,7 +44,6 @@ import { useOpenPerson } from "../person-door";
 import { SpinnerRegion } from "../spinner";
 import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 import { OneLine } from "./one-line";
@@ -53,7 +52,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
  *
- * The page shows the workspace the plans' sidebar lists and no other, so
+ * The page shows the workspace the tasks' sidebar lists and no other, so
  * there is one choice of workspace in the window: a Settings link that names
  * another lists it in the sidebar first. It is drawn in the shape of the
  * other Settings pages, one kind of thing to a group. Its first row is the
@@ -129,7 +128,7 @@ const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 const INVITATIONS_EMPTY =
   "No invitations. Luke sends no email, so copy each invitation's link and send it yourself.";
 
-/** What a list's line says where its read did not land, in `read-failure.tsx`'s words. */
+/** What a list's line says where its read did not land, in `ErrorState`'s words. */
 const READ_FAILED = {
   MEMBERS: "The members could not be read.",
   INVITATIONS: "The invitations could not be read.",
@@ -137,7 +136,7 @@ const READ_FAILED = {
 
 /**
  * What the leave says: the row's line, and the dialog's body and what it
- * names as staying and stopping. Plans and agents are the workspace's; an
+ * names as staying and stopping. Tasks and agents are the workspace's; an
  * agent's every step runs as its starter, read through their membership, so
  * one still working when its starter leaves stops at its next step, and a
  * run of an automation starts as its creator, so one whose creator left
@@ -565,7 +564,7 @@ function HeirChip({
   chosen: WorkspaceMember;
   onChoose: (heir: WorkspaceMember) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
     <>
@@ -771,7 +770,7 @@ function RoleChip({
   onChange: (role: WorkspaceInvitation["role"]) => void;
 }): React.JSX.Element {
   // The page is drawn whenever the chip is, so the menu closes with the chip unmounting.
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
     <>
@@ -1302,7 +1301,7 @@ function identityLine(workspace: Workspace): string {
  * The page's first row, drawn as Profile's account row is: the workspace's
  * tile, its name, who shares it and the reader's role in one line, then for
  * an owner or an admin Rename, and the photo's acts in its ⋯. Rename opens
- * the name in place on its own line, as the sidebar renames a plan, and
+ * the name in place on its own line, as the sidebar renames a task, and
  * Return or a press elsewhere sends what was typed with its ends trimmed,
  * while Escape, an empty name, or the same one renames nothing; an account's
  * first workspace is named by its owner's account name, so it offers no

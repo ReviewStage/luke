@@ -3,7 +3,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CallIcon } from "@luke/ui";
+import { CallIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   type CallTurn,
@@ -27,9 +27,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { EmptyState } from "../empty-state";
 import { usePerson } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
@@ -46,13 +44,13 @@ import {
 import { WorkingLine } from "./working-time";
 
 /**
- * task-call.tsx -- the open plan's Call tab: its calls with Luke as one thread, read as a coding agent's tab reads, Luke's work drawn under the line that asked for it.
+ * task-call.tsx -- the open task's Call tab: its calls with Luke as one thread, read as a coding agent's tab reads, Luke's work drawn under the line that asked for it.
  *
  * A call lands in the thread the way a voice call lands in a chat thread.
  * Every row is a coding agent tab's own (`AgentMessage`): the developer's
  * lines are the developer's bubbles, a run of them one bubble, and Luke's
  * spoken lines are the agent's messages, a Copy under each. The work a line
- * caused stands right under it (`call-thread.ts`), each planning turn drawn
+ * caused stands right under it (`call-thread.ts`), each brain turn drawn
  * as an agent's turn is, its calls grouped and, once it has finished,
  * folded behind one line, its subagents and the coding agents it started on
  * rows of their own, and how long it worked under it, its card on hover; a
@@ -387,10 +385,10 @@ export function TaskCall({
   reveal,
   video,
 }: {
-  /** What was said on the plan's calls, as the transcript reads it. */
+  /** What was said on the task's calls, as the transcript reads it. */
   region: TranscriptRegion;
   onRetry: () => void;
-  /** The plan's planning conversation as an agent's transcript is read, its newest turns and every older page read since; none before the first read lands. */
+  /** The task's conversation with the brain as an agent's transcript is read, its newest turns and every older page read since; none before the first read lands. */
   conversation: TaskConversation;
   callLive: boolean;
   /** Reads the page before the oldest turn drawn, which the conversation's `earlier` names; the view brings it. */
@@ -452,7 +450,7 @@ export function TaskCall({
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
               <div className="pt-(--section-gap)">
-                <ReadFailure line={TRANSCRIPT_FAILED_LINE} onRetry={onRetry} />
+                <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState>
               </div>
             ) : null}
             {region.kind === TRANSCRIPT_REGION.READY && region.earlierOmitted ? (
@@ -474,13 +472,9 @@ export function TaskCall({
           <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
         </ConversationEmptyState>
       ) : region.kind === TRANSCRIPT_REGION.FAILED ? (
-        <ConversationEmptyState>
-          <ReadFailure
-            line={TRANSCRIPT_FAILED_LINE}
-            onRetry={onRetry}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
-        </ConversationEmptyState>
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {TRANSCRIPT_FAILED_LINE}
+        </ErrorState>
       ) : (
         <EmptyState icon={<CallIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
       )}

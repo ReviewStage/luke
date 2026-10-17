@@ -215,7 +215,7 @@ function mountSidebar(
 
 /** The words each standing menu item says, its glyph left out. */
 function itemLabel(item: HTMLElement): string {
-  return (item.querySelector(".task-menu-label") ?? item).textContent?.trim() ?? "";
+  return (item.querySelector(".luke-menu-item-label") ?? item).textContent?.trim() ?? "";
 }
 
 /** The menu item that says `label`, in whichever menu stands. */
@@ -285,7 +285,7 @@ test("a shared workspace's tasks group by repository until View options groups t
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  assert.match(document.querySelector(".tooltip-card")?.textContent ?? "", /acme\/console/);
+  assert.match(document.querySelector(".luke-tooltip-card")?.textContent ?? "", /acme\/console/);
 });
 
 test("grouped by none, the tasks run in one list, each row naming its repository and a teammate's wearing their face", () => {

@@ -1,5 +1,6 @@
 {
   "name": "@luke/service",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -54,6 +55,7 @@
     "./agents/brain-host/relay": "./src/agents/brain-host/relay.js",
     "./agents/brain-host/seed": "./src/agents/brain-host/seed.js",
     "./agents/brain-host/stop-carrier": "./src/agents/brain-host/stop-carrier.js",
+    "./agents/coder-host/chat": "./src/agents/coder-host/chat.js",
     "./agents/coder-host/account-keys": "./src/agents/coder-host/account-keys.js",
     "./agents/coder-host/bounds": "./src/agents/coder-host/bounds.js",
     "./agents/coder-host/channel": "./src/agents/coder-host/channel.js",
@@ -156,6 +158,7 @@
     "./maintenance/maintenance-bounds": "./src/maintenance/maintenance-bounds.js",
     "./maintenance/maintenance-sweep": "./src/maintenance/maintenance-sweep.js",
     "./maintenance/terminal-lease-sweep": "./src/maintenance/terminal-lease-sweep.js",
+    "./observability/sentry": "./src/observability/sentry.js",
     "./tasks/board-layout": "./src/tasks/board-layout.js",
     "./tasks/board-look": "./src/tasks/board-look.js",
     "./tasks/board-tool": "./src/tasks/board-tool.js",
@@ -166,6 +169,7 @@
     "./tasks/plan-comments-app": "./src/tasks/plan-comments-app.js",
     "./tasks/picture-look": "./src/tasks/picture-look.js",
     "./tasks/task-file": "./src/tasks/task-file.js",
+    "./tasks/task-sections-app": "./src/tasks/task-sections-app.js",
     "./tasks/plan-notes": "./src/tasks/plan-notes.js",
     "./tasks/plan-scribe": "./src/tasks/plan-scribe.js",
     "./tasks/task-skills": "./src/tasks/task-skills.js",
@@ -223,8 +227,9 @@
     "./voice/socket": "./src/voice/socket.js"
   },
   "scripts": {
-    "test:vitest:1": "vitest run --shard=1/2",
-    "test:vitest:2": "vitest run --shard=2/2",
+    "test:vitest:1": "vitest run --shard=1/3",
+    "test:vitest:2": "vitest run --shard=2/3",
+    "test:vitest:3": "vitest run --shard=3/3",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -241,6 +246,7 @@
     "@luke/settings": "workspace:*",
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@sentry/effect": "11.7.0",
     "@vercel/connect": "2.4.1",
     "@vercel/oidc": "4.0.0",
     "ai": "catalog:",

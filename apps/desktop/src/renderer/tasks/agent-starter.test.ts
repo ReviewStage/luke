@@ -132,7 +132,7 @@ function hover(element: Element): void {
 
 /** The cards standing in the window, the first hung first. */
 function cards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(".tooltip-card:not([data-leaving])")];
+  return [...document.querySelectorAll<HTMLElement>(".luke-tooltip-card:not([data-leaving])")];
 }
 
 /** The agent named where `readerId` reads it, as the Inbox's thread names it, its card hung once the pointer rests on it, and how many times it was opened. */
@@ -301,7 +301,8 @@ test("an agent's card wears its tile beside its name and its pull request at the
   const tile = card.querySelector<HTMLElement>(".actor-card-head > .actor-mark");
   assert.equal(tile?.dataset.kind, "agent");
   assert.equal(tile?.dataset.size, "card");
-  const corner = card.querySelector(".card-corner") ?? assert.fail("the head has a corner");
+  const corner =
+    card.querySelector(".luke-hover-card-corner") ?? assert.fail("the head has a corner");
   assert.ok(corner.querySelector("[data-pull-request-mark]"), "the pull request's mark leads it");
   assert.match(corner.textContent ?? "", /^#42 · Failed/u);
 
@@ -312,7 +313,7 @@ test("an agent's card wears its tile beside its name and its pull request at the
     "the card offers no way to the tab",
   );
   assert.equal(
-    card.querySelector(".card-rule")?.outerHTML,
+    card.querySelector(".luke-hover-card-rule")?.outerHTML,
     undefined,
     "nor a rule to stand one under",
   );

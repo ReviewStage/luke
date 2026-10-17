@@ -11,7 +11,7 @@ import {
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { BackIcon } from "@luke/ui";
+import { BackIcon, useMenu } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
@@ -43,7 +43,7 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 import { WorkspaceTile } from "./workspace-tile";
@@ -64,7 +64,7 @@ function SettingsPageRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const page = settingsPageOf(view);
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.SETTINGS, page: view });
   return (
     <li>
@@ -112,12 +112,12 @@ function GroupHeading({
 
 /**
  * Settings as a desktop app lays them out: the sidebar turns into the list of
- * pages, with the way back to plans at its head and the search above the
+ * pages, with the way back to tasks at its head and the search above the
  * list, and the chosen page stands beside it under its own title. The pages
  * are the panel's own, drawn by `SettingsPanel`, and this list is the one
  * index of them, the Voice row wearing its attention mark. It groups them
  * under three headings, as Linear and Notion group theirs: the workspace the
- * plans' sidebar lists, by its tile and name, over its Members and GitHub;
+ * tasks' sidebar lists, by its tile and name, over its Members and GitHub;
  * Account, over what is the account's whichever workspace is listed; and
  * This Mac. Settings opens on Profile, Account's first page, with the caret
  * in the search. The page has
@@ -140,7 +140,7 @@ function GroupHeading({
  * for, and turning to another page clears it. Command-F lands in the page's
  * field while it shows, and in the sidebar's otherwise.
  *
- * The list is as wide as the plans' sidebar and resizes it from its own edge,
+ * The list is as wide as the tasks' sidebar and resizes it from its own edge,
  * but never folds: a drag past the least width holds there, because Settings
  * has no other way back to its pages. Back and forward stand at the right of
  * its title-bar row, where the sidebar keeps them, and Back at the list's
@@ -157,7 +157,7 @@ export function DesktopSettings({
   sidebar: SidebarCollapse;
   history: NavigationHistory;
   settings: SettingsPanelProps;
-  /** The call card, at the page list's foot, as the plans' sidebar draws it above its account row. */
+  /** The call card, at the page list's foot, as the tasks' sidebar draws it above its account row. */
   call: CallCardInput | undefined;
   /** Leaves Settings for wherever it was opened from. */
   onExit: () => void;
@@ -175,7 +175,7 @@ export function DesktopSettings({
   // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
   const shown = settingsPageOf(settings.view);
-  // The workspace the plans' sidebar lists, which heads the first group and is the one the Workspace page shows.
+  // The workspace the tasks' sidebar lists, which heads the first group and is the one the Workspace page shows.
   const listed =
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN && settings.workspace
       ? shownWorkspace(settings.workspace)

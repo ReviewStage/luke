@@ -808,9 +808,10 @@ body,
 }
 
 /* A fault's words, in the danger text colour: a refusal under the row or
-   the dialog it answers, a press that did not land, and a read that did not
-   (`read-failure.tsx`). The one class for them, so a failure reads alike
-   wherever it is said. */
+   the dialog it answers, and a press that did not land. The one class for
+   them, so a failure reads alike wherever it is said. A read that did not
+   land is said more quietly, its glyph alone in red (`@luke/ui`'s
+   `ErrorState`). */
 .error-message {
   margin: 0;
   color: var(--danger-text);
@@ -890,82 +891,6 @@ svg.working-mark[viewBox] {
   }
 }
 
-/* The window's one spinner for a wait (`spinner.tsx`): an arc in the ink
-   around it over a faint track, filling whatever box holds it. An endless
-   motion held by `--loop-motion` like every animation with no end of its
-   own, and still reading as a wait while held. */
-.spinner-ring {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  border: var(--spinner-stroke, 1.5px) solid color-mix(in srgb, currentColor 22%, transparent);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: spinner-turn 900ms linear infinite;
-  animation-play-state: var(--loop-motion);
-}
-
-@keyframes spinner-turn {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* A wait: 16px beside words or inside a control, 22px alone in a region, in
-   the secondary ink a wait is said in everywhere else. */
-.spinner {
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  color: var(--text-secondary);
-}
-
-.spinner[data-size="region"] {
-  --spinner-stroke: 2px;
-  width: 22px;
-  height: 22px;
-}
-
-/* A region still being read holds its ring at the centre of the room it fills. */
-.spinner-region {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  align-self: stretch;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-24);
-}
-
-/* A control's words and the ring share one cell, so the ring stands over the
-   words' own room rather than taking a width of its own. */
-.busy-label {
-  display: inline-grid;
-  align-items: center;
-  gap: inherit;
-  justify-items: center;
-}
-
-.busy-label > :not(.visually-hidden) {
-  grid-area: 1 / 1;
-}
-
-.busy-label-words {
-  display: inline-flex;
-  align-items: center;
-  gap: inherit;
-}
-
-.busy-label[data-shown="true"] > .busy-label-words {
-  visibility: hidden;
-}
-
-.busy-label > .spinner {
-  color: inherit;
-}
-
 /* Session primitives ----------------------------------------------------- */
 
 /* Read by assistive tech and drawn nowhere: the rows carry state in colour and
@@ -1043,6 +968,8 @@ svg.working-mark[viewBox] {
   --duration-hover: 0s;
   --duration-pane: 0s;
   --row-stagger: 0s;
+  /* A late state shows at once, so a capture never waits on its delay. */
+  --late-delay: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
      first frame, he is the same face in every PNG. The working rows' spinners
@@ -1064,6 +991,9 @@ svg.working-mark[viewBox] {
     --duration-fast: 1ms;
     --duration-pane: 1ms;
     --row-stagger: 0ms;
+    /* A late state's wait (`--late-delay`) stands: it holds back a blip that
+       heals at once rather than moving anything, and zeroing it would
+       flash every blip on screen. */
     /* Idle motion is the one thing here that no one asked for, so it is the
        first thing to stop: Luke sits still, upright, with his eyes open. The
        spinner holds too — a working row still says Working in words. */

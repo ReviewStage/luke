@@ -1,3 +1,4 @@
+import type { Replay } from "@luke/features/agent-replay";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
@@ -28,6 +29,7 @@ import {
   turnStretches,
   workerLines,
 } from "./coding-agent-model";
+import { leftOutLine, replayCount, replayOpening, replayVerb, stepLine } from "./replay-card-model";
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
 import type { TranscriptReader } from "./use-agent-transcript";
 
@@ -47,7 +49,10 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * saying so. Nothing is copied that the tab does not draw. A tab's hover
  * card previews the same reading's latest step (`latestActivity`): the
  * agent's last words as plain text, or its last call as the concise copy's
- * line says it.
+ * line says it. An agent started from another is copied as its tab draws
+ * it (`replay-card-model.ts`): its brief, then the steps of the source's
+ * work it was handed, then the developer's note as their own turn, never
+ * the markers its first message holds.
  */
 
 /** The two copies a transcript's menu offers. */
@@ -154,10 +159,15 @@ function headingOf(turn: CopiedTurn): string {
   return turn.from === undefined ? `## ${turn.speaker}` : `## ${turn.speaker} @${turn.from}`;
 }
 
-/** A transcript as both copies read it: its tab's name, the brief it opened on, and its turns in order. */
+/** What names the source agent in a copy, which knows it by no tab. */
+const REPLAY_SOURCE_WORDS = "an earlier agent";
+
+/** A transcript as both copies read it: its tab's name, the brief it opened on, the replay after it where the agent was started from another, and its turns in order. */
 export interface CopiedTranscript {
   readonly title: string;
   readonly brief: { readonly label: string; readonly text: string } | undefined;
+  /** The steps of another agent's work the agent was handed after its brief; none for an agent started afresh. */
+  readonly replay?: Replay | undefined;
   /** Whether the session's earliest steps were let go before it was read. */
   readonly earlierOmitted: boolean;
   readonly turns: readonly CopiedTurn[];
@@ -236,6 +246,9 @@ export function agentTranscript(input: {
         ? BRIEF_LABEL.PROMPT
         : BRIEF_LABEL.PLAN;
   const speaker = task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT;
+  // An agent started from another opens on its brief, the replay, and the note, each copied apart.
+  const opening = first === undefined || task !== undefined ? undefined : replayOpening(first);
+  const note = opening?.note === undefined ? [] : [developerTurn(opening.note, chatOn)];
   // A line that reached a turn while it ran is copied where the tab draws it, between the turn's work before and after it.
   const turns = placedMessages(messages).flatMap(({ message, arrived }): CopiedTurn[] => {
     if (message === first) return [];
@@ -248,9 +261,10 @@ export function agentTranscript(input: {
   });
   return {
     title,
-    brief: first === undefined ? undefined : { label, text: messageWords(first) },
+    brief: first === undefined ? undefined : { label, text: messageWords(opening?.brief ?? first) },
+    ...(opening === undefined ? undefined : { replay: opening.replay }),
     earlierOmitted: false,
-    turns,
+    turns: [...note, ...turns],
   };
 }
 
@@ -413,7 +427,20 @@ function fullTurn(turn: CopiedTurn): string[] {
   return turn.blocks.map(blockSaid).filter((each) => each.length > 0);
 }
 
-/** The transcript as the markdown the copy asked for puts on the clipboard: its name, its brief, then each turn under who said it. */
+/** The replay as a copy reads it: its heading, how many steps were left out, and each step, one line in the concise copy and its words fenced in the full one. */
+function replaySaid(replay: Replay, copy: TranscriptCopy): string[] {
+  const heading = `## ${replayVerb(replay)} ${REPLAY_SOURCE_WORDS} · ${replayCount(replay)}`;
+  const left = leftOutLine(replay);
+  const steps = replay.steps.map((step) => {
+    const { who, line } = stepLine(step);
+    if (copy === TRANSCRIPT_COPY.CONCISE) return `- **${who}:** ${oneLine(line)}`;
+    return `**${who}:** ${line}\n\n${fenced(step.words, "")}`;
+  });
+  const listed = copy === TRANSCRIPT_COPY.CONCISE && steps.length > 0 ? [steps.join("\n")] : steps;
+  return [heading, ...(left === undefined ? [] : [`_${left}_`]), ...listed];
+}
+
+/** The transcript as the markdown the copy asked for puts on the clipboard: its name, its brief, the replay where there is one, then each turn under who said it. */
 export function transcriptMarkdown(transcript: CopiedTranscript, copy: TranscriptCopy): string {
   const { brief } = transcript;
   const turns = transcript.turns.flatMap((turn) => {
@@ -423,6 +450,7 @@ export function transcriptMarkdown(transcript: CopiedTranscript, copy: Transcrip
   return `${[
     `# ${transcript.title}`,
     ...(brief === undefined ? [] : [`## ${brief.label}`, brief.text.trim()]),
+    ...(transcript.replay === undefined ? [] : replaySaid(transcript.replay, copy)),
     ...(transcript.earlierOmitted ? [EARLIER_OMITTED_LINE] : []),
     ...turns,
   ].join("\n\n")}\n`;

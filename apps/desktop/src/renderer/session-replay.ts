@@ -19,7 +19,7 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * most of a person's words also block their whole subtree with the library's
  * fixed `ph-no-capture` class as a second line, each named where it is drawn
  * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
- * pictures of the person's screen, a plan's title and the editor its document
+ * pictures of the person's screen, a task's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
  * version history, Inbox, Chat, and coding agents' tabs and their Terminal tabs,

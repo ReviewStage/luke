@@ -344,16 +344,16 @@ export function agentStateWords(status: CodingAgentStatus): string | undefined {
 /**
  * Whether an agent's transcript is read on the held long-poll now: only
  * while its tab is on screen and the agent may still write. A tab hidden,
- * a plan left, and an agent that ended each stop the reads.
+ * a task left, and an agent that ended each stop the reads.
  */
 export function followsAgent(input: { shown: boolean; status: CodingAgentStatus }): boolean {
   return input.shown && agentStillWriting(input.status);
 }
 
-/** What the Start button says while it cannot start: the plan names no repository yet. */
+/** What the Start button says while it cannot start: the task names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
-/** Why Start, and a draft's first message, cannot run on an archived plan. */
+/** Why Start, and a draft's first message, cannot run on an archived task. */
 export const START_ARCHIVED = "Unarchive the task to start a coding agent.";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
@@ -364,9 +364,69 @@ const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_RETIRED]: "This agent has ended. Start a new one.",
   [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
 } as const;
+
+/** What a Start from an agent whose session has ended says. */
+const START_RETIRED = "This agent has ended. Start a new one.";
+
+/** What a message to an agent whose session has ended says, its box closed on it, beside the press that continues it in a new agent (`ContinueAgent`). */
+export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one to carry on.";
+
+/** What the press that starts a new agent on another's whole transcript says. */
+export const CONTINUE_LABEL = "Continue in new agent";
+
+/** What the line naming the agents that continued another says before their chips. */
+export const CONTINUED_IN = "Continued in";
+
+/**
+ * The agents of the task that continue `agentId`: each started from it on
+ * its whole transcript, naming no message, archived ones among them, in the
+ * order started. Note that a fork names the message it was cut at, so it
+ * continues nothing.
+ */
+export function continuationsOf(
+  agentId: string,
+  agents: readonly CodingAgentSummary[] | undefined,
+  archived: readonly CodingAgentSummary[] | undefined,
+): readonly CodingAgentSummary[] {
+  return [...(agents ?? []), ...(archived ?? [])]
+    .filter((each) => each.from?.agentId === agentId && each.from.messageId === undefined)
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+/** What a place an agent may be continued from ends on: nothing, the press that continues it, or the agents that already have. */
+export const CONTINUE_TRAIL = {
+  NONE: "none",
+  OFFER: "offer",
+  CONTINUED: "continued",
+} as const;
+
+export type ContinueTrail =
+  | { readonly kind: typeof CONTINUE_TRAIL.NONE }
+  | { readonly kind: typeof CONTINUE_TRAIL.OFFER }
+  | {
+      readonly kind: typeof CONTINUE_TRAIL.CONTINUED;
+      readonly agents: readonly CodingAgentSummary[];
+    };
+
+/**
+ * What a place an agent may be continued from ends on: the agents that
+ * continued it where any did, so one agent is not continued twice; else
+ * the press, where a Start could run (`offered`); else nothing.
+ */
+export function continueTrail(
+  continuations: readonly CodingAgentSummary[],
+  offered: boolean,
+): ContinueTrail {
+  if (continuations.length > 0) return { kind: CONTINUE_TRAIL.CONTINUED, agents: continuations };
+  return offered ? { kind: CONTINUE_TRAIL.OFFER } : { kind: CONTINUE_TRAIL.NONE };
+}
+
+/** Whether a turn's end line is where an agent may be continued: it failed, and not on a refused API key, which a new agent would meet the same. */
+export function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): boolean {
+  return status === CODING_AGENT_STATUS.FAILED && endReason !== FAILURE_REASON.API_KEY;
+}
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
 export const MODEL_CHANGE_FAILED = "The model could not be changed. Try again.";
@@ -390,7 +450,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What the toast says when a Start the developer left the plan behind did not start; the plan's own note says why. */
+/** What the toast says when a Start the developer left the task behind did not start; the task's own note says why. */
 export const START_FAILED_AWAY = "The coding agent could not be started.";
 
 /** What the toast says when the service did not stop an agent. */
@@ -417,7 +477,7 @@ const UNARCHIVED_WORDS = {
 /** What a refused archive says of an agent still starting, or with a message awaiting its turn, which has no turn to stop yet. */
 export const ARCHIVE_NOT_READY = "The agent is still starting its turn. Try again in a moment.";
 
-/** What the toast says once an agent's archive, or its undoing, landed or was refused, by which way it was asked, as a plan's do (`MARK_UNDOS`). */
+/** What the toast says once an agent's archive, or its undoing, landed or was refused, by which way it was asked, as a task's do (`MARK_UNDOS`). */
 export function archiveWords(archived: boolean): {
   readonly done: string;
   readonly refused: string;
@@ -447,10 +507,10 @@ function callFailure(text: string): Failure {
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
  * Settings; the repository given to Luke on GitHub; another repository
- * chosen; or the plan moved to the workspace whose GitHub reaches it. A
+ * chosen; or the task moved to the workspace whose GitHub reaches it. A
  * service that said nothing more says the bare sentence, which Retry
- * answers, and so does an agent with no plan wherever the remedy is pressed
- * on the plan: only giving the repository to Luke on GitHub is not.
+ * answers, and so does an agent with no task wherever the remedy is pressed
+ * on the task: only giving the repository to Luke on GitHub is not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -517,17 +577,18 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
       return "This task no longer exists.";
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "The agent could not be started. Try again.";
+    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+      return START_RETIRED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
 
-/** What a message that did not reach the agent says under the composer, and what mends it, on a plan or, for an agent with none, where the remedy needs no plan. */
+/** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
 export function messageFailureNote(refused: RefusedCall, taskId: string | null): Failure {
   return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
     ? unreachedFailure(refused.unreached, taskId)
@@ -546,11 +607,12 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "Luke didn't hear back. Retry sends it again, once.";
+    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+      return MESSAGE_RETIRED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
@@ -1107,7 +1169,7 @@ export function agentListCallIds(messages: readonly CodingAgentMessage[]): reado
     );
 }
 
-/** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
+/** Whether a call is a delegation to a worker, a coding agent's or the brain's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
   return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
 }

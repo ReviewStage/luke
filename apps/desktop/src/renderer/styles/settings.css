@@ -256,44 +256,6 @@
   cursor: pointer;
 }
 
-/* The app's one switch (`switch.tsx`). On is the accent (`--switch-on`), so
-   a switch reads as the primary button beside it does. Its state is keyed on
-   its own `data-checked`, so a switch drawn inside a row button that carries
-   `aria-checked` (a menu's switch row) takes this one rule too. Only the
-   thumb moves, only by transform, and on `--spring-fast` — the bounce every
-   small element in the app rides. */
-.switch {
-  display: inline-flex;
-  width: 34px;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 2px;
-  border-radius: 999px;
-  background: var(--switch-track);
-  transition: background-color var(--duration-hover) ease;
-}
-
-.switch[data-checked="true"] {
-  background: var(--switch-on);
-}
-
-.switch:disabled {
-  opacity: 0.4;
-}
-
-.switch-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--switch-thumb);
-  box-shadow: var(--switch-thumb-shadow);
-  transition: transform var(--duration-fast) var(--spring-fast);
-}
-
-.switch[data-checked="true"] .switch-thumb {
-  transform: translateX(14px);
-}
-
 /* A row's picker: the chip naming the value, and the app's own menu under
    it, drawn the way the composer's chips and menus are so Settings reads as
    the rest of the app. Every chip shares one width, like a column of macOS
@@ -342,61 +304,15 @@
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
-/* A short set of values as one segmented control (`segmented.tsx`), in the
-   look the side panel's tabs have: the chosen segment filled, the rest quiet until
-   hovered. The row it stands in wraps, so a narrow page drops the control
-   under its label rather than clipping it or running it under the chip
-   column; still too wide for the row, it gives way to the row's width and
-   its segments wrap onto a second line inside the trough, so the last of
-   them never stands past the card's edge. */
+/* A row holding a segmented control (`@luke/ui`'s `Segmented`) wraps, so a
+   narrow page drops the control under its label rather than clipping it or
+   running it under the chip column. */
 .settings-row-wrapping {
   flex-wrap: wrap;
 }
 
 .settings-row-wrapping .settings-copy {
   flex: 1 1 200px;
-}
-
-.segmented {
-  display: inline-flex;
-  min-inline-size: 0;
-  max-width: 100%;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: var(--space-2);
-  border-radius: var(--control-radius);
-  background: var(--raised);
-}
-
-.segment {
-  /* Note that a segment draws the ring inside itself, because its trough
-     leaves it no room for one outside. */
-  --focus-ring-offset: var(--focus-ring-inset);
-  height: calc(var(--control-height) - 2 * var(--space-2));
-  padding: 0 var(--space-12);
-  border-radius: calc(var(--control-radius) - var(--space-2));
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 560;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.segment:hover {
-  color: var(--text-primary);
-}
-
-.segment[aria-checked="true"] {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.segment:disabled {
-  opacity: 0.4;
 }
 
 /* The one green thing on the line, in the same palette a finished session
@@ -733,7 +649,7 @@
 }
 
 /* A sign-in waiting on the browser wears the window's ring, at the line's size. */
-.settings-state .spinner {
+.settings-state .luke-spinner {
   width: 12px;
   height: 12px;
 }

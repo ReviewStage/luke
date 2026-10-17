@@ -1,6 +1,7 @@
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { ChevronDownIcon, PlayIcon } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { FailureNote } from "../failure-note";
 import { BusyLabel } from "../spinner";
@@ -9,10 +10,9 @@ import { ModelMenu, settledChoice } from "../tasks/model-menu";
 import { useRepositoryRemedy } from "../tasks/repository-remedy";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { Tooltip } from "../tooltip";
-import { useDisclosure } from "../use-disclosure";
 
 /**
- * start-agent-button.tsx -- the plan toolbar's Start: a split button that starts a coding agent on the plan.
+ * start-agent-button.tsx -- the task toolbar's Start: a split button that starts a coding agent on the task.
  *
  * The main part starts one on the account's default model and effort, and
  * says which on hover: "Opus 5.5 High Fast". The chevron drops
@@ -21,10 +21,10 @@ import { useDisclosure } from "../use-disclosure";
  * is what the main part then starts on. The models and the default are
  * read as the button mounts and again as the menu opens, so the menu
  * shows the catalog as it stands and the default the last change wrote. A
- * plan with no repository has nothing for an agent to check out, so Start
+ * task with no repository has nothing for an agent to check out, so Start
  * is unavailable and says why on hover instead. The menu closes on a pick,
  * on Escape, on a press of the main part, and on focus leaving the button;
- * Escape stops there, so it closes the menu and not the plan behind it.
+ * Escape stops there, so it closes the menu and not the task behind it.
  * In a toolbar short of room the main part draws its glyph alone, named
  * still, its hover saying the model as before (desktop.css's `plan-toolbar`).
  */

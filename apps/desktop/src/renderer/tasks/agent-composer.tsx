@@ -10,13 +10,12 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
-import { lapsedServer, namedServers, SERVER_HANDED } from "@luke/ui/agent-servers-model";
+import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon, riseAboveEnd, useMenu } from "@luke/ui";
+import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -25,7 +24,7 @@ import {
   PromptInputTools,
   submitPromptInput,
 } from "../ai-elements/prompt-input";
-import { ActionMenu, type MenuAction, riseAboveEnd, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { editorBundleAtom } from "../editor-bundle";
 import { FailureNote } from "../failure-note";
 import { imageFiles } from "../feedback-images";
@@ -41,19 +40,14 @@ import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
+import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
-import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
-import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
-import { useMentionBox, usePlanMentions } from "./plan-mentions";
+import { useMentionBox } from "./plan-mentions";
 import { ComposerQuoteView } from "./reply-to-selection";
 import { useRepositoryRemedy } from "./repository-remedy";
-import { MentionedServers } from "./server-card";
-import { useSkillOpener } from "./skill-chip";
-import { type SkillSource, useSkillPicker } from "./skill-picker";
+import type { SkillSource } from "./skill-picker";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
-import { DICTATION_PHASE, useDictation } from "./use-dictation";
-import { useKnownNames } from "./use-known-names";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
@@ -84,7 +78,7 @@ import { useKnownNames } from "./use-known-names";
  * and what mends it (`../failure-note.tsx`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
  * once, or, for a repository out of reach, the press its reason names
- * (`repository-remedy.tsx`), a move of the plan sending it again by itself
+ * (`repository-remedy.tsx`), a move of the task sending it again by itself
  * once it lands; an agent that takes no message any more keeps the box,
  * disabled, with the reason under it; a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
@@ -124,17 +118,18 @@ import { useKnownNames } from "./use-known-names";
  * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
  * is said in the same note a file's refusal is.
  *
- * An `@` at the start of a word, on a plan's page, opens the list of what
- * the message can mention, the plan's repository's files and folders, the
+ * An `@` at the start of a word, on a task's page, opens the list of what
+ * the message can mention, the task's repository's files and folders, the
  * plan's sections, the pages agents showed on it, its other coding agents,
  * the repository's skills, and the account's connected MCP servers and
  * their tools
  * (`mention-picker.tsx`), and the one chosen is written into the words as
- * its link, drawn as its chip (`mention-chip.tsx`). A server mentioned is
+ * its link, drawn as its chip (`mention-chip.tsx`). The `@` and `/` lists and the
+ * microphone are the Inbox's answer box's too (`composer-pickers.tsx`). A server mentioned is
  * handed to the agent's next turn even where its switch is off, and to that
  * turn alone.
  *
- * A `/` at the start of a word opens the list of the skills the plan's
+ * A `/` at the start of a word opens the list of the skills the task's
  * repository keeps, at the caret, and the one chosen is written into the
  * words as its chip, read as `/name`, which the agent loads before it acts
  * and a press opens the `SKILL.md` of (`skill-picker.tsx`).
@@ -215,7 +210,7 @@ function ComposerMore({
   foot: RefObject<HTMLDivElement | null>;
   offers: readonly OverflowOffer[];
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const [taken, setTaken] = useState<readonly OverflowPress[]>([]);
   const trigger = menu.trigger(riseAboveEnd);
   const standing = menu.open !== undefined;
@@ -272,6 +267,8 @@ export function AgentComposer({
   keywords = [],
   skills,
   replyDoor,
+  sendsEmpty = false,
+  closedRemedy,
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
@@ -303,6 +300,10 @@ export function AgentComposer({
   skills?: SkillSource | undefined;
   /** Where the box hands the transcript's Reply the door that lays a quote in at its caret; none where nothing replies. */
   replyDoor?: RefObject<((words: string) => void) | undefined> | undefined;
+  /** Whether an empty box sends too, as a fork's draft does, which needs no words of its own. */
+  sendsEmpty?: boolean;
+  /** What mends a box closed for good, drawn after its note: Continue in new agent (`continue-agent.tsx`); none where nothing does. */
+  closedRemedy?: ReactNode;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
@@ -327,7 +328,7 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
-  const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
+  const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const bundle = useAtomValue(editorBundleAtom);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
@@ -419,55 +420,28 @@ export function AgentComposer({
     };
   }, [replyDoor]);
 
-  const dictation = useDictation({ editor, keywords, onNote: setRefusal });
-  const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
-  const openSkill = useSkillOpener();
-  const skillPicker = useSkillPicker({
+  // The `@` and `/` lists, dictation, and the keys that work them, as the Inbox's answer box has them.
+  const pickers = useComposerPickers({
     editor,
     room,
     draft: composer.draft,
-    source: skills,
-    onOpen: openSkill,
+    placeholder,
+    self: agentId,
+    skills,
+    keywords,
+    // A server's chip in the box says what a send now does with it: opens a turn, or steers the one running.
+    servers: {
+      statuses,
+      place: {
+        disabled: servers.disabled,
+        handed: stoppable ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
+      },
+    },
+    onNote: setRefusal,
   });
-
-  // An `@` picks a mention of the plan the box stands on, where it stands on a plan's page.
-  const planMentions = usePlanMentions();
-  // A Luke address pasted whole is called by the name the window holds for what it names.
-  const known = useKnownNames();
+  const { dictation, dictating } = pickers;
   // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
   useMentionBox((mention) => editor.current?.insertMention(mention));
-  const mentionPicker = useMentionPicker({
-    source: planMentions,
-    self: agentId,
-    // The repository's skills, a pick written as the `/name` chip the `/` list writes.
-    skills:
-      skills === undefined
-        ? undefined
-        : {
-            known: skillPicker.known,
-            ask: skillPicker.ask,
-            onChoose: (name) => editor.current?.chooseSkillAtMention(name),
-          },
-    // The servers the account connected, each one a mention hands the agent's next turn.
-    servers: namedServers({
-      statusOf: statuses.statusOf,
-      accountsOf: statuses.accountsOf,
-      standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
-    }),
-    room,
-    side: MENTION_MENU_SIDE.ABOVE,
-    onChoose: (mention) => editor.current?.chooseMention(mention),
-  });
-
-  const onFieldKey = (event: KeyboardEvent): boolean => {
-    if (dictation.onFieldKey(event) || skillPicker.onKey(event) || mentionPicker.onKey(event)) {
-      return true;
-    }
-    if (event.key !== "Escape") return false;
-    event.stopPropagation();
-    editor.current?.blur();
-    return true;
-  };
 
   const stop = () => {
     setStopping(true);
@@ -480,7 +454,7 @@ export function AgentComposer({
   const handBack = (set: (open: boolean) => void) => (open: boolean) => {
     const more = foot.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
     const returning =
-      !open && (document.activeElement?.closest(".anchored-popover") ?? null) !== null;
+      !open && (document.activeElement?.closest(".luke-anchored-popover") ?? null) !== null;
     set(open);
     if (returning && more !== null && getComputedStyle(more).display !== "none") {
       queueMicrotask(() => more.focus());
@@ -604,9 +578,7 @@ export function AgentComposer({
                 : COMPOSER_INPUT.EDITABLE
           }
           maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
-          skills={skillPicker.names}
-          aria={{ ...skillPicker.aria, "aria-placeholder": placeholder }}
-          onKey={onFieldKey}
+          {...pickers.field}
           onEnter={() => {
             if (room.current !== null) submitPromptInput(room.current);
           }}
@@ -617,37 +589,8 @@ export function AgentComposer({
             attach(pasted);
             return true;
           }}
-          onTrigger={skillPicker.onTrigger}
-          chip={skillPicker.chip}
           quote={(quote) => <ComposerQuoteView quote={quote} held={held} />}
-          mentions={
-            planMentions === undefined
-              ? undefined
-              : {
-                  onTrigger: mentionPicker.onTrigger,
-                  // A server's chip in the box says what a send now does with it: opens a turn, or steers the one running.
-                  chip: (mention) => (
-                    <MentionedServers
-                      value={{
-                        disabled: servers.disabled,
-                        handed: stoppable ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
-                      }}
-                    >
-                      <MentionNodeChip mention={mention} doors={planMentions.doors} />
-                    </MentionedServers>
-                  ),
-                  pasted: (words) =>
-                    pastedMentionNode(words, planMentions.doors.place, {
-                      known,
-                      planId: planMentions.taskId,
-                      text: planMentions.text,
-                    }),
-                }
-          }
-        >
-          {skillPicker.menu}
-          {mentionPicker.menu}
-        </ComposerField>
+        />
         <PromptInputFooter ref={foot}>
           {dictating ? (
             <DictationStrip dictation={dictation} />
@@ -737,7 +680,9 @@ export function AgentComposer({
           className="error-message agent-composer-note"
           onRetry={retries ? composer.retry : undefined}
           onRemedy={remedy}
-        />
+        >
+          {closed ? closedRemedy : null}
+        </FailureNote>
       ) : null}
     </div>
   );

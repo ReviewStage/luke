@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -30,9 +30,12 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -48,6 +51,7 @@ import {
   type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
@@ -63,7 +67,9 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
-  codingAgentOverviewAnswerSchema,
+  codingAgentOverviewChecksAnswerSchema,
+  codingAgentOverviewConversationAnswerSchema,
+  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
@@ -97,15 +103,23 @@ import {
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
+import {
+  type PullRequestActionRequest,
+  pullRequestActionRequestSchema,
+  pullRequestWriteAnswerSchema,
+} from "./pull-request-write-wire.js";
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
   agentGitHubImagePath,
   agentInboxPath,
   agentMessagesPath,
-  agentOverviewPath,
+  agentOverviewChecksPath,
+  agentOverviewConversationPath,
+  agentOverviewPullRequestPath,
   agentPath,
   agentPicturePath,
+  agentPullRequestActionPath,
   agentPullRequestPath,
   agentStopPath,
   agentSubagentMessagesPath,
@@ -127,17 +141,17 @@ import {
 } from "./service-wire.js";
 
 /**
- * coding-agent-client.ts -- the window's side of a plan's coding agents, as the host asks the service for them.
+ * coding-agent-client.ts -- the window's side of a task's coding agents, as the host asks the service for them.
  *
  * Every call is the one account call, so the bearer is read fresh per
  * attempt and a 401 is renewed and retried once. Each call answers one of
  * the view's shapes rather than failing, because every caller does the same
  * thing with a failure: draws why, and offers to try again. The transcript
- * read and the two inbox reads, a plan's and the account's, are the calls
+ * read and the two inbox reads, a task's and the account's, are the calls
  * the service holds open, for as long as it waits on the agent's next
  * message or the inbox's next change, so they travel under a deadline of
  * their own that outlasts that hold; every other call keeps the account
- * call's usual one. The account's plan
+ * call's usual one. The account's task
  * template is read and written here too, as Settings asks for it beside
  * the default and the keys.
  */
@@ -182,7 +196,7 @@ const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its plan archived, and the repository the turn's checkout no longer reaches. */
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its task archived, and the repository the turn's checkout no longer reaches. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -231,6 +245,14 @@ function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachment
   return Effect.map(imageBodyOf(response, inboxImageTypeSchema), (image) => image ?? UNANSWERED);
 }
 
+/** The types an inbox item's attachment is served under: a block's picture's, or any a file an answer carried travelled as. */
+const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** An inbox attachment's bytes in base64 under its type: a picture, or a file an answer carried; unanswered under any other type. */
+function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
+  return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
+}
+
 /**
  * An answer read whole: the body the schema admits where the service
  * answered, a key a newer service added dropped rather than refused, the
@@ -252,12 +274,12 @@ function readAnswer<Answer, Encoded>(
 }
 
 /**
- * The window's reads and writes of a plan's coding agents: the models the
- * service offers and the account's default among them, a plan's agents,
+ * The window's reads and writes of a task's coding agents: the models the
+ * service offers and the account's default among them, a task's agents,
  * one started, one's transcript past a cursor, one messaged, one's model
- * and effort changed, one stopped, what one published, the plan's inbox
+ * and effort changed, one stopped, what one published, the task's inbox
  * of what its agents need of the developer, read past a cursor and
- * answered an item at a time, and what waits across the account's plans.
+ * answered an item at a time, and what waits across the account's tasks.
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
@@ -445,7 +467,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One plan's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
+  /** One task's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
   list(
     taskId: string,
     includeArchived = false,
@@ -480,7 +502,7 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * Starts an agent on the plan under the request's own key, so a retry
+   * Starts an agent on the task under the request's own key, so a retry
    * carrying the same key answers the agent the first Start made; a request
    * the service would refuse by shape is refused here without traveling.
    */
@@ -516,8 +538,8 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * One plan's planning conversation as an agent's transcript is read, or a
-   * planning worker's where the call that started it is named: past the
+   * One task's conversation as an agent's transcript is read, or a
+   * brain worker's where the call that started it is named: past the
    * cursor, held by the service while a turn or the worker runs; with no
    * cursor, its newest turns; with `before`, the turns before that one.
    */
@@ -650,7 +672,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent read whole as its own page by its id, on a plan or with none. */
+  /** One agent read whole as its own page by its id, on a task or with none. */
   agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentPath(agentId) }),
@@ -678,17 +700,37 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them now. */
-  overview(
+  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
+  overviewPullRequest(
     agentId: string,
-  ): Effect.Effect<CodingAgentOverviewAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewPath(agentId) }),
-      (answer) => readAnswer(answer, codingAgentOverviewAnswerSchema, ROW_REFUSALS),
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewPullRequestPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentOverviewPullRequestAnswerSchema, ROW_REFUSALS),
     );
   }
 
-  /** One plan's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
+  /** The checks on one agent's pull request's head as GitHub holds them now. */
+  overviewChecks(
+    agentId: string,
+  ): Effect.Effect<CodingAgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewChecksPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentOverviewChecksAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them now. */
+  overviewConversation(
+    agentId: string,
+  ): Effect.Effect<CodingAgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewConversationPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentOverviewConversationAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One task's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
   inbox(
     taskId: string,
     after: string,
@@ -699,7 +741,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent's inbox past the cursor, an agent with no plan as much as one on a plan: every item it posted, held by the service while nothing changed. */
+  /** One agent's inbox past the cursor, an agent with no task as much as one on a task: every item it posted, held by the service while nothing changed. */
   agentInbox(
     agentId: string,
     after: string,
@@ -753,6 +795,27 @@ export class HostedCodingAgentClient {
   }
 
   /**
+   * One change to an agent's pull request, made on GitHub by the service as
+   * the account, on its own GitHub sign-in: how GitHub took it; a change the
+   * service would refuse by shape is refused here without traveling.
+   */
+  pullRequestAction(
+    agentId: string,
+    request: PullRequestActionRequest,
+  ): Effect.Effect<CodingAgentPullRequestWriteAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(pullRequestActionRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: agentPullRequestActionPath(agentId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, pullRequestWriteAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
    * One image an agent's pull request's overview names, by the address
    * GitHub's rendering spelled, fetched under the account: its bytes in
    * base64 under the type GitHub served; not found where GitHub answers no
@@ -782,7 +845,7 @@ export class HostedCodingAgentClient {
   /**
    * One image of an inbox item, fetched under the account: its bytes in
    * base64 under the media type the service kept, where the service answered
-   * with one of the types an image block may be; not found where the item or
+   * with one of the types an image block's picture or an answer's file may be; not found where the item or
    * the attachment is not the account's; unanswered for anything else,
    * another media type included, so nothing the window draws is a type it
    * did not expect.
@@ -800,7 +863,7 @@ export class HostedCodingAgentClient {
             refusedAs(unparsedWire(body), ROW_REFUSALS),
           );
         }
-        return readImage(answer.response);
+        return readInboxFile(answer.response);
       },
     );
   }

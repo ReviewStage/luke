@@ -1,5 +1,6 @@
 {
   "name": "@luke/luke",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "Luke, the orchestrator: the planning brain's eve app on the web deployment",
@@ -18,8 +19,11 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",
     "@luke/database": "workspace:*",
+    "@luke/features": "workspace:*",
     "@luke/service": "workspace:*",
+    "@luke/settings": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@sentry/node": "11.7.0",
     "@vercel/connect": "2.4.1",
     "@vercel/oidc": "4.0.0",
     "ai": "catalog:",

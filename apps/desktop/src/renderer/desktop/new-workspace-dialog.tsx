@@ -1,12 +1,7 @@
 import { WORKSPACE_BOUNDS } from "@luke/features/workspace-wire";
+import { ConfirmDialog, DIALOG_TONE, type DialogConfirm, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
-import {
-  ConfirmDialog,
-  DIALOG_TONE,
-  type DialogConfirm,
-  useConfirmDialog,
-} from "../settings/confirm-dialog";
 
 /**
  * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a name, Cancel, and Create workspace.
@@ -14,7 +9,7 @@ import {
  * It is the confirm dialog with a field in it, so it dims the window, keeps
  * Tab inside, hands focus back to whatever opened it, and says a refusal on
  * the card with the name left as typed for another try. The name is held
- * to the service's bound and drawn in New plan's name field; Enter creates,
+ * to the service's bound and drawn in New task's name field; Enter creates,
  * and Escape or a press on the dimmed window cancels. Each opening starts
  * from an empty name, so a cancelled one is never offered again, and the
  * question goes with the sidebar folding away or the account signing out.

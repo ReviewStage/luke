@@ -22,7 +22,7 @@ import { changesOffers, changesTabOf, showPullRequest } from "./side-panel";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** An agent at rest on the plan, named by its title. */
+/** An agent at rest on the task, named by its title. */
 function agent(id: string, title: string, createdAt: number): CodingAgentSummary {
   return {
     id,
@@ -54,7 +54,7 @@ const FIRST = agent("8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", "Invite flow", 1);
 const SECOND = agent("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32", "Invite fixes", 2);
 const THIRD = agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c", "Expiry job", 3);
 
-/** The plan's agents, the first two on one pull request and the third on its own. */
+/** The task's agents, the first two on one pull request and the third on its own. */
 function agents(): CodingAgentsControl {
   const shared = pullRequest(41, "Teammate invitations");
   return {
@@ -92,10 +92,10 @@ test("an agent's chips open the one Pull request tab of its pull request: its pu
     onChoose: (tab: SidePanelTab) => asked.push(["choose", tab]),
     onPullRequestView: (agentId: string, view: string) => asked.push(["view", agentId, view]),
   };
-  showPullRequest(panel, control, SECOND.id, PULL_REQUEST_VIEW.OVERVIEW);
+  showPullRequest(panel, control, SECOND.id, PULL_REQUEST_VIEW.CONVERSATION);
   showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.FILES);
   assert.deepEqual(asked, [
-    ["view", FIRST.id, PULL_REQUEST_VIEW.OVERVIEW],
+    ["view", FIRST.id, PULL_REQUEST_VIEW.CONVERSATION],
     ["choose", { changes: FIRST.id }],
     ["view", THIRD.id, PULL_REQUEST_VIEW.FILES],
     ["choose", { changes: THIRD.id }],
@@ -145,11 +145,14 @@ test("a Changes card names the coding agent whose pull request it is by its tile
       ),
     ),
   );
-  assert.equal(container.querySelector(".card-name")?.textContent, "Expire invitations");
-  assert.equal(container.querySelector(".card-corner")?.textContent, "#42");
-  assert.match(container.querySelector(".card-note")?.textContent ?? "", /^6 files changed/);
+  assert.equal(container.querySelector(".luke-hover-card-name")?.textContent, "Expire invitations");
+  assert.equal(container.querySelector(".luke-hover-card-corner")?.textContent, "#42");
+  assert.match(
+    container.querySelector(".luke-hover-card-note")?.textContent ?? "",
+    /^6 files changed/,
+  );
   const named = container.querySelector<HTMLButtonElement>(
-    '.card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-hover-card-sub button.actor-ref[data-kind="agent"]',
   );
   assert.ok(named, "the agent is named as an actor");
   assert.equal(named.textContent, "Expiry job");
@@ -159,7 +162,7 @@ test("a Changes card names the coding agent whose pull request it is by its tile
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     await Promise.resolve();
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card] .card-name");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card] .luke-hover-card-name");
   assert.equal(card?.textContent, "Expiry job", "the agent's own card hangs from its name");
   act(() => named.click());
   assert.deepEqual(opened, [THIRD.id]);

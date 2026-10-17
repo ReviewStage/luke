@@ -257,14 +257,14 @@ async function cardOf(chip: Element | undefined) {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   await settle();
-  const card = [...document.querySelectorAll(".tooltip-card > *")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
     card: [...card.attributes].map((attribute) => attribute.name).find((name) => name !== "class"),
-    name: card.querySelector(".card-name")?.textContent,
-    sub: card.querySelector(".card-sub")?.textContent,
-    corner: card.querySelector(".card-corner")?.textContent,
-    notes: [...card.querySelectorAll(".card-note")].map((note) => note.textContent),
+    name: card.querySelector(".luke-hover-card-name")?.textContent,
+    sub: card.querySelector(".luke-hover-card-sub")?.textContent,
+    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
+    notes: [...card.querySelectorAll(".luke-hover-card-note")].map((note) => note.textContent),
     focus: card.querySelector("[data-task-card-focus]")?.textContent,
     details: [...card.querySelectorAll(".task-card-detail")].map((detail) => detail.textContent),
   };

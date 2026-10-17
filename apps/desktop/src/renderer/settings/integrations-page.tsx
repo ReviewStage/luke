@@ -26,7 +26,15 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ChevronRightIcon, CloseIcon, ProviderMark, SearchIcon, TrashIcon } from "@luke/ui";
+import {
+  ChevronRightIcon,
+  CloseIcon,
+  ConfirmDialog,
+  ProviderMark,
+  SearchIcon,
+  TrashIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import {
   namedServers,
   type ServerRow,
@@ -51,7 +59,6 @@ import { focusSearchField, Highlighted } from "../search-field";
 import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { commandKeyshortcuts } from "../tooltip";
-import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 
@@ -232,7 +239,7 @@ function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
   return (
     <small className="settings-state" data-state={line.state}>
       {line.state === LINE_STATE.WAITING ? (
-        <span className="spinner" data-size={SPINNER_SIZE.INLINE}>
+        <span className="luke-spinner" data-size={SPINNER_SIZE.INLINE}>
           <SpinnerRing />
         </span>
       ) : null}

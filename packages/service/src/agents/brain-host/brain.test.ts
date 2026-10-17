@@ -2,12 +2,22 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
+import {
+  ensureMember,
+  ensurePlanChannel,
+  history,
+  postMessage,
+  roster,
+} from "@luke/database/models/chat-store";
 import { hostTurnId } from "@luke/database/models/ids";
 import { openTaskConversation, readTask, savePlanText } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { type PlanDocument, planDocumentSchema } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import {
   generateText,
@@ -20,6 +30,7 @@ import {
 } from "ai";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { SqlClient } from "effect/sql";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -29,6 +40,9 @@ import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import {
   SCRIPTED_BRAIN_REPLY,
+  SCRIPTED_NOT_READ_REPLY,
+  SCRIPTED_POST,
+  SCRIPTED_POSTED_REPLY,
   SCRIPTED_READ,
   SCRIPTED_READ_REPLY,
   scriptedModel,
@@ -50,15 +64,16 @@ import {
   type BrainHostTurn,
 } from "./bounds.js";
 import { readRecentMessages } from "./context.js";
-import { type BrainHost, brainHost } from "./host.js";
+import type { AdmittedConversation } from "./conversation.js";
+import { type BrainHost, brainHost, type TurnStanding } from "./host.js";
 import type { BrainHostSeams } from "./production.js";
 import { memoryRelayState, type RelayStateStore } from "./relay.js";
 
 /**
- * The planning model as the hosted brain runs it, end to end in one process:
- * a plan's conversation opened and attached, a session admitted for it, the
- * scripted fixture model handed the planning instructions, the saved document
- * as its standing context, and the planning tools, and each of its steps
+ * The brain as the hosted brain runs it, end to end in one process:
+ * a task's conversation opened and attached, a session admitted for it, the
+ * scripted fixture model handed the brain's instructions, the saved document
+ * as its standing context, and the brain's tools, and each of its steps
  * carried as eve carries them, the tool calls through the host's `runTool`
  * and every event through the relay into the store. What a caller reads
  * afterwards (the window's `readTask`, the next turn's standing context, a
@@ -84,7 +99,13 @@ const SAVED: PlanDocument = { body: SAVED_TEXT, assumptions: [] };
 
 const CORRECTION = "Any member should be able to invite, not only admins.";
 
-/** The repository the reading scenarios' plan is about, and the installation connected to the plan's workspace that reaches it. */
+/** What the developer asks Luke to post in the plan's chat, and what a teammate answers there. */
+const CHAT = {
+  POSTED: "The invite table's schema is frozen until Friday.",
+  ANSWERED: `Noted: the expiry column waits until then. ${"The invite emails keep their old subject meanwhile. ".repeat(8)}Ship the rest.`,
+} as const;
+
+/** The repository the reading scenarios' task is about, and the installation connected to the task's workspace that reaches it. */
 const RELAY = { owner: "acme", name: "relay", defaultBranch: "main" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const RELAY_INSTALLATION = { id: 11, login: RELAY.owner, repositories: [RELAY] } as const;
@@ -130,7 +151,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** A plan with a saved document and its conversation opened, as the Plans tab would leave it. */
+/** A task with a saved document and its conversation opened, as the Tasks tab would leave it. */
 const savedTaskWithConversation = () =>
   Effect.gen(function* () {
     const userId = yield* openUser;
@@ -230,20 +251,11 @@ const brainTurn = (
       turnId: hostTurnId(session.id, eveTurnId),
     };
     const sequence = 0;
-    const relay = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-      host
-        .relay(
-          stampedEveEvent(event, NOW),
-          standing,
-          { id: session.id, auth: session.auth, turn: { id: eveTurnId, sequence } },
-          session.state,
-          {},
-        )
-        .pipe(Effect.provide(noNetwork));
-
     const prompt = host.prompt();
     const seed = yield* host.seed(standing);
-    const context = yield* host.standingContext(standing);
+    const opened = yield* host.standingContext(standing);
+    const context = opened.text;
+    const relay = sessionRelay(host, session, standing, eveTurnId, opened);
     const declarations = host.toolDeclarations();
     const tools: ToolSet = Object.fromEntries(
       declarations.map((declared) => [
@@ -363,6 +375,55 @@ const brainTurn = (
     }
   });
 
+/** The relay of one turn's events as the store hook relays them, with the chat the turn opened with as eve's state keeps it. */
+function sessionRelay(
+  host: BrainHost,
+  session: Session,
+  standing: AdmittedConversation,
+  eveTurnId: string,
+  opened: TurnStanding,
+) {
+  const handed = {
+    eveTurnId,
+    ...(opened.chatThrough === undefined ? undefined : { through: opened.chatThrough }),
+  };
+  return <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+    host
+      .relay(
+        stampedEveEvent(event, NOW),
+        standing,
+        { id: session.id, auth: session.auth, turn: { id: eveTurnId, sequence: 0 } },
+        session.state,
+        {},
+        handed,
+      )
+      .pipe(Effect.provide(noNetwork));
+}
+
+/** A turn that opens with its standing context, takes the developer's words, and fails before the model answers, as a provider's refusal ends one. */
+const failedTurn = (host: BrainHost, session: Session, eveTurnId: string, words: string) =>
+  Effect.gen(function* () {
+    const standing = yield* admitted(host, session);
+    const opened = yield* host.standingContext(standing);
+    const relay = sessionRelay(host, session, standing, eveTurnId, opened);
+    const sequence = 0;
+    yield* relay({ type: "turn.started", data: { turnId: eveTurnId, sequence } });
+    yield* relay({
+      type: "message.received",
+      data: { turnId: eveTurnId, sequence, message: words },
+    });
+    yield* relay({
+      type: "turn.failed",
+      data: {
+        turnId: eveTurnId,
+        sequence,
+        code: "MODEL_CALL_FAILED",
+        message: "the provider refused",
+      },
+    });
+    return opened.text;
+  });
+
 const readDocument = Schema.decodeUnknownSync(Schema.fromJsonString(planDocumentSchema));
 
 /** The line the saved document follows in a standing context, as the model reads it. */
@@ -377,7 +438,7 @@ function handedDocument(context: string): PlanDocument {
     : readDocument(lines[at + 1]);
 }
 
-/** The document the Plans tab opens, failing the test where the plan does not open. */
+/** The document the Tasks tab opens, failing the test where the task does not open. */
 const windowDocument = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (opened) =>
     Option.match(opened, {
@@ -432,9 +493,99 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         assert.equal(reply, SCRIPTED_BRAIN_REPLY);
         assert.deepEqual(yield* windowDocument(userId, taskId), SAVED);
         assert.deepEqual(
-          handedDocument(yield* host.standingContext(yield* admitted(host, session))),
+          handedDocument((yield* host.standingContext(yield* admitted(host, session))).text),
           SAVED,
         );
+      }),
+  );
+
+  it.effect(
+    "with Chat off for the plan's owner a turn is offered no chat tool and opens with no chat, and once the owner turns it on it is offered them and the chat said since",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        const channel = Option.getOrThrow(yield* ensurePlanChannel(userId, planId));
+        const person = Option.getOrThrow(
+          yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
+        );
+        // Luke joins the chat before the post it should read, as a turn with Chat on would seat it.
+        yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.PLANNER, planId });
+        yield* postMessage(userId, channel.organizationId, {
+          authorMemberId: person.id,
+          to: { channelId: channel.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: CHAT.ANSWERED }],
+          mentions: [],
+          clientKey: randomUUID(),
+        });
+        const standing = yield* admitted(host, session);
+        const offered = (on: readonly { readonly name: string }[]) =>
+          on
+            .map((declared) => declared.name)
+            .filter((name) => Object.values<string>(CHAT_TOOL).includes(name));
+
+        assert.deepEqual(offered(yield* host.toolDeclarationsFor(standing)), []);
+        const off = (yield* host.standingContext(standing)).text;
+        assert.equal(off.includes("[chat since the last planning call]"), false, off);
+
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
+        assert.deepEqual(offered(yield* host.toolDeclarationsFor(standing)), [
+          CHAT_TOOL.POST,
+          CHAT_TOOL.READ,
+          CHAT_TOOL.RESOLVE,
+        ]);
+        const on = (yield* host.standingContext(standing)).text;
+        assert.ok(on.includes("[chat since the last planning call]"), on);
+      }),
+  );
+
+  it.effect(
+    "asked to post, Luke posts in the plan's channel as @luke, and each turn opens with what was said there since Luke last read, until a turn handed it completes",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
+        const session = yield* startSession(host, userId, conversationId);
+
+        const reply = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_POST}${CHAT.POSTED}`);
+
+        const channel = Option.getOrThrow(yield* ensurePlanChannel(userId, planId));
+        const { organizationId } = channel;
+        const person = Option.getOrThrow(
+          yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
+        );
+        const said = Option.getOrThrow(
+          yield* history(userId, organizationId, person.id, { channelId: channel.id }),
+        );
+        const luke = (yield* roster(userId, organizationId)).find(
+          (member) => member.kind === MEMBER_KIND.PLANNER && member.planId === planId,
+        );
+        assert.ok(luke);
+        assert.equal(luke.handle, "luke");
+        assert.deepEqual(
+          said.map((message) => [message.authorMemberId, message.blocks]),
+          [[luke.id, [{ type: CHAT_BLOCK.MARKDOWN, text: CHAT.POSTED }]]],
+        );
+        assert.equal(reply, `${SCRIPTED_POSTED_REPLY} ${said[0]?.seq}.`);
+
+        const answered = yield* postMessage(userId, organizationId, {
+          authorMemberId: person.id,
+          to: { channelId: channel.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: CHAT.ANSWERED }],
+          mentions: [],
+          clientKey: randomUUID(),
+        });
+        assert.ok(Result.isSuccess(answered));
+        const line = `[chat since the last planning call]\n- m ${answered.success.message.seq} in #teammate-invitations, @${person.handle}: ${JSON.stringify(CHAT.ANSWERED)}`;
+        // A turn that fails took nothing in, so the turn after it is handed the same line.
+        const failed = yield* failedTurn(host, session, "turn_1", CORRECTION);
+        assert.ok(failed.includes(line), failed);
+        const retried = yield* failedTurn(host, session, "turn_2", CORRECTION);
+        assert.ok(retried.includes(line), retried);
+        // A turn that completes took it in, so the turn after is handed nothing of it.
+        yield* brainTurn(host, session, "turn_3", CORRECTION);
+        const after = (yield* host.standingContext(yield* admitted(host, session))).text;
+        assert.equal(after.includes("[chat since the last planning call]"), false, after);
       }),
   );
 
@@ -481,6 +632,35 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           assert.equal(text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
           assert.equal(text.includes(header), false);
         }
+      }),
+  );
+});
+
+it.layer(getTestDB())("the planning model where the account's preferences cannot be read", (it) => {
+  it.effect(
+    "a turn still opens and a planning tool still runs, with Chat read as off and offered no chat tool",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, conversationId } = yield* savedTaskWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        // The preferences are unreadable from here on, as a store failure would leave them.
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`ALTER TABLE account_preference RENAME TO account_preference_unreadable`;
+        const standing = yield* admitted(host, session);
+
+        const offered = (yield* host.toolDeclarationsFor(standing)).map(
+          (declared) => declared.name,
+        );
+        assert.ok(offered.length > 0);
+        assert.equal(
+          offered.some((name) => Object.values<string>(CHAT_TOOL).includes(name)),
+          false,
+        );
+        const opened = (yield* host.standingContext(standing)).text;
+        assert.equal(opened.includes("[chat since the last planning call]"), false, opened);
+        // A repository read runs and answers in its own words, here that the plan names no repository.
+        const read = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_READ}ls`);
+        assert.ok(read.startsWith(SCRIPTED_NOT_READ_REPLY), read);
       }),
   );
 });

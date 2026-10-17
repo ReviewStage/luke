@@ -175,8 +175,11 @@ function mount(address: string | undefined, browserId: string = crypto.randomUUI
     });
     await act(async () => input.form?.requestSubmit());
   };
+  // A button is named by its label, or by its words where it has none, as Retry is.
   const press = async (label: string) => {
-    const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    const button = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => (each.getAttribute("aria-label") ?? each.textContent?.trim()) === label,
+    );
     assert.ok(button);
     await act(async () => button.click());
   };

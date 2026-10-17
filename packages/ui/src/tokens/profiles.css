@@ -52,7 +52,8 @@
   --luke-menu-row-height: 32px;
   --luke-menu-row-radius: var(--luke-radius-6);
   --luke-menu-inset: var(--luke-space-4);
-  --luke-menu-radius: var(--luke-radius-10);
+  /* A row's corner and the inset together, so a highlighted row follows the menu's curve. */
+  --luke-menu-radius: calc(var(--luke-menu-row-radius) + var(--luke-menu-inset));
 }
 
 [data-luke-profile="web"] {
@@ -99,5 +100,6 @@
   --luke-menu-row-height: 44px;
   --luke-menu-row-radius: var(--luke-radius-6);
   --luke-menu-inset: var(--luke-space-4);
-  --luke-menu-radius: var(--luke-radius-10);
+  /* A row's corner and the inset together, so a highlighted row follows the menu's curve. */
+  --luke-menu-radius: calc(var(--luke-menu-row-radius) + var(--luke-menu-inset));
 }

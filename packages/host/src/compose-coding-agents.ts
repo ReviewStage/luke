@@ -12,9 +12,12 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   codingAgentAccountInboxParamsSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -30,6 +33,7 @@ import {
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
   codingAgentPinParamsSchema,
+  codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
@@ -59,10 +63,10 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
+ * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, and what waits across the account.
  *
  * Nothing is held here. The window holds the agents it draws and the
- * cursor it reads from, asks when a plan opens, when it starts or stops an
+ * cursor it reads from, asks when a task opens, when it starts or stops an
  * agent, and while an agent's tab shows its running transcript, and every
  * ask is one call of the service answered whole. The transcript read is
  * one the service holds open while the agent runs and nothing new stands,
@@ -97,8 +101,11 @@ export type CodingAgentClient = Pick<
   | "agentInbox"
   | "pullRequest"
   | "changes"
-  | "overview"
+  | "overviewPullRequest"
+  | "overviewChecks"
+  | "overviewConversation"
   | "githubImage"
+  | "pullRequestAction"
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
@@ -388,15 +395,45 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.changes(agentId));
         return carried<CodingAgentChangesAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW]: (params) =>
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(
           codingAgentPullRequestParamsSchema,
           params,
           "reading an agent's pull request names one agent",
         );
-        const answer = yield* asked(client.overview(agentId));
-        return carried<CodingAgentOverviewAnswerView>(answer);
+        const answer = yield* asked(client.overviewPullRequest(agentId));
+        return carried<CodingAgentOverviewPullRequestAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's pull request's checks names one agent",
+        );
+        const answer = yield* asked(client.overviewChecks(agentId));
+        return carried<CodingAgentOverviewChecksAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's pull request's conversation names one agent",
+        );
+        const answer = yield* asked(client.overviewConversation(agentId));
+        return carried<CodingAgentOverviewConversationAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, request } = yield* read(
+          codingAgentPullRequestActionParamsSchema,
+          params,
+          "changing an agent's pull request names the agent and the change",
+        );
+        const answer = yield* asked(client.pullRequestAction(agentId, request));
+        return carried<CodingAgentPullRequestWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE]: (params) =>
       Effect.gen(function* () {

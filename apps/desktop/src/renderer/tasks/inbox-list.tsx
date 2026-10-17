@@ -1,7 +1,7 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { DocumentIcon } from "@luke/ui";
+import { DocumentIcon, EmptyState, useMenu } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -21,7 +21,7 @@ import { useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
@@ -32,7 +32,6 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
-import { EmptyState } from "../empty-state";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
@@ -57,16 +56,16 @@ import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
 
 /**
- * inbox-list.tsx -- the Inbox's list of items: one row each, under its plan's group header or in one run, with what the list shows and how at its head.
+ * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.
  *
  * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
- * sidebar does. A plan's items stand under the sidebar's own group header
- * (`sidebar-group-header.tsx`), the plan's glyph giving way to its chevron
+ * sidebar does. A task's items stand under the sidebar's own group header
+ * (`sidebar-group-header.tsx`), the task's glyph giving way to its chevron
  * under the pointer, a press folding the group, and each fold kept across
  * launches as a sidebar group's is; an automation's agents stand under its
  * clock tile, which hangs its card. An item is a sidebar row: the tile of
- * the agent that posted it (`actor-ref.tsx`), as the plan's summary or
- * main's read of an agent with no plan names the agent, its title, and how
+ * the agent that posted it (`actor-ref.tsx`), as the task's summary or
+ * main's read of an agent with no task names the agent, its title, and how
  * long ago it last changed, and before its time the face of the teammate
  * whose agent asks it, as the sidebar marks a teammate's task, the reader's
  * own wearing none; a press chooses it, for the pane beside the
@@ -79,9 +78,9 @@ import { cardTitle } from "./tool-call-model";
  * filtered or not; a teammate's open item waits on the teammate, in the
  * body's weight with a hollow dot in the blue's place, and any member may
  * still answer it; an answered one is settled, in the body's weight with
- * no dot. Only an item waiting on the developer wears the dot: a plan or a
+ * no dot. Only an item waiting on the developer wears the dot: a task or a
  * tab with something unseen on it is unread, not waiting, and wears the
- * weight alone. A folded plan
+ * weight alone. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
@@ -151,7 +150,7 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** The agent that posted an item as its holder names it: the plan's summary's line, or main's line for an agent with no plan; none where neither holds it. */
+/** The agent that posted an item as its holder names it: the task's summary's line, or main's line for an agent with no task; none where neither holds it. */
 function itemSubject(
   holder: InboxHolder,
   agentId: string,
@@ -241,7 +240,7 @@ export function InboxItemRow({
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
   const waitsOnTeammate = starter !== undefined && item.status === INBOX_STATUS.OPEN;
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
@@ -309,7 +308,7 @@ export function InboxItemRow({
 }
 
 /**
- * A holder's group header: a plan's document glyph and name; an
+ * A holder's group header: a task's document glyph and name; an
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the Factory's glyph, the
  * sidebar's row listing every agent, for the agents no automation names,
@@ -407,7 +406,7 @@ function ViewOptions({
   grouping: InboxGrouping;
   onGrouping: (grouping: InboxGrouping) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const choices: MenuAction[] = [
     {
       label: "Group by task",
@@ -489,18 +488,13 @@ export function NeedsYouEmpty({
     <EmptyState
       icon={<InboxIcon />}
       title={NEEDS_YOU.NONE}
-      action={
-        <button
-          type="button"
-          className="toolbar-button"
-          onClick={() => {
-            onList();
-            needsYou.onWaitingOnly(false);
-          }}
-        >
-          {NEEDS_YOU_PRESS.ALL}
-        </button>
-      }
+      action={{
+        label: NEEDS_YOU_PRESS.ALL,
+        onClick: () => {
+          onList();
+          needsYou.onWaitingOnly(false);
+        },
+      }}
     >
       {NEEDS_YOU.ANSWERED}
     </EmptyState>
@@ -590,7 +584,7 @@ function useRowFocusKept(): RowFocus {
   };
 }
 
-/** The list: its head where it has one, then each plan's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
+/** The list: its head where it has one, then each task's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
   chosen,

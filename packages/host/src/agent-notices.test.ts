@@ -59,7 +59,7 @@ function agent(
   };
 }
 
-/** An inbox read's answer as a test gives it: its plans holding items left out where none does. */
+/** An inbox read's answer as a test gives it: its tasks holding items left out where none does. */
 type InboxAnswerGiven =
   | Exclude<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>
   | (Omit<Extract<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>, "plans"> & {
@@ -70,7 +70,7 @@ type InboxAnswerGiven =
     });
 
 /**
- * The notices over a scripted host: each plan's list answers from its own
+ * The notices over a scripted host: each task's list answers from its own
  * queue, the last answer standing, the account's inbox read holds until the
  * test answers it, and everything posted, toasted, opened, badged, and
  * written is kept for the test to read. Electron's doors are a Layer of the
@@ -196,7 +196,7 @@ function fixture() {
     opened,
     openedTaskless,
     unseen,
-    /** The list answers a plan's reads hear, in order; the last stands for every read after it. */
+    /** The list answers a task's reads hear, in order; the last stands for every read after it. */
     answer: (planId: string, ...queue: CodingAgentListAnswer[]) => answers.set(planId, queue),
     /** The page answers an agent's own reads hear, in order; the last stands for every read after it. */
     answerPage: (agentId: string, ...queue: CodingAgentPageAnswerView[]) =>
@@ -215,7 +215,7 @@ function fixture() {
       accountChanged(next);
       Queue.offerUnsafe(accounts, next);
     },
-    /** The account's inbox read answered, as the host answers the one standing; no plan holds an item but where the answer says. */
+    /** The account's inbox read answered, as the host answers the one standing; no task holds an item but where the answer says. */
     answerInbox: (answer: InboxAnswerGiven) => {
       assert.ok(inboxAnswers);
       Queue.offerUnsafe(inboxAnswers, "failure" in answer ? answer : { plans: [], ...answer });
@@ -244,7 +244,7 @@ function fixture() {
     },
     /** What was said, without the clicks. */
     said: () => posted.map(({ title, body }) => ({ title, body })),
-    /** How many times the plan list was asked for again. */
+    /** How many times the task list was asked for again. */
     listReads: () => listReads,
   };
 }
@@ -566,7 +566,7 @@ it.effect(
       assert.deepEqual(f.posted, []);
     }),
 );
-/** An item of an agent with no plan waiting on the developer, as the account's inbox read carries it. */
+/** An item of an agent with no task waiting on the developer, as the account's inbox read carries it. */
 function tasklessItem(id: string, patch: Partial<AccountTasklessEntry> = {}): AccountTasklessEntry {
   return {
     id,

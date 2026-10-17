@@ -1,8 +1,8 @@
 import type { Workspace } from "@luke/features/workspace-wire";
-import { ChevronDownIcon, GearIcon, PlusIcon } from "@luke/ui";
+import { ChevronDownIcon, dropBelowStart, GearIcon, PlusIcon, useMenu } from "@luke/ui";
 import { UsersIcon } from "lucide-react";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { useNewWorkspaceDialog } from "./new-workspace-dialog";
 import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
 import { WorkspaceTile } from "./workspace-tile";
@@ -10,7 +10,7 @@ import { WorkspaceTile } from "./workspace-tile";
 /**
  * workspace-switcher.tsx -- the sidebar's head: the workspace listed, by its tile and name and who shares it, and the menu that lists another.
  *
- * A workspace is a team's shared plans, the first one made for the account
+ * A workspace is a team's shared tasks, the first one made for the account
  * among them, and the sidebar lists one at a time. Its head stands at the
  * sidebar's top left, where Slack, Linear, and Vercel name the scope
  * everything under it belongs to (`docs/proposals/workspace-clarity.md`,
@@ -79,7 +79,7 @@ export function WorkspaceSwitcher({
     signedIn: tasks.signedIn,
     surfaceOpen: tasks.shown && inSight,
   });
-  const menu = useActionMenu(tasks.shown && inSight);
+  const menu = useMenu(tasks.shown && inSight);
   const listed = tasks.workspace;
   if (listed === undefined) return null;
   const personal = tasks.workspaces[0]?.id === listed.id;

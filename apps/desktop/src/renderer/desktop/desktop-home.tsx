@@ -1,5 +1,5 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { FolderIcon, WingFace } from "@luke/ui";
+import { ErrorState, FolderIcon, WingFace } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -7,9 +7,7 @@ import { useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
-import { RetryButton } from "../retry-button";
 import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { InboxItemRow } from "../tasks/inbox-list";
@@ -29,27 +27,27 @@ import { TaskStatusMark } from "./task-card";
 import { useRowKeys } from "./use-row-keys";
 
 /**
- * desktop-home.tsx -- the home page: the column the window rests on with no plan open, saying what needs the developer and the plans saved latest, and offering New plan.
+ * desktop-home.tsx -- the home page: the column the window rests on with no task open, saying what needs the developer and the tasks saved latest, and offering New task.
  *
  * It is one column at a reading measure, as a chat app's empty page is: a
- * greeting with New plan beside it, then Inbox, every open Inbox item of the
+ * greeting with New task beside it, then Inbox, every open Inbox item of the
  * workspace listed, a teammate's agent's among them, as the Inbox's own row draws it, the
- * plan it is about after its title, a press opening the Inbox on it; then
- * Recent, the plans of the workspace listed saved latest, each as the
- * sidebar draws a plan, with its repository after its name, a press opening
+ * task it is about after its title, a press opening the Inbox on it; then
+ * Recent, the tasks of the workspace listed saved latest, each as the
+ * sidebar draws a task, with its repository after its name, a press opening
  * it. Nothing waiting says so in the Inbox's own words. An account with no plan
  * yet in any workspace is welcomed instead: Luke's face, one line of what he does, and New
- * plan. Nothing here names the sidebar, which may be folded away.
+ * task. Nothing here names the sidebar, which may be folded away.
  *
  * ↑ and ↓ move through its rows, a launcher's way, from the window itself
  * as well as from a row, and Return opens the row reached, so a launch is a
- * key or two from a plan; a key pressed anywhere else, the sidebar or a
- * field, is left to it. Until the plan list is read the page draws nothing,
+ * key or two from a task; a key pressed anywhere else, the sidebar or a
+ * field, is left to it. Until the task list is read the page draws nothing,
  * since what it says hangs on the list; a read refused says so under Recent,
  * with Retry, over whatever an earlier read listed.
  */
 
-/** How many plans Recent lists. */
+/** How many tasks Recent lists. */
 const RECENT_COUNT = 6;
 
 /** What Recent says where the plan list could not be read, as the sidebar says it. */
@@ -66,7 +64,7 @@ function recentTasks(plans: readonly TaskSummary[]): TaskSummary[] {
   return orderTasks(plans, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
 }
 
-/** New plan, with its chord: the home page's, and the empty Factory's (`desktop-factory.tsx`). */
+/** New task, with its chord: the home page's, and the empty Factory's (`desktop-factory.tsx`). */
 function NewTaskButton({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   return (
     <button
@@ -179,9 +177,8 @@ function HomeInbox({
         </ul>
       )}
       {waiting.failed ? (
-        <div className="sidebar-note flex items-center gap-2" role="alert">
-          <span>Some items could not be read.</span>
-          <RetryButton onRetry={waiting.onRetry} />
+        <div className="sidebar-note">
+          <ErrorState onRetry={waiting.onRetry}>Some items could not be read.</ErrorState>
         </div>
       ) : empty && waiting.reading ? (
         <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
@@ -209,7 +206,7 @@ function HomeRecent({
       </h2>
       {plans.listFailed ? (
         <div className="sidebar-note">
-          <ReadFailure line={UNREAD_LINE} onRetry={plans.onRetryList} />
+          <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
         </div>
       ) : null}
       {recent.length === 0 ? null : (
@@ -242,7 +239,7 @@ function Welcome({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   );
 }
 
-/** The home page, in the plan's place while no plan is open. */
+/** The home page, in the task's place while no task is open. */
 export function DesktopHome({
   tasks,
   accountName,
@@ -255,8 +252,8 @@ export function DesktopHome({
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
   useRowKeys(column, tasks.shown);
   if (!tasks.listRead && !tasks.listFailed) return null;
-  // Only an account with no plan in any workspace, and nothing an agent with
-  // no plan waits on, is new; a workspace of its own with none still says
+  // Only an account with no task in any workspace, and nothing an agent with
+  // no task waits on, is new; a workspace of its own with none still says
   // what needs it elsewhere.
   const fresh =
     tasks.tasks.length === 0 && tasks.archived.length === 0 && tasks.inboxTaskless.length === 0;

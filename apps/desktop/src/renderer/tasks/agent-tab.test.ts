@@ -30,9 +30,8 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
  * agent-tab.test.ts -- a call about something the window draws in a tab of
  * its own is a row that opens that tab, and every other call a row that
  * folds open in place; a run of calls and a finished turn's lead fold under
- * a line led by a chevron saying whether it is open, while the calls under
- * it, a list of the agents among them, keep their own icons. A row that opens an agent's or a worker's tab
- * hangs that tab's card. A call of an integration's own tool is one row
+ * a line saying whether it is open. A row that opens an agent's or a
+ * worker's tab hangs that tab's card. A call of an integration's own tool is one row
  * wearing the integration's mark, with the `connection_execute` that ran it
  * left out.
  */
@@ -260,20 +259,7 @@ for (const call of FOLDING_CALLS) {
   });
 }
 
-/** The chevron leading a fold's line: a right-pointing chevron, turned down where the line says it is open; nothing where the line has none. */
-function chevronOf(line: Element | null | undefined): { open: boolean } | undefined {
-  const glyph = line?.firstElementChild;
-  if (!glyph?.classList.contains("lucide-chevron-right")) return undefined;
-  const open = glyph.classList.contains("rotate-90");
-  assert.equal(
-    line?.getAttribute("aria-expanded"),
-    String(open),
-    "the chevron agrees with the line",
-  );
-  return { open };
-}
-
-test("a run of calls folds under a line whose chevron says it is open, and its calls keep their icons, a list of the agents a list's", () => {
+test("a run of calls folds under a line that says it is open", () => {
   const { container } = drawn(
     assistant([
       toolPart("list_coding_agents", {}, { agents: [] }),
@@ -283,21 +269,10 @@ test("a run of calls folds under a line whose chevron says it is open, and its c
   );
   const group = container.querySelector("[data-turn-fold] > summary");
   assert.equal(group?.textContent, "2 tools called");
-  assert.deepEqual(chevronOf(group), { open: true }, "the open group's chevron points down");
-  const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
-  const listed = rows.find((row) => row.textContent?.includes("Listed the coding agents"));
-  assert.ok(
-    listed?.querySelector("svg")?.classList.contains("lucide-layout-list"),
-    "the list's row wears LayoutList",
-  );
-  const ran = rows.find((row) => row.textContent?.includes("git status"));
-  assert.ok(
-    ran?.querySelector("svg")?.classList.contains("lucide-laptop"),
-    "the command's row wears Laptop",
-  );
+  assert.equal(group?.getAttribute("aria-expanded"), "true", "the group says it is open");
 });
 
-test("a finished turn's lead folds under a line whose chevron turns as it opens, and its calls keep their icons", () => {
+test("a finished turn's lead folds under a line that opens as it is pressed", () => {
   const { container } = drawn(
     assistant([
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
@@ -308,14 +283,13 @@ test("a finished turn's lead folds under a line whose chevron turns as it opens,
   );
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   assert.equal(fold?.textContent, "2 tool calls, 1 message");
-  assert.deepEqual(chevronOf(fold), { open: false }, "the closed fold's chevron points right");
+  assert.equal(fold?.getAttribute("aria-expanded"), "false", "the fold stands closed");
   act(() => fold?.click());
-  assert.deepEqual(chevronOf(fold), { open: true }, "the opened fold's chevron points down");
+  assert.equal(fold?.getAttribute("aria-expanded"), "true", "the pressed fold says it is open");
   const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
-  const read = rows.find((row) => row.textContent?.includes("src/new.ts"));
   assert.ok(
-    read?.querySelector("svg")?.classList.contains("lucide-file-text"),
-    "the read's row wears FileText",
+    rows.some((row) => row.textContent?.includes("src/new.ts")),
+    "the opened fold lists the read",
   );
 });
 
@@ -410,7 +384,7 @@ for (const { name, parts, standings, label } of FAILURE_LINES) {
   });
 }
 
-/** An agent of the plan's, as its list holds it. */
+/** An agent of the task's, as its list holds it. */
 function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSummary> = {}) {
   return {
     id,
@@ -430,11 +404,11 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   act(() => row.focus());
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the row hangs a tab's card");
   return [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-corner")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-corner")?.textContent,
   ];
 }
 

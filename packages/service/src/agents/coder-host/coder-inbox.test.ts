@@ -5,24 +5,25 @@ import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
 import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../../core.js";
 import { answerInboxItem, taskInboxItems } from "../../inbox/inbox-store.js";
-import { closeInInbox, type PostingAgent, postToInbox } from "./inbox.js";
+import { closeInInbox, type PostingAgent, postToInbox, readOwnInbox } from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
  * The coding agent's inbox tools, through their public functions against a
- * real dialect: a post under a key is one item the plan's inbox reads, a
+ * real dialect: a post under a key is one item the task's inbox reads, a
  * post under the same key replaces it and opens it again, a close takes it
  * back with why, a read answers the agent's items open first, and every
  * call answers the agent's whole inbox, answers and all. Nothing of
  * another account's agent is read or written.
  *
- * Synthetic accounts, plans, and words throughout.
+ * Synthetic accounts, tasks, and words throughout.
  */
 
 const openUser = Effect.gen(function* () {
@@ -32,7 +33,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one plan and one agent started on it, in its repository. */
+/** An account with one task and one agent started on it, in its repository. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -159,5 +160,30 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         );
         assert.deepEqual(yield* taskInboxItems(other, agent.taskId), []);
       }),
+  );
+
+  it.effect("the agent reads back by name which files an answer carried", () =>
+    Effect.gen(function* () {
+      const agent = yield* openAgent;
+      yield* post(agent, input(SETTINGS));
+      const [item] = yield* taskInboxItems(agent.userId, agent.taskId);
+      assert.ok(item);
+      const file = (name: string) => ({
+        name,
+        mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+        data: Buffer.from(`${name}\n`).toString("base64"),
+      });
+      yield* answerInboxItem(agent.userId, item.id, 1, { reply: INBOX_REPLY.DONE }, randomUUID(), [
+        file("rule.txt"),
+        file("audit.txt"),
+      ]);
+
+      const read = yield* readOwnInbox(agent);
+      assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.deepEqual(
+        read.inbox?.map((line) => [line.key, line.answerFiles]),
+        [[SETTINGS.key, ["rule.txt", "audit.txt"]]],
+      );
+    }),
   );
 });

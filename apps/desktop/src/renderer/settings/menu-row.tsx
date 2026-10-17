@@ -1,14 +1,14 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { EllipsisIcon } from "@luke/ui";
+import { EllipsisIcon, useMenu } from "@luke/ui";
 import { useRef } from "react";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 
 /**
  * menu-row.tsx -- a Settings row with actions of its own: a stored key, a connected service, a changeable shortcut.
  *
  * The row's acts live in the window's own menu rather than in buttons along
- * the row, the way a sidebar plan's do: a ⋯ at the row's end opens it, and a
+ * the row, the way a sidebar task's do: a ⋯ at the row's end opens it, and a
  * right-click anywhere on the row opens the same menu at the pointer. The ⋯
  * is always drawn, muted as a toolbar's glyphs are until the pointer is on it,
  * because a ⋯ shown only on hover leaves an empty gap at the end of the row. A
@@ -52,7 +52,7 @@ export function MenuRow({
 }): React.JSX.Element {
   // The page is drawn whenever the row is, so the menu needs no surface of
   // its own to close with: it closes with the row unmounting.
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   const groups = groupsOf(actions);
   const acting = groups.length > 0;

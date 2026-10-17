@@ -1,0 +1,32 @@
+/* checkbox.css -- the platform's own box in the accent, beside its words in
+   the body's type, the box standing on the words' first line. */
+
+@layer components {
+  .luke-checkbox {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--luke-icon-gap);
+    min-width: 0;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+  }
+
+  .luke-checkbox-box {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin: calc((var(--luke-type-body-leading) - 14px) / 2) 0 0;
+    accent-color: var(--luke-color-accent);
+  }
+
+  .luke-checkbox-words {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .luke-checkbox[data-disabled="true"] {
+    color: var(--luke-color-text-subtle);
+  }
+}

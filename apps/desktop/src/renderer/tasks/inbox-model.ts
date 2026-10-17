@@ -1,3 +1,5 @@
+import type { FileChip } from "@luke/features/attachment-model";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   codeLinesReadable,
   fieldValueWords,
@@ -36,12 +38,12 @@ import { refusalLine, refusalPasses } from "./file-tab-model";
  * item chosen, while a teammate's open item stands in the list as waiting
  * on them. A settled item keeps everything its agent offered,
  * the developer's pick marked, and says who settled it and what they
- * wrote. A plan's board, which counts what waits, holds what waits the
+ * wrote. A task's board, which counts what waits, holds what waits the
  * oldest posted first, since it has held its agent longest, and what is
  * settled, answered or taken back by its agent, the latest changed first.
- * Every item the plan's inbox holds is
+ * Every item the task's inbox holds is
  * drawn, whether or not the window's list of agents has caught up with the
- * agent that posted it, since the service reads the inbox by plan and an
+ * agent that posted it, since the service reads the inbox by task and an
  * agent's items go with it. A card's answer is held to the same rule the
  * service holds it to (`inbox-wire.ts`'s `inboxReplyRefusal`), so a press
  * the service would refuse is never offered; an item asking a response
@@ -50,14 +52,35 @@ import { refusalLine, refusalPasses } from "./file-tab-model";
  * of the file around them, the lines it points at lit. Nothing here draws.
  */
 
-/** What the developer has put on a card so far: the options picked on a choice, the fields filled on a form, and their note. */
+/** What the developer has put on a card so far: the options picked on a choice, the fields filled on a form, their note, and the files they attached to it. */
 export interface InboxDraft {
   readonly choices: readonly string[];
   readonly values: readonly InboxFormValue[];
   readonly note: string;
+  readonly attachments: readonly CodingAgentAttachment[];
 }
 
-export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "" };
+export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
+
+/**
+ * The files an item's answer carried as chips, in the order they were
+ * attached: each by its name and type, its bytes as the `data:` URL its
+ * read came back as where it did, and none while it is read or where the
+ * read did not answer, which draws the chip by its name alone.
+ */
+export function answerFileChips(
+  item: Pick<InboxItem, "answerFiles">,
+  urls: ReadonlyMap<string, { readonly url: string } | { readonly failed: true }>,
+): FileChip[] {
+  return (item.answerFiles ?? []).map((file) => {
+    const read = urls.get(file.attachmentId);
+    return {
+      name: file.name,
+      mediaType: file.mediaType,
+      url: read !== undefined && "url" in read ? read.url : "",
+    };
+  });
+}
 
 /** The board as the tab draws it. */
 export interface InboxBoardView {
@@ -65,7 +88,7 @@ export interface InboxBoardView {
   readonly settled: readonly InboxItem[];
 }
 
-/** The plan's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
 export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
   return {
     open: items
@@ -99,7 +122,7 @@ export function withValue(
   return { ...draft, values: value === undefined ? others : [...others, { label, value }] };
 }
 
-/** The answer's kind for what the card holds: a press where the response is answered by one, else the options picked, the form filled, or the developer's words. */
+/** The answer's kind for what the card holds: a press where the response is answered by one, else the options picked, the form filled, or the developer's words or files. */
 function replyKindOf(
   item: Pick<InboxItem, "response">,
   draft: InboxDraft,
@@ -109,7 +132,9 @@ function replyKindOf(
   const response = item.response;
   if (response.type === INBOX_RESPONSE.CHOICE && draft.choices.length > 0) return INBOX_REPLY.CHOSE;
   if (response.type === INBOX_RESPONSE.FORM) return INBOX_REPLY.SUBMITTED;
-  return draft.note.trim() === "" ? undefined : INBOX_REPLY.ANSWERED;
+  return draft.note.trim() === "" && draft.attachments.length === 0
+    ? undefined
+    : INBOX_REPLY.ANSWERED;
 }
 
 /** A form's values as sent, in the form's own order: words trimmed, a field left blank left out, and a switch left alone sent as no. */
@@ -129,7 +154,9 @@ function sentValues(form: InboxForm, draft: InboxDraft): readonly InboxFormValue
  * takes: a choice is answered by its options, with the note beside them,
  * or by the developer's own words; an approval, a task, and an item asking
  * nothing by their presses, with the note beside them; words by words; a
- * form by its fields, with the note beside them.
+ * form by its fields, with the note beside them. The files attached go
+ * beside any of these, and stand for the developer's own words where they
+ * wrote none, as a message's do; they travel apart from the answer.
  */
 export function inboxReply(
   item: Pick<InboxItem, "response">,
@@ -151,7 +178,7 @@ export function inboxReply(
       : undefined),
     ...(note === "" ? undefined : { note }),
   };
-  return inboxReplyRefusal(item, answer) === undefined ? answer : undefined;
+  return inboxReplyRefusal(item, answer, draft.attachments) === undefined ? answer : undefined;
 }
 
 /** The presses each response answered by a press offers: the one that holds back where there is one, then the one that goes ahead. */
@@ -242,20 +269,25 @@ const REPLY_WORDS = {
 /**
  * How a settled item came to be settled: answered, by the item's
  * `answeredBy`, whom its line names before what they did in a few words
- * (`did`: "chose Postgres"), or taken back by its agent, said whole; and
- * what either wrote.
+ * (`did`: "chose Postgres"), with a form's values one per line and the note
+ * they wrote, which is Markdown as their box wrote it, its mentions links;
+ * or taken back by its agent, said whole, and why.
  */
 export type Settlement =
-  | { readonly by: typeof SETTLED_BY.DEVELOPER; readonly did: string; readonly words?: string }
+  | {
+      readonly by: typeof SETTLED_BY.DEVELOPER;
+      readonly did: string;
+      readonly values?: string;
+      readonly note?: string;
+    }
   | { readonly by: typeof SETTLED_BY.AGENT; readonly lead: string; readonly words?: string };
 
-/** What the developer wrote: a form's values one per line, then the note. */
-function answerWords(answer: InboxReply): string | undefined {
+/** A form's values as the developer filled them, one per line; nothing where they filled none. */
+function valueLines(answer: InboxReply): string | undefined {
   const values = (answer.values ?? []).map(
     ({ label, value }) => `${label}: ${fieldValueWords(value)}`,
   );
-  const lines = [...values, ...(answer.note === undefined ? [] : [answer.note])];
-  return lines.length === 0 ? undefined : lines.join("\n");
+  return values.length === 0 ? undefined : values.join("\n");
 }
 
 /** How an item was settled, or nothing while it waits: what its answerer did and wrote, or the agent taking it back and why. */
@@ -275,8 +307,13 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
     answer.reply === INBOX_REPLY.CHOSE
       ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
       : REPLY_WORDS[answer.reply];
-  const words = answerWords(answer);
-  return { by: SETTLED_BY.DEVELOPER, did, ...(words === undefined ? undefined : { words }) };
+  const values = valueLines(answer);
+  return {
+    by: SETTLED_BY.DEVELOPER,
+    did,
+    ...(values === undefined ? undefined : { values }),
+    ...(answer.note === undefined ? undefined : { note: answer.note }),
+  };
 }
 
 /**
@@ -294,7 +331,7 @@ export const NEEDS_YOU = {
   ANSWERED: "You've answered everything",
 } as const;
 
-/** What an item is listed under: the plan its agent works on, or, for an agent with no plan, the automation that started it. */
+/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */
 export const INBOX_HOLDER = {
   TASK: "plan",
   AUTOMATION: "automation",
@@ -307,8 +344,8 @@ type InboxAgentLine = Pick<
 >;
 
 /**
- * The plan holding an item, or the automation holding an item of an agent
- * with no plan, named as its group's header names it, and its agents as
+ * The task holding an item, or the automation holding an item of an agent
+ * with no task, named as its group's header names it, and its agents as
  * main's read names them, by id; none for the agents no automation the
  * reader may read started.
  */
@@ -334,13 +371,13 @@ export type PlanlessAgent = Pick<
   | "workspaceId"
 >;
 
-/** The key a holder's group is folded and drawn by: the plan's id, the automation's, or one key for the agents no automation names. */
+/** The key a holder's group is folded and drawn by: the task's id, the automation's, or one key for the agents no automation names. */
 export function holderKey(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.id;
   return holder.automationId ?? NO_AUTOMATION_KEY;
 }
 
-/** A plan as the holder of its items. */
+/** A task as the holder of its items. */
 export function taskHolder(task: TaskSummary): InboxHolder {
   return { kind: INBOX_HOLDER.TASK, task };
 }
@@ -356,7 +393,7 @@ export function itemWorkspaceId(holder: InboxHolder, agentId: string): string | 
     : holder.agents.get(agentId)?.workspaceId;
 }
 
-/** A holder's name as its header and a row's context say it: the plan's, or the automation's. */
+/** A holder's name as its header and a row's context say it: the task's, or the automation's. */
 export function holderName(holder: InboxHolder): string {
   return holder.kind === INBOX_HOLDER.TASK ? holder.task.name : holder.name;
 }
@@ -368,10 +405,10 @@ const NO_AUTOMATION_KEY = "no-automation";
 const NO_AUTOMATION_NAME = "Other agents";
 
 /**
- * Whether a waiting item of an agent with no plan is listed in the workspace
+ * Whether a waiting item of an agent with no task is listed in the workspace
  * given: one of that workspace's agents', or one whose workspace the service
  * does not name. Note that with no workspace listed every agent's items
- * stand, as every plan's do.
+ * stand, as every task's do.
  */
 export function listedIn(
   entry: Pick<AppInboxTasklessItem, "workspaceId">,
@@ -385,7 +422,7 @@ export function listedIn(
 }
 
 /**
- * The groups the items of agents with no plan stand in: one per automation
+ * The groups the items of agents with no task stand in: one per automation
  * that started them, by its name, and one for the agents no automation the
  * reader may read names, each holding every item its agents' reads hold,
  * settled ones too; only the listed workspace's agents, where the service
@@ -423,7 +460,7 @@ export function tasklessGroups(
   }));
 }
 
-/** How the window's Inbox lists its items: under each plan, or in one list. */
+/** How the window's Inbox lists its items: under each task, or in one list. */
 export const INBOX_GROUPING = {
   TASK: "plan",
   NEWEST: "newest",
@@ -432,7 +469,7 @@ export const INBOX_GROUPING = {
 
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
 
-/** One holder, a plan or an automation, and every item it holds, as the list is handed them. */
+/** One holder, a task or an automation, and every item it holds, as the list is handed them. */
 export interface InboxGroup {
   readonly holder: InboxHolder;
   readonly items: readonly InboxItem[];
@@ -456,7 +493,7 @@ export interface InboxPersonGroup {
 }
 
 /**
- * The list as it is drawn: a group for each plan holding an item it shows,
+ * The list as it is drawn: a group for each task holding an item it shows,
  * one for each person whose agents ask one, or every item in one run; and
  * the reader it was drawn for, whose items alone need them.
  */
@@ -519,9 +556,9 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
 }
 
 /**
- * The list from every plan's items: each item the latest changed first,
+ * The list from every task's items: each item the latest changed first,
  * under its plan, under the person whose agent asks it, or in one run, the
- * plans in the order their latest item changed and the people as
+ * tasks in the order their latest item changed and the people as
  * `personGroups` orders them. Needs you lists only what needs the reader,
  * and the item chosen where one is given. Note that the rows a list draws are given none,
  * so a settled item leaves a list filtered to exclude it, while the steps
@@ -557,7 +594,7 @@ export function inboxList(
   return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
 }
 
-/** Whether any plan's item needs the reader, listed or filtered out. */
+/** Whether any task's item needs the reader, listed or filtered out. */
 export function anyNeedsYou(tasks: readonly InboxGroup[], readerId: string | undefined): boolean {
   return tasks.some(({ items }) => items.some((item) => needsReader(item, readerId)));
 }
@@ -671,8 +708,8 @@ export function codeWindow(block: InboxCodeBlock): TaskFileRequest {
 
 /**
  * Why a code block's lines are not read at all, or nothing where they are
- * read: the plan reads its own repository alone, which the agent's
- * repository was when it started but may not be once the plan names
+ * read: the task reads its own repository alone, which the agent's
+ * repository was when it started but may not be once the task names
  * another, and lines that run backwards or past the bound are no window
  * the File tab's read takes. Note that GitHub spells a repository's name in
  * any case.

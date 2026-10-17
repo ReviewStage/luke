@@ -21,6 +21,12 @@
     },
     "author": {
       "type": "string"
+    },
+    "authorAvatarUrl": {
+      "type": "string"
+    },
+    "authorBot": {
+      "type": "boolean"
     }
   },
   "required": [

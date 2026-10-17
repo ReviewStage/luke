@@ -20,6 +20,8 @@ export const EXPERIMENT = {
   VIDEO_CALLS: "video-calls",
   /** A workspace's issues, each a title, a status, a priority, and a description, listed on their own page. */
   ISSUES: "issues",
+  /** Sections of your own in the sidebar, each a title and an icon, that tasks are dragged into. */
+  SECTIONS: "sections",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -50,6 +52,13 @@ export const EXPERIMENTS = [
       "Open a web page in a tab beside your plan, your own localhost included. Pages keep " +
       "their own cookies, apart from Luke's.",
     owner: "Dean",
+    since: "2026-10-16",
+  },
+  {
+    key: EXPERIMENT.SECTIONS,
+    name: "Sections",
+    detail: "Keep tasks in sections of your own in the sidebar, each with a title and an icon.",
+    owner: "Charles",
     since: "2026-10-16",
   },
   {

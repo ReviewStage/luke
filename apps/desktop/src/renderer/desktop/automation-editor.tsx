@@ -62,12 +62,23 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import {
+  AnchoredPopover,
+  BUTTON_VARIANT,
+  ConfirmDialog,
+  EllipsisIcon,
+  POPOVER_ALIGN,
+  ProviderMark,
+  SidePanelIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
@@ -76,7 +87,6 @@ import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
-import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
 import { SettingsGroup } from "../settings/settings-group";
@@ -90,9 +100,7 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
@@ -103,7 +111,7 @@ import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choic
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
  *
- * It stands where the list stood, in the plan's place, and the first crumb
+ * It stands where the list stood, in the task's place, and the first crumb
  * goes back to the list. Its form is drawn as a Settings page is, from
  * Settings' own rows: a group per part, each a card of rows naming a
  * setting and why on the left and its control on the right, every pick a
@@ -557,7 +565,7 @@ function AutomationActions({
   automation: AutomationSummary;
   onDelete: () => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   const remove: MenuAction = {
     label: "Delete",
@@ -641,7 +649,7 @@ function EditorToolbar({
       <div className="automation-toolbar">
         <div className="desktop-toolbar-heading">
           <nav className="automation-crumbs" aria-label="Path">
-            <FoldingButton label="Automations" glyph={<ZapIcon />} onClick={onBack} />
+            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
             <ChevronRightIcon aria-hidden="true" />
             <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
           </nav>
@@ -655,16 +663,11 @@ function EditorToolbar({
           {automation === undefined ? null : (
             <FoldingButton
               label="Run now"
-              glyph={<PlayIcon />}
+              icon={<PlayIcon />}
+              variant={BUTTON_VARIANT.OUTLINE}
               busy={running ? "Running" : undefined}
-              className="toolbar-button bordered-button"
-              disabled={running}
               onClick={onRunNow}
-            >
-              <BusyLabel busy={running} label="Running">
-                Run now
-              </BusyLabel>
-            </FoldingButton>
+            />
           )}
           <button
             type="button"

@@ -26,7 +26,7 @@ import { NO_LOOKS } from "./use-task-looks";
  * Show terminal (⌘J) and New terminal from each place a developer can be,
  * as the new-terminal rules have them: which agent's Terminal tab the side
  * panel is asked to show, whether a new shell is asked of its sandbox, and
- * the picker where the rules leave the agent to the developer. The plan is
+ * the picker where the rules leave the agent to the developer. The task is
  * drawn by the real window over a staged control; main answers how each
  * sandbox stands.
  */
@@ -50,7 +50,7 @@ const SUMMARY: TaskSummary = {
   repository: TASK.repository,
 };
 
-/** An agent on the plan, standing where `status` says. */
+/** An agent on the task, standing where `status` says. */
 function agent(
   id: string,
   title: string,
@@ -116,9 +116,9 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The plan drawn with the agents given, its column on `main` and the panel on `side`, answering what the panel was asked to show. */
+/** The task drawn with the agents given, its column on `main` and the panel on `side`, answering what the panel was asked to show. */
 function mount(input: {
-  /** The plan's agents, or nothing while their read is out. */
+  /** The task's agents, or nothing while their read is out. */
   agents: readonly CodingAgentSummary[] | undefined;
   /** Why no agent can start now, where none can. */
   cannotStart?: string;
@@ -302,11 +302,11 @@ function menuItem(label: string) {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".task-menu-label")?.textContent === label,
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
   );
   assert.ok(item, `the menu offers ${label}`);
   return {
-    hint: item.querySelector(".menu-item-hint")?.textContent,
+    hint: item.querySelector(".luke-menu-item-hint")?.textContent,
     press: async () => {
       await act(async () => item.click());
       await settle();
@@ -314,7 +314,7 @@ function menuItem(label: string) {
   };
 }
 
-/** Opens the right-click menu of the plan's column's tab named `name`. */
+/** Opens the right-click menu of the task's column's tab named `name`. */
 function rightClickTab(name: string): void {
   const tab = [
     ...document.querySelectorAll<HTMLElement>('.desktop-task-main .desktop-toolbar [role="tab"]'),

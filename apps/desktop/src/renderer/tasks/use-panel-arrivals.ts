@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-side-panel";
 
 /**
- * use-panel-arrivals.ts -- shows the side panel's tab for each drawing Luke puts on the open plan's board, and each snippet and page he shows on its call.
+ * use-panel-arrivals.ts -- shows the side panel's tab for each drawing Luke puts on the open task's board, and each snippet and page he shows on its call.
  *
  * Luke tells the developer what he drew or showed is on screen as he does
  * it, so each arrival shows its tab: the panel opens where it was hidden,
@@ -13,21 +13,21 @@ import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-
  * developer closed it (`use-side-panel.ts`). Full screen is left as it is,
  * and nothing here moves focus.
  *
- * An arrival is live, while the developer is on the plan: a drawing of
+ * An arrival is live, while the developer is on the task: a drawing of
  * Luke's numbered past the one the visit first read, or a snippet the call
  * did not start with. The developer's own strokes number no drawing, so
- * they arrive nothing. A plan opened with a drawing or code already on it
+ * they arrive nothing. A task opened with a drawing or code already on it
  * has nothing arriving; what it holds counts as seen. The code last shown
- * stays on the plan past its call, so code is read only while a call
- * stands, and what a call starts with is what the plan already held. Two
+ * stays on the task past its call, so code is read only while a call
+ * stands, and what a call starts with is what the task already held. Two
  * arriving on one read show the code, Luke's latest pointing, and the
  * board's tab reads in semibold until it is shown. A page arrives on a call
  * the same way, as a page the call did not start with or a newer version of
  * one it did, and its tab is shown over any other that arrived with it. A fixture run draws
- * staged plans and has nothing arriving.
+ * staged tasks and has nothing arriving.
  */
 
-/** What the open plan held when this visit first read it, and has read since. */
+/** What the open task held when this visit first read it, and has read since. */
 interface Visit {
   taskId: string;
   /** The number of Luke's latest drawing read, 0 before any, or none before the board is read. */
@@ -38,7 +38,7 @@ interface Visit {
   pages: Map<string, number> | undefined;
 }
 
-/** The tabs with an arrival not yet shown, and the plan they arrived on. */
+/** The tabs with an arrival not yet shown, and the task they arrived on. */
 interface Unread {
   taskId: string | undefined;
   tabs: readonly SidePanelTab[];
@@ -71,21 +71,21 @@ function readNewPage(read: Map<string, number>, pages: readonly PageLine[]): str
   return fresh;
 }
 
-/** The unread tabs with one more, the plan's alone: another plan's news is not this one's. */
+/** The unread tabs with one more, the task's alone: another task's news is not this one's. */
 function withUnread(was: Unread, taskId: string, tab: SidePanelTab): Unread {
   if (was.taskId !== taskId) return { taskId, tabs: [tab] };
   return was.tabs.includes(tab) ? was : { taskId, tabs: [...was.tabs, tab] };
 }
 
 /**
- * Shows the tab of each drawing and snippet Luke puts on the open plan, and
+ * Shows the tab of each drawing and snippet Luke puts on the open task, and
  * answers the tabs whose arrival came while another arrival's tab was shown.
  */
 export function usePanelArrivals(input: {
-  /** The open plan, or none where nothing may arrive: no plan open, or a fixture run's staged one. */
+  /** The open task, or none where nothing may arrive: no task open, or a fixture run's staged one. */
   taskId: string | undefined;
   board: Board | undefined;
-  /** The code shown on the plan, or nothing while no call about it stands, since only a call shows code. */
+  /** The code shown on the task, or nothing while no call about it stands, since only a call shows code. */
   code: readonly TaskCodeShowing[] | undefined;
   /** The plan's pages, or nothing while no call about it stands, since a page shown on a call is what arrives. */
   pages: readonly PageLine[] | undefined;
@@ -95,7 +95,7 @@ export function usePanelArrivals(input: {
   const visit = useRef<Visit | undefined>(undefined);
   const [unread, setUnread] = useState<Unread>({ taskId: undefined, tabs: [] });
   // Note that a board not yet read is unknown rather than empty, because the
-  // read landing is the plan opening, not anything Luke drew.
+  // read landing is the task opening, not anything Luke drew.
   const drawing = input.board === undefined ? undefined : lukeDrawing(input.board);
 
   // A tab shown is a tab seen. Note that this runs before the arrivals,
@@ -111,7 +111,7 @@ export function usePanelArrivals(input: {
   }, [shownTab]);
 
   useEffect(() => {
-    // Note that a plan left ends its visit, because the plan opened again
+    // Note that a task left ends its visit, because the task opened again
     // is read again, and what it holds by then was drawn while it was away.
     if (taskId === undefined) {
       visit.current = undefined;
@@ -121,12 +121,12 @@ export function usePanelArrivals(input: {
       visit.current = { taskId, drawing: undefined, code: undefined, pages: undefined };
     const seen = visit.current;
     const arrived: SidePanelTab[] = [];
-    // The first read of the board is what the plan already held.
+    // The first read of the board is what the task already held.
     if (drawing !== undefined) {
       if (seen.drawing !== undefined && drawing > seen.drawing) arrived.push(SIDE_PANEL_TAB.BOARD);
       seen.drawing = Math.max(seen.drawing ?? 0, drawing);
     }
-    // A call's first read is what the plan already held, and a call ended
+    // A call's first read is what the task already held, and a call ended
     // reads its successor's afresh.
     if (code === undefined) seen.code = undefined;
     else if (seen.code === undefined) seen.code = new Set(code.map((showing) => showing.callId));

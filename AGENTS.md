@@ -69,6 +69,12 @@ the check names. A component is placed by review under the same rule.
   trace, a counted event, a fixture, app state, the service, or the voice
   window; the still is left out of the screen recording, and the title and
   address the tab draws are masked there as every word is.
+  And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
+  data collection (`packages/service/src/observability/sentry.ts`, the eve
+  roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`), so what a
+  request, a log line, a local variable, or an agent's prompt, reply, or tool
+  result carries may reach Sentry; a credential among it is replaced only
+  where Sentry's denylist catches it by name, and `PRIVACY.md` says so.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

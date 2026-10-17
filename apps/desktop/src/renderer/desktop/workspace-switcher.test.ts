@@ -45,7 +45,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The switcher over the plans given, in sight or folded away. */
+/** The switcher over the tasks given, in sight or folded away. */
 function mount(tasks: Partial<TasksControl>) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -88,7 +88,7 @@ function open(switcher: HTMLButtonElement | null): void {
 
 /** An item's label, the words beside its glyph. */
 function labelOf(item: HTMLElement): string | null {
-  return item.querySelector(".task-menu-label")?.textContent ?? null;
+  return item.querySelector(".luke-menu-item-label")?.textContent ?? null;
 }
 
 /** Chooses the open menu's item by its label. */
@@ -248,7 +248,7 @@ test("Enter while an input method composes creates nothing, and a press dragged 
     );
   });
   const backdrop =
-    document.querySelector<HTMLElement>(".confirm-dialog-backdrop") ?? assert.fail("no backdrop");
+    document.querySelector('[aria-modal="true"]')?.parentElement ?? assert.fail("no backdrop");
   act(() => {
     field.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -303,7 +303,7 @@ test("each workspace in the menu says who shares it under its name, to the eye a
     .slice(0, 4)
     .map((item) => [
       labelOf(item),
-      item.querySelector(".menu-item-detail")?.textContent,
+      item.querySelector(".luke-menu-item-detail")?.textContent,
       item.getAttribute("aria-label"),
     ]);
 

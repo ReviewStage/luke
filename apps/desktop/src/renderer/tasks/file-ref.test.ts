@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 /**
- * The plan open, its side panel on the Code tab holding the file's code,
+ * The task open, its side panel on the Code tab holding the file's code,
  * and the file's own tab open beside it, read at `commit` where it names
  * one; each file opened recorded.
  */
@@ -106,11 +106,11 @@ function cardOn(element: Element | null | undefined): (string | null | undefined
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-file-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-note")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-note")?.textContent,
   ];
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));

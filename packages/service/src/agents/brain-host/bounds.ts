@@ -146,7 +146,7 @@ export const BRAIN_HOST_TURN_KIND = {
     trigger: BRAIN_TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
   },
-  // The task the planning model handed the subagent is the child turn's received line.
+  // The task the brain handed the subagent is the child turn's received line.
   [RELAY_TURN.CHILD]: {
     origin: BRAIN_TURN_ORIGIN.CHILD,
     trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,

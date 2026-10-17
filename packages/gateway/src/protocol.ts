@@ -13,42 +13,44 @@ import { Effect, Schema } from "effect";
 /** Every method the host answers, by the name a client calls it. */
 export const GATEWAY_METHOD = {
   SHUTDOWN: "gateway.shutdown",
-  /** The panel's Plans tab shows: the plan list read now, and the active plan's document with it. */
+  /** The panel's Tasks tab shows: the task list read now, and the active task's document with it. */
   TASKS_REFRESH: "tasks.refresh",
-  /** One plan made the active one and its saved document read, replacing whichever was active. */
+  /** One task made the active one and its saved document read, replacing whichever was active. */
   TASKS_OPEN: "tasks.open",
-  /** The developer left the open plan: its call ends and no plan is active. */
+  /** The developer left the open task: its call ends and no task is active. */
   TASKS_CLOSE: "tasks.close",
-  /** A named plan started on the service, on the repository it names where it names one, and made the active one. */
+  /** A named task started on the service, on the repository it names where it names one, and made the active one. */
   TASKS_START: "tasks.start",
-  /** One plan deleted on the service; deleting the open plan ends its call and leaves no plan active. */
+  /** One task deleted on the service; deleting the open task ends its call and leaves no task active. */
   TASKS_DELETE: "tasks.delete",
-  /** One plan renamed on the service; the list and the open document take the name it answered without reading either again. */
+  /** One task renamed on the service; the list and the open document take the name it answered without reading either again. */
   TASKS_RENAME: "tasks.rename",
-  /** One plan pinned or unpinned on the service; the list and the open document take the plan it answered without reading either again. */
+  /** One task pinned or unpinned on the service; the list and the open document take the task it answered without reading either again. */
   TASKS_PIN: "tasks.pin",
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
-  /** One plan archived or brought back on the service, taken in place as a pin is; the open plan stays open either way. */
+  /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
+  TASKS_WRITE_SECTION: "tasks.writeSection",
+  /** One task archived or brought back on the service, taken in place as a pin is; the open task stays open either way. */
   TASKS_ARCHIVE: "tasks.archive",
   /** The repositories the account reaches through the Luke GitHub App, read from the service now. */
   TASKS_REPOSITORIES: "tasks.repositories",
-  /** One plan given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
+  /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
-  /** One plan moved to another of the account's workspaces on the service; the list and the open document take the plan it answered without reading either again. */
+  /** One task moved to another of the account's workspaces on the service; the list and the open document take the task it answered without reading either again. */
   TASKS_MOVE: "tasks.move",
-  /** The developer's edit of a plan's document saved on the service; the open document takes the plan it answered, and a conflict leaves it unchanged. */
+  /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
   TASKS_EDIT: "tasks.edit",
-  /** The page of the open plan's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
+  /** The page of the open task's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
   TASKS_WORK_EARLIER: "tasks.workEarlier",
-  /** The page of the open plan's conversation before the oldest turn held, read from the service where an older one stands; the view takes it before the rest, and the held read's cursor stays. */
+  /** The page of the open task's conversation before the oldest turn held, read from the service where an older one stands; the view takes it before the rest, and the held read's cursor stays. */
   TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a plan's conversation as an agent's transcript is read, or a planning worker's under the call that started it, held open by the service while a turn or the worker runs; answered to the caller, never held in the view. */
+  /** One page of a task's conversation as an agent's transcript is read, or a brain worker's under the call that started it, held open by the service while a turn or the worker runs; answered to the caller, never held in the view. */
   TASKS_MESSAGES: "tasks.messages",
-  /** A window of a file of one plan's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
+  /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
   TASKS_FILE: "tasks.file",
-  /** One folder of one plan's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
+  /** One folder of one task's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_TREE: "tasks.tree",
-  /** The skills a developer may choose of one plan's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
+  /** The skills a developer may choose of one task's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_SKILLS: "planning.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_PULL_REQUEST: "planning.pullRequest",
@@ -60,13 +62,15 @@ export const GATEWAY_METHOD = {
   TASKS_REVISION: "tasks.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
   TASKS_PAGE: "planning.page",
+  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the caller, never held in the view. */
+  TASKS_PAGES: "planning.pages",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   TASKS_PICTURE: "planning.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
   TASKS_PICTURE_KEEP: "planning.pictureKeep",
-  /** One revision of one plan put back as its content on the service; the view takes the plan as the service answered it. */
+  /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
-  /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
+  /** The developer's scene of the open task's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
@@ -96,7 +100,7 @@ export const GATEWAY_METHOD = {
   WORKSPACES_MEMBER_ROLE: "workspaces.memberRole",
   /** A workspace handed by its owner to one of its admins on the service, the owner becoming an admin, answered with the members as they then stand; the view's workspaces are read again, the account's role in it among them. */
   WORKSPACES_TRANSFER: "workspaces.transfer",
-  /** The account left one workspace on the service; the view's workspaces and plans are read again. */
+  /** The account left one workspace on the service; the view's workspaces and tasks are read again. */
   WORKSPACES_LEAVE: "workspaces.leave",
   /** One workspace's pending invitations, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_INVITATIONS: "workspaces.invitations",
@@ -114,11 +118,11 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
   /** The account's default model and effort for a coding agent, written to the service; the default as kept, or why it is unchanged. */
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
-  /** One plan's coding agents with their status, read from the service now. */
+  /** One task's coding agents with their status, read from the service now. */
   CODING_AGENTS_LIST: "codingAgents.list",
   /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
   CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
-  /** A coding agent started on one plan under the panel's own key; the agent, or why none started. */
+  /** A coding agent started on one task under the panel's own key; the agent, or why none started. */
   CODING_AGENTS_START: "codingAgents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
@@ -154,17 +158,23 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
-  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them now. */
-  CODING_AGENTS_OVERVIEW: "codingAgents.overview",
+  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
+  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  /** The checks on one agent's pull request's head, as its overview draws them. */
+  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
+  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
   /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
+  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key removed on the service; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
-  /** The Markdown the account's new plans start from, read from the service now: its own, or the default while it keeps none. */
+  /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
   PLAN_TEMPLATE_WRITE: "planTemplate.write",
@@ -176,10 +186,10 @@ export const GATEWAY_METHOD = {
   PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
-  /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
+  /** One task's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
-  /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
+  /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
@@ -193,7 +203,7 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
-  /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
+  /** What waits on the developer across the account's tasks past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
@@ -363,8 +373,8 @@ function keptText(max: number): Schema.Codec<string, string> {
 const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /**
- * `voice.createLiveSession`: the peer's SDP offer, and the plan the call is
- * about. The host creates a call only for the plan the panel has open.
+ * `voice.createLiveSession`: the peer's SDP offer, and the task the call is
+ * about. The host creates a call only for the task the panel has open.
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
@@ -519,7 +529,7 @@ export const GATEWAY_EVENT = {
   ACCOUNT_CHANGED: "account.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
-  /** The panel's plans, active plan, and document, whole, whenever a read moved them. */
+  /** The panel's tasks, active task, and document, whole, whenever a read moved them. */
   TASKS_CHANGED: "tasks.changed",
   /** What an attached shell printed, named by its connection, for the one panel that connection's port reaches. */
   TERMINAL_OUTPUT: "terminal.output",

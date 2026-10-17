@@ -11,7 +11,7 @@ import {
 } from "./fold";
 
 /**
- * plan.tsx -- AI Elements' Plan: a plan as a card across the column, its title on the header and the plan itself under it once opened.
+ * task.tsx -- AI Elements' Plan: a plan as a card across the column, its title on the header and the plan itself under it once opened.
  *
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
  * to Luke's tokens and folded on `fold.tsx` rather than the registry's

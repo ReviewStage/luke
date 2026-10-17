@@ -1,13 +1,16 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
-  codingAgentOverviewAnswerSchema,
+  codingAgentOverviewChecksAnswerSchema,
+  codingAgentOverviewConversationAnswerSchema,
+  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
@@ -18,12 +21,7 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
-import {
-  inboxAnsweredSchema,
-  inboxAnswerRequestSchema,
-  inboxAnswerSchema,
-  inboxImageTypeSchema,
-} from "./inbox-wire.js";
+import { inboxAnsweredSchema, inboxAnswerRequestSchema, inboxAnswerSchema } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -36,20 +34,24 @@ import {
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
+import {
+  pullRequestActionRequestSchema,
+  pullRequestWriteAnswerSchema,
+} from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 import { planRevisionSeqSchema } from "./task-wire.js";
 
 /**
- * coding-agent-view.ts -- a plan's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
+ * coding-agent-view.ts -- a task's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
  *
  * The host asks the service for these on the window's behalf and answers
  * the window one of the shapes here, so a window draws an answer or draws
  * why, and nothing the service said beyond that reaches it. The failures
- * are the few a window can act on: the service never answered, the plan or
- * the agent is gone, the plan names no repository yet, the App does not
+ * are the few a window can act on: the service never answered, the task or
+ * the agent is gone, the task names no repository yet, the App does not
  * reach it, the choice named is
  * not one the service offers now, or — for a message, and for an answer to
- * the plan's inbox, which may reach the agent as one — the words run past
+ * the task's inbox, which may reach the agent as one — the words run past
  * the bound, the agent's session is still coming up, or it has ended for
  * good.
  *
@@ -71,11 +73,11 @@ import { planRevisionSeqSchema } from "./task-wire.js";
 export const CODING_AGENT_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
   UNANSWERED: "unanswered",
-  /** The plan or the agent is not one the account holds: deleted, or never the caller's. */
+  /** The task or the agent is not one the account holds: deleted, or never the caller's. */
   NOT_FOUND: "not-found",
-  /** The plan names no repository, so there is nothing for an agent to check out. */
+  /** The task names no repository, so there is nothing for an agent to check out. */
   NO_REPOSITORY: "no-repository",
-  /** The plan's workspace's GitHub installation does not reach the plan's repository; why travels beside it where the service said. */
+  /** The task's workspace's GitHub installation does not reach the task's repository; why travels beside it where the service said. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** GitHub did not answer whether the workspace reaches the repository; the same call a moment later may be taken. */
   GITHUB_UNANSWERED: "github-unanswered",
@@ -87,7 +89,7 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_NOT_READY: "agent-not-ready",
   /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
-  /** The plan is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
+  /** The task is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
   TASK_ARCHIVED: "plan-archived",
 } as const;
 
@@ -179,7 +181,7 @@ export type PlanTemplateRevisionAnswerView = typeof planTemplateRevisionAnswerVi
 /** Writing the default, as the window asks it: the choice to keep. */
 export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;
 
-/** One plan's agents, as the window asks them: the plan, and whether the archived agents are listed among the rest. */
+/** One task's agents, as the window asks them: the task, and whether the archived agents are listed among the rest. */
 export const codingAgentListParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   includeArchived: EffectSchema.optionalKey(EffectSchema.Boolean),
@@ -203,7 +205,7 @@ export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentWorkspaceListParams = typeof codingAgentWorkspaceListParamsSchema.Type;
 
-/** One plan's agents, as the window hears them: each with its status, in the order started, or why there is no list. */
+/** One task's agents, as the window hears them: each with its status, in the order started, or why there is no list. */
 export const codingAgentListAnswerViewSchema = EffectSchema.Union([
   EffectSchema.Struct({ agents: EffectSchema.Array(codingAgentSummarySchema) }),
   failed,
@@ -211,7 +213,7 @@ export const codingAgentListAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentListAnswer = typeof codingAgentListAnswerViewSchema.Type;
 
-/** Starting an agent, as the window asks it: the plan, and the Start request the service takes. */
+/** Starting an agent, as the window asks it: the task, and the Start request the service takes. */
 export const codingAgentStartParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   ...codingAgentStartRequestFields,
@@ -299,7 +301,7 @@ export const codingAgentStopParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentStopParams = typeof codingAgentStopParamsSchema.Type;
 
-/** One agent, as the window asks to read it whole as its own page, on a plan or with none. */
+/** One agent, as the window asks to read it whole as its own page, on a task or with none. */
 export const codingAgentPageParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
 });
@@ -337,13 +339,50 @@ export const codingAgentChangesAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentChangesAnswerView = typeof codingAgentChangesAnswerViewSchema.Type;
 
-/** One agent's pull request as its Pull request tab draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
-export const codingAgentOverviewAnswerViewSchema = EffectSchema.Union([
-  codingAgentOverviewAnswerSchema,
+/** One agent's pull request itself as its overview draws it, as the window hears it: the pull request, why there is none yet, or why there is no answer. */
+export const codingAgentOverviewPullRequestAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewPullRequestAnswerSchema,
   failed,
 ]);
 
-export type CodingAgentOverviewAnswerView = typeof codingAgentOverviewAnswerViewSchema.Type;
+export type CodingAgentOverviewPullRequestAnswerView =
+  typeof codingAgentOverviewPullRequestAnswerViewSchema.Type;
+
+/** The checks on one agent's pull request's head, as the window hears them: the checks, why there are none yet, or why there is no answer. */
+export const codingAgentOverviewChecksAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewChecksAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOverviewChecksAnswerView =
+  typeof codingAgentOverviewChecksAnswerViewSchema.Type;
+
+/** One agent's pull request's conversation, as the window hears it: the conversation, why there is none yet, or why there is no answer. */
+export const codingAgentOverviewConversationAnswerViewSchema = EffectSchema.Union([
+  codingAgentOverviewConversationAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentOverviewConversationAnswerView =
+  typeof codingAgentOverviewConversationAnswerViewSchema.Type;
+
+/** One change to an agent's pull request, as the window asks it made: the agent, and the change (`pull-request-write-wire.ts`). */
+export const codingAgentPullRequestActionParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  request: pullRequestActionRequestSchema,
+});
+
+export type CodingAgentPullRequestActionParams =
+  typeof codingAgentPullRequestActionParamsSchema.Type;
+
+/** How GitHub took a change to an agent's pull request, as the window hears it: made, the member to sign in with GitHub again, GitHub's refusal in its words, or why there is no answer. */
+export const codingAgentPullRequestWriteAnswerViewSchema = EffectSchema.Union([
+  pullRequestWriteAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentPullRequestWriteAnswerView =
+  typeof codingAgentPullRequestWriteAnswerViewSchema.Type;
 
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;
@@ -358,7 +397,7 @@ export const dictationTranscribeAnswerViewSchema = EffectSchema.Union([
 
 export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerViewSchema.Type;
 
-/** One plan's inbox past a cursor, as the window asks it: the plan, and where the window stands. */
+/** One task's inbox past a cursor, as the window asks it: the task, and where the window stands. */
 export const codingAgentInboxParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   after: EffectSchema.NonEmptyString,
@@ -366,7 +405,7 @@ export const codingAgentInboxParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentInboxParams = typeof codingAgentInboxParamsSchema.Type;
 
-/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a plan's inbox is. */
+/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a task's inbox is. */
 export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
   after: EffectSchema.NonEmptyString,
@@ -374,7 +413,7 @@ export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
 
-/** The plan's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
+/** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
 
 export type CodingAgentInboxAnswerView = typeof codingAgentInboxAnswerViewSchema.Type;
@@ -424,14 +463,15 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
 
 /**
- * The image, as the window hears it: its bytes in base64 under the media
- * type the service sniffed and kept, which the window draws from a `data:`
- * URL of its own making, or why there is none. The host fetched it under
+ * The image, or the file an inbox answer carried, as the window hears it:
+ * its bytes in base64 under the media type the service sniffed and kept, or
+ * the type the file travelled as, which the window draws or opens from a
+ * `data:` URL of its own making, or why there is none. The host fetched it under
  * the account, so the window holds no bearer and no address.
  */
 export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: inboxImageTypeSchema,
+    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
     base64: EffectSchema.String,
   }),
   failed,

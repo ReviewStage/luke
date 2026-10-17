@@ -6,6 +6,7 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -24,8 +25,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useAct } from "../act";
-import { EmptyState } from "../empty-state";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { Tooltip } from "../tooltip";
 import type { OpenBrowser } from "./use-side-panel";
 
@@ -460,21 +459,19 @@ export function BrowserPane({
             Type an address above. Your own dev server works too, like localhost:3000.
           </EmptyState>
         ) : refused ? (
-          <div className="side-panel-empty">
-            <ReadFailure
-              line="The page could not be opened."
-              onRetry={() => openAt(browserAddressOf(address) ?? address)}
-              place={READ_FAILURE_PLACE.CENTRED}
-            />
-          </div>
+          <ErrorState
+            onRetry={() => openAt(browserAddressOf(address) ?? address)}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+          >
+            The page could not be opened.
+          </ErrorState>
         ) : failed ? (
-          <div className="side-panel-empty">
-            <ReadFailure
-              line={`The page could not be shown: ${page?.failure ?? ""}`}
-              onRetry={() => stepTo(BROWSER_STEP.RELOAD)}
-              place={READ_FAILURE_PLACE.CENTRED}
-            />
-          </div>
+          <ErrorState
+            onRetry={() => stepTo(BROWSER_STEP.RELOAD)}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+          >
+            The page could not be shown: {page?.failure ?? ""}
+          </ErrorState>
         ) : still === undefined ? null : (
           <img
             className="browser-view-still"

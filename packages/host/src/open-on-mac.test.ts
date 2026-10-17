@@ -27,6 +27,9 @@ const GIT_ENVIRONMENT = {
   GIT_COMMITTER_EMAIL: "fixture@luke.test",
 };
 
+// Note that a test here runs real Git and bash, which a macOS runner has taken past vitest's 5s default.
+const GIT_DEADLINE = 30_000;
+
 function git(folder: string, args: readonly string[]): string {
   return execFileSync("git", args, { cwd: folder, env: GIT_ENVIRONMENT, encoding: "utf8" }).trim();
 }
@@ -72,96 +75,112 @@ function run(scratch: string, shell: string, script: string): string {
 const shellOpenedIn = (scratch: string) =>
   readFileSync(path.join(scratch, "shell-opened-in"), "utf8").trim();
 
-test("the first open clones into Luke's folder and opens a shell in the branch's worktree; a later one moves it forward and keeps what was made there", async (t) => {
-  const { scratch, origin, push, shell, state } = await fixture(t);
-  const first = push("first\n");
-  const clone = cloneFolder(state, "Octocat/Relay");
-  const worktree = worktreeFolder(state, "Octocat/Relay", "luke/fix-relay");
-  const script = () =>
-    openOnMacScript({
-      repository: "Octocat/Relay",
-      clone,
-      worktree,
-      branch: "luke/fix-relay",
-      remotes: { https: origin, ssh: origin },
-    });
+test(
+  "the first open clones into Luke's folder and opens a shell in the branch's worktree; a later one moves it forward and keeps what was made there",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const first = push("first\n");
+    const clone = cloneFolder(state, "Octocat/Relay");
+    const worktree = worktreeFolder(state, "Octocat/Relay", "luke/fix-relay");
+    const script = () =>
+      openOnMacScript({
+        repository: "Octocat/Relay",
+        clone,
+        worktree,
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      });
 
-  run(scratch, shell, script());
-  assert.equal(git(worktree, ["rev-parse", "HEAD"]), first);
-  assert.equal(shellOpenedIn(scratch), worktree);
-  writeFileSync(path.join(worktree, "installed.txt"), "");
-  const second = push("second\n");
-  run(scratch, shell, script());
+    run(scratch, shell, script());
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), first);
+    assert.equal(shellOpenedIn(scratch), worktree);
+    writeFileSync(path.join(worktree, "installed.txt"), "");
+    const second = push("second\n");
+    run(scratch, shell, script());
 
-  assert.equal(clone, path.join(state, "clones", "octocat", "relay"));
-  assert.equal(worktree, path.join(state, "worktrees", "octocat", "relay", "luke%2Ffix-relay"));
-  assert.equal(git(worktree, ["rev-parse", "HEAD"]), second);
-  assert.equal(readFileSync(path.join(worktree, "README.md"), "utf8"), "second\n");
-  assert.equal(readFileSync(path.join(worktree, "installed.txt"), "utf8"), "");
-  assert.throws(() => readFileSync(path.join(scratch, "open.sh")), "the script deletes itself");
-});
+    assert.equal(clone, path.join(state, "clones", "octocat", "relay"));
+    assert.equal(worktree, path.join(state, "worktrees", "octocat", "relay", "luke%2Ffix-relay"));
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), second);
+    assert.equal(readFileSync(path.join(worktree, "README.md"), "utf8"), "second\n");
+    assert.equal(readFileSync(path.join(worktree, "installed.txt"), "utf8"), "");
+    assert.throws(() => readFileSync(path.join(scratch, "open.sh")), "the script deletes itself");
+  },
+  GIT_DEADLINE,
+);
 
-test("a clone over HTTPS that fails is made over SSH", async (t) => {
-  const { scratch, origin, push, shell, state } = await fixture(t);
-  const head = push("first\n");
-  const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+test(
+  "a clone over HTTPS that fails is made over SSH",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const head = push("first\n");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
 
-  run(
-    scratch,
-    shell,
-    openOnMacScript({
-      repository: "acme/app",
-      clone: cloneFolder(state, "acme/app"),
-      worktree,
-      branch: "luke/fix-relay",
-      remotes: { https: path.join(scratch, "nowhere"), ssh: origin },
-    }),
-  );
+    run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone: cloneFolder(state, "acme/app"),
+        worktree,
+        branch: "luke/fix-relay",
+        remotes: { https: path.join(scratch, "nowhere"), ssh: origin },
+      }),
+    );
 
-  assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
-});
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
+  },
+  GIT_DEADLINE,
+);
 
-test("a branch that cannot be fetched is said, and the shell still opens, in Luke's clone", async (t) => {
-  const { scratch, origin, shell, state } = await fixture(t);
-  const clone = cloneFolder(state, "acme/app");
+test(
+  "a branch that cannot be fetched is said, and the shell still opens, in Luke's clone",
+  async (t) => {
+    const { scratch, origin, shell, state } = await fixture(t);
+    const clone = cloneFolder(state, "acme/app");
 
-  const printed = run(
-    scratch,
-    shell,
-    openOnMacScript({
-      repository: "acme/app",
-      clone,
-      worktree: worktreeFolder(state, "acme/app", "luke/gone"),
-      branch: "luke/gone",
-      remotes: { https: origin, ssh: origin },
-    }),
-  );
+    const printed = run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone,
+        worktree: worktreeFolder(state, "acme/app", "luke/gone"),
+        branch: "luke/gone",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
 
-  assert.match(printed, /Could not bring luke\/gone onto this Mac/u);
-  assert.equal(shellOpenedIn(scratch), clone);
-});
+    assert.match(printed, /Could not bring luke\/gone onto this Mac/u);
+    assert.equal(shellOpenedIn(scratch), clone);
+  },
+  GIT_DEADLINE,
+);
 
-test("a run command runs as written in the worktree, quotes and dollars and all, before the shell opens", async (t) => {
-  const { scratch, origin, push, shell, state } = await fixture(t);
-  push("first\n");
-  const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+test(
+  "a run command runs as written in the worktree, quotes and dollars and all, before the shell opens",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
 
-  run(
-    scratch,
-    shell,
-    openOnMacScript({
-      repository: "acme/app",
-      clone: cloneFolder(state, "acme/app"),
-      worktree,
-      branch: "luke/fix-relay",
-      command: `printf '%s' "it's \\$HOME" > said.txt`,
-      remotes: { https: origin, ssh: origin },
-    }),
-  );
+    run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone: cloneFolder(state, "acme/app"),
+        worktree,
+        branch: "luke/fix-relay",
+        command: `printf '%s' "it's \\$HOME" > said.txt`,
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
 
-  assert.equal(readFileSync(path.join(worktree, "said.txt"), "utf8"), "it's $HOME");
-  assert.equal(shellOpenedIn(scratch), worktree);
-});
+    assert.equal(readFileSync(path.join(worktree, "said.txt"), "utf8"), "it's $HOME");
+    assert.equal(shellOpenedIn(scratch), worktree);
+  },
+  GIT_DEADLINE,
+);
 
 test("two branches never share a worktree, and none reaches outside the repository's folder", () => {
   const folders = ["luke/a-b", "luke/a/b", "luke%2Fa-b"].map((branch) =>

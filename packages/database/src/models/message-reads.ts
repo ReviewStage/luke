@@ -2,6 +2,7 @@ import { toolPartType } from "@luke/features/brain";
 import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  type MessageRole,
   type SchemaPath,
   type SchemaRead,
   type SchemaRefusal,
@@ -309,6 +310,100 @@ export function listRecentMessages(
   return Effect.flatMap(
     findRecentMessages({ conversationId, userId, limit: pageLimit({ limit }) }),
     (selected) => readSelected([...selected].reverse(), tools),
+  );
+}
+
+const findMessagesBefore = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    before: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            lt(messages.seq, options.before),
+          ),
+        )
+        .orderBy(desc(messages.seq))
+        .limit(options.limit),
+    ),
+});
+
+/**
+ * The newest messages below a sequence, every role and finished or not, as
+ * each now stands, answered oldest first: a page of a transcript read back
+ * from its end, `before` the lowest sequence the reader holds so far. A page
+ * holds at most `limit` rows, and fewer only once nothing more stands below.
+ * A conversation that no longer stands, or another account's, answers none.
+ */
+export function listMessagesBefore(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  before: number,
+  limit?: number,
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+  return Effect.flatMap(
+    findMessagesBefore({
+      conversationId,
+      userId,
+      before,
+      limit: pageLimit({ ...(limit === undefined ? undefined : { limit }) }),
+    }),
+    (selected) => readSelected([...selected].reverse(), tools),
+  );
+}
+
+const findMessageSeq = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    messageId: Schema.String,
+    role: MessageRoleSchema,
+  }),
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .select({ seq: messages.seq })
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            eq(messages.id, options.messageId),
+            eq(messages.role, options.role),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Where a message of the conversation in the role named stands, by its id,
+ * without reading its parts: what a read back from the end starts below.
+ * Nothing for a message that is not there in that role, and nothing in a
+ * conversation that no longer stands or another account's.
+ */
+export function messageSeqOf(
+  userId: string,
+  conversationId: string,
+  messageId: string,
+  role: MessageRole,
+): Effect.Effect<Option.Option<number>, MessageReadFailure, DatabaseServices> {
+  return Effect.map(
+    findMessageSeq({ conversationId, userId, messageId, role }),
+    Option.map((row) => row.seq),
   );
 }
 
@@ -763,7 +858,7 @@ export function noReceiptOfLine() {
  * named with no turn yet: each is a message the session took and the next
  * turn will receive, which is what reads an idle agent as running again
  * until that turn opens. The kind is held here as the writer holds it when
- * it takes such a line, since a planning conversation's turnless user rows
+ * it takes such a line, since a task conversation's turnless user rows
  * are its spoken asks and wait for no turn of eve's. A line a turn already
  * received under another row (`noReceiptOfLine`) is not counted.
  */

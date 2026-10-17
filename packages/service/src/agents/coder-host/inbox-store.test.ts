@@ -17,10 +17,17 @@ import {
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  type CodingAgentAttachment,
+} from "@luke/features/coding-agent-wire";
+import {
+  INBOX_BLOCK,
   INBOX_CURSOR_START,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxImageBlock,
   type InboxPost,
 } from "@luke/features/inbox-wire";
 import { eq } from "drizzle-orm";
@@ -31,7 +38,9 @@ import {
   answerInboxItem,
   closeInboxItem,
   type InboxAgent,
+  type InboxFile,
   postInboxItem,
+  readInboxAttachment,
   readInboxItem,
   taskInboxItems,
   withdrawInboxAnswer,
@@ -44,12 +53,12 @@ import { accountInboxPast } from "./inbox-page.js";
  * same key writes it again and opens it, a close takes it back, an answer
  * is taken only at the revision it names while the item is open and can be
  * withdrawn under its key, a read keeps every open item however many others
- * changed, every member of the plan's workspace reads and answers the items
- * of an agent any of them started, an agent with no plan posts to its
- * workspace's members as one on a plan does to its plan's, and nothing of
+ * changed, every member of the task's workspace reads and answers the items
+ * of an agent any of them started, an agent with no task posts to its
+ * workspace's members as one on a task does to its task's, and nothing of
  * a workspace the account is not in is read or written.
  *
- * Synthetic accounts, plans, and words throughout.
+ * Synthetic accounts, tasks, and words throughout.
  */
 
 const openUser = Effect.gen(function* () {
@@ -59,7 +68,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one plan and one agent started on it, and the workspace the plan is in. */
+/** An account with one task and one agent started on it, and the workspace the task is in. */
 const openAgentIn = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -89,7 +98,17 @@ const SETTINGS: InboxPost = {
 /** The reply a task takes: done. */
 const DONE = { reply: INBOX_REPLY.DONE } as const;
 
-/** A workspace automation of the account's on a plan of the workspace, which its runs start agents beside. */
+/** A file as an answer carries it: its name, its type, and its bytes in base64. */
+const attached = (
+  name: string,
+  mediaType: CodingAgentAttachment["mediaType"],
+  bytes: Uint8Array,
+): CodingAgentAttachment => ({ name, mediaType, data: Buffer.from(bytes).toString("base64") });
+
+const TRACE = new TextEncoder().encode("TypeError: invite is undefined\n");
+const SHOT = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+/** A workspace automation of the account's on a task of the workspace, which its runs start agents beside. */
 const openAutomation = (userId: string, workspaceId: string) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Flaky tests" });
@@ -107,7 +126,7 @@ const openAutomation = (userId: string, workspaceId: string) =>
     return Option.getOrThrow(made).id;
   });
 
-/** An account's workspace with one agent started in it on no plan, as an automation's run starts one, by an automation of the account's where asked. */
+/** An account's workspace with one agent started in it on no task, as an automation's run starts one, by an automation of the account's where asked. */
 const openTasklessAgentOf = (byAutomation: boolean) =>
   Effect.gen(function* () {
     const userId = yield* openUser;
@@ -249,6 +268,125 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const askedAgain = yield* postInboxItem(agent, SETTINGS);
         assert.ok(Result.isSuccess(askedAgain));
         assert.equal(askedAgain.success.answeredBy, undefined);
+      }),
+  );
+
+  it.effect(
+    "an answer's files are kept beside the item in the order attached, named by name and type, and served as their bytes to every member and nobody else; an answer not taken keeps none",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        const outsider = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+        const files = [
+          attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
+          attached("after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG, SHOT),
+        ];
+
+        const stale = yield* answerInboxItem(teammate, id, 2, DONE, randomUUID(), files);
+        assert.ok(Option.isNone(stale));
+        assert.equal(
+          Option.getOrThrow(yield* readInboxItem(teammate, id)).item.answerFiles,
+          undefined,
+        );
+
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(teammate, id, 1, DONE, randomUUID(), files),
+        );
+        assert.deepEqual(
+          answered.answerFiles?.map((file) => [file.name, file.mediaType]),
+          [
+            ["trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT],
+            ["after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG],
+          ],
+        );
+        const [trace, shot] = answered.answerFiles ?? [];
+        assert.ok(trace && shot);
+        for (const reader of [agent.userId, teammate]) {
+          const read = Option.getOrThrow(yield* readInboxItem(reader, id)).item;
+          assert.deepEqual(read.answerFiles, answered.answerFiles);
+          const found = yield* readInboxAttachment(reader, id, trace.attachmentId);
+          const served: InboxFile = Option.getOrThrow(found);
+          assert.equal(served.contentType, CODING_AGENT_ATTACHMENT_TYPE.TEXT);
+          assert.deepEqual(new Uint8Array(served.bytes), TRACE);
+        }
+        assert.ok(Option.isNone(yield* readInboxAttachment(outsider, id, shot.attachmentId)));
+      }),
+  );
+
+  it.effect(
+    "an answer's file is held to a message's bound for its type rather than a picture's",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        // Past the picture bound, inside a PDF's.
+        const spec = new Uint8Array(2_000_000).fill(0x25);
+        const answered = yield* answerInboxItem(
+          agent.userId,
+          posted.success.id,
+          1,
+          DONE,
+          randomUUID(),
+          [attached("spec.pdf", CODING_AGENT_ATTACHMENT_TYPE.PDF, spec)],
+        );
+        const [file] = Option.getOrThrow(answered).answerFiles ?? [];
+        assert.ok(file);
+        const served = yield* readInboxAttachment(
+          agent.userId,
+          posted.success.id,
+          file.attachmentId,
+        );
+        assert.equal(Option.getOrThrow(served).bytes.byteLength, spec.byteLength);
+      }),
+  );
+
+  it.effect(
+    "an answer taken back, or a post that opens the item again, deletes the answer's files and keeps the item's pictures",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const withPicture: InboxPost = {
+          ...SETTINGS,
+          blocks: [{ type: INBOX_BLOCK.IMAGE, path: "shots/rule.png", alt: "The branch rule" }],
+        };
+        const posted = yield* postInboxItem(agent, withPicture, [
+          { contentType: INBOX_IMAGE_TYPE.PNG, bytes: SHOT },
+        ]);
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+        const picture = posted.success.blocks.find(
+          (block): block is InboxImageBlock => block.type === INBOX_BLOCK.IMAGE,
+        );
+        assert.ok(picture);
+        const files = [attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE)];
+        const fileOf = (item: { readonly answerFiles?: readonly { attachmentId: string }[] }) =>
+          item.answerFiles?.[0]?.attachmentId ?? "";
+
+        const key = randomUUID();
+        const first = Option.getOrThrow(
+          yield* answerInboxItem(agent.userId, id, 1, DONE, key, files),
+        );
+        const withdrawn = Option.getOrThrow(yield* withdrawInboxAnswer(agent.userId, id, key));
+        assert.equal(withdrawn.answerFiles, undefined);
+        assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, fileOf(first))));
+        assert.ok(
+          Option.isSome(yield* readInboxAttachment(agent.userId, id, picture.attachmentId)),
+          "taking an answer back keeps the item's picture",
+        );
+
+        const second = Option.getOrThrow(
+          yield* answerInboxItem(agent.userId, id, withdrawn.revision, DONE, randomUUID(), files),
+        );
+        const askedAgain = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(askedAgain));
+        assert.equal(askedAgain.success.answerFiles, undefined);
+        assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, fileOf(second))));
       }),
   );
 

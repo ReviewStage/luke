@@ -11,8 +11,8 @@ import { afterEach, test } from "vitest";
 import { type InboxItemsControl, useInboxItems } from "./use-inbox-items";
 
 /**
- * use-inbox-items.test.ts -- the window's Inbox reads each listed plan's
- * items, and says a read failed only of a plan it still lists, so a
+ * use-inbox-items.test.ts -- the window's Inbox reads each listed task's
+ * items, and says a read failed only of a task it still lists, so a
  * workspace switched to is not told of another's failure.
  */
 
@@ -36,7 +36,7 @@ const holding = (taskId: string): AppInboxTaskHolding => ({
 });
 
 test("a read that failed for a plan another workspace listed says nothing once the list holds only plans that read", async () => {
-  // The service refuses Personal's plan and answers Acme's with nothing waiting.
+  // The service refuses Personal's task and answers Acme's with nothing waiting.
   const readInbox = ({ taskId }: { taskId: string }): Promise<CodingAgentInboxAnswerView> =>
     Promise.resolve(
       taskId === "personal-plan"

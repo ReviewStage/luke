@@ -13,8 +13,8 @@ import {
  * names where the account is in it, so a teammate's link to their
  * workspace's members lands on the reader's own copy of that page, or on
  * the reader's own Workspace page where they are not in it; a page the
- * window does not know opens Settings on its first. Factory's and
- * Automations' places stand nowhere while their experiments are off, as
+ * window does not know opens Settings on its first. Factory's,
+ * Automations', and Issues' places stand nowhere while their experiments are off, as
  * every other door to them does (`renderer/CLAUDE.md`'s "Experiments"), so
  * a link to one says how to turn it on instead. Every other place opens on
  * the Plans tab, whose own door checks nothing: a place the reader may not
@@ -44,6 +44,7 @@ export function linkRoute(
     readonly workspaces: readonly Workspace[];
     readonly factoryOn: boolean;
     readonly automationsOn: boolean;
+    readonly issuesOn: boolean;
   },
 ): LinkRoute {
   switch (place.kind) {
@@ -65,6 +66,8 @@ export function linkRoute(
       return window.automationsOn
         ? { kind: LINK_ROUTE.TASKS }
         : { kind: LINK_ROUTE.EXPERIMENT_OFF };
+    case LINK_PLACE.ISSUE:
+      return window.issuesOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     default:
       return { kind: LINK_ROUTE.TASKS };
   }

@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 13 October 2026
+Last updated: 16 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -28,8 +28,8 @@ the Inbox; and the words of a message you typed to a coding agent and have
 not sent, mentions and skills among them, kept per agent until you send it
 or empty its box, and an inbox answer you have not sent, kept per item until
 you send it or the agent changes the item, each shown only while the account
-that wrote it is signed in. The files attached to such a message stay in
-memory only.
+that wrote it is signed in. The files attached to such a message or answer
+stay in memory only.
 None of it is sent anywhere.
 
 **Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
@@ -226,6 +226,14 @@ service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
+**Sidebar sections.** When you make a section in the sidebar, our service
+stores its title, its icon, its place among your sections, and the workspace
+it is in under your account, and, for each task you put in it, which task and
+when, so your sections follow you to every Mac you sign in on. They are yours
+alone: no teammate sees them. Deleting a section deletes those records and none
+of its tasks; they are not read while you are not a member of the workspace,
+and deleting your account or the workspace removes them all.
+
 **A task's inbox.** When a coding agent on a task needs a decision from you,
 or something only you can do such as changing a GitHub setting, it posts an
 item to the task's inbox on our service: a title, context in Markdown, links,
@@ -242,7 +250,12 @@ picture goes when the item stops naming it. Your answer, and any note, is
 stored with the item under the account of whichever member gave it, which
 every member of the task's workspace sees by name beside the answer, and,
 where the agent asked to hear back, handed to it as one of your messages,
-kept in its transcript. While you are signed in, Luke
+kept in its transcript. You can attach files to an answer as you can to a
+message, on the same terms and bounds (see "Files you attach to a coding
+agent"): an answer carrying one is always handed to the agent, and our
+service also keeps each file, with its name, in our database beside the item,
+where every member of the task's workspace can open it, until the answer is
+taken back or the agent posts the item again. While you are signed in, Luke
 on your Mac keeps a read open to our service for every item waiting in your
 workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on
@@ -264,18 +277,24 @@ has a handle our service makes once and keeps: yours is spelled from your
 account's name. A message is stored with its words, any links, references to
 lines of a repository (a path, the lines, and the commit, never the lines
 themselves), the members it mentions, who posted it, where, and when; it may
-also ask for an answer, with the answer and who gave it stored beside it.
-Every message is stored under the workspace and readable by our own
+also ask for an answer, with the answer and who gave it stored beside it. A
+message may carry a picture an agent took in its sandbox, which our service
+reads from the sandbox and keeps beside the message, up to 1.5 MB. Every
+message is stored under the workspace and readable by our own
 operators, like an agent's transcript. Every person in the workspace can
 read every channel and every direct message, one between two other people
 included; a coding agent and Luke read the channels and only their own
 direct messages, and only a direct message's two members post in it.
+Luke's planning model posts as its plan's Luke where you ask it to, and at
+the start of each of its turns reads what was said in the chat since it last
+read, up to 20 messages, sent to the model provider with the rest of the
+turn.
 Deleting a plan deletes its channel with its messages, deleting your account
 deletes your messages (others' replies to them stay), and deleting the
 workspace deletes its chat.
 
 **Files you attach to a coding agent.** You can attach files to a coding
-agent's message, or to the prompt you start one with, by picking them with +,
+agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,
 dropping, or pasting: images, PDFs up to 3 MB, and text files up to 100 KB, up
 to ten files and 3 MB a message. A PNG, JPEG, or WebP up to 1.5 MB is sent as
 it is; any other image, or a larger one, is first made into a smaller WebP on
@@ -417,7 +436,13 @@ GitHub's own image proxy, each up to 8 MB; other images are shown as links.
 Files changed reads each changed file's name and patch, for up to 300 files,
 leaving out a patch over 100,000 characters. It stores none of it, and Luke
 holds it in memory while the tab is open, never on disk, except that
-downloading a patch writes it where you save it. Wherever Luke names someone on
+downloading a patch writes it where you save it. A button in the tab that
+changes the pull request, such as Ready for review or Convert to draft, is
+sent to GitHub by our service as you, on the token of your own GitHub sign-in,
+whoever started the agent, so it can do only what your GitHub account may; it
+is never sent as the Luke GitHub App, and where you hold no GitHub sign-in
+GitHub takes, nothing is sent and the tab asks you to sign in with GitHub
+again. Wherever Luke names someone on
 GitHub, as the tab does who opened, reviewed, and commented on the pull
 request, it draws them by their GitHub avatar, which your Mac loads straight
 from GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP
@@ -512,8 +537,9 @@ own retention policy.
 address, the address of your profile picture, and which of the two you used.
 An account made with Google can also link a GitHub account to itself, even
 one under a different email address, in Settings › Integrations, which lets
-agents use GitHub tools as you, and lets our service open the pull request
-of a coding agent you start as you; signing in with GitHub, or linking it,
+agents use GitHub tools as you, lets our service open the pull request
+of a coding agent you start as you, and lets it change a coding agent's pull
+request as you when you press a button in its Pull request tab; signing in with GitHub, or linking it,
 authorizes the Luke GitHub App: its token reaches only
 repositories where you installed the App and can already see, with the App's
 permissions (reading a repository's details; reading and writing its contents,
@@ -653,7 +679,10 @@ place of a member's own, so what they change in Linear shows as made by the
 person who connected it. Starting a plan from an issue copies the issue's
 key, title, address, and description onto the plan, where it stays with the
 plan, is shown to the planning model on every turn of its call, and is
-deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
+deleted with the plan. Once you pause typing in New task's name field, what
+you typed is sent to Linear through this connection as a search, or, where it
+is an issue's key or a link to one, as a read of that one issue; neither what
+was sent nor what Linear answered is kept. Where a plan, a reply, or an Inbox item shows a link
 to a Linear issue, the app asks our service for that issue's key, title,
 state, and assignee's name, which it reads through this connection as you
 look and keeps nowhere; the app shows them on the link, and they go no
@@ -849,17 +878,41 @@ while it runs; one that never reaches a sign-in belongs to nobody, so
 deleting your account does not reach it — we have no way to tell it was
 yours.
 
-**Crash reports.** In ordinary runs, Luke sends Sentry anonymous reports of
-unhandled exceptions in its Electron main, preload, and renderer code, along
-with anonymous process-session status and native minidumps when an Electron
-main, renderer, or GPU process crashes. Sentry's default reports include the
-exception message and code path, breadcrumbs, and Electron, operating-system,
-runtime, and device context; its breadcrumbs can include messages Luke wrote
-to its console and the addresses of requests it made, and Sentry sees your
-Mac's network address. Luke does not attach your Luke account or user
-identity, and does not enable PII collection, tracing, Sentry Replay,
-screenshots, profiling, or manual reports of handled errors. Fixture and
-evidence runs send no crash reports.
+**Crash and performance reports from the Mac app.** In ordinary runs, Luke
+sends Sentry reports of unhandled exceptions in its Electron main, preload,
+and renderer code, process-session status, and native minidumps when an
+Electron main, renderer, or GPU process crashes. It also sends performance
+traces: how long Luke took to start, how each window's page loaded, and the
+requests each made. Luke uses Sentry's default data collection, so reports
+and traces carry the exception message and code path, breadcrumbs (among them
+messages Luke wrote to its console and the addresses of requests it made),
+the headers, bodies, and query parameters of requests Luke made, Electron,
+operating-system, runtime, and device context, and your Mac's IP address.
+Sentry replaces a value whose name looks like a credential, such as an
+authorization header or a token parameter, before it is sent, and Luke drops
+any report that names a call's avatar access token. Luke does not attach your
+Luke account, and does not enable Sentry Replay, screenshots, or profiling.
+Fixture and evidence runs send nothing to Sentry.
+
+**Error, performance, and agent reports from our service.** Our service and
+Luke's agents send Sentry what its SDK collects by default, so that we can find
+and fix failures. That is: every error our service did not handle, with its
+message, stack trace, the lines of code around it, and the values of local
+variables; performance traces of each request our service answers, each
+database query, and each request it makes, with their headers, bodies, query
+parameters, and database query parameters, and the IP address a request came
+from; every line our service logs; counts and timings; and, each minute,
+whether the scheduled sweep ran. Luke's agents also send Sentry's agent
+traces of each turn: the instructions and messages sent to the model (which
+include the plan, the conversation, what was said on a call, and what Luke and
+his workers read, such as code, a command's output from your Mac, and an
+integration's answer), the model's replies, and each tool call with its
+arguments and result. Sentry replaces a value whose name looks like a
+credential (such as `auth`, `token`, `secret`, `password`, `key`, or `session`)
+before it leaves, but not a credential written in free text, such as a key
+pasted into a conversation. Terminal tabs' bytes are not sent. What reaches
+Sentry is kept under Sentry's retention, not tied to your account, and is not
+erased when you delete your account.
 
 **What earlier versions left on our service.** Earlier versions of Luke
 followed your coding agent sessions, kept a notebook, and pushed briefings to
@@ -903,7 +956,8 @@ only when you press Send.
   Luke's transits our service; keeps only the lines and the call record
   described under "Your account"; logs status and close codes, event names,
   the kind of any failure, and counts, never what was said or an error's own
-  words; and counts each session's billed seconds once. Luke's judgment is a
+  words, apart from the reports to Sentry described under "Error, performance,
+  and agent reports from our service"; and counts each session's billed seconds once. Luke's judgment is a
   separate run of calls to OpenAI's Responses API, one for each step of a
   turn, made from our service on our key when you ask him something on a call,
   carrying the task conversation's working memory: the saved plan, the
@@ -911,7 +965,8 @@ only when you press Send.
   it, such as the repository's code, a command's output from your Mac, an
   integration's answer, a skill, or a web page. Your Mac makes no such call.
   Our service logs none of the request or the reply and keeps only the record
-  described under "Your account"; OpenAI keeps them under its own retention
+  described under "Your account", apart from the reports to Sentry described under "Error, performance,
+  and agent reports from our service"; OpenAI keeps them under its own retention
   policy. Every model call and notetaker run is counted in your daily usage. A
   development build run from a checkout can write a local trace of the voice
   traffic when its developer asks; a packaged build cannot.
@@ -933,8 +988,9 @@ only when you press Send.
   task is likely to contain — its repository's name, its title, and the file
   paths it names — so they are spelled right. Only the text comes back, into
   the box at the caret, and it goes nowhere until you send it. Our service
-  stores and logs neither the recording nor the text, and counts only the clip
-  and its length in your daily usage; OpenAI keeps the request and its reply
+  stores and logs neither the recording nor the text, apart from the reports to Sentry described under "Error, performance,
+  and agent reports from our service", and counts
+  only the clip and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
 - Keyframe Labs, for video calls, only while the Video calls experiment is on
   in Settings › Experimental, which it is not until you turn it on. The
@@ -962,8 +1018,9 @@ only when you press Send.
   no referrer and nothing of yours is sent with it.
 - PostHog, for usage data and screen recordings from the Mac app. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
-- Sentry, for the anonymous exception, process-session, and native crash
-  reports described above.
+- Sentry, for the Mac app's crash and performance reports, and our service's
+  and Luke's agents' error, performance, log, and agent reports, described
+  above.
 - Anthropic and OpenAI, for a coding agent. When you, or Luke on a call, start
   one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)
@@ -1144,7 +1201,7 @@ keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and
 its snapshot; usage counts and recordings are held by PostHog, and crash
-reports by Sentry.
+and error, performance, and agent reports by Sentry.
 
 ## Your choices
 
@@ -1184,9 +1241,8 @@ reports by Sentry.
   versions left there — and asks PostHog to erase your usage data and
   recordings, which does not reach a recording never attached to your account.
   Luke stops recording for the rest of the session, and starts again the next
-  time you open it or sign in. Sentry reporting continues, and earlier
-  anonymous crash reports cannot be identified as yours and targeted through
-  account deletion. Deleting does not affect your Google or GitHub account
+  time you open it or sign in. Sentry reporting continues, and what Sentry
+  already received is not tied to your account and is not erased with it. Deleting does not affect your Google or GitHub account
   or the account at any service you connected, and does not revoke the Luke
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot

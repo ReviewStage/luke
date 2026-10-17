@@ -13,7 +13,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
@@ -201,8 +201,9 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   );
   assert.match(shown.map((column) => column.textContent).join(""), /Nothing needs you/u);
   assert.equal(
-    shown.find((column) => column.classList.contains("inbox-tasks"))?.querySelector(".empty-state")
-      ?.textContent,
+    shown
+      .find((column) => column.classList.contains("inbox-tasks"))
+      ?.querySelector(".luke-empty-state")?.textContent,
     "Nothing needs you",
     "the list standing alone stands the Inbox's empty state",
   );
@@ -310,7 +311,7 @@ async function narrowTaskInbox(
       [...tab.querySelectorAll(".inbox-tasks .sidebar-task-name")].map((row) => row.textContent),
     /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
     filteredOut: () => {
-      const empty = tab.querySelector(".inbox-tasks:not([hidden]) .empty-state");
+      const empty = tab.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
       if (empty === null) return null;
       return [
         empty.querySelector("h3")?.textContent,
@@ -319,7 +320,9 @@ async function narrowTaskInbox(
       ];
     },
     showAll: () =>
-      act(() => tab.querySelector<HTMLButtonElement>(".inbox-tasks .empty-state button")?.click()),
+      act(() =>
+        tab.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button")?.click(),
+      ),
     pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
     /** What the list says of a read that did not land, and whether it offers Retry. */
     failure: () => {
@@ -547,89 +550,49 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
   inbox.unmount();
 });
 
-test("the crumb's workspace opens that workspace's home page, the window switching to it first where another is listed", () => {
-  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null };
-  const personal = { ...acme, id: TASK.workspaceId, name: "Personal" };
-  const asked: string[] = [];
-  const pressHome = (listed: typeof acme) => {
-    const container = document.body.appendChild(document.createElement("div"));
-    const root = createRoot(container);
-    act(() =>
-      root.render(
-        onRegistry(
-          AtomRegistry.make(),
-          createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
-            looks: NO_LOOKS,
-            tasks: tasksControl({
-              page: TASKS_PAGE.DOCUMENT,
-              activeTaskId: TASK.id,
-              region: { kind: DOCUMENT_REGION.READY, task: TASK },
-              workspaces: [personal, acme],
-              workspace: listed,
-              onChooseWorkspace: (workspaceId) => asked.push(`choose ${workspaceId}`),
-              onGoHome: () => asked.push("home"),
-            }),
-          }),
-        ),
-      ),
-    );
-    const crumb = container.querySelector<HTMLButtonElement>(
-      'nav[aria-label="Where this task is"] button.task-crumb-item',
-    );
-    assert.ok(crumb, "the crumb names the plan's workspace");
-    act(() => crumb.click());
-    act(() => root.unmount());
-    container.remove();
-  };
-
-  pressHome(personal);
-  pressHome(acme);
-
-  assert.deepEqual(asked, ["home", `choose ${personal.id}`, "home"]);
-});
-
-test("the crumb says the task's repository as the sidebar does: its name alone, or owner/name where another listed shares the name", () => {
+test("a plan's document opens on its Edited by line, with no crumb over it", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
     role: WORKSPACE_ROLE.MEMBER,
     github: null,
   };
-  const task = { ...TASK, repository: "acme/web" };
-  const summary = { ...task, updatedAt: 2 };
-  const said = (others: readonly string[]) => {
-    const container = document.body.appendChild(document.createElement("div"));
-    const root = createRoot(container);
-    const listed = others.map((repository, at) => ({
-      ...summary,
-      id: `plan-${at}`,
-      repository,
-    }));
-    act(() =>
-      root.render(
-        onRegistry(
-          AtomRegistry.make(),
-          createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
-            looks: NO_LOOKS,
-            tasks: tasksControl({
-              page: TASKS_PAGE.DOCUMENT,
-              activeTaskId: task.id,
-              region: { kind: DOCUMENT_REGION.READY, task: task },
-              workspaces: [home],
-              workspace: home,
-              tasks: [summary, ...listed],
-            }),
-          }),
-        ),
-      ),
-    );
-    const words = container.querySelector(".task-crumb-repository")?.textContent;
-    act(() => root.unmount());
-    container.remove();
-    return words;
+  const task: Task = {
+    ...TASK,
+    repository: "acme/web",
+    lastEdit: {
+      actor: PLAN_ACTOR.DEVELOPER,
+      by: { userId: "user-lee", name: "Lee Park" },
+      at: 2,
+      duringCall: false,
+    },
   };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: task.id,
+            region: { kind: DOCUMENT_REGION.READY, task },
+            workspaces: [home],
+            workspace: home,
+          }),
+        }),
+      ),
+    ),
+  );
+  const scroll = container.querySelector(".desktop-document .plan-document-scroll");
+  const first = scroll?.firstElementChild;
 
-  assert.deepEqual([said([]), said(["acme/api"]), said(["other/web"])], ["web", "web", "acme/web"]);
+  assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
+  assert.ok(first?.classList.contains("plan-edit-note"), "the Edited by line leads the document");
+  assert.match(first?.textContent ?? "", /^Edited by .*Lee Park/u);
+  act(() => root.unmount());
+  container.remove();
 });

@@ -53,7 +53,7 @@ test("a version written while the card stands is hidden until it loads, never th
   assert.equal(preview()?.dataset.loaded, "true");
 
   render({ ...FUNNEL, version: 3 });
-  assert.equal(container.querySelector(".card-sub")?.textContent, "Version 3");
+  assert.equal(container.querySelector(".luke-hover-card-sub")?.textContent, "Version 3");
   assert.equal(
     container.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId: TASK, pageId: FUNNEL.id, version: 3 }),
@@ -71,7 +71,7 @@ test("the head says who showed the version beside it, wherever the card hangs: L
     act(() =>
       root.render(onRegistry(AtomRegistry.make(), createElement(PageCard, { taskId: TASK, page }))),
     );
-    return container.querySelector(".card-sub")?.textContent;
+    return container.querySelector(".luke-hover-card-sub")?.textContent;
   };
 
   assert.deepEqual(

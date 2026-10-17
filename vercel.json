@@ -153,12 +153,24 @@
           "dest": "/api/default.js?route=agents/pull-request&id=$1"
         },
         {
+          "src": "/api/agents/([^/]+)/pull-request/action",
+          "dest": "/api/default.js?route=agents/pull-request-action&id=$1"
+        },
+        {
           "src": "/api/agents/([^/]+)/changes",
           "dest": "/api/default.js?route=agents/changes&id=$1"
         },
         {
-          "src": "/api/agents/([^/]+)/overview",
-          "dest": "/api/default.js?route=agents/overview&id=$1"
+          "src": "/api/agents/([^/]+)/overview/pull-request",
+          "dest": "/api/default.js?route=agents/overview-pull-request&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/overview/checks",
+          "dest": "/api/default.js?route=agents/overview-checks&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/overview/conversation",
+          "dest": "/api/default.js?route=agents/overview-conversation&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/github-image",
@@ -361,6 +373,10 @@
           "dest": "/api/default.js?route=repository-pins"
         },
         {
+          "src": "/api/task-sections",
+          "dest": "/api/default.js?route=task-sections"
+        },
+        {
           "src": "/api/workspaces",
           "dest": "/api/default.js?route=workspaces"
         },
@@ -457,7 +473,7 @@
           "dest": "/admin.html"
         },
         {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|issue)(?:/[^/]+)*/?",
           "dest": "/open.html"
         }
       ]

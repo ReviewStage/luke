@@ -1,10 +1,10 @@
 import { ACT_KIND } from "@luke/host/acts";
-import { CopyIcon, DownloadIcon, EllipsisIcon } from "@luke/ui";
+import { CopyIcon, DownloadIcon, EllipsisIcon, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model";
@@ -13,7 +13,7 @@ import { useFileViewSettings } from "./file-view-settings";
 /**
  * file-menu.tsx -- the File view bar's ⋯: what is done with the file shown, then how every File tab draws its lines.
  *
- * The window's own menu (`../desktop/action-menu.tsx`), as the plan's ⋯
+ * The window's own menu (`../desktop/action-menu.tsx`), as the task's ⋯
  * draws it: the file's name or its whole text copied, said in the copy
  * toast as every copy from a menu is; the file saved where the system's
  * save dialog chooses (`ACT_KIND.WINDOW_SAVE_FILE`); and, under a rule, the
@@ -49,7 +49,7 @@ export function LinesMenu({
   /** Settings only this bar's lines follow, as checks under the File tabs' own. */
   looks?: readonly MenuAction[];
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const { settings, change } = useFileViewSettings();
   const groups: readonly (readonly MenuAction[])[] = [
     actions,
@@ -58,13 +58,13 @@ export function LinesMenu({
         label: "Line numbers",
         icon: <ListOrderedIcon aria-hidden="true" />,
         checked: settings.lineNumbers,
-        onSelect: () => change({ lineNumbers: !settings.lineNumbers }),
+        onSelect: () => change("lineNumbers", !settings.lineNumbers),
       },
       {
         label: "Word wrap",
         icon: <WrapTextIcon aria-hidden="true" />,
         checked: settings.wordWrap,
-        onSelect: () => change({ wordWrap: !settings.wordWrap }),
+        onSelect: () => change("wordWrap", !settings.wordWrap),
       },
       ...looks,
     ],

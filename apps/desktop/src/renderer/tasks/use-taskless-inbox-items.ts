@@ -6,15 +6,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 
 /**
- * use-planless-inbox-items.ts -- the items of each agent with no plan that something waits on, for the window's Inbox, each agent read whole once and again only when main says its items moved.
+ * use-planless-inbox-items.ts -- the items of each agent with no task that something waits on, for the window's Inbox, each agent read whole once and again only when main says its items moved.
  *
- * Main's read of the account carries the items of agents with no plan that
- * wait on the developer, in brief, as it carries a plan's. So each such
+ * Main's read of the account carries the items of agents with no task that
+ * wait on the developer, in brief, as it carries a task's. So each such
  * agent is read whole here, its settled items as well, from the start,
  * which the service answers at once, and read again only when the items
  * main lists as waiting on it move, one answered or one opened, rather
  * than holding a read open on every agent; the agent whose item is chosen
- * holds its own read open besides, as a plan's does (`use-task-inbox.ts`).
+ * holds its own read open besides, as a task's does (`use-task-inbox.ts`).
  * An answer a newer ask overtook is let go. A read that did not answer
  * leaves the agent as it was last read, or unread, and says so, with Try
  * again, which asks again of it whether or not it was read before.
@@ -22,7 +22,7 @@ import { useAct } from "../act";
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** What the window's Inbox lists of the agents with no plan. */
+/** What the window's Inbox lists of the agents with no task. */
 export interface TasklessInboxItems {
   /** Each agent's items as last read, by agent; an agent not yet read is absent. */
   readonly items: ReadonlyMap<string, readonly InboxItem[]>;

@@ -35,9 +35,12 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -59,13 +62,17 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
-  codingAgentOverviewAnswerViewSchema,
+  codingAgentOverviewChecksAnswerViewSchema,
+  codingAgentOverviewConversationAnswerViewSchema,
+  codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
   codingAgentPinParamsSchema,
+  codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
@@ -137,6 +144,7 @@ import {
   type TasksIssue,
   type TasksMoveAnswer,
   type TasksPageSourceAnswer,
+  type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksRepositoriesAnswer,
@@ -161,6 +169,8 @@ import {
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPageSourceAnswerSchema,
+  tasksPagesAnswerSchema,
+  tasksPagesParamsSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
   tasksPictureKeepParamsSchema,
@@ -195,6 +205,7 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceTransferParamsSchema,
+  tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -305,11 +316,11 @@ export const ACT_KIND = {
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
   /**
-   * The panel's Plans tab asking the host: the plan list and the active
-   * document read as the tab shows, one plan made the active one, the open
-   * plan left, a plan started on a repository, and a plan renamed, given its
+   * The panel's Tasks tab asking the host: the task list and the active
+   * document read as the tab shows, one task made the active one, the open
+   * task left, a task started on a repository, and a task renamed, given its
    * repository, pinned or unpinned, archived or brought back, or deleted. The view arrives on the document rather than as
-   * an answer. The one write of a plan's document from here is the
+   * an answer. The one write of a task's document from here is the
    * developer's edit of a field, `TASKS_EDIT`, which answers whether it
    * saved, conflicted with what Luke wrote meanwhile, or failed.
    */
@@ -322,14 +333,16 @@ export const ACT_KIND = {
   TASKS_PIN: "tasks.pin",
   /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
+  /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
+  TASKS_WRITE_SECTION: "tasks.writeSection",
   TASKS_ARCHIVE: "tasks.archive",
   /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
   TASKS_REPOSITORIES: "tasks.repositories",
-  /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
+  /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
-  /** A plan moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
+  /** A task moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
   TASKS_MOVE: "tasks.move",
-  /** The developer's edit of the open plan's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
+  /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   TASKS_EDIT: "tasks.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
@@ -339,21 +352,21 @@ export const ACT_KIND = {
   GITHUB_CONNECT: "github.connect",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
-  /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
+  /** The Tasks tab's microphone button: a call about the task the panel has open, opened, or its microphone toggled. */
   TASKS_TALK: "tasks.talk",
-  /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
+  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
-  /** The Work tab scrolled back to its oldest turn: the open plan's page of work before it, read from the service; the view arrives on the document. */
+  /** The Work tab scrolled back to its oldest turn: the open task's page of work before it, read from the service; the view arrives on the document. */
   TASKS_WORK_EARLIER: "tasks.workEarlier",
-  /** The Call tab scrolled back to its oldest turn: the open plan's page of conversation before it, read from the service; the view arrives on the document. */
+  /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
   TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a plan's conversation, or a planning worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
+  /** One page of a task's conversation, or a brain worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
   TASKS_MESSAGES: "tasks.messages",
-  /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
+  /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   TASKS_FILE: "tasks.file",
-  /** A File tab's tree listing one folder of the open plan's repository, read from GitHub through the service; answered to the tree, never on the document. */
+  /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
   TASKS_TREE: "tasks.tree",
-  /** The skills a developer may choose of a plan's repository, read from GitHub through the service; answered to the asker, never on the document. */
+  /** The skills a developer may choose of a task's repository, read from GitHub through the service; answered to the asker, never on the document. */
   TASKS_SKILLS: "planning.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_PULL_REQUEST: "planning.pullRequest",
@@ -369,6 +382,8 @@ export const ACT_KIND = {
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
   TASKS_PAGE_SOURCE: "planning.pageSource",
+  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
+  TASKS_PAGES: "planning.pages",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "planning.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
@@ -410,8 +425,8 @@ export const ACT_KIND = {
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
   /**
-   * A plan's coding agents, asked of the service: the models one may run
-   * on, the account's default among them read and written, the plan's
+   * A task's coding agents, asked of the service: the models one may run
+   * on, the account's default among them read and written, the task's
    * agents with their status, one started under the press's own key, one's
    * transcript past a cursor (held open by the service while the agent
    * runs), one sent a message naming how it reaches a turn under way, one
@@ -436,7 +451,7 @@ export const ACT_KIND = {
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   CODING_AGENTS_PIN: "codingAgents.pin",
   /**
-   * Which agent's tab the panel shows, or none, and which plan's Inbox tab,
+   * Which agent's tab the panel shows, or none, and which task's Inbox tab,
    * or none: what main's notification of an agent's end or of an inbox item
    * is held back by, and what clears an agent's tab's unseen dot.
    */
@@ -445,10 +460,16 @@ export const ACT_KIND = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
-  /** One agent's pull request's description, checks, reviewers, and conversation, which its Pull request tab draws. */
-  CODING_AGENTS_OVERVIEW: "codingAgents.overview",
+  /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
   /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
   /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -473,7 +494,7 @@ export const ACT_KIND = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /**
-   * Settings › Plan template: the Markdown the account's new plans start
+   * Settings › Plan template: the Markdown the account's new tasks start
    * from, read as the page opens, and kept as the developer pauses or reset
    * to the default with null. Each answers the template as the service then
    * keeps it. Its version history reads a page of revisions and one
@@ -491,7 +512,7 @@ export const ACT_KIND = {
    */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
-   * The plan's inbox of what its coding agents need of the developer: read
+   * The task's inbox of what its coding agents need of the developer: read
    * past a cursor (held open by the service while nothing changed), and one
    * item answered against the revision the panel drew, under the panel's own
    * key. The window holds what it draws; nothing here does.
@@ -543,7 +564,7 @@ export const ACT_KIND = {
   MAC_TERMINAL_OPEN: "macTerminal.open",
   MAC_TERMINAL_CLOSE: "macTerminal.close",
   VOICE_COMMAND: "voice.command",
-  /** The call card's way back: Luke's window brought forward on the call's own plan. */
+  /** The call card's way back: Luke's window brought forward on the call's own task. */
   CALL_SHOW_TASK: "call.showPlan",
   /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
   AVATAR_REPORT: "avatar.report",
@@ -716,7 +737,7 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
 }
 
 /**
- * An identifier that has to match the one it names elsewhere — a plan or an
+ * An identifier that has to match the one it names elsewhere — a task or an
  * account — so its ends are admitted as written rather than trimmed into a
  * value the host would not hold.
  */
@@ -742,7 +763,7 @@ const savedFileName = exactText(255).check(EffectSchema.isPattern(/^[^/\\]+$/u))
 /** The longest language name a fence may give for its block to be coloured. */
 export const FENCE_LANGUAGE_MAX_CHARS = 32;
 
-/** The one host the browser is sent to from a plan: a repository's page, or the App's installation page. */
+/** The one host the browser is sent to from a task: a repository's page, or the App's installation page. */
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
 
 /** An address on GitHub, and nowhere else: what a repository link, the installation link, or Luke's own issues open. */
@@ -922,6 +943,11 @@ export const ACT = {
     payload: actSchema(tasksPinRepositoryParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not pin that repository on this system.",
+  },
+  [ACT_KIND.TASKS_WRITE_SECTION]: {
+    payload: actSchema(tasksWriteSectionParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not change that section on this system.",
   },
   [ACT_KIND.TASKS_ARCHIVE]: {
     payload: actSchema(tasksArchiveParamsSchema),
@@ -1119,6 +1145,11 @@ export const ACT = {
     result: wireResult<TasksPageSourceAnswer>(isReadable(tasksPageSourceAnswerSchema)),
     refusal: "Could not read that page's source on this system.",
   },
+  [ACT_KIND.TASKS_PAGES]: {
+    payload: actSchema(tasksPagesParamsSchema),
+    result: wireResult<TasksPagesAnswer>(isReadable(tasksPagesAnswerSchema)),
+    refusal: "Could not read that plan's pages on this system.",
+  },
   [ACT_KIND.TASKS_WORK_EARLIER]: press("Could not read that task's earlier work on this system."),
   [ACT_KIND.TASKS_CONVERSATION_EARLIER]: press(
     "Could not read that task's earlier conversation on this system.",
@@ -1259,17 +1290,38 @@ export const ACT = {
     ),
     refusal: "Could not read the agent's changes on this system.",
   },
-  [ACT_KIND.CODING_AGENTS_OVERVIEW]: {
+  [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: {
     payload: actSchema(codingAgentPullRequestParamsSchema),
-    result: wireResult<CodingAgentOverviewAnswerView>(
-      isReadable(codingAgentOverviewAnswerViewSchema),
+    result: wireResult<CodingAgentOverviewPullRequestAnswerView>(
+      isReadable(codingAgentOverviewPullRequestAnswerViewSchema),
     ),
     refusal: "Could not read the agent's pull request on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentOverviewChecksAnswerView>(
+      isReadable(codingAgentOverviewChecksAnswerViewSchema),
+    ),
+    refusal: "Could not read the pull request's checks on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentOverviewConversationAnswerView>(
+      isReadable(codingAgentOverviewConversationAnswerViewSchema),
+    ),
+    refusal: "Could not read the pull request's conversation on this system.",
   },
   [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: {
     payload: actSchema(codingAgentGitHubImageParamsSchema),
     result: wireResult<CodingAgentGitHubImageView>(isReadable(codingAgentGitHubImageViewSchema)),
     refusal: "Could not read the pull request's image on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: {
+    payload: actSchema(codingAgentPullRequestActionParamsSchema),
+    result: wireResult<CodingAgentPullRequestWriteAnswerView>(
+      isReadable(codingAgentPullRequestWriteAnswerViewSchema),
+    ),
+    refusal: "Could not change the pull request on this system.",
   },
   [ACT_KIND.AUTOMATIONS_LIST]: {
     payload: actSchema(automationListParamsSchema),
@@ -1562,7 +1614,7 @@ export const ACT = {
     refusal: "Could not turn the video on or off on this system.",
   },
   [ACT_KIND.WINDOW_COPY_TEXT]: {
-    // A plan's whole document and a File tab's whole file are copied
+    // A task's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service
     // holds, and an empty document copies as the empty text it is.
     payload: record({

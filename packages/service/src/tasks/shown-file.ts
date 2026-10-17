@@ -1,10 +1,10 @@
 import { SHOWN_CODE_BOUNDS } from "@luke/features/task-wire";
 
 /**
- * shown-file.ts -- the one rule a file of the plan's repository is put on the developer's screen by, whichever reader read it.
+ * shown-file.ts -- the one rule a file of the task's repository is put on the developer's screen by, whichever reader read it.
  *
  * Two readers put a repository's lines on a Mac: `show_code`, from the
- * planning session's checkout (`show-code.ts`), and the File tab's read of
+ * brain session's checkout (`show-code.ts`), and the File tab's read of
  * a whole file, from GitHub through the Luke GitHub App (`task-file.ts`).
  * Each finds out the same facts of a file in its own way, and both hand
  * them here, so what is refused and how a line is cut cannot drift between

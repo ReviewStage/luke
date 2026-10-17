@@ -43,9 +43,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-accent-ink: var(--accent-ink);
   --color-attention: var(--attention);
-  --color-attention-tint: var(--attention-tint);
   --color-complete: var(--complete);
-  --color-complete-tint: var(--complete-tint);
   --color-border: var(--border);
   --color-ring: var(--ring);
 
