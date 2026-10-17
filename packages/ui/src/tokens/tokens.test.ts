@@ -17,7 +17,7 @@ interface TokenRule {
 /** The spacing scale every app shares, in pixels. */
 const SPACE_STEPS = [0, 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 96];
 
-const SHEETS = ["scale", "profiles", "palettes", "display", "legacy"] as const;
+const SHEETS = ["scale", "profiles", "palettes", "display"] as const;
 
 /** The rules of `tokens/<sheet>.css`, comments dropped; the sheets hold no nested block. */
 function rulesOf(sheet: (typeof SHEETS)[number]): TokenRule[] {
@@ -108,16 +108,6 @@ test("every shared token a sheet reads is one some sheet sets", () => {
           assert.ok(set.has(read), `${sheet}.css's ${name} reads ${read}, which nothing sets`);
         }
       }
-    }
-  }
-});
-
-test("an app's old names are aliases of shared roles, each under its own profile", () => {
-  for (const rule of rulesOf("legacy")) {
-    assert.match(rule.selector, /^\[data-luke-profile="(desktop|web)"\]$/);
-    for (const [name, value] of rule.values) {
-      assert.ok(!name.startsWith("--luke-"), `legacy.css sets the shared ${name}`);
-      assert.match(value, /^var\(--luke-[\w-]+\)$/, `legacy.css's ${name} is not an alias`);
     }
   }
 });

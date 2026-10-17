@@ -134,7 +134,7 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }): React.JSX.Element 
 }
 
 /**
- * The pill's fill is scoped here rather than taken from `--muted`: 5% white is
+ * The pill's fill is scoped here rather than taken from `--luke-color-fill-hover`: 5% white is
  * a resting tint for flat surfaces, too faint to read as a state on the
  * lifted card the rail sits on, and raising the shared token would brighten
  * every muted surface on the page.

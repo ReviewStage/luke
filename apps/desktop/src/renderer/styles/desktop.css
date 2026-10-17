@@ -1883,7 +1883,7 @@ ul.actor-stack {
   width: 18px;
   height: 18px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--luke-color-border);
   border-radius: 50%;
   background: currentColor;
 }

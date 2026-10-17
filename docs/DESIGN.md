@@ -112,10 +112,7 @@ role its own way. A palette (`palettes.css`) names each colour by its role,
 for each profile in each theme. A component reads roles and the palette, never
 a base value at its call site, so it moves with its profile. Both profiles set
 the same roles and every palette the same names; `tokens.test.ts` holds them
-to it.
-The site's older names (`--space-8`, `--foreground`, `--border`, …) are
-aliases of the roles under its own profile (`legacy.css`), kept until nothing
-reads them; the desktop reads the roles alone.
+to it. Both apps read the roles alone; neither keeps a name of its own for one.
 
 A shared component takes its data and callbacks as props and no class or
 style: it owns its insides, and the room around it is its container's. Its
