@@ -317,6 +317,7 @@ body,
    edge and never on both. */
 .title-bar-controls {
   --title-bar-ground: var(--desktop-ground);
+  --luke-button-ground: var(--title-bar-ground);
   position: absolute;
   z-index: 2;
   top: calc(var(--traffic-lights-middle) - var(--control-height) / 2);
@@ -341,10 +342,6 @@ body,
   .title-bar-controls:not([data-edge]),
 .desktop-shell:has(.side-panel) .title-bar-controls[data-edge="end"] {
   --title-bar-ground: var(--desktop-well);
-}
-
-.title-bar-controls .icon-button {
-  --button-ground: var(--title-bar-ground);
 }
 
 .title-bar-controls[data-edge="end"] {

@@ -12,7 +12,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { CollapseIcon, EmptyState, ExpandIcon, SidePanelIcon } from "@luke/ui";
+import { CollapseIcon, EmptyState, ExpandIcon, IconButton, SidePanelIcon } from "@luke/ui";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -1495,17 +1495,13 @@ export function SidePanelToggle({
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
-      <button
-        type="button"
-        className="icon-button side-panel-toggle"
-        aria-label={label}
+      <IconButton
+        icon={<SidePanelIcon />}
+        label={label}
         aria-expanded={panel.open}
-        data-open={String(panel.open)}
         disabled={disabled}
         onClick={panel.onToggle}
-      >
-        <SidePanelIcon />
-      </button>
+      />
     </Tooltip>
   );
 }

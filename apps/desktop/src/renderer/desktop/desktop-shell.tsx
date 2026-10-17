@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot
 import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { ComposeIcon, SidebarIcon } from "@luke/ui";
+import { ComposeIcon, IconButton, SidebarIcon } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
@@ -130,9 +130,7 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
-      <button type="button" className="icon-button" aria-label={label} onClick={sidebar.onToggle}>
-        <SidebarIcon />
-      </button>
+      <IconButton icon={<SidebarIcon />} label={label} onClick={sidebar.onToggle} />
     </Tooltip>
   );
 }
@@ -249,15 +247,12 @@ function usePlaceCommands(
 function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   return (
     <Tooltip label="New task" command={APP_COMMAND.NEW_TASK}>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label="New task"
+      <IconButton
+        icon={<ComposeIcon />}
+        label="New task"
         disabled={!tasks.signedIn}
         onClick={tasks.onNewTask}
-      >
-        <ComposeIcon />
-      </button>
+      />
     </Tooltip>
   );
 }
