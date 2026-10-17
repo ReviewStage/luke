@@ -1,6 +1,6 @@
 {
   "name": "@luke/luke",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "Luke, the orchestrator: the planning brain's eve app on the web deployment",
