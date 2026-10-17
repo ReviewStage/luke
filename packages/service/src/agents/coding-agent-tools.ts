@@ -4,6 +4,7 @@ import {
   awaitingLinesOfReached,
   type CodingAgent,
   type CodingAgentLatestTurn,
+  continuationsOf,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
   planNamesOf,
@@ -12,7 +13,12 @@ import {
   readCodingAgentByKey,
   unarchiveCodingAgentFrom,
 } from "@luke/database/models/coding-agent-store";
-import { listJournals, turnStoppedUnderReached } from "@luke/database/models/message-reads";
+import {
+  listJournals,
+  messageSeqOf,
+  type StoredMessageRecord,
+  turnStoppedUnderReached,
+} from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
 import { createTask, deleteTask, listTasks, readTask } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
@@ -25,6 +31,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentStartFrom,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
@@ -39,6 +46,7 @@ import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
   isStoredToolPart,
+  MESSAGE_ROLE,
   type StoredUIMessage,
   type UnparsedWireValue,
   type WireRecord,
@@ -67,6 +75,7 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
+import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { accountModelChoices, startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
@@ -119,7 +128,7 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * to answer it by, written here rather than by the model, so the receiving
  * agent reads it as a colleague's word and neither the developer's nor
  * Luke's. A start takes the one path the Start button's does
- * (`coder-host/start.ts`), on the caller's own task and no other, under the
+ * (`coder-host/start.ts`), on the caller's own task or another of its workspace, under the
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
  * after either, on the model and effort named or else the member's default,
@@ -135,6 +144,14 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * works in (Luke's task's, or the calling agent's own), confirmed through the
  * workspace's installation first; a start that then fails takes the task it
  * made away again, and a call run again answers the agent and task it made.
+ * A start may instead go on from another agent of the workspace, on that
+ * agent's own task, as the Start route's continue and fork do: without a
+ * message it continues an agent that has ended and that no other agent
+ * continued yet, which its start then stops, and with one of its messages
+ * it forks it there, which leaves it going on; either is handed the
+ * source's brief, its replay with Luke's summary of what does not fit, a
+ * copy of its work, and the note, and takes no prompt and no branch. A read
+ * names the message each entry of the tail stands in, which a fork names.
  * An archive takes the rule the Archive agent menu's does for the member
  * the caller acts for: any agent of the workspace that member could
  * archive, a teammate's among them, with the stamp the menu writes, and
@@ -287,12 +304,43 @@ export const START_CODING_AGENT_REFUSAL = {
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
   ARCHIVED: "Not started: this task is archived; a member unarchives it first.",
+  NO_SOURCE:
+    "Not started: no coding agent of your workspace has that id to start from; " +
+    `${AGENT_TOOL.LIST_AGENTS} names them.`,
+  SOURCE_NO_TASK:
+    "Not started: that agent works on no task, and only an agent on a task is continued or " +
+    "forked; start a new agent with a prompt instead.",
+  SOURCE_OTHER_TASK:
+    "Not started: that agent works on another task than the taskId named; leave taskId out to " +
+    "start on its own task.",
+  FROM_WITH_PROMPT:
+    "Not started: an agent started from another is handed that agent's brief, transcript, and " +
+    "work on that agent's own task, so it takes no prompt, no branch, and no new task; put what it " +
+    "should hear beyond them in the note.",
+  NO_MESSAGE:
+    "Not started: that messageId is none of that agent's own messages; " +
+    `${AGENT_TOOL.READ_AGENT} names each entry's messageId. Leave messageId out to continue it.`,
+  SELF_CONTINUE:
+    "Not started: an agent does not continue itself, since you are still here to go on; to try " +
+    "another direction from one of your own messages, fork yourself at its messageId.",
+  SOURCE_RUNNING:
+    "Not started: that agent is still starting or working, and a continue would take over work " +
+    "it is still doing. Wait until it ends, message it, or fork it at a messageId to try another " +
+    "direction beside it.",
 } as const;
 
 /** Why a list of the models answered none, in words the model can act on. */
 export const LIST_MODELS_REFUSAL = {
   UNAVAILABLE: "Not listed: the models could not be read just now. The call may be made again.",
 } as const;
+
+/** The refusal of a continue of an agent another agent already continued, naming that one so the caller goes on from it. */
+function alreadyContinued(mention: string, agentId: string): string {
+  return (
+    `Not started: that agent was already continued by ${mention} (agent id ${agentId}); ` +
+    "continue or message that one instead, or fork this one at a messageId."
+  );
+}
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
@@ -335,6 +383,8 @@ export interface CodingAgentCall {
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;
+  /** How a start from another agent summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out unsummarized. */
+  readonly summaryModel?: SummaryModelOf | undefined;
 }
 
 /** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, and the catalog a start's choice is checked against. */
@@ -464,6 +514,29 @@ const START_AGENT_INPUT = Schema.Struct({
       "The reasoning effort, as the model lists it (such as high); given with the model or not at all.",
     ),
   ),
+  from: Schema.optionalKey(
+    describeWire(
+      Schema.Struct({
+        agentId: describeWire(
+          wireUuidSchema,
+          `The agent to start from, by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
+        ),
+        messageId: Schema.optionalKey(
+          describeWire(
+            wireUuidSchema,
+            `One of that agent's messages, by the messageId ${AGENT_TOOL.READ_AGENT} names on ` +
+              "an entry of its tail, to fork it there; leave it out to continue the agent from " +
+              "where it stands.",
+          ),
+        ),
+      }),
+      "Another coding agent of your workspace to take over from, on its own task: the new " +
+        "agent is handed its brief and its transcript (with Luke's summary of the steps that " +
+        "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
+        "the note after them; it takes no prompt and no branch. Without messageId it continues " +
+        "the agent, which is stopped; with one it forks the agent at that message, which goes on.",
+    ),
+  ),
 });
 
 const readAgentRef = Schema.decodeUnknownResult(READ_AGENT_INPUT);
@@ -517,7 +590,8 @@ export const READ_AGENT_TOOL = {
   description:
     "Read one coding agent's recent progress: its status, the branch it pushed and the pull " +
     "request from it as GitHub holds them, and a short tail of what it last said and did, " +
-    "newest last. Summarise it in a sentence or two; never read it out.",
+    "newest last, each entry with the messageId to fork the agent at. Summarise it in a " +
+    "sentence or two; never read it out.",
   inputSchema: READ_AGENT_INPUT,
 } as const;
 
@@ -529,7 +603,9 @@ export const CODER_READ_AGENT_TOOL = {
     `what ${AGENT_TOOL.LIST_AGENTS} says of it, the branch it pushed and the pull request from it ` +
     "as GitHub holds them, and the tail of its transcript, what it last said and which tools it " +
     "called on what, newest last, each entry cut to " +
-    `${CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS} characters. Read one to learn why an agent ` +
+    `${CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS} characters and with the messageId of the ` +
+    `message it stands in, which ${AGENT_TOOL.START_AGENT}'s from names to fork the agent ` +
+    "there. Read one to learn why an agent " +
     "went quiet, what it is stuck on, or what it did, before you message it or decide what " +
     "comes next. It only reads: the agent is not told. Answers `accepted` with the reading, or " +
     "`rejected` and why.",
@@ -564,7 +640,11 @@ export const START_AGENT_TOOL = {
     "the agent's id, model, the model's name to say it by, effort, status, and mention once its session " +
     "is open, and the new task's id, name, and mention where it made one, or `rejected` and why " +
     "nothing was started; a rejected model or effort lists the choices. " +
-    `${AGENT_TOOL.LIST_MODELS} lists them before you name one.`,
+    `${AGENT_TOOL.LIST_MODELS} lists them before you name one. With from, it starts from ` +
+    "another agent instead: continue an agent (or worker) " +
+    "that failed, ended, or ran out of context, which is handed over and stopped, or fork one " +
+    "at a messageId to try another direction while it goes on. A start from another agent " +
+    "copies its work and summarizes its transcript, so it may take a minute to answer.",
   inputSchema: START_AGENT_INPUT,
 } as const;
 
@@ -681,6 +761,9 @@ export const LIST_TASKS_TOOL = {
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
+/** How a refusal names a continuation that has no title yet. */
+const CONTINUATION_NAME = "its continuation";
+
 const ENTRY_WORDS = {
   SAID: "Said",
 } as const;
@@ -723,10 +806,11 @@ interface AgentReading {
   readonly mention: string;
 }
 
-/** The newest journals of an agent's conversation, read under the member who started it, oldest first; none where the page does not read. */
+/** The newest journals of an agent's conversation, each with its message's id, read under the member who started it, oldest first; none where the page does not read. */
 const journalsOf = (agent: CodingAgent, limit: number) =>
-  Effect.map(listJournals(agent.userId, agent.conversationId, CODER_TOOL_SET, limit), (read) =>
-    read.ok ? read.value.map((record) => record.message) : [],
+  Effect.map(
+    listJournals(agent.userId, agent.conversationId, CODER_TOOL_SET, limit),
+    (read): readonly StoredMessageRecord[] => (read.ok ? read.value : []),
   );
 
 /** The agents' standings, read once for the lot: each one's newest turn, and whether a line of the developer's awaits one. The agents were read through their workspace's gate, so their conversations are read by id. */
@@ -776,7 +860,7 @@ const readAgent = (
     const activity =
       newest === undefined
         ? undefined
-        : entriesOf(newest, CODING_AGENT_TOOL_BOUNDS.ACTIVITY_CHARS).at(-1);
+        : entriesOf(newest.message, CODING_AGENT_TOOL_BOUNDS.ACTIVITY_CHARS).at(-1);
     return {
       id: agent.id,
       ...task,
@@ -1073,15 +1157,18 @@ export function runListAgents(
 
 /**
  * The newest entries of an agent's transcript, as many as asked where it
- * has them. Note that the newest turns are read first and older ones only
+ * has them, each with the id of the message it stands in, which a fork
+ * names (`start_agent`'s `from`). Note that the newest turns are read first and older ones only
  * where those fall short, because a coding agent's one turn is often its
  * whole run, long enough on its own; and that the second read takes as many
  * turns as entries asked, since a turn that ended carries at least one.
  */
 const tailOf = (agent: CodingAgent, entries: number, entryChars: number) =>
   Effect.gen(function* () {
-    const entriesIn = (journals: readonly StoredUIMessage[]) =>
-      journals.flatMap((journal) => entriesOf(journal, entryChars));
+    const entriesIn = (journals: readonly StoredMessageRecord[]) =>
+      journals.flatMap((journal) =>
+        entriesOf(journal.message, entryChars).map((text) => ({ messageId: journal.id, text })),
+      );
     const newest = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
     const read = entriesIn(newest);
     const more =
@@ -1193,14 +1280,92 @@ export function runMessageAgent(
   );
 }
 
+/** The task a start from another agent lands on, the source's own, once the source is read and found fit to start from; or why it is not. */
+const sourceLanding = (
+  caller: AgentCaller,
+  from: CodingAgentStartFrom,
+  named: string | undefined,
+): Effect.Effect<Result.Result<string, string>, StoreFailure, DatabaseServices> =>
+  Effect.gen(function* () {
+    const found = yield* workspaceAgentOf(caller, from.agentId);
+    if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
+    const { agent: source, task, workspaceId } = found.value;
+    if (source.taskId === null) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_TASK);
+    if (named !== undefined && named !== source.taskId) {
+      return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_OTHER_TASK);
+    }
+    if (task.task?.archived === true) return Result.fail(START_CODING_AGENT_REFUSAL.ARCHIVED);
+    // A fork names one of the source's own messages, and leaves the source going on beside it.
+    if (from.messageId !== undefined) {
+      const { userId, conversationId } = source;
+      const role = MESSAGE_ROLE.ASSISTANT;
+      const at = yield* messageSeqOf(userId, conversationId, from.messageId, role);
+      if (Option.isNone(at)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_MESSAGE);
+      return Result.succeed(source.taskId);
+    }
+    // A continue takes over work that has ended, and only once: a second would split it in two.
+    const { status } = (yield* standingsOf([source]))(source);
+    if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
+      return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING);
+    }
+    const userId = callerUserId(caller);
+    const continuations = (yield* continuationsOf(userId, [source.id])).get(source.id) ?? [];
+    const continuation = continuations.find((each) => each.messageId === undefined);
+    if (continuation !== undefined) {
+      const mention = writtenMention(
+        { kind: MENTION_KIND.AGENT, taskId: source.taskId, agentId: continuation.agentId },
+        continuation.title ?? CONTINUATION_NAME,
+        yield* workspaceStepOf(userId, workspaceId),
+      );
+      return Result.fail(alreadyContinued(mention, continuation.agentId));
+    }
+    return Result.succeed(source.taskId);
+  });
+
+/** A start's refusal in the model's words, said of the source where the start named one: one that is none of the caller's, or a message that is none of the source's. */
+function startFromRefusalWords(
+  refusal: HostedRefusal,
+  from: CodingAgentStartFrom | undefined,
+): string {
+  if (from !== undefined && refusal.error === HOSTED_API_ERROR.NOT_FOUND) {
+    return START_CODING_AGENT_REFUSAL.NO_SOURCE;
+  }
+  if (from?.messageId !== undefined && refusal.error === HOSTED_API_ERROR.INVALID_REQUEST) {
+    return START_CODING_AGENT_REFUSAL.NO_MESSAGE;
+  }
+  return startRefusalWords(refusal);
+}
+
+/** Why a start's input asks for nothing that can start, read before anything is: a source with a prompt, a branch, or a new task, or a coding agent continuing itself. */
+function startInputRefusal(
+  caller: AgentCaller,
+  start: typeof START_AGENT_CALL.Type,
+): string | undefined {
+  const { from } = start;
+  if (from === undefined) return undefined;
+  const prompt = start.prompt ?? start.task;
+  if (prompt !== undefined || start.branch !== undefined || start.newTask !== undefined) {
+    return START_CODING_AGENT_REFUSAL.FROM_WITH_PROMPT;
+  }
+  const self = caller.kind === AGENT_CALLER.AGENT && from.agentId === caller.agent.id;
+  return self && from.messageId === undefined
+    ? START_CODING_AGENT_REFUSAL.SELF_CONTINUE
+    : undefined;
+}
+
 /**
  * One call of `start_agent`: an agent started under the call's own key on
- * the caller's own task, another of its workspace, or a new one made for it,
- * or why nothing was started. A new task stands only under the agent its own
- * call made: one whose start failed, or that found an agent a concurrent run
- * of the same call made meanwhile on a task of its own, goes (and is left
- * where an agent stands on it after all), and the call answers whatever agent
- * its key now stands for, with that agent's own task, or else the refusal.
+ * the caller's own task, another of its workspace, a new one made for it, or
+ * the task of the agent it starts from, or why nothing was started. A new
+ * task stands only under the agent its own call made: one whose start failed,
+ * or that found an agent a concurrent run of the same call made meanwhile on
+ * a task of its own, goes (and is left where an agent stands on it after
+ * all), and the call answers whatever agent its key now stands for, with that
+ * agent's own task, or else the refusal. Note that a start from another agent
+ * can take tens of seconds, a copy of its work and a summary of its
+ * transcript among them, which the call is let run: eve's workflow step runs
+ * a tool to the function's own bound, and the copy and the summary each hold
+ * to their own timeouts well inside it (`snapshot.ts`, `replay-summary.ts`).
  */
 export function runStartAgent(
   call: CodingAgentCall,
@@ -1216,10 +1381,12 @@ export function runStartAgent(
   ) {
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
   }
-  const { model, effort, newTask } = asked.success;
+  const { model, effort, newTask, from } = asked.success;
+  const { caller, eve } = call;
+  const refused = startInputRefusal(caller, asked.success);
+  if (refused !== undefined) return Effect.succeed(agentToolRejected(refused));
   const prompt = asked.success.prompt ?? asked.success.task;
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
-  const { caller, eve } = call;
   const named = asked.success.taskId;
   const ownTask = callerTask(caller);
   if (eve === undefined)
@@ -1230,23 +1397,30 @@ export function runStartAgent(
   const userId = callerUserId(caller);
   return orStoreRefusal(
     Effect.gen(function* () {
-      // Another task, or a new one, is started on only where it is of the caller's own workspace;
-      // a call run again after its start landed answers what it made (`startedBefore`).
-      const elsewhere = newTask !== undefined || (named !== undefined && named !== ownTask);
+      // Another task, a new one, or another agent's is started on only where it is of the caller's
+      // own workspace; a call run again after its start landed answers what it made
+      // (`startedBefore`), before a source is read, which its own continue has since stopped.
+      const elsewhere =
+        from !== undefined || newTask !== undefined || (named !== undefined && named !== ownTask);
       if (elsewhere) {
         const before = yield* startedBefore(call, newTask !== undefined);
         if (Option.isSome(before)) return before.value;
       }
-      if (named !== undefined && named !== ownTask) {
+      if (from === undefined && named !== undefined && named !== ownTask) {
         const reached = yield* taskOfCallerWorkspace(caller, named);
         if (!reached) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
+      }
+      // A start from another agent lands on that agent's own task.
+      const landing = from === undefined ? undefined : yield* sourceLanding(caller, from, named);
+      if (landing !== undefined && Result.isFailure(landing)) {
+        return agentToolRejected(landing.failure);
       }
       const making = newTask === undefined ? undefined : yield* newTaskOf(caller, newTask);
       if (making !== undefined && Result.isFailure(making)) {
         return agentToolRejected(making.failure);
       }
       const made = making?.success;
-      const planId = made?.id ?? named ?? ownTask;
+      const planId = landing?.success ?? made?.id ?? named ?? ownTask;
       if (planId === null) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
         taskId: planId,
@@ -1256,6 +1430,8 @@ export function runStartAgent(
         note,
         title: asked.success.title,
         branch: asked.success.branch,
+        from,
+        summaryModel: call.summaryModel,
         ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
       // A new task stands only under the agent its own call made (see above).
@@ -1270,7 +1446,7 @@ export function runStartAgent(
           // The choices are the models the start was checked against, so no second read can lose them.
           return agentToolRejected(choiceRefusal(choice, refusal.offered));
         }
-        return agentToolRejected(startRefusalWords(refusal));
+        return agentToolRejected(startFromRefusalWords(refusal, from));
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
