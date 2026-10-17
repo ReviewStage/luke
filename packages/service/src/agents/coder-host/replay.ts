@@ -45,6 +45,7 @@ import {
   isWireString,
   MESSAGE_ROLE,
   type StoredToolPart,
+  UI_PART_TYPE,
   type UnparsedWireValue,
 } from "../../core.js";
 import {
@@ -66,7 +67,10 @@ import { CURSOR_START } from "./transcript.js";
  * other, and its transcript under the member who started it, whose
  * conversation it is. A continue replays every step; a fork stops at the
  * assistant message named, its turn's journal included, and a message that
- * is none of the source's own journals is refused. The source's first
+ * is none of the source's own journals is refused. A fork of a reply still
+ * being written names how many of its steps were seen as Fork was pressed,
+ * and keeps those steps alone, as they stand when the Start reads them, so
+ * the steps the source began after the press stay out of it. The source's first
  * message is its brief and is not replayed: the new agent is handed the
  * plan as it stands now, or the source's prompt with the text files
  * attached to it, an automation run's prompt as it was handed, without the
@@ -635,6 +639,8 @@ interface ReplayTold {
   readonly forked: { readonly at: boolean; readonly edited: readonly string[] | undefined };
   readonly unkept: readonly string[];
   readonly messageId: string | undefined;
+  /** How many of that message's steps the fork kept, where it was of a reply still being written; none where it kept the message whole. */
+  readonly messageSteps?: number | undefined;
 }
 
 /** A replay fitted to the new agent's window, and what the new agent's row keeps of where it came from. */
@@ -678,6 +684,7 @@ export function replayOf(
     startedFrom: {
       agentId: source.id,
       ...message,
+      ...(told.messageSteps === undefined ? undefined : { messageSteps: told.messageSteps }),
       steps: kept.length,
       totalSteps,
       ...(told.copy.copied ? { branch: told.copy.branch } : undefined),
@@ -698,16 +705,17 @@ function editedFiles(part: StoredToolPart): readonly string[] {
 }
 
 /**
- * The files the source's file tools edited after the message a fork is
- * taken at, each once, in the order first edited, read forward from the
- * cut's sequence up to `REPLAY_BOUNDS.MAX_ROWS` rows. Note that a page that
+ * The files the source's file tools edited after the point a fork is taken
+ * at, each once, in the order first edited: the steps of the cut message the
+ * fork left out, then the rows read forward from the cut's sequence up to
+ * `REPLAY_BOUNDS.MAX_ROWS` rows. Note that a page that
  * does not read, or rows past the cap, answer nothing rather than refusing
  * the fork or naming some of the files as all of them, because the fork
  * replays none of those rows and only its caveat names them.
  */
-const editedAfter = (source: CodingAgent, cutSeq: number) =>
+const editedAfter = (source: CodingAgent, cutSeq: number, rest: Parts) =>
   Effect.gen(function* () {
-    const files = new Set<string>();
+    const files = new Set(rest.filter(isStoredToolPart).flatMap(editedFiles));
     // A cursor past every revision reads the rows after the cut alone, never one amended before it.
     let cursor = { seq: cutSeq, revision: Number.MAX_SAFE_INTEGER };
     for (let read = 0; read < REPLAY_BOUNDS.MAX_ROWS; read += PAGE_ROWS) {
@@ -786,6 +794,52 @@ const lineageOf = (userId: string, source: CodingAgent, repository: string | nul
     return { lineage, carried };
   });
 
+/** One message's parts. */
+type Parts = StoredMessageRecord["message"]["parts"];
+
+/** A message's parts as a fork cuts them: those it keeps, and those it leaves out. */
+interface CutParts {
+  readonly kept: Parts;
+  readonly rest: Parts;
+}
+
+/** A source's records with the cut message's parts as a fork keeps them, and the parts of it left out. */
+interface PinnedRecords {
+  readonly records: readonly StoredMessageRecord[];
+  readonly rest: Parts;
+}
+
+/**
+ * A message's parts cut after its first `steps` steps, as a fork of a reply
+ * still being written keeps them, and the parts it leaves out: everything
+ * from the boundary of the step after those on. Parts ahead of the first
+ * boundary are kept with the first step; a message of no more steps than
+ * that is kept whole.
+ */
+function cutAtStep(parts: Parts, steps: number): CutParts {
+  const boundaries = parts.flatMap((part, index) =>
+    part.type === UI_PART_TYPE.STEP_START ? [index] : [],
+  );
+  const end = boundaries[steps] ?? parts.length;
+  return { kept: parts.slice(0, end), rest: parts.slice(end) };
+}
+
+/** The records with the cut message's parts cut at the step a fork names, and the parts left out; the records as read where it names none. */
+function pinnedRecords(
+  records: readonly StoredMessageRecord[],
+  messageId: string | undefined,
+  steps: number | undefined,
+): PinnedRecords {
+  const at = records.findIndex(
+    (record) => record.id === messageId && record.message.role === MESSAGE_ROLE.ASSISTANT,
+  );
+  const cut = records[at];
+  if (steps === undefined || cut === undefined) return { records, rest: [] };
+  const { kept, rest } = cutAtStep(cut.message.parts, steps);
+  const pinned = { ...cut, message: { ...cut.message, parts: kept } };
+  return { records: records.with(at, pinned), rest };
+}
+
 /** The steps a source's transcript replays, cut after the message named: refused where that message is none of its journals. */
 function transcriptSteps(
   records: readonly StoredMessageRecord[],
@@ -834,7 +888,8 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   const read = yield* hostedStoreOrUnavailable(recordsOf(source, from.messageId));
   if (read === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  const { records, cutSeq } = read;
+  const { cutSeq } = read;
+  const { records, rest } = pinnedRecords(read.records, from.messageId, from.messageSteps);
   const lines = records.filter((record) => record.message.role === MESSAGE_ROLE.USER);
   const senders = yield* hostedStoreOrUnavailable(
     lineSendersOf(
@@ -854,7 +909,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
   const copy = yield* copySourceWork(userId, source, forked, idempotencyKey);
   const edited =
-    cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq));
+    cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));
   return {
     source,
     lineage,
@@ -873,6 +928,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       forked: { at: forked, edited },
       unkept: files.unkept,
       messageId: from.messageId,
+      messageSteps: from.messageSteps,
     },
   };
 });

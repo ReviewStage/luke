@@ -25,10 +25,12 @@ import type { AgentFork } from "./fork-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 
 /**
- * fork-action.test.ts -- Fork to new agent stands on an agent's own settled
- * messages, on a tab of a task that is not archived and that opens a
- * draft, and nowhere else; its press forks at that message; and under each
- * message a line names the agents forked at it, each opening its tab.
+ * fork-action.test.ts -- Fork to new agent stands on an agent's own
+ * messages, settled ones whole, wordless ones among them, and the reply a
+ * running turn is still writing as far as it stood, on a tab of a task that
+ * is not archived and that opens a draft, and nowhere else; its press forks
+ * at that message; and under each message a line names the agents forked at
+ * it, each opening its tab.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -125,7 +127,28 @@ test("an agent's own settled message offers Fork to new agent after Copy, and it
   ]);
 });
 
-test("no fork is offered on the developer's message, the message still being written, a task archived, an agent on no task, a place that opens no draft, or a tab that hands none, as a worker's", () => {
+test("a settled turn of no words, its calls alone or failed before it said anything, offers Fork with no Copy, and its press forks at that message", () => {
+  const callsOnly: CodingAgentMessage = {
+    ...SETTLED,
+    parts: [
+      { type: "step-start" },
+      {
+        type: "tool-bash",
+        toolCallId: "call-1",
+        state: "output-available",
+        input: { command: "pnpm test" },
+        output: "ok",
+      },
+    ],
+  };
+  const view = drawn({ message: callsOnly });
+  assert.ok(view.fork, "the action is drawn");
+  assert.equal(view.container.querySelector('button[aria-label="Copy"]'), null, "no Copy");
+  act(() => view.fork?.click());
+  assert.deepEqual(view.forks, [{ agentId: SOURCE, messageId: TURN, opening: "" }]);
+});
+
+test("no fork is offered on the developer's message, a task archived, an agent on no task, a place that opens no draft, or a tab that hands none, as a worker's", () => {
   const developers: CodingAgentMessage = {
     id: "line-1",
     role: MESSAGE_ROLE.USER,
@@ -133,7 +156,6 @@ test("no fork is offered on the developer's message, the message still being wri
   };
   const cases = {
     "the developer's message": drawn({ message: developers }),
-    "the message still being written": drawn({ moving: true }),
     "a task archived": drawn({ taskArchived: true }),
     "an agent on no task": drawn({ agent: summary(SOURCE, { planId: null }) }),
     "a place that opens no draft": drawn({ opensDraft: false }),
@@ -200,7 +222,7 @@ function line(id: string, text: string): CodingAgentMessage {
 async function forkedAtInTab(
   status: CodingAgentStatus,
   messages: readonly CodingAgentMessage[],
-): Promise<readonly (string | undefined)[]> {
+): Promise<readonly Omit<AgentFork, "agentId" | "opening">[]> {
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
@@ -249,33 +271,45 @@ async function forkedAtInTab(
   )) {
     act(() => button.click());
   }
-  return forks.map((fork) => fork.messageId);
+  return forks.map(({ agentId: _agent, opening: _opening, ...at }) => at);
 }
 
-test("while an agent works, the newest of its replies, which the running turn may still be writing, offers no fork, and every earlier one does; once it settles, every reply does", async () => {
+test("while an agent works, the newest of its replies, which the running turn may still be writing, forks as far as the steps it has begun, and every earlier one whole; once it settles, every reply forks whole", async () => {
   const LATEST = "6b3a4f5e-7d8c-4b9a-8c3d-4e5f6a7b8c9d";
+  const writing = {
+    ...reply(LATEST, "Adding the retry"),
+    parts: [
+      { type: "step-start" },
+      { type: "text", text: "Adding the retry" },
+      { type: "step-start" },
+    ],
+  };
   const settled = [
     line("task", "Queue the invite email."),
     reply(TURN, "Moved it onto the queue."),
     line("line-1", "Now add a retry."),
-    reply(LATEST, "Adding the retry"),
+    writing,
   ];
 
   for (const working of [CODING_AGENT_STATUS.RUNNING, CODING_AGENT_STATUS.STARTING]) {
     assert.deepEqual(
       await forkedAtInTab(working, settled),
-      [TURN],
-      `${working}: the newest reply is open`,
+      [{ messageId: TURN }, { messageId: LATEST, messageSteps: 2 }],
+      `${working}: the newest reply is cut where it stands`,
     );
   }
-  assert.deepEqual(await forkedAtInTab(CODING_AGENT_STATUS.COMPLETED, settled), [TURN, LATEST]);
-  // A turn that has not written a reply of its own yet may still be writing to the newest one there is.
+  assert.deepEqual(await forkedAtInTab(CODING_AGENT_STATUS.COMPLETED, settled), [
+    { messageId: TURN },
+    { messageId: LATEST },
+  ]);
+  // A reply that has begun no step yet holds nothing to keep, so it offers no fork until it does.
   assert.deepEqual(
     await forkedAtInTab(CODING_AGENT_STATUS.RUNNING, [
       line("task", "Queue the invite email."),
       reply(TURN, "Moved it onto the queue."),
       line("line-1", "Now add a retry."),
+      { ...reply(LATEST, ""), parts: [] },
     ]),
-    [],
+    [{ messageId: TURN }],
   );
 });

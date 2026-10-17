@@ -624,11 +624,14 @@ const MessageInsertSchema = Schema.Struct({
 
 const lockConversation = SqlSchema.findOneOption({
   Request: ConversationTargetSchema,
-  Result: RowIdSchema,
+  Result: Schema.Struct({
+    id: Schema.String,
+    kind: Schema.Literals(Object.values(CONVERSATION_KIND)),
+  }),
   execute: (target) =>
     Database.use((db) =>
       db
-        .select({ id: conversations.id })
+        .select({ id: conversations.id, kind: conversations.kind })
         .from(conversations)
         .where(
           and(
@@ -1110,6 +1113,8 @@ interface WriterContext {
   /** The instant this locked write stamps every row it touches. */
   readonly now: Date;
   readonly target: ConversationTarget;
+  /** What the conversation is: a coding agent's own, whose failed turn keeps its words, or one of the brain's. */
+  readonly kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 }
 
 /** What one of this writer's statements answers: an effect over the transaction it runs in. */
@@ -1369,11 +1374,14 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
     responseIds: event.responseIds,
   });
-  // A journal still open here belongs to a turn that answered nothing, so
-  // the words its steps formed while it ran leave it, and what it keeps is
-  // what it did. One the answer already closed is revised in place, because
-  // a reader may have taken it before the row settled, and what the row now
-  // says of it travels with it.
+  // A journal still open here belongs to a turn that answered nothing. A
+  // brain's keeps what it did and the words its steps formed leave it,
+  // because a new session's seed reads them as said and the voice could
+  // speak them. A coding agent's keeps its words as well, because they are
+  // the partial work its tab shows and a Continue or a Fork replays. One
+  // the answer already closed is revised in place, because a reader may
+  // have taken it before the row settled, and what the row now says of it
+  // travels with it.
   const open = yield* messageByClientId(context, event.turnId);
   if (Option.isSome(open) && open.value.finishedAt !== null) {
     yield* reviseJournal({ id: open.value.id, conversationId: context.target.conversationId });
@@ -1383,8 +1391,9 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
       event.status === BRAIN_REQUEST_STATUS.CANCELLED
         ? UNANSWERED_REASON.CANCELLED
         : UNANSWERED_REASON.ENDED;
-    const parts = open.value.parts.flatMap((part) => {
-      if (part.type === UI_PART_TYPE.TEXT) return [];
+    const keepsWords = context.kind === CONVERSATION_KIND.CODING_AGENT;
+    const parts = open.value.parts.flatMap((part): Parts => {
+      if (part.type === UI_PART_TYPE.TEXT) return keepsWords ? [part] : [];
       return isStoredToolPart(part) && !isSettledToolPartState(part.state)
         ? [unansweredToolPart(part, reason)]
         : [part];
@@ -2326,7 +2335,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
           const locked = yield* lockConversation(target);
           if (Option.isNone(locked)) return Result.fail(NO_CONVERSATION);
           const now = yield* DateTime.nowAsDate;
-          return yield* write({ tools, now, target });
+          return yield* write({ tools, now, target, kind: locked.value.kind });
         }),
       ),
     );

@@ -62,12 +62,13 @@ const draftPlaceSchema = Schema.Union([
     planId: Schema.String,
     /** The key the draft agent starts under, which a relaunch keeps, so a Start asked again is the same one. */
     draftId: Schema.String,
-    /** The agent and message the draft forks, with the message's opening words, which a relaunch keeps beside its words; no message for a continue of the agent's whole transcript. */
+    /** The agent and message the draft forks, with the message's opening words and, for a reply still being written, how many of its steps the fork keeps, which a relaunch keeps beside its words; no message for a continue of the agent's whole transcript. */
     fork: Schema.optionalKey(
       Schema.Struct({
         agentId: Schema.String,
         messageId: Schema.optionalKey(Schema.String),
         opening: Schema.String,
+        messageSteps: Schema.optionalKey(Schema.Number),
       }),
     ),
   }),

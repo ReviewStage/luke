@@ -30,7 +30,9 @@ import { useOpenPlace } from "./use-open-link";
 
 /** What an agent's tab hands its messages: the press that forks one, none where forking is not offered, the chips of the agents each was forked to, and the press that opens the agent's continue as a draft, none where no draft opens. */
 interface ForkDoors {
-  readonly onFork: ((messageId: string, words: string) => void) | undefined;
+  readonly onFork:
+    | ((messageId: string, words: string, messageSteps: number | undefined) => void)
+    | undefined;
   readonly forkedTo: (messageId: string) => readonly ReactNode[];
   readonly onContinue?: ContinueDoor | undefined;
 }
@@ -106,8 +108,13 @@ export function agentForkDoors(input: {
       : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
   return {
     onFork: forkable
-      ? (messageId, words) =>
-          onFork({ agentId: agent.id, messageId, opening: messageOpening(words) })
+      ? (messageId, words, messageSteps) =>
+          onFork({
+            agentId: agent.id,
+            messageId,
+            opening: messageOpening(words),
+            ...(messageSteps === undefined ? undefined : { messageSteps }),
+          })
       : undefined,
     onContinue:
       onContinue !== undefined && drafts
@@ -128,13 +135,21 @@ export function agentForkDoors(input: {
   };
 }
 
+/** Whether the tab a message is drawn in offers to fork it. */
+export function useForkOffered(): boolean {
+  return useContext(ForkContext)?.onFork !== undefined;
+}
+
 /** A message's Fork to new agent, after its Copy and Copy link; nothing where its tab offers no fork. */
 export function ForkMessageAction({
   messageId,
   words,
+  messageSteps,
 }: {
   messageId: string;
   words: string;
+  /** How many of the message's steps the fork keeps, where it is a reply still being written (`forkStepsOf`); none for a settled one, kept whole. */
+  messageSteps?: number | undefined;
 }): ReactNode {
   const onFork = useContext(ForkContext)?.onFork;
   if (onFork === undefined) return null;
@@ -144,7 +159,7 @@ export function ForkMessageAction({
       tooltip={FORK_WORDS.ACTION}
       className="[&_svg]:size-4"
       data-fork-action=""
-      onClick={() => onFork(messageId, words)}
+      onClick={() => onFork(messageId, words, messageSteps)}
     >
       <SplitIcon />
     </MessageAction>

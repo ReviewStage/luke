@@ -2,8 +2,10 @@
  * fork-model.ts -- a coding agent forked at one of its messages: the fork a draft holds, what its chip quotes of the message, the choice it starts on, the Start a forked draft sends, and where each message was forked to.
  *
  * A fork is a new agent on the same plan handed the source's transcript up
- * to and including one of the source's own settled messages
- * (`codingAgentStartRequestFields`' `from`). The draft that sends it holds
+ * to and including one of the source's own messages
+ * (`codingAgentStartRequestFields`' `from`): a settled one whole, and the
+ * reply a running turn is still writing as far as it stood when Fork was
+ * pressed, by how many of its steps had begun (`forkStepsOf`). The draft that sends it holds
  * the fork beside its choices (`use-coding-agents.ts`), with the opening
  * words of the message it was forked at, which its chip quotes. The
  * developer's words and files go with it as a note, as the Start takes
@@ -18,11 +20,15 @@
  * source on its whole transcript, its chip naming the source alone.
  */
 
-import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type {
+  CodingAgentAttachment,
+  CodingAgentMessage,
+  CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { ACT_KIND, ActPayload } from "@luke/host/acts";
-import { MESSAGE_ROLE } from "@luke/wire";
-import { choiceRequest } from "./coding-agent-model";
+import { isRecord, MESSAGE_ROLE } from "@luke/wire";
+import { AGENT_PART, choiceRequest } from "./coding-agent-model";
 import { cardTitle } from "./tool-call-model";
 
 /** The words the fork's action, chip, and trail are drawn with. */
@@ -45,14 +51,16 @@ const ELLIPSIS = "…";
 
 /**
  * One agent forked at one of its messages, with the message's opening
- * words, which the draft's chip quotes; or, naming no message, continued
- * on its whole transcript, when there is nothing to quote and `opening` is
- * empty.
+ * words, which the draft's chip quotes, and, for a reply still being
+ * written, how many of its steps the fork keeps; or, naming no message,
+ * continued on its whole transcript, when there is nothing to quote and
+ * `opening` is empty.
  */
 export interface AgentFork {
   readonly agentId: string;
   readonly messageId?: string;
   readonly opening: string;
+  readonly messageSteps?: number;
 }
 
 /** A continue of `agentId` as a draft holds it: its whole transcript, no message named. */
@@ -102,10 +110,12 @@ export function forkChoice(source: CodingAgentSummary): ModelChoice {
   });
 }
 
-/** Where a fork starts from: its source at its message, or on its whole transcript for a continue. */
+/** Where a fork starts from: its source at its message, cut at the steps seen where it was still being written, or on its whole transcript for a continue. */
 function forkFrom(fork: AgentFork): NonNullable<ForkStart["from"]> {
-  const { agentId, messageId } = fork;
-  return messageId === undefined ? { agentId } : { agentId, messageId };
+  const { agentId, messageId, messageSteps } = fork;
+  if (messageId === undefined) return { agentId };
+  // Note that a settled message names no steps, so a service before the count still takes its fork.
+  return messageSteps === undefined ? { agentId, messageId } : { agentId, messageId, messageSteps };
 }
 
 /**
@@ -149,10 +159,10 @@ export function startingWords(source: string, elapsedMs: number | undefined): st
 }
 
 /**
- * The reply a running turn may still be writing, which no fork may cut,
- * since a fork keeps whole rows and would keep it half-written: the newest
- * of the agent's own messages while it may still write, and none once it
- * has settled.
+ * The reply a running turn may still be writing, which a fork cuts where it
+ * stood as Fork was pressed (`forkStepsOf`) rather than whole: the newest of
+ * the agent's own messages while it may still write, and none once it has
+ * settled.
  */
 export function openReply(
   messages: readonly { readonly id: string; readonly role: string }[],
@@ -161,6 +171,22 @@ export function openReply(
   return writing
     ? messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT)?.id
     : undefined;
+}
+
+/**
+ * How many steps a fork of `message` keeps: for the reply a running turn is
+ * still writing, the steps begun as it is drawn, which pins the cut so the
+ * steps the agent begins after the press stay out of it; none for a settled
+ * message, which a fork keeps whole. Zero for a reply that has begun no
+ * step, which offers no fork, since there is nothing of it yet to keep.
+ */
+export function forkStepsOf(
+  message: Pick<CodingAgentMessage, "id" | "parts">,
+  open: string | undefined,
+): number | undefined {
+  if (message.id !== open) return undefined;
+  return message.parts.filter((part) => isRecord(part) && part.type === AGENT_PART.STEP_START)
+    .length;
 }
 
 /**

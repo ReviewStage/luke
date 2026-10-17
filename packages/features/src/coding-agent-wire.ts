@@ -329,12 +329,23 @@ export const disabledServersSchema = EffectSchema.Array(
  * The agent a Start takes over from, on the same plan: everything it did
  * where no message is named, which is a continue, or its transcript up to
  * and including one of its own assistant messages, by that message's id as
- * its transcript carries it, which is a fork.
+ * its transcript carries it, which is a fork. A fork of a reply still being
+ * written names how many of that message's steps the developer saw as they
+ * pressed Fork, so the cut keeps those steps and none the agent began after;
+ * a fork naming none keeps the message whole, as a desktop before the count
+ * asked.
  */
 const codingAgentStartFromSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   messageId: EffectSchema.optionalKey(wireUuidSchema),
-});
+  messageSteps: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+}).check(
+  EffectSchema.makeFilter(
+    ({ messageId, messageSteps }) => messageSteps === undefined || messageId !== undefined,
+  ),
+);
 
 export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
 
@@ -604,7 +615,9 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   automationName: EffectSchema.optionalKey(EffectSchema.String),
   /**
    * The agent this one was started from, on the same plan, and the message
-   * of its it was forked at where it was forked rather than continued, with
+   * of its it was forked at where it was forked rather than continued, and
+   * how many of that message's steps it kept where it was forked while that
+   * message was still written, with
    * how many of that agent's steps its replay kept of how many there were,
    * and the branch that agent's work was copied to for this one where it
    * could be; absent for an agent started afresh, and from a service before it.
@@ -613,6 +626,7 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
     EffectSchema.Struct({
       agentId: wireUuidSchema,
       messageId: EffectSchema.optionalKey(wireUuidSchema),
+      messageSteps: EffectSchema.optionalKey(countedNumber),
       steps: countedNumber,
       totalSteps: countedNumber,
       branch: EffectSchema.optionalKey(EffectSchema.String),
