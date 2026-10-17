@@ -2962,6 +2962,63 @@ ol.transcript-list {
   white-space: pre-wrap;
 }
 
+/* A model's reasoning (../ai-elements/reasoning.tsx): one line, a call's
+   line's height and type, the brain in the 16px seat a call's icon stands
+   in, "Thought" in the full ink and the preview after it in the muted one,
+   cut to the line. Open, its words sit under the line's, set in past the
+   brain, in the muted ink, keeping their own breaks and wrapping anywhere. */
+.reasoning {
+  font-size: 12.5px; /* off-scale: a call's line, which it sits among */
+}
+
+.reasoning-line {
+  display: flex;
+  height: 28px; /* off-scale: a call's line */
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.reasoning-line:hover {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+}
+
+.reasoning-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.reasoning-preview {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasoning-label {
+  color: var(--luke-color-text);
+}
+
+.reasoning-body {
+  margin: var(--luke-space-4) 0 0 28px; /* off-scale: past the line's inset and brain */
+  color: var(--luke-color-text-muted);
+}
+
+.reasoning-words {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 /* A transcript's fenced block (transcript-markdown.tsx), drawn as a Code
    tab card is: the code's own ground inside a hairline, a header naming
    the language with the copy at its right, and the lines in the cards'

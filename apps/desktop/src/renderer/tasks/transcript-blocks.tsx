@@ -533,11 +533,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   return (
     <Reasoning>
       <ReasoningTrigger preview={cardTitle(text).slice(0, REASONING_PREVIEW_LENGTH)} />
-      <ReasoningContent>
-        <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {text.replace(LEADING_BLANK_LINES, "").trimEnd()}
-        </p>
-      </ReasoningContent>
+      <ReasoningContent text={text.replace(LEADING_BLANK_LINES, "").trimEnd()} />
     </Reasoning>
   );
 }
