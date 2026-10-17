@@ -302,8 +302,14 @@ function planDraft(
     attachments: kept?.attachments ?? [],
     choice: held?.choice,
     disabledServers: held?.disabledServers ?? [],
-    ...(held?.fork === undefined ? undefined : { fork: held.fork }),
+    // Note that a fork is kept with the words too, so a relaunch keeps the draft a fork.
+    ...forkOf(held === undefined ? kept?.place.fork : held.fork),
   };
+}
+
+/** A draft's fork as an optional key, absent where it forks nothing. */
+function forkOf(fork: AgentFork | undefined): { readonly fork?: AgentFork } {
+  return fork === undefined ? {} : { fork };
 }
 
 /** A Start on its way or asked again: the task, the key the press minted, and the choice it was for. */
@@ -613,13 +619,32 @@ export function useCodingAgents(input: {
     return id;
   };
 
+  /** Where a draft's words are kept: under its key, beside the fork it is. */
+  const wordsPlace = (on: string, id: string, fork: AgentFork | undefined): NewAgentPlace => ({
+    kind: DRAFT_PLACE.NEW_AGENT,
+    planId: on,
+    draftId: id,
+    ...forkOf(fork),
+  });
+
+  /** The open task's draft's words and files kept again under `id` and `fork`, and no longer where they were. */
+  const moveWords = (on: string, id: string, fork: AgentFork | undefined) => {
+    if (draft === undefined) return;
+    const words = { text: draft.prompt, attachments: draft.attachments };
+    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draft.id);
+    writer.update(wordsPlace(on, id, fork), (was) => ({ ...was, ...words }));
+  };
+
   // Note that a fork joins the draft the task holds, so words already
-  // written stay, and its chips are put back on the source's, which a fork
-  // runs on unless the developer picks otherwise.
+  // written stay, under a key of the fork's own, because a Start the draft
+  // sent and never heard answered is answered again under its old key; its
+  // chips are put back on the source's, which a fork runs on unless the
+  // developer picks otherwise.
   const onForkDraft = (fork: AgentFork): string => {
-    const id = draft?.id ?? mintKey();
+    const id = mintKey();
     if (taskId === undefined) return id;
     const source = held?.find((agent) => agent.id === fork.agentId);
+    moveWords(taskId, id, fork);
     withDraft(taskId, {
       id,
       choice: undefined,
@@ -631,6 +656,7 @@ export function useCodingAgents(input: {
 
   const onDropFork = () => {
     if (taskId === undefined || draft === undefined) return;
+    moveWords(taskId, draft.id, undefined);
     withDraft(taskId, {
       id: draft.id,
       choice: draft.choice,
@@ -641,7 +667,7 @@ export function useCodingAgents(input: {
   /** The open plan's draft's words and files moved on from those kept for it. */
   const writeWords = (next: (was: Draft) => Draft) => {
     if (taskId === undefined || draft === undefined) return;
-    writer.update({ kind: DRAFT_PLACE.NEW_AGENT, planId: taskId, draftId: draft.id }, next);
+    writer.update(wordsPlace(taskId, draft.id, draft.fork), next);
   };
 
   const onDraftChange = (

@@ -439,7 +439,7 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
   assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
 });
 
-test("a fork joins the task's draft, its words kept and its chips on the source's servers, holds while another task is open, and starts from the source at the message with the box's words and files as a note; an empty box forks alone", async () => {
+test("a fork joins the task's draft under a key of its own, its words kept and its chips on the source's servers, holds while another task is open, and starts from the source at the message with the box's words and files as a note and its servers named even where none is off; an empty box forks alone", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
   const FORKED = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
@@ -477,9 +477,9 @@ test("a fork joins the task's draft, its words kept and its chips on the source'
   act(() => {
     joined = tab.control().onForkDraft(fork);
   });
-  assert.equal(joined, draft, "the fork joins the draft the task holds");
+  assert.notEqual(joined, draft, "a Start the draft sent is never answered for the fork");
   const forkDraft = {
-    id: draft,
+    id: joined,
     prompt: words,
     attachments: [],
     choice: undefined,
@@ -498,23 +498,29 @@ test("a fork joins the task's draft, its words kept and its chips on the source'
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   let failed: Failure | undefined;
   await act(async () => {
-    failed = await tab.control().startFork(draft, fork, ` ${words} `, undefined, [notes]);
+    failed = await tab.control().startFork(joined, fork, ` ${words} `, undefined, [notes], []);
   });
   assert.equal(failed?.text, "The agent could not be started. Try again.");
   assert.equal(tab.control().draft?.fork, fork, "a send that did not start keeps the fork");
   await act(async () => {
-    failed = await tab.control().startFork(draft, fork, "", undefined, []);
+    failed = await tab.control().startFork(joined, fork, "", undefined, [], []);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
     {
       taskId: TASK,
-      idempotencyKey: draft,
+      idempotencyKey: joined,
       from: { agentId: AGENT, messageId: MESSAGE },
       note: words,
       attachments: [notes],
+      disabledServers: [],
     },
-    { taskId: TASK, idempotencyKey: draft, from: { agentId: AGENT, messageId: MESSAGE } },
+    {
+      taskId: TASK,
+      idempotencyKey: joined,
+      from: { agentId: AGENT, messageId: MESSAGE },
+      disabledServers: [],
+    },
   ]);
   assert.deepEqual(tab.started, [FORKED]);
   assert.equal(tab.control().draft, undefined, "the started fork's draft is let go");
@@ -540,4 +546,46 @@ test("a fork's × lets the fork go and leaves an ordinary draft with its words a
     choice: undefined,
     disabledServers: [],
   });
+});
+
+test("a fork's draft with words outlasts a relaunch still a fork, under the same key, and its × keeps the words as an ordinary draft's", async () => {
+  const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
+  const fork = { agentId: AGENT, messageId: MESSAGE, opening: "Done." };
+  const before = mount({ taskId: TASK, repository: "acme/relay" });
+  before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  await before.mount();
+  let draft = "";
+  act(() => {
+    draft = before.control().onForkDraft(fork);
+  });
+  act(() => before.control().onDraftChange({ prompt: "Try the queue" }));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const after = mount({ taskId: TASK, repository: "acme/relay" });
+  after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  await after.mount();
+  assert.deepEqual(after.control().draft, {
+    id: draft,
+    prompt: "Try the queue",
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+    fork,
+  });
+  act(() => after.control().onDropFork());
+  act(() => after.control().onDraftChange({ prompt: "Try the queue, then retry" }));
+  assert.deepEqual(after.control().draft, {
+    id: draft,
+    prompt: "Try the queue, then retry",
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  });
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const again = mount({ taskId: TASK, repository: "acme/relay" });
+  again.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  await again.mount();
+  assert.equal(again.control().draft?.fork, undefined, "a fork let go stays let go");
+  assert.equal(again.control().draft?.prompt, "Try the queue, then retry");
 });

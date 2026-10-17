@@ -74,8 +74,9 @@ export function forkChoice(source: CodingAgentSummary): ModelChoice {
 /**
  * The Start a forked draft sends under its own key: from the source at its
  * message, a note where the box holds anything, its words and the files
- * with them, the servers the draft switched off, and the choice only where
- * one was made, since a fork otherwise runs on the source's.
+ * with them, the servers the draft switched off, none among them as well,
+ * and the choice only where one was made, since a fork otherwise runs on
+ * the source's.
  */
 export function forkStart(input: {
   readonly draftId: string;
@@ -92,7 +93,8 @@ export function forkStart(input: {
     from: { agentId: input.fork.agentId, messageId: input.fork.messageId },
     ...(note === "" && attachments.length === 0 ? undefined : { note }),
     ...(attachments.length === 0 ? undefined : { attachments }),
-    ...(disabledServers.length === 0 ? undefined : { disabledServers }),
+    // Note that the servers go even when none is off, because a Start naming none runs on the source's.
+    disabledServers,
     ...(choice === undefined ? undefined : choiceRequest(choice)),
   };
 }

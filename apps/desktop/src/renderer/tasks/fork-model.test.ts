@@ -39,7 +39,7 @@ test("the chip quotes a message's first line as plain words, a few of them, endi
   assert.equal(messageOpening("Done.\n\nThe tests pass."), "Done.");
 });
 
-test("a forked draft's send is from the source at its message, under the draft's key, its words and files as a note, the choice only where one was made; an empty box forks alone", () => {
+test("a forked draft's send is from the source at its message, under the draft's key, its words and files as a note, the servers even where none is off, the choice only where one was made; an empty box forks alone", () => {
   const fork = { agentId: SOURCE, messageId: AT, opening: "Done." };
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   const base = { draftId: "draft-1", fork, disabledServers: [] };
@@ -48,6 +48,7 @@ test("a forked draft's send is from the source at its message, under the draft's
   assert.deepEqual(forkStart({ ...base, words: "  ", attachments: [], choice: undefined }), {
     idempotencyKey: "draft-1",
     from,
+    disabledServers: [],
   });
   assert.deepEqual(
     forkStart({
@@ -73,6 +74,7 @@ test("a forked draft's send is from the source at its message, under the draft's
     from,
     note: "",
     attachments: [notes],
+    disabledServers: [],
   });
 });
 
