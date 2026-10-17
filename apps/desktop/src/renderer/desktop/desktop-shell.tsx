@@ -33,6 +33,7 @@ import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopTasks } from "./desktop-tasks";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 import { useFloatDismiss } from "./hover-pane";
+import { OfflineMark } from "./offline-mark";
 import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
 import { SidePanelToggle } from "./side-panel";
@@ -605,10 +606,12 @@ export function DesktopShell({
           onPointerEnter={() => sidebar.onOverlay(SIDEBAR_OVERLAY.PEEK)}
         />
       ) : null}
-      {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
+      {/* Note that they follow the drag strips they cover, because a later drag region wins.
+          Folded, the sidebar's offline pill stands here, as its New task does. */}
       <div className="title-bar-controls" onPointerDown={keepOverlay}>
         <SidebarToggle sidebar={sidebar} />
         {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
+        {sidebar.collapsed ? <OfflineMark /> : null}
       </div>
       {panelToggle ? (
         <div className="title-bar-controls" data-edge="end">
