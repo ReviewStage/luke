@@ -1,5 +1,6 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
+import { INBOX_BLOCK } from "@luke/features/inbox-wire";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
@@ -121,7 +122,7 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.SHOW_IMAGE,
 ]);
 
-/** What a chat post's input is read for here: the types of its blocks, an image's among them. */
+/** What a chat post's or an inbox post's input is read for here: the types of its blocks, an image's among them. */
 const readPostedBlocks = Schema.decodeUnknownOption(
   Schema.Struct({ blocks: Schema.Array(Schema.Struct({ type: Schema.String })) }),
 );
@@ -129,8 +130,9 @@ const readPostedBlocks = Schema.decodeUnknownOption(
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
  * a sandbox tool, for a page read from a file in the sandbox, for an
- * edit of the plan adding a picture read from one, or for a chat post with
- * a picture, which is read from a file in the sandbox, or a message
+ * edit of the plan adding a picture read from one, or for a chat post or
+ * an inbox post with a picture, which is read from a file in the sandbox,
+ * or a message
  * received with files, which eve stages in the sandbox before the
  * turn opens, opening it to do so.
  */
@@ -148,6 +150,10 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
             (action.toolName === CODER_TOOL.POST_CHAT &&
               Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
                 blocks.some((block) => block.type === CHAT_BLOCK.IMAGE),
+              )) ||
+            (action.toolName === CODER_TOOL.POST_TO_INBOX &&
+              Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
+                blocks.some((block) => block.type === INBOX_BLOCK.IMAGE),
               ))),
       );
     case "message.received":
