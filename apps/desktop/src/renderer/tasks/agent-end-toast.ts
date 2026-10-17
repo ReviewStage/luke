@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { appBridge } from "../app-bridge";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 
 /** What an agent's end offers, to open the agent it was. */
@@ -44,7 +45,7 @@ export function useAgentEndToasts(
   viewing.current = view;
   useEffect(
     () =>
-      window.luke.onAgentEnded(({ taskId, agentId, words, detail, failed }) =>
+      appBridge().onAgentEnded(({ taskId, agentId, words, detail, failed }) =>
         toast({
           words,
           detail,

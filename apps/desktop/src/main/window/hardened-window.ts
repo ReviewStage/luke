@@ -3,9 +3,10 @@ import type { BrowserWindow } from "electron";
 
 /**
  * The one posture every renderer window of Luke's runs under. The panels and
- * the hidden voice window load the same bundle with the same reach, so the
- * sandbox and the navigation refusals live here once: a hardening fix applied
- * to one window class must not silently leave the other on the old posture.
+ * the hidden voice window load the one renderer, each through its own entry,
+ * with the same reach, so the sandbox and the navigation refusals live here
+ * once: a hardening fix applied to one window class must not silently leave
+ * the other on the old posture.
  */
 export function hardenedWebPreferences(input: {
   preloadPath: string;

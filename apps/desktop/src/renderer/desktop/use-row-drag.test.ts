@@ -134,9 +134,14 @@ function layOutByBoxes(): void {
 /**
  * Two zones down a column: `a`, whose list of two rows is dragged, from 0
  * to 60, and `b`, from 100 to 190, whose three rows keep an order, at 100,
- * 130, and 160. Each drop out of `a` is reported to `outs`.
+ * 130, and 160. Each drop out of `a` is reported to `outs`. Where `scoped`,
+ * `b` stands in a drop scope of its own.
  */
-function twoZones(outs: [number, string, number][], reorders: boolean): HTMLElement {
+function twoZones(
+  outs: [number, string, number][],
+  reorders: boolean,
+  scoped = false,
+): HTMLElement {
   function Column() {
     const drag = useRowDrag(reorders ? () => undefined : undefined, {
       onDropOut: (from, zone, at) => outs.push([from, zone, at]),
@@ -159,13 +164,17 @@ function twoZones(outs: [number, string, number][], reorders: boolean): HTMLElem
         ]),
       ),
       createElement(
-        "nav",
-        { "data-row-drop": "b", "data-box": "100 90" },
-        createElement("ul", { "data-row-drop-rows": "", "data-box": "100 90" }, [
-          row(100, "b0"),
-          row(130, "b1"),
-          row(160, "b2"),
-        ]),
+        "div",
+        scoped ? { "data-row-drop-scope": "" } : null,
+        createElement(
+          "nav",
+          { "data-row-drop": "b", "data-box": "100 90" },
+          createElement("ul", { "data-row-drop-rows": "", "data-box": "100 90" }, [
+            row(100, "b0"),
+            row(130, "b1"),
+            row(160, "b2"),
+          ]),
+        ),
       ),
     );
   }
@@ -235,6 +244,20 @@ test("a list that keeps no order of its own lets a row go only out of it", () =>
     window.dispatchEvent(at("pointerup", 110));
   });
   assert.deepEqual(outs, [[0, "b", 0]]);
+});
+
+test("a zone in a drop scope takes no row from a list outside it, and is never marked for one", () => {
+  const outs: [number, string, number][] = [];
+  const column = twoZones(outs, false, true);
+  let marked = 0;
+  act(() => {
+    named(column, "a0").dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 140));
+    marked = column.querySelectorAll("[data-drop-target], [data-drop-before]").length;
+    window.dispatchEvent(at("pointerup", 140));
+  });
+  assert.equal(marked, 0);
+  assert.deepEqual(outs, []);
 });
 
 test("a list dragged by a handle starts no drag from a press outside it", () => {

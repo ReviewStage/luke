@@ -20,6 +20,7 @@ import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { ApiKeysSection } from "./api-keys-section";
 
@@ -98,10 +99,7 @@ beforeEach(() => {
   refuseRead = false;
   holdRead = false;
   holdSaves = undefined;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ act: answer });
 });
 
 afterEach(() => {

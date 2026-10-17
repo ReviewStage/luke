@@ -16,7 +16,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--luke-space-6);
-  margin-bottom: var(--luke-space-2);
+  margin: 0 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
   font-variant-numeric: tabular-nums;
 }
@@ -142,6 +142,7 @@
 /* The columns fill the scroller's height and share its width, each at least
    a card's width, past which the board scrolls. */
 .issue-board {
+  position: relative;
   display: flex;
   min-width: min-content;
   flex: 1 0 0;
@@ -161,6 +162,55 @@
   border: 1px solid var(--hairline-strong);
   border-radius: var(--luke-control-radius);
   background: var(--section-fill);
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease;
+}
+
+/* The column a card is carried over (use-row-drag.ts) is ringed and washed,
+   so it reads as the one the card will land in. */
+.issue-column[data-drop-target="true"] {
+  border-color: var(--luke-color-focus-ring);
+  border-radius: var(--luke-control-radius);
+  background:
+    linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover)), var(--section-fill);
+}
+
+/* A card being dragged stays in its column as its own placeholder, faded,
+   while its copy follows the pointer over the board. */
+.issue-column .sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
+  z-index: auto;
+  background: none;
+  box-shadow: none;
+  opacity: 0.4;
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+.issue-column .sidebar-tasks > .sidebar-task-item {
+  transition:
+    transform var(--duration-fast) var(--spring-fast),
+    opacity var(--duration-quick) var(--motion-exit);
+}
+
+/* The copy of a card carried over the board: lifted as the sidebar lifts a
+   row it drags, on the column's ground, at the card's place and width, and
+   moved only by its transform, frame for frame, so it eases nothing. */
+.issue-board > [data-carried="true"] {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.issue-board > [data-carried="true"] > .sidebar-task-item[data-dragging="true"] {
+  background:
+    linear-gradient(var(--raised-strong), var(--raised-strong)), var(--section-fill),
+    var(--desktop-well);
+  box-shadow:
+    0 0 0 1px var(--hairline-strong),
+    0 4px 12px var(--shadow);
 }
 
 /* A column's head: its status's glyph, its name, how many it holds, and its

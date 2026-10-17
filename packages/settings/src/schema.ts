@@ -9,6 +9,7 @@ import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@lu
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
+import { HOST_CAPABILITY } from "./capabilities.js";
 import {
   DIFF_FONT,
   DIFF_FONT_LABEL,
@@ -87,6 +88,10 @@ function themeLabel(themes: readonly { readonly id: string; readonly label: stri
 
 /** Voice available and the microphone granted: the whole of what a control needs. */
 const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
+
+/** The voice controls drawn on a platform that routes the microphone itself. */
+const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
+  view.voiceControlsDrawn && view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
 
 /** Signed in with Video calls on: an avatar is a choice only while calls can show one. */
 const videoCallsDrawn = (view: SettingsVisibility): boolean =>
@@ -253,7 +258,7 @@ export const APP_SETTING_SCHEMA = {
     order: 110,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    visible: voiceControlDrawn,
+    visible: microphoneRouteDrawn,
   }),
   lineNumbers: toggleSetting({
     field: "lineNumbers",

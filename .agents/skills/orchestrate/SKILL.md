@@ -12,22 +12,24 @@ with a new worker, and manage the rollout to merge.
 You run in one of two hosts, and the steps are the same in both; only the
 commands differ. In Conductor, a worker is a Conductor workspace driven by the
 `conductor` CLI. In Luke, you are a coding agent and a worker is another
-coding agent on the same task, driven by your agent tools. Use the column for
-the host you are in:
+coding agent on a task of its own, driven by your agent tools. Use the column
+for the host you are in:
 
 | Action | Conductor | Luke |
 | --- | --- | --- |
 | Ask the user | `AskUserQuestion` | `post_to_inbox` with a `choice` (or `form`) response and `needsReply` |
-| Valid model ids | `conductor model` | `start_agent` refuses an unknown model or effort and lists the choices |
+| Valid model ids | `conductor model` | `list_models` |
 | Your id, for reports | `echo "$CONDUCTOR_SESSION_ID"` | Nothing to record: a started agent is told your id |
-| Start a worker | `conductor workspace create` (below) | `start_agent` with the brief as `prompt`, plus `model` and `effort` |
-| Worker's base branch | `--branch <base-branch>` | Every agent starts on a clone of `main` alone; the brief says to fetch the base branch and cut its branch from it (see "Branching" below) |
-| Open a PR | `gh pr create --base <base-branch>` | `open_pull_request`, which always targets `main`, then `gh pr edit <number> --base <base-branch>` when the base is not `main` |
+| Start a worker | `conductor workspace create` (below) | `start_agent` with `newTask` and `title`, the brief as `prompt`, plus `model` and `effort` (below) |
+| Worker's base branch | `--branch <base-branch>` | `start_agent`'s `branch` |
+| Open a PR | `gh pr create --base <base-branch>` | `open_pull_request` with `base` |
 | Message a worker | `conductor message create --session <sessionId>` | `message_agent` with its agent id |
 | Worker reports back | `conductor message create --session <ORCHESTRATOR_SESSION_ID>` | `message_agent` with the orchestrator's agent id |
-| Check on a silent worker | `conductor session message <sessionId>` | `list_agents` with `thisTask` (its status and what it last did) |
+| Check on a silent worker | `conductor session message <sessionId>` | `read_agent` with its agent id |
+| Stop a worker | `conductor session cancel <sessionId>` | `stop_agent` with its agent id |
+| Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url and its branch, "keep this PR and open no second one", your agent id, and "report to me" |
 | Archive a worker | `conductor workspace archive <workspaceId>` | `archive_agent` with a short reason, once the agent is idle |
-| Point the user at a worker or PR | Deep links | The `mention` `start_agent` answered, and the PR's URL |
+| Point the user at a worker or PR | Deep links | The mentions `start_agent` answered, and the PR's URL |
 
 Arguments: the plan (a file path, a Linear issue key such as `LUKE-159`, or
 inline text), optionally followed by the model and effort the user wants the
@@ -76,14 +78,18 @@ BRIEF
 )"
 ```
 
-In Luke, call `start_agent` on this task (leave `taskId` out) with the brief
-as `prompt`, so the worker works from the brief and not the whole plan, and
-with the chosen `model` and `effort`. The call carries everything the worker
-is told; do not follow it with a message. `prompt` and `note` each hold at
-most 16,000 characters: put the PR's own scope and acceptance criteria in
-`prompt` and the rest of the brief in `note`, and where the plan is longer
-than that, quote only the parts this PR needs and name the plan's file in the
-repository, if it has one, for the worker to read.
+In Luke, call `start_agent` with `newTask` set to the PR title, so each
+worker stands as its own task in the sidebar as a Conductor workspace does,
+and `title` set to the PR title too (at most 80 characters). Set `branch` to
+the base branch when it is not `main`; the worker starts on it and is told to
+pass it as `base` when it opens its PR. Give the brief as `prompt`, so the
+worker works from the brief and not the whole plan, and the chosen `model`
+and `effort`, checked against `list_models`. The call carries everything the
+worker is told; do not follow it with a message. `prompt` and `note` each
+hold at most 64,000 characters, and a `message_agent` message 16,000: put the
+PR's own scope and acceptance criteria in `prompt` and the rest of the brief
+in `note`, and where the plan is long, quote only the parts this PR needs and
+name the plan's file in the repository, if it has one, for the worker to read.
 
 Every brief must contain:
 
@@ -92,17 +98,13 @@ Every brief must contain:
    plan is long), plus a line on each PR below and above it in its
    stack. Say plainly what is out of scope.
 2. **Branching**: the base branch, the PR's branch, and how to open it
-   against that base (the table's "Open a PR" row for the host). In Luke,
-   also tell a worker whose base is not `main` that its checkout is a
-   single-branch clone of `main`, and possibly a shallow one, where a plain
-   `git fetch` brings no other branch. So it first runs `git remote
-   set-branches origin '*'`, then `git fetch origin` (with `--unshallow` when
-   `git rev-parse --is-shallow-repository` says `true`), and only then cuts
-   its branch from `origin/<base-branch>`. The worker never restacks.
+   against that base (the table's "Open a PR" row for the host). The worker
+   never restacks.
    When the orchestrator says a restack is pending, it pushes or discards any
    work in flight, stops pushing, and replies "holding". When told the
-   restack is done, it runs `git fetch` and `git reset --hard
-   origin/<branch>` before touching the branch again.
+   restack is done, it runs `git fetch origin <branch>` and `git reset
+   --hard FETCH_HEAD` before touching the branch again (its clone may track
+   no other branch than the one it started on).
 3. **Babysit and merge**: watch CI and review comments on the PR, fix what
    fails, and merge as root `AGENTS.md`'s "Merging" says, taking
    merge-on-green at kickoff as the go or holding for an explicit go from the
@@ -127,8 +129,8 @@ Every brief must contain:
    worker.
 
 Keep each worker's ids (in Conductor its workspace and session ids, in Luke
-its agent id and mention), branch, and PR url; you need them to reply, to
-kick off the PRs above, to restack, and to archive.
+its agent id and its agent and task mentions), branch, and PR url; you need
+them to reply, to kick off the PRs above, to restack, and to archive.
 
 ## Step 2: Monitor by messages, not polling
 
@@ -145,34 +147,59 @@ and each message arrives as a new turn. On each report:
 - **Merged**: if any PR builds on this one, restack (Step 3), which also
   retargets the PR above to `main`. Archive the merged PR's worker.
 
-If a worker has gone silent for longer than the work plausibly takes, send it
-one message asking for status. Only then, if it still does not answer, check
-on it as the table says.
+If a worker has gone quiet far longer than its work plausibly takes, send it
+one message asking for status, and check on it as the table says. If the
+message is refused because its session has ended, the worker is dead (in
+Luke it now reads `failed`). Continue it yourself, as the table's "Continue
+a dead or stalled worker" row says; do not ask the user to.
+
+If a worker is alive but going the wrong way (out of scope, or against an
+answer you gave it) or stuck, and a message does not turn it, stop it as the
+table says, then continue it the same way, with the correction in the note.
+
+In Luke, the continued agent runs on the old one's task and model, with its
+transcript and a copy of its work. While the old worker's PR is open, the
+new agent carries that work onto the PR's branch and opens no second PR;
+the note says so too, since Luke may not have recorded the PR yet. If
+`start_agent` refuses because the old worker is still running, stop it,
+wait until `list_agents` no longer reads it `running`, and call again; if it
+names an agent that already continued it, track that one. In Conductor, the
+new session works in the old one's workspace, on its
+branch and PR; tell it to read the old transcript with `conductor session
+message <old sessionId>`.
+
+Track the new worker in the old one's place, by its id and mention, and
+archive the old one (in Conductor, `conductor session archive <old
+sessionId>`). Never start a replacement worker from scratch: the brief's
+work lives in the old worker's transcript.
 
 ## Step 3: Restack
 
 Run one restack at a time per stack. Tell every worker in the stack, and in
 each branch-off stack based on it, that a restack is pending, and wait for
-each to reply "holding". Then start a short-lived worker on the stack's top
-branch (the Step 1 start, named "Restack <stack title>"; in Luke it starts on
-a single-branch clone of `main`, so it first fetches every branch the way a
-stacked worker does under "Branching", then checks the branches out itself, as
-below) whose brief names the
+each to reply "holding"; stop one that does not hold, as the table says. Then
+start a short-lived restack worker (the Step 1 start, named "Restack <stack
+title>"; in Conductor on the stack's top branch; in Luke without `branch`, on
+`main`, since a Luke agent never pushes the branch it was started on, so its
+checkout is a single-branch clone of `main`, possibly shallow, and its brief
+has it first run `git remote set-branches origin '*'`, then `git fetch
+origin`, with `--unshallow` when `git rev-parse --is-shallow-repository` says
+`true`) whose brief names the
 trunk (`main`, or the parent PR's branch for a branch-off stack whose parent
 has not merged), every unmerged branch bottom to top, and, after a merge, the
 PR to retarget with `gh pr edit <number> --base main`. It first points a
 local branch at each one's remote tip, bottom to top (`git checkout -B
-<branch> origin/<branch>`, which also resets the top branch the worker starts
-on), then adopts them with `gh stack init --base <trunk> <branch> ...` and
+<branch> origin/<branch>`, which in Conductor also resets the top branch the
+worker starts on), then adopts them with `gh stack init --base <trunk> <branch> ...` and
 restacks them in one pass: `gh stack sync` (fetch, cascading rebase, atomic
 push, and relink) when nothing conflicts. When `gh stack sync` reports a
 conflict, it restores every branch; the worker then runs `gh stack rebase`,
 resolves each conflict and runs `gh stack rebase --continue` (or `--abort` to
 give up), and after a successful rebase runs `gh stack push`, which pushes
-each branch with `--force-with-lease`. Without the extension, the fallback is
-to note the cutoff, which is the old trunk tip (`git rev-parse
-origin/<trunk>`) or, after a merge, the merged PR's last head (`gh pr view
-<number> --json headRefOid`), then `git fetch` and run `git rebase
+each branch with `--force-with-lease`. Only when `gh stack` is missing or
+fails, the fallback is to note the cutoff, which is the old trunk tip (`git
+rev-parse origin/<trunk>`) or, after a merge, the merged PR's last head (`gh
+pr view <number> --json headRefOid`), then `git fetch` and run `git rebase
 --update-refs --onto origin/<trunk> <cutoff>` from the top branch, so neither
 a rewritten trunk's old commits nor a squash-merged PR's commits are
 replayed; on a conflict, resolve and stage it, then `git rebase --continue`
@@ -194,8 +221,13 @@ issue, update the issue with the merged PRs.
 
 - Never do the PR's implementation work yourself.
 - Point the user at a worker or PR with a deep link or mention, not an id.
-- One PR per worker. Do not reuse a worker for a second PR.
+- One PR per worker. Do not reuse a worker for a second PR; a continuation
+  of a worker takes over its source's PR.
 - A PR that builds on another gets its worker only after that PR is open.
 - Workers never restack; a restack runs only in a restack worker, while
   every affected worker holds.
-- Do not archive a worker while its PR is unmerged.
+- Do not archive a worker while its PR is unmerged, unless a continuation
+  has taken the PR over.
+- Stop a worker only when it goes the wrong way, is stuck, or will not hold
+  for a restack. Continue a dead or stopped worker; never start a fresh one
+  to replace it.
