@@ -30,6 +30,7 @@ import {
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
 } from "@luke/features/coding-agent-wire";
+import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
 import { pageVersionNumberSchema } from "@luke/features/page-wire";
 import { PICTURE_BOUNDS, pictureOfDataUrl } from "@luke/features/picture-wire";
 import {
@@ -54,6 +55,7 @@ import {
   cursorOfWire,
   cursorToWire,
   type TranscriptPage,
+  transcriptNow,
   transcriptPast,
 } from "../agents/coder-host/transcript.js";
 import { retireSessions } from "../agents/retire-sessions.js";
@@ -715,12 +717,22 @@ const cursorQueryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** A page of a transcript as the wire answers it, the agent transcript's own shape, every field the page holds carried as it is; a planning conversation is named by its plan, so it carries no title. */
+/** Whether a worker's transcript read asks for the page at once rather than held, as a reader following its live statements does (`live-wire.ts`). */
+function readsNow(request: Request): boolean {
+  const asked = new URL(request.url).searchParams.get(TRANSCRIPT_NOW_QUERY.WAIT);
+  return asked === TRANSCRIPT_NOW_QUERY.NONE;
+}
+
+/** A page of a transcript as the wire answers it, the agent transcript's own shape, every field the page holds carried as it is, with whether the held read would have held on it and when only the clock would move it where it was read at once; a planning conversation is named by its plan, so it carries no title. */
 function transcriptAnswer(
   page: BrainPage | TranscriptPage,
   title: string | null,
+  holds?: boolean,
+  wakeIn?: number,
 ): HttpServerResponse.HttpServerResponse {
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    ...(holds === undefined ? undefined : { holds }),
+    ...(wakeIn === undefined ? undefined : { wakeIn }),
     ...page,
     cursor: cursorToWire(page.cursor),
     title,
@@ -772,7 +784,10 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskMessagesEndpoint")(f
  * plan's conversation under the call that started the worker, held while it
  * runs, with its title once one landed. A worker whose session has written
  * nothing yet reads as starting, held for, so a tab opened the moment its
- * call was made keeps reading.
+ * call was made keeps reading. Where `wait=none` asks, nothing is held: the
+ * page, or the empty page of a worker still starting, is answered at once
+ * with whether the held read would have held, as a reader following the
+ * worker's live statements asks it.
  */
 const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskSubagentMessagesEndpoint")(
   function* (
@@ -790,6 +805,7 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskSubagentMess
     if (Result.isFailure(call)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const userId = yield* resolvedUserId(seams, request);
     const after = (yield* cursorQueryOf(request)) ?? CODING_AGENT_CURSOR_START;
+    const now = readsNow(request);
     const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
     if (Option.isNone(task) || task.value.conversationId === undefined) {
       return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -804,24 +820,36 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskSubagentMess
       return transcriptAnswer(
         { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
         null,
+        now ? true : undefined,
       );
     }
     const child = childConversationId(parent.conversationId, session);
     const createdAt = new Date(yield* Clock.currentTimeMillis);
-    const page = yield* hostedStoreOrUnavailable(
-      transcriptPast(
-        { userId, conversationId: child },
-        HOSTED_TOOL_SET,
-        cursorOfWire(after),
-        { createdAt },
-        undefined,
-        brainTitleAwaited(parent, child),
-        BRAIN_POLL,
-      ),
-    );
+    const worker = { userId, conversationId: child };
+    const cursor = cursorOfWire(after);
+    const titleAwaited = brainTitleAwaited(parent, child);
+    const { page, holds, wakeIn } = now
+      ? yield* hostedStoreOrUnavailable(
+          transcriptNow(worker, HOSTED_TOOL_SET, cursor, { createdAt }, undefined, titleAwaited),
+        )
+      : {
+          page: yield* hostedStoreOrUnavailable(
+            transcriptPast(
+              worker,
+              HOSTED_TOOL_SET,
+              cursor,
+              { createdAt },
+              undefined,
+              titleAwaited,
+              BRAIN_POLL,
+            ),
+          ),
+          holds: undefined,
+          wakeIn: undefined,
+        };
     // The title is read after the page, since it lands beside the worker's start, which a held read may span.
     const titles = yield* hostedStoreOrUnavailable(childTitlesOf(parent, [child]));
-    return transcriptAnswer(page, titles.get(child) ?? null);
+    return transcriptAnswer(page, titles.get(child) ?? null, holds, wakeIn);
   },
 );
 

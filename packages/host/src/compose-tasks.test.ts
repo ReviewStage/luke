@@ -25,6 +25,7 @@ import {
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import type { AgentTranscriptLiveAnswer, TranscriptNowAnswer } from "@luke/features/live-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
@@ -72,6 +73,7 @@ import { readEither } from "@luke/wire/effect";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
+import type { LiveClient } from "./live-follow.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 /** The text the edit tests' plan opens on. */
@@ -732,6 +734,12 @@ interface FakeConversations extends TasksConversationClient {
   answer: (taskId: string, answer: CodingAgentMessagesAnswerView) => Effect.Effect<void>;
   /** The older pages, by the turn each is read before. */
   older: Record<string, CodingAgentMessagesAnswer>;
+  /** What the service seals for following a planning worker's transcript; none answers unanswered, as a service without Realtime does. */
+  workerSealed: AgentTranscriptLiveAnswer | undefined;
+  /** Every read of a worker's transcript at once, as `plan:call:cursor`, in order. */
+  readonly workerReads: string[];
+  /** Hands the next read of a worker's transcript at once its answer. */
+  answerWorker: (answer: TranscriptNowAnswer) => Effect.Effect<void>;
 }
 
 function fakeConversations(): Effect.Effect<FakeConversations> {
@@ -741,7 +749,20 @@ function fakeConversations(): Effect.Effect<FakeConversations> {
     for (const taskId of [INVITES, BILLING]) {
       pages.set(taskId, yield* Queue.unbounded<CodingAgentMessagesAnswerView>());
     }
+    const workerPages = yield* Queue.unbounded<TranscriptNowAnswer>();
     const conversations: FakeConversations = {
+      workerSealed: undefined,
+      workerReads: [],
+      answerWorker: (answer) => Effect.asVoid(Queue.offer(workerPages, answer)),
+      taskWorkerTranscriptLive: () =>
+        Effect.sync(
+          () => conversations.workerSealed ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        ),
+      taskWorkerMessagesNow: (taskId, callId, after) =>
+        Effect.suspend(() => {
+          conversations.workerReads.push(`${taskId}:${callId}:${after}`);
+          return Queue.take(workerPages);
+        }),
       asks: [],
       nextAsk: Queue.take(asked),
       older: {},
@@ -796,6 +817,67 @@ function conversationPage(
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
+/** The host's clock, which a seal's renewal is timed by. */
+const NOW = 1_800_000_100_000;
+
+/** The parts a transcript is followed by. */
+const TRANSCRIPT_PARTS = ["messages", "turns", "conversation", "agent", "workers"] as const;
+
+/** A planning worker's transcript sealed as the service answers it, each part named by its capability. */
+const SEALED_WORKER: AgentTranscriptLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    messages: sealedPart("messages"),
+    turns: sealedPart("turns"),
+    conversation: sealedPart("conversation"),
+    agent: sealedPart("agent"),
+    workers: sealedPart("workers"),
+  },
+};
+
+function sealedPart(part: string) {
+  return { capability: part, queryFingerprint: part, expiresAt: NOW + 60_000 };
+}
+
+/** Realtime as a script: each subscription by its capability, and a way to deliver every part's rows once the host subscribed. */
+function fakeRealtime() {
+  const listeners = new Map<
+    string,
+    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
+  >();
+  const open = (_url: string): LiveClient => ({
+    subscribe: (query) => ({
+      onChange: (listener) => {
+        listeners.set(query.capability, listener);
+        return () => listeners.delete(query.capability);
+      },
+      renew: () => Promise.resolve(),
+      unsubscribe: () => void listeners.delete(query.capability),
+    }),
+    close: () => undefined,
+  });
+  /** A transcript's rows, at the messages' count, delivered to every part once each is subscribed. */
+  const deliver = (rows: number) =>
+    Effect.gen(function* () {
+      for (let turn = 0; turn < 100 && listeners.size < TRANSCRIPT_PARTS.length; turn += 1) {
+        yield* Effect.yieldNow;
+      }
+      const data = {
+        messages: [{ rows, seq: rows }],
+        turns: [],
+        conversation: [{ title: null, revision: 0 }],
+        agent: [],
+        workers: [],
+      };
+      for (const part of TRANSCRIPT_PARTS) {
+        const listener = listeners.get(part);
+        assert.ok(listener, `no subscription to ${part}`);
+        listener({ status: "live", data: data[part] });
+      }
+    });
+  return { open, deliver };
+}
+
 /** The one voice call as the live composer holds it: about a plan, about the desk, or none. */
 interface StandingCall {
   about: { readonly taskId: string | undefined } | undefined;
@@ -812,8 +894,11 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
     }[] = [];
     const standing = options.call ?? { about: undefined };
     const conversations = yield* fakeConversations();
+    const realtime = fakeRealtime();
     const tasks = yield* composeTasks({
+      openLive: realtime.open,
       kernel: {
+        now: () => NOW,
         runMode: { sendsNetwork: true },
         emit: (kind, payload) => {
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
@@ -856,7 +941,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    return { tasks, call, told, last, viewWhere, viewLands, conversations };
+    return { tasks, call, told, last, viewWhere, viewLands, conversations, realtime };
   });
 }
 
@@ -2307,5 +2392,70 @@ it.effect(
       );
       const open = last()?.document;
       assert.equal(open?.status === TASKS_READ.READY ? open.task?.workspaceId : undefined, ACME.id);
+    }),
+);
+
+/** A planning worker's page read at once, with whether the service's held read would have held on it. */
+function workerPage(
+  messages: readonly CodingAgentMessage[],
+  status: CodingAgentStatus,
+  holds: boolean,
+): TranscriptNowAnswer {
+  return { ...conversationPage(messages, "3:0", status), holds };
+}
+
+it.effect(
+  "a planning worker's transcript is held here on its live statements where the service seals them: read at once, again only as they move, and answered once the service says its held read would not hold",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, conversations, realtime } = yield* subject(service);
+      conversations.workerSealed = SEALED_WORKER;
+      const read = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_MESSAGES, { taskId: INVITES, callId: "call-0-0", after: "2:0" }),
+      );
+      yield* conversations.answerWorker(workerPage([], CODING_AGENT_STATUS.RUNNING, true));
+      yield* conversations.answerWorker(workerPage([], CODING_AGENT_STATUS.RUNNING, true));
+      yield* realtime.deliver(1);
+      // The same rows again move nothing; new ones read the page again.
+      yield* realtime.deliver(1);
+      yield* TestClock.adjust(Duration.seconds(5));
+      assert.equal(conversations.workerReads.length, 2);
+      yield* conversations.answerWorker(
+        workerPage([journal("worker-1", "Compared them.")], CODING_AGENT_STATUS.COMPLETED, false),
+      );
+      yield* realtime.deliver(2);
+
+      assert.deepEqual(
+        yield* Fiber.join(read),
+        conversationPage(
+          [journal("worker-1", "Compared them.")],
+          "3:0",
+          CODING_AGENT_STATUS.COMPLETED,
+        ),
+      );
+      assert.deepEqual(conversations.workerReads, [
+        `${INVITES}:call-0-0:2:0`,
+        `${INVITES}:call-0-0:2:0`,
+        `${INVITES}:call-0-0:2:0`,
+      ]);
+      assert.deepEqual(conversations.asks, []);
+    }),
+);
+
+it.effect(
+  "a planning worker's transcript the service seals nothing for is read on its held read, as before",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, conversations } = yield* subject(service);
+      const read = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_MESSAGES, { taskId: INVITES, callId: "call-0-0", after: "2:0" }),
+      );
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "2:0"]);
+      const page = conversationPage([], "2:0", CODING_AGENT_STATUS.COMPLETED);
+      yield* conversations.answer(INVITES, page);
+      assert.deepEqual(yield* Fiber.join(read), page);
+      assert.deepEqual(conversations.workerReads, []);
     }),
 );

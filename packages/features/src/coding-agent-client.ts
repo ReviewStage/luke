@@ -571,6 +571,47 @@ export class HostedCodingAgentClient {
   }
 
   /**
+   * One planning worker's transcript past the cursor, read at once rather
+   * than held, with whether the held read would have held on it: for a
+   * reader following the worker's live statements.
+   */
+  taskWorkerMessagesNow(
+    taskId: string,
+    callId: string,
+    after: string,
+  ): Effect.Effect<TranscriptNowAnswer | Failed, never, HttpClient.HttpClient> {
+    const now = new URLSearchParams({ [TRANSCRIPT_NOW_QUERY.WAIT]: TRANSCRIPT_NOW_QUERY.NONE });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${taskSubagentMessagesPath(taskId, callId, after)}&${now}`,
+      }),
+      (answer) => readAnswer(answer, transcriptNowAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * One planning worker's transcript sealed for following over Neon
+   * Realtime, as an agent's worker's is, answered at once: not found where
+   * the account reaches no such plan, unanswered where the deployment has
+   * no Realtime and for anything else, which the caller answers by holding
+   * its read open as before.
+   */
+  taskWorkerTranscriptLive(
+    taskId: string,
+    callId: string,
+  ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({ id: taskId, call: callId });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_TASK_WORKER_TRANSCRIPT}?${query}`,
+      }),
+      (answer) => readAnswer(answer, agentTranscriptLiveAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
    * One plan's planning conversation as an agent's transcript is read, or a
    * planning worker's where the call that started it is named: past the
    * cursor, held by the service while a turn or the worker runs; with no

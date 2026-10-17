@@ -5,6 +5,7 @@ import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
@@ -254,6 +255,48 @@ it.layer(getTestDB())("the live reads", (it) => {
             body: { error: HOSTED_API_ERROR.UNAVAILABLE },
           });
         }
+      }),
+  );
+
+  it.effect(
+    "a planning worker's transcript is sealed as its child conversation's statements for an account that reaches the plan, and not found for one that does not or for a plan never planned on",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const stranger = yield* openUser;
+        const planned = yield* startTask(owner, { name: "Teammate invitations" });
+        const opened = yield* openTaskConversation(owner, planned.id);
+        assert.ok(Option.isSome(opened));
+        const unplanned = yield* startTask(owner, { name: "Billing" });
+        const pathOf = (taskId: string) =>
+          `/api/live/plan-worker-transcript?id=${taskId}&call=call-0-0`;
+
+        const sealed = yield* ask({
+          bearer: owner,
+          path: pathOf(planned.id),
+          sealing: Option.some(SCRIPTED),
+        });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(agentTranscriptLiveAnswerSchema)(sealed.body);
+        const child = childConversationId(opened.value.conversationId, "call-0-0");
+        assert.ok(answer.queries.messages.capability.includes(`"${child}"`), "the worker's own");
+        assert.ok(answer.queries.messages.capability.includes(`"${owner}"`), "read for the bearer");
+        for (const [bearer, taskId] of [
+          [stranger, planned.id],
+          [owner, unplanned.id],
+        ] as const) {
+          assert.deepEqual(
+            yield* ask({ bearer, path: pathOf(taskId), sealing: Option.some(SCRIPTED) }),
+            { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+          );
+        }
+        assert.deepEqual(
+          yield* ask({ bearer: owner, path: pathOf(planned.id), sealing: Option.none() }),
+          {
+            status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+            body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+          },
+        );
       }),
   );
 });
