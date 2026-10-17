@@ -73,6 +73,7 @@ import {
   HOSTED_BYTES_HEADERS,
   HOSTED_REFUSAL,
   type HostedRefusal,
+  hostedBearerOnly,
   hostedJsonResponse,
   hostedNotFoundRoute,
   hostedRefusing,
@@ -552,6 +553,11 @@ const ONE_TASK_METHODS: ReadonlySet<string> = new Set([
  * then the task. An eve that refuses a Stop, an agent with a turn still coming
  * that no Stop can name yet, or an agent started while the others were
  * stopped, leaves the task standing and refused.
+ *
+ * It takes the developer's bearer alone (`hostedBearerOnly`), because the
+ * Stops and the retires reach eve over it: a browser's session cookie
+ * carries none eve takes, so a cookie's delete of an idle task would go on
+ * with every session of it left standing.
  */
 const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: TasksAppSeams,
@@ -560,6 +566,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
+  yield* hostedBearerOnly(request);
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, taskId, { includeArchived: true }),
   );

@@ -111,6 +111,24 @@ export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRe
 }
 
 /**
+ * Refuses, as unauthenticated, a request that carries no `Authorization`:
+ * one that only a browser's session cookie could name. A request that
+ * carries one is read by its bearer alone (`auth/bearer.ts`'s
+ * `requestUserId`), so an endpoint asks for this where its work reaches eve
+ * as the developer over that bearer and must not go on without it: a
+ * delete ends the eve sessions of what it deletes (`agents/retire-sessions.ts`),
+ * and a refusal there goes unnoticed. Note that the endpoint asks for it
+ * itself rather than its route file handing the group a bearer-only
+ * resolver, because every function holding a group answers every path the
+ * group declares (`apps/web/server/function-dispatch.ts`).
+ */
+export function hostedBearerOnly(request: Request): Effect.Effect<void, HostedRefusal> {
+  return request.headers.has("authorization")
+    ? Effect.void
+    : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+}
+
+/**
  * The headers bytes a member, an agent, or GitHub wrote are served under
  * beside the type the service checked them to be: a task's picture, an
  * inbox attachment, a picture a tool answered, a workspace's photo, and an
