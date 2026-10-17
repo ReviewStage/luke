@@ -8,6 +8,8 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ProviderMark } from "@luke/ui";
 import { CHAT_PLACE, type ChatPlace, chatNames } from "@luke/ui/chat-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
@@ -17,6 +19,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
+import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -565,6 +568,80 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.equal(row.querySelector("button, a"), null, "the chip is no target inside the row");
   act(() => row.querySelector<HTMLElement>(".tool-agent-chip")?.click());
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }], "it opens the row's");
+});
+
+/** Main's document holding one agent on no task, running on Codex, as the plan list carries it. */
+function stateHoldingCodexAgent(agentId: string): AppStateSnapshot {
+  const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
+  return {
+    ...snapshot,
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      tasklessAgents: [
+        {
+          id: agentId,
+          planId: null,
+          turnId: null,
+          title: "Retry audit",
+          model: "openai/gpt-6.1-sol",
+          effort: "high",
+          status: CODING_AGENT_STATUS.COMPLETED,
+          createdAt: 1_000,
+          automationId: null,
+          workspaceId: "workspace-acme",
+          repository: "acme/relay",
+          activityAt: 1_000,
+        },
+      ],
+    },
+  };
+}
+
+test("a call about an agent the place lists not, whose answer names no model, wears the harness the window last read the agent running on", async () => {
+  const state = stateHoldingCodexAgent("agent-8");
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      onAppState: () => () => undefined,
+      requestAppState: () => Promise.resolve(state),
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  // An answer from a service before it named the agent's model.
+  const message = assistant([
+    toolPart(
+      "archive_agent",
+      { agentId: "agent-8" },
+      { status: "accepted", agent: { id: "agent-8", title: "Retry audit", onYourTask: false } },
+    ),
+  ]);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: true,
+          delegation: { models: [], onOpenTarget: () => undefined },
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const chip = container.querySelector('[data-call-id="call-archive_agent"] .tool-agent-chip');
+
+  assert.equal(chip?.textContent, "Retry audit");
+  // Codex's mark is its picture.
+  assert.ok(chip?.querySelector("img.harness-mark"), "the chip wears Codex's mark");
+  Reflect.deleteProperty(window, "luke");
 });
 
 /** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */
