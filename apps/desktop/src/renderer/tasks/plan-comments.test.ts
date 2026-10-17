@@ -121,6 +121,7 @@ function drawn(
   threads: readonly PlanCommentThread[] = THREADS,
   landing: () => boolean = () => true,
   plan: Task = PLAN,
+  reveal?: { readonly thread: string; readonly ask: number },
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
   const started: PlanCommentStartRequest[] = [];
@@ -160,7 +161,7 @@ function drawn(
       createElement(
         PlanCommentsProvider,
         { value: control },
-        createElement(CommentFocusScope, null, page),
+        createElement(CommentFocusScope, { reveal, children: page }),
       ),
     ),
   );
@@ -246,13 +247,18 @@ test("a thread whose words were deleted stays in the margin, saying so over its 
   );
 });
 
-test("the Comments tab lists the resolved thread under Resolved, where Reopen brings it back", async () => {
+test("the Comments tab's view menu lists the resolved thread under Resolved, where Reopen brings it back", async () => {
   const { container, asked } = drawn("tab");
 
-  const filter = [...container.querySelectorAll<HTMLButtonElement>(".comments-filter")].find(
-    (each) => each.textContent?.startsWith("Resolved"),
+  act(() =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click(),
   );
-  act(() => filter?.click());
+  const resolved = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find((each) =>
+    each.textContent?.startsWith("Resolved (1)"),
+  );
+  assert.ok(resolved, "the view menu offers Resolved with how many it holds");
+  act(() => resolved.click());
+  assert.ok(container.querySelector(".comments-head")?.textContent?.startsWith("Resolved"));
   act(() => container.querySelector<HTMLButtonElement>(".comment-open")?.click());
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="Reopen"]')?.click();
@@ -534,4 +540,36 @@ test("a line's count stands every thread on the line under it, the first open", 
       [ID.GONE, "false"],
     ],
   );
+});
+
+test("a link to a resolved thread lists it under Resolved, open, and scrolls the list to it", () => {
+  const box = (top: number) => () => ({
+    top,
+    bottom: top,
+    left: 0,
+    right: 0,
+    width: 0,
+    height: 0,
+    x: 0,
+    y: top,
+    toJSON: () => ({}),
+  });
+  const rect = Object.getOwnPropertyDescriptor(Element.prototype, "getBoundingClientRect");
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    return (this.classList.contains("comment-card") ? box(500) : box(0))();
+  };
+  try {
+    const { container } = drawn("tab", THREADS, () => true, PLAN, {
+      thread: ID.RESOLVED,
+      ask: 1,
+    });
+
+    const card = container.querySelector<HTMLElement>(
+      `.comment-card[data-thread="${ID.RESOLVED}"]`,
+    );
+    assert.equal(card?.dataset.open, "true");
+    assert.equal(container.querySelector(".comments-list")?.scrollTop, 500 - 96);
+  } finally {
+    if (rect !== undefined) Object.defineProperty(Element.prototype, "getBoundingClientRect", rect);
+  }
 });

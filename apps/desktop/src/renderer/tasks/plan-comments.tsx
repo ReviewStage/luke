@@ -45,10 +45,12 @@ import {
   ArrowUpIcon,
   CheckIcon,
   ChevronDownIcon,
+  CircleCheckIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
   PencilIcon,
   RotateCcwIcon,
+  SlidersHorizontalIcon,
 } from "lucide-react";
 import {
   createContext,
@@ -1541,6 +1543,58 @@ const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
 
 type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
 
+/** What the Comments tab's head names the threads it lists, by its filter. */
+const COMMENTS_FILTER_WORDS = {
+  [COMMENTS_FILTER.OPEN]: "Open",
+  [COMMENTS_FILTER.RESOLVED]: "Resolved",
+} as const satisfies Record<CommentsFilter, string>;
+
+const VIEW_OPTIONS = "View options";
+
+/** The Comments tab's view menu, as the Inbox's: which threads it lists, the choice checked, each with how many it holds. */
+function CommentsViewOptions({
+  filter,
+  counts,
+  onFilter,
+}: {
+  filter: CommentsFilter;
+  counts: { readonly open: number; readonly resolved: number };
+  onFilter: (filter: CommentsFilter) => void;
+}): React.JSX.Element {
+  const menu = useMenu(true);
+  const choices: MenuAction[] = [
+    {
+      label: `${COMMENTS_FILTER_WORDS[COMMENTS_FILTER.OPEN]} (${counts.open})`,
+      icon: <MessageSquareIcon />,
+      checked: filter === COMMENTS_FILTER.OPEN,
+      onSelect: () => onFilter(COMMENTS_FILTER.OPEN),
+    },
+    {
+      label: `${COMMENTS_FILTER_WORDS[COMMENTS_FILTER.RESOLVED]} (${counts.resolved})`,
+      icon: <CircleCheckIcon />,
+      checked: filter === COMMENTS_FILTER.RESOLVED,
+      onSelect: () => onFilter(COMMENTS_FILTER.RESOLVED),
+    },
+  ];
+  return (
+    <>
+      <Tooltip label={VIEW_OPTIONS}>
+        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
+          <SlidersHorizontalIcon className="icon-button-glyph" />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={VIEW_OPTIONS}
+          menu={menu.drawn}
+          groups={[choices]}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
 /** What the Comments tab says over a list holding nothing, by its filter. */
 const NO_COMMENTS = {
   [COMMENTS_FILTER.OPEN]: "No open comments.",
@@ -1578,6 +1632,19 @@ export function PlanCommentsTab({
     setFilter(COMMENTS_FILTER.RESOLVED);
     setOpened(resolvedAsked.id);
   }, [revealed, resolvedAsked]);
+  // The thread a link opened here is scrolled to in the list, once per ask, the list alone moving.
+  const list = useRef<HTMLDivElement>(null);
+  const scrolledAsk = useRef<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    const element = list.current;
+    if (revealed === undefined || element === null || scrolledAsk.current === revealed.ask) return;
+    if (shownAsk.current !== revealed.ask || opened !== revealed.thread) return;
+    const row = element.querySelector(`.comment-card[data-thread="${revealed.thread}"]`);
+    if (row === null) return;
+    scrolledAsk.current = revealed.ask;
+    element.scrollTop +=
+      row.getBoundingClientRect().top - element.getBoundingClientRect().top - REVEAL_ROOM;
+  });
   if (control === undefined) return null;
   const open = control.threads.filter(openThread);
   const resolved = control.threads.filter((thread) => !openThread(thread));
@@ -1585,54 +1652,47 @@ export function PlanCommentsTab({
   const full = { ...doors, control };
   return (
     <div className="comments-tab">
-      <div className="comments-filters">
-        {[
-          [COMMENTS_FILTER.OPEN, "Open", open.length] as const,
-          [COMMENTS_FILTER.RESOLVED, "Resolved", resolved.length] as const,
-        ].map(([kind, label, count]) => (
-          <button
-            key={kind}
-            type="button"
-            className="comments-filter"
-            aria-pressed={filter === kind}
-            onClick={() => setFilter(kind)}
-          >
-            {label}
-            <span className="comments-filter-count">{count}</span>
-          </button>
-        ))}
+      <div className="comments-head">
+        <span className="comments-head-title">
+          {COMMENTS_FILTER_WORDS[filter]}
+          <span className="comments-head-count">{listed.length}</span>
+        </span>
+        <CommentsViewOptions
+          filter={filter}
+          counts={{ open: open.length, resolved: resolved.length }}
+          onFilter={setFilter}
+        />
       </div>
-      {control.failed ? (
-        <div className="comments-empty" role="alert">
-          The comments could not be read.{" "}
-          <button type="button" className="quiet-button" onClick={control.onRetry}>
-            Try again
-          </button>
-        </div>
-      ) : listed.length === 0 ? (
-        <div className="comments-empty">{control.read ? NO_COMMENTS[filter] : null}</div>
-      ) : (
-        listed.map((thread) => (
-          <div key={thread.id} className="comments-row">
-            <div className="comments-row-section">
-              {thread.section === "" ? "Plan" : thread.section}
-            </div>
-            <ThreadCard
-              thread={thread}
-              open={opened === thread.id}
-              quote
-              doors={full}
-              onOpen={() => {
-                if (openThread(thread)) {
-                  onShowDocument();
-                  reveal(thread.id);
-                } else setOpened(thread.id);
-              }}
-              onClose={() => setOpened(undefined)}
-            />
+      <div ref={list} className="comments-list scroll-fade">
+        {control.failed ? (
+          <div className="comments-empty" role="alert">
+            The comments could not be read.{" "}
+            <button type="button" className="quiet-button" onClick={control.onRetry}>
+              Try again
+            </button>
           </div>
-        ))
-      )}
+        ) : listed.length === 0 ? (
+          <div className="comments-empty">{control.read ? NO_COMMENTS[filter] : null}</div>
+        ) : (
+          listed.map((thread) => (
+            <div key={thread.id} className="comments-row">
+              <ThreadCard
+                thread={thread}
+                open={opened === thread.id}
+                quote
+                doors={full}
+                onOpen={() => {
+                  if (openThread(thread)) {
+                    onShowDocument();
+                    reveal(thread.id);
+                  } else setOpened(thread.id);
+                }}
+                onClose={() => setOpened(undefined)}
+              />
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
