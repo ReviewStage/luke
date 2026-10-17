@@ -160,6 +160,8 @@ interface PickerProps {
   label: string;
   /** The id of the why drawn beside it, which describes the chip. */
   describedBy?: string | undefined;
+  /** Whether the chip's last pick was refused, as its row says under it. */
+  invalid?: true | undefined;
   /** The id of the value chosen now, checked in the menu. */
   value: string;
   /** What the chip says: the chosen value's own words. */
@@ -190,6 +192,7 @@ interface PickerProps {
 export function Picker({
   label,
   describedBy,
+  invalid,
   value,
   valueLabel,
   valueIcon,
@@ -227,6 +230,7 @@ export function Picker({
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         aria-label={`${label}: ${valueLabel}`}
         aria-describedby={describedBy}
+        aria-invalid={invalid}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}

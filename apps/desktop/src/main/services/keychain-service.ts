@@ -21,7 +21,7 @@ export function createKeychainService(): KeychainService {
     cipher: {
       isAvailable: () => safeStorage.isEncryptionAvailable(),
       encrypt: (plainText) => safeStorage.encryptString(plainText),
-      decrypt: (cipherText) => safeStorage.decryptString(cipherText),
+      decrypt: (cipherText) => safeStorage.decryptString(Buffer.from(cipherText)),
     },
     start: () => Effect.void,
     stop: () => Effect.void,

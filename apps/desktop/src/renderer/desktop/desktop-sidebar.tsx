@@ -13,6 +13,7 @@ import {
   EllipsisIcon,
   ErrorState,
   FolderIcon,
+  IconButton,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -160,26 +161,20 @@ export function HistoryButtons({ history }: { history: NavigationHistory }): Rea
   return (
     <div className="title-bar-controls" data-edge="column">
       <Tooltip label="Back" command={APP_COMMAND.BACK}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Back"
+        <IconButton
+          icon={<ArrowLeftIcon />}
+          label="Back"
           disabled={!history.canGoBack}
           onClick={history.onBack}
-        >
-          <ArrowLeftIcon />
-        </button>
+        />
       </Tooltip>
       <Tooltip label="Forward" command={APP_COMMAND.FORWARD}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Forward"
+        <IconButton
+          icon={<ArrowRightIcon />}
+          label="Forward"
           disabled={!history.canGoForward}
           onClick={history.onForward}
-        >
-          <ArrowRightIcon />
-        </button>
+        />
       </Tooltip>
     </div>
   );

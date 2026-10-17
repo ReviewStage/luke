@@ -317,6 +317,7 @@ body,
    edge and never on both. */
 .title-bar-controls {
   --title-bar-ground: var(--desktop-ground);
+  --luke-button-ground: var(--title-bar-ground);
   position: absolute;
   z-index: 2;
   top: calc(var(--traffic-lights-middle) - var(--control-height) / 2);
@@ -341,10 +342,6 @@ body,
   .title-bar-controls:not([data-edge]),
 .desktop-shell:has(.side-panel) .title-bar-controls[data-edge="end"] {
   --title-bar-ground: var(--desktop-well);
-}
-
-.title-bar-controls .icon-button {
-  --button-ground: var(--title-bar-ground);
 }
 
 .title-bar-controls[data-edge="end"] {
@@ -2207,7 +2204,7 @@ ul.actor-stack {
    the tab's pill a row's inset in, as the side panel's row starts its own;
    the Inbox pane's bar leads with its crumbs, drawn as tabs, alike. */
 .desktop-task-main .desktop-toolbar,
-.desktop-toolbar:has(.tab-skeleton),
+.desktop-toolbar:has(.desktop-toolbar-heading > .luke-skeleton),
 .inbox-view-items .desktop-toolbar {
   padding-left: var(--column-inset);
 }
@@ -6421,6 +6418,15 @@ button.automation-run:hover {
   scrollbar-gutter: stable;
 }
 
+/* A page drawn in the shared settings page (`SettingsPage`) fills the room
+   under the drag strip and scrolls in it, its top fading as the window's own
+   frame's does (`base.css`), and a landed search result keeps the page's
+   inset above it rather than the fade's. */
+.settings-page > .luke-settings-page {
+  flex: 1 1 0;
+  scroll-padding-top: var(--page-inset);
+}
+
 /* A page whose reads are out draws nothing under its name until every one
    has answered, then the whole page at once, so nothing grows into place. */
 .settings-page-scroll:has(.settings-reading) .settings {
@@ -6441,7 +6447,8 @@ button.automation-run:hover {
 
 /* A quiet act ends the line flush with the card's edge, its words rather than
    its hover's pill standing in the column. */
-.settings-page-head .quiet-button {
+.settings-page-head .quiet-button,
+.settings-page .luke-settings-page-actions .quiet-button {
   margin-right: calc(-1 * var(--space-8));
 }
 
@@ -7406,8 +7413,8 @@ button.automation-run:hover {
   /* Room above and below the tabs, given back to the row, for the shadow
      under a tab being dragged, which the strip's scrolling would clip, and
      at either end for the keyboard's ring on the first tab and the last. */
-  margin: calc(-1 * var(--space-8)) calc(-1 * var(--focus-ring-reach));
-  padding: var(--space-8) var(--focus-ring-reach);
+  margin: calc(-1 * var(--luke-space-8)) calc(-1 * var(--focus-ring-reach));
+  padding: var(--luke-space-8) var(--focus-ring-reach);
 }
 
 .main-tabs .tab-strip {
@@ -7472,19 +7479,20 @@ button.automation-run:hover {
   /* The pill's insets about its glyph and label, and the ×'s box with its
      inset from the pill's end. */
   --tab-start: var(--row-inset);
-  --tab-end: var(--space-12);
-  --tab-gap: var(--glyph-gap);
+  --tab-end: var(--luke-space-12);
+  --tab-gap: var(--luke-icon-gap);
   --tab-close: 20px;
-  --tab-close-inset: var(--space-4);
+  --tab-close-inset: var(--luke-space-4);
   position: relative;
   display: flex;
   max-width: 200px;
   flex: none;
   align-items: center;
-  border-radius: var(--control-radius);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 560;
+  border-radius: var(--luke-control-radius);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
   /* Its transform is a drag's (use-tab-drag.ts): sliding aside for a tab
      dragged past it, and home again, on the bounce small elements ride. */
   transition:
@@ -7499,7 +7507,7 @@ button.automation-run:hover {
    width; each is a container of its own width, so it can stand as its glyph
    alone once it is narrow (below). */
 .tab-strip .tab {
-  min-width: calc(2 * var(--space-8) + var(--control-glyph));
+  min-width: calc(2 * var(--luke-space-8) + var(--luke-control-icon));
   max-width: var(--tab-widest);
   flex: 0 1 var(--tab-widest);
   container: tab / inline-size;
@@ -7549,7 +7557,9 @@ button.automation-run:hover {
 }
 
 .tab-strip .tab[data-selected="true"]:not([data-quiet="true"]) {
-  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--strip-ground);
+  background:
+    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
+    var(--strip-ground);
 }
 
 /* A quiet chosen tab, drawn with no fill at rest, still stands on the
@@ -7563,8 +7573,8 @@ button.automation-run:hover {
 @container pinned scroll-state(stuck: left) {
   .tab-strip .tab-button::after {
     position: absolute;
-    top: calc(-1 * var(--space-8));
-    bottom: calc(-1 * var(--space-8));
+    top: calc(-1 * var(--luke-space-8));
+    bottom: calc(-1 * var(--luke-space-8));
     left: 100%;
     width: var(--scroll-fade);
     background: linear-gradient(to right, var(--strip-ground), transparent);
@@ -7576,9 +7586,9 @@ button.automation-run:hover {
 @container pinned scroll-state(stuck: right) {
   .tab-strip .tab-button::after {
     position: absolute;
-    top: calc(-1 * var(--space-8));
+    top: calc(-1 * var(--luke-space-8));
     right: 100%;
-    bottom: calc(-1 * var(--space-8));
+    bottom: calc(-1 * var(--luke-space-8));
     width: var(--scroll-fade);
     background: linear-gradient(to left, var(--strip-ground), transparent);
     content: "";
@@ -7587,8 +7597,8 @@ button.automation-run:hover {
 }
 
 .tab:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 /* The tab holding the keyboard stands over its neighbours, so the chosen
@@ -7598,8 +7608,8 @@ button.automation-run:hover {
 }
 
 .tab[data-selected="true"] {
-  background: var(--raised-strong);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
 }
 
 /* A quiet tab, the plan's while it is its column's lone one, wears no fill
@@ -7610,7 +7620,7 @@ button.automation-run:hover {
 }
 
 .tab[data-quiet="true"]:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 /* A tab being dragged is lifted over the tabs it passes: the chosen tab's
@@ -7618,9 +7628,11 @@ button.automation-run:hover {
    the pointer frame for frame, so its own transform eases nothing. */
 .tab[data-dragging="true"] {
   z-index: 1;
-  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-well);
-  box-shadow: 0 4px 12px var(--shadow);
-  color: var(--text-primary);
+  background:
+    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
+    var(--desktop-well);
+  box-shadow: 0 4px 12px var(--luke-color-shadow);
+  color: var(--luke-color-text);
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
@@ -7640,7 +7652,7 @@ button.automation-run:hover {
   flex: 1 1 auto;
   align-items: center;
   gap: var(--tab-gap);
-  height: var(--control-height);
+  height: var(--luke-control-height);
   padding: 0 var(--tab-end) 0 var(--tab-start);
   border-radius: inherit;
   background: none;
@@ -7659,18 +7671,18 @@ button.automation-run:hover {
   position: relative;
   display: flex;
   flex: 0 0 auto;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .tab-icon svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 /* A glyph wearing where its work stands takes a glyph's footprint, so an
    agent's tab and a fixed tab line their labels up alike. */
 .tab-icon .state-glyph {
-  --state-glyph-size: var(--control-glyph);
+  --state-glyph-size: var(--luke-control-icon);
 }
 
 .tab-label {
@@ -7822,7 +7834,7 @@ button.automation-run:hover {
 /* Renamed in place, the label gives way to a field in the same type,
    ringed rather than bordered so nothing moves. */
 .tab-button[data-editing="true"] {
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
 .tab-field {
@@ -7850,7 +7862,7 @@ button.automation-run:hover {
   padding: 0;
   border-radius: 6px;
   background: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   opacity: 0;
   transform: translateY(-50%);
   transition:
@@ -7894,19 +7906,19 @@ button.automation-run:hover {
 /* Note that the × draws no ground under the pointer, because it is a glyph
    on a pill that is already raised: only the glyph itself brightens. */
 .tab-close:hover {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .tab-close svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: 0 0 auto;
 }
 
 /* What follows a tab's label, the Inbox's count, is muted as a model's
    effort is after its name (`.model-label-detail`). */
 .tab-detail {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 /* The plan's column's tabs and their "+" take what the toolbar leaves
@@ -7925,14 +7937,16 @@ button.automation-run:hover {
    the bar moves as the developer goes from tab to tab. */
 .toolbar-tab-actions {
   display: flex;
-  min-width: var(--control-height);
+  min-width: var(--luke-control-height);
   flex: none;
   align-items: center;
 }
 
 /* A tab dragged in the plan's column is lifted on the column's ground. */
 .main-tabs .tab[data-dragging="true"] {
-  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-ground);
+  background:
+    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
+    var(--desktop-ground);
 }
 
 /* The plan's tab alone in its column takes the room the heading has rather
@@ -7942,7 +7956,7 @@ button.automation-run:hover {
 .inbox-crumbs .tab {
   min-width: calc(
     var(--tab-start) +
-    var(--control-glyph) +
+    var(--luke-control-icon) +
     var(--tab-gap) +
     3.5ch +
     var(--tab-end)
@@ -7952,17 +7966,6 @@ button.automation-run:hover {
 
 .desktop-toolbar-heading .tab[data-quiet="true"] {
   max-width: 100%;
-}
-
-/* While the plan is read, one block in its tab's place: a tab's height and
-   corner at a typical tab's width, starting where the tab's pill will
-   (`.desktop-task-main .desktop-toolbar`), so the row stands as it will once
-   the plan's tab is drawn there. */
-.tab-skeleton {
-  width: 120px;
-  height: var(--control-height);
-  margin: 0;
-  border-radius: var(--control-radius);
 }
 
 /* Dialog parts ---------------------------------------------------------------- */

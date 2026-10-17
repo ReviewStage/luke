@@ -226,6 +226,19 @@ test("with the sidebar folded, New plan stands beside its toggle over the home p
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New task"]);
 });
 
+test("the title bar's buttons, each wrapped in its hint, tell a reader the chord that reaches them on the button itself", () => {
+  const controls = mount(false).querySelector(".title-bar-controls:not([data-edge])");
+  assert.ok(controls, "the title bar's buttons stand");
+  const chords = [...controls.querySelectorAll("button")].map((button) => [
+    button.getAttribute("aria-label"),
+    button.getAttribute("aria-keyshortcuts"),
+  ]);
+  assert.deepEqual(chords, [
+    ["Show sidebar", "Meta+B"],
+    ["New task", "Meta+N"],
+  ]);
+});
+
 test("the home page welcomes an account with no plan, and its New plan raises the dialog over the window, which Cancel puts away", () => {
   const page = mount(false);
   const home = page.querySelector('section[aria-label="Home"]');
@@ -780,7 +793,9 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
       root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
     );
     await settle();
-    toggled[place] = container.querySelector("button.side-panel-toggle") !== null;
+    toggled[place] = [...container.querySelectorAll("button")].some((button) =>
+      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
+    );
   }
   assert.deepEqual(toggled, {
     [PLACE.HOME]: false,

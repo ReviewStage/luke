@@ -165,8 +165,11 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
   const chip = page.querySelector<HTMLButtonElement>('[aria-label="Avatar: Atlas"]');
   assert.ok(chip, "the avatar is a choice, Atlas at first");
   // Each experiment is a card of its own, and the avatar stands in Video calls' card, under its switch.
-  const cards = [...page.querySelectorAll(".settings-card")].map((card) =>
-    [...card.querySelectorAll(".settings-row strong")].map((label) => label.textContent),
+  const cards = [...page.querySelectorAll("section")].map((card) =>
+    [...card.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
+      // A chip's name ends with the value it names, which is not the row's.
+      (control) => control.getAttribute("aria-label")?.split(": ")[0],
+    ),
   );
   assert.deepEqual(cards, [
     ["Browser tab"],
