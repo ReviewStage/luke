@@ -8,7 +8,7 @@ import { Tooltip } from "../tooltip";
  * menu-row.tsx -- a Settings row with actions of its own: a stored key, a connected service, a changeable shortcut.
  *
  * The row's acts live in the window's own menu rather than in buttons along
- * the row, the way a sidebar plan's do: a ⋯ at the row's end opens it, and a
+ * the row, the way a sidebar task's do: a ⋯ at the row's end opens it, and a
  * right-click anywhere on the row opens the same menu at the pointer. The ⋯
  * is always drawn, muted as a toolbar's glyphs are until the pointer is on it,
  * because a ⋯ shown only on hover leaves an empty gap at the end of the row. A

@@ -27,11 +27,16 @@
  * lands rather than waiting on the slowest: the pull request whole, its
  * description and its mergeability among it; every check on its head, one
  * by one, read by the pull request's own head ref so it waits on no read of
- * the head's commit; and its comments, its reviews, and its review threads,
- * made one conversation in time order.
+ * the head's commit, and beside them its head's deployments in one GraphQL
+ * read; and its comments, its reviews, and its review threads, made one
+ * conversation in time order.
  */
 
-import { githubAvatarUrl, githubUserAvatarUrl } from "@luke/features/account-picture";
+import {
+  githubAppAvatarUrl,
+  githubAvatarUrl,
+  githubUserAvatarUrl,
+} from "@luke/features/account-picture";
 import {
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
@@ -42,6 +47,8 @@ import {
   type CheckSummary,
   CONVERSATION_ENTRY,
   type CodingAgentChangedFile,
+  DEPLOYMENT_STATE,
+  type DeploymentState,
   DIFF_SIDE,
   type DiffSide,
   MERGE_STATE,
@@ -50,10 +57,12 @@ import {
   PATCH_OMITTED,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
+  type PullRequestDeployment,
   type PullRequestState,
   REVIEW_STATE,
   type ReviewState,
 } from "@luke/features/coding-agent-wire";
+import { githubImageOf } from "@luke/features/github-image";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -842,7 +851,7 @@ const ListedCheckRunsSchema = Schema.Struct({
       details_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
       started_at: Schema.NullOr(Schema.String),
       completed_at: Schema.NullOr(Schema.String),
-      app: Schema.NullOr(Schema.Struct({ name: Schema.String })),
+      app: Schema.NullOr(Schema.Struct({ id: Schema.Number, name: Schema.String })),
     }),
   ),
 });
@@ -856,6 +865,7 @@ const ListedStatusesSchema = Schema.Struct({
       target_url: Schema.NullOr(Schema.String),
       created_at: Schema.String,
       updated_at: Schema.String,
+      avatar_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
     }),
   ),
 });
@@ -943,6 +953,8 @@ interface GitHubThreadComment {
 interface GitHubReviewThread {
   /** GitHub's id for the review its first comment was made in; none where GitHub names none. */
   readonly reviewId: number | null;
+  /** GitHub's GraphQL id for the thread, which a reply or a resolve names it by. */
+  readonly id: string;
   readonly path: string;
   readonly line: number | null;
   readonly startLine: number | null;
@@ -981,6 +993,21 @@ function statusStateOf(state: string): CheckState {
   return FAILING_STATUS_STATES.has(state) ? CHECK_STATE.FAILED : CHECK_STATE.PENDING;
 }
 
+/**
+ * A check's avatar as the wire carries it: an address on GitHub's own
+ * avatar host, drawn as it is, or one the window reads through the
+ * service's image proxy (`githubImageOf`); absent for anything else.
+ */
+function checkAvatarOf(spelled: string | null | undefined): string | undefined {
+  if (spelled === null || spelled === undefined) return undefined;
+  return githubAvatarUrl(spelled) ?? (githubImageOf(spelled) === undefined ? undefined : spelled);
+}
+
+/** A check wearing its avatar, where it has one. */
+function withAvatar(check: PullRequestCheck, avatarUrl: string | undefined): PullRequestCheck {
+  return avatarUrl === undefined ? check : { ...check, avatarUrl };
+}
+
 /** Where a check stands in the order the bound keeps them by: what asks for a look first. */
 const CHECK_RANK = {
   [CHECK_STATE.FAILED]: 0,
@@ -1001,7 +1028,10 @@ function pullHeadRef(number: number): string {
  * the checks wait on no read of the pull request for its head's commit; a
  * pull request the repository does not hold lists none. Note that they are
  * ordered before they are cut, because a head with a hundred passing runs
- * would otherwise leave out the one status that failed.
+ * would otherwise leave out the one status that failed. Each wears its
+ * avatar: a check run its App's logo, by the App's id its run names, and a
+ * status the picture GitHub names on it, so the avatars cost no request of
+ * their own.
  */
 export function pullRequestChecks(
   token: Redacted.Redacted,
@@ -1015,14 +1045,19 @@ export function pullRequestChecks(
     githubRead(`${commit}/check-runs`, token).pipe(perPage),
     ListedCheckRunsSchema,
     (answer): readonly PullRequestCheck[] =>
-      answer.check_runs.map((run) => ({
-        name: nameOf(run.name),
-        app: run.app === null ? null : nameOf(run.app.name),
-        state: runStateOf(run.status, run.conclusion),
-        url: run.html_url ?? run.details_url ?? null,
-        startedAt: timeOf(run.started_at),
-        completedAt: timeOf(run.completed_at),
-      })),
+      answer.check_runs.map((run) =>
+        withAvatar(
+          {
+            name: nameOf(run.name),
+            app: run.app === null ? null : nameOf(run.app.name),
+            state: runStateOf(run.status, run.conclusion),
+            url: run.html_url ?? run.details_url ?? null,
+            startedAt: timeOf(run.started_at),
+            completedAt: timeOf(run.completed_at),
+          },
+          run.app === null ? undefined : githubAppAvatarUrl(run.app.id),
+        ),
+      ),
   );
   const statuses = readListed(
     "commit statuses",
@@ -1031,7 +1066,7 @@ export function pullRequestChecks(
     (answer): readonly PullRequestCheck[] =>
       answer.statuses.map((status) => {
         const state = statusStateOf(status.state);
-        return {
+        const check: PullRequestCheck = {
           name: nameOf(status.context),
           app: null,
           state,
@@ -1039,6 +1074,7 @@ export function pullRequestChecks(
           startedAt: timeOf(status.created_at),
           completedAt: state === CHECK_STATE.PENDING ? null : timeOf(status.updated_at),
         };
+        return withAvatar(check, checkAvatarOf(status.avatar_url));
       }),
   );
   return Effect.map(Effect.all([runs, statuses], { concurrency: "unbounded" }), ([a, b]) =>
@@ -1099,6 +1135,7 @@ const REVIEW_THREADS_QUERY = `query ReviewThreads($owner: String!, $name: String
       reviewThreads(last: ${OVERVIEW_BOUNDS.MAX_THREADS}) {
         totalCount
         nodes {
+          id
           path
           line
           startLine
@@ -1160,6 +1197,7 @@ const ThreadCommentSchema = Schema.Struct({
 });
 
 const ThreadSchema = Schema.Struct({
+  id: Schema.String,
   path: Schema.String,
   line: Schema.NullOr(Schema.Number),
   startLine: Schema.NullOr(Schema.Number),
@@ -1233,6 +1271,7 @@ function threadOf(node: typeof ThreadSchema.Type): GitHubReviewThread | undefine
   if (first === undefined) return undefined;
   return {
     reviewId: first.pullRequestReview?.databaseId ?? null,
+    id: node.id,
     path: node.path,
     line: node.line,
     startLine: node.startLine,
@@ -1469,3 +1508,179 @@ export const pullRequestConversation = /* @__PURE__ */ Effect.fn("web/pullReques
     };
   },
 );
+
+/**
+ * How many deployments of the head one read asks GitHub for, the newest
+ * first: a whole page, GitHub's most, so an environment deployed again and
+ * again on the same commit leaves room for the others once each keeps its
+ * newest. Note that it is one page and never more, because paging until
+ * ten environments stood would make the checks read's requests grow with
+ * how often one environment redeployed; a head with more than a hundred
+ * deployments lists the environments of its newest hundred.
+ */
+const DEPLOYMENTS_ASKED = 100;
+
+/**
+ * The deployments of a pull request's head, in one GraphQL read whatever
+ * their number: the head is the pull request's last commit, so no read of
+ * its commit comes first, and each deployment carries its newest status,
+ * where REST would ask once for the list and once more for each status.
+ */
+const DEPLOYMENTS_QUERY = `query Deployments($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      commits(last: 1) {
+        nodes {
+          commit {
+            deployments(first: ${DEPLOYMENTS_ASKED}, orderBy: { field: CREATED_AT, direction: DESC }) {
+              nodes {
+                environment
+                state
+                creator { avatarUrl }
+                latestStatus { state environmentUrl }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+const DeploymentSchema = Schema.Struct({
+  environment: Schema.NullOr(Schema.String),
+  state: Schema.NullOr(Schema.String),
+  creator: Schema.NullOr(Schema.Struct({ avatarUrl: Schema.String })),
+  latestStatus: Schema.NullOr(
+    Schema.Struct({ state: Schema.String, environmentUrl: Schema.NullOr(Schema.String) }),
+  ),
+});
+
+/** GitHub's GraphQL answer to the deployments read: its data where it read any, and its errors where it met some. */
+const DeploymentsAnswerSchema = Schema.Struct({
+  data: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        repository: Schema.NullOr(
+          Schema.Struct({
+            pullRequest: Schema.NullOr(
+              Schema.Struct({
+                commits: Schema.Struct({
+                  nodes: Schema.Array(
+                    Schema.NullOr(
+                      Schema.Struct({
+                        commit: Schema.Struct({
+                          deployments: Schema.NullOr(
+                            Schema.Struct({ nodes: Schema.Array(Schema.NullOr(DeploymentSchema)) }),
+                          ),
+                        }),
+                      }),
+                    ),
+                  ),
+                }),
+              }),
+            ),
+          }),
+        ),
+      }),
+    ),
+  ),
+  errors: Schema.optionalKey(Schema.Array(Schema.Struct({ message: Schema.String }))),
+});
+
+/** GitHub's words for where a deployment or its newest status stands, as the wire says each; any it adds reads as still deploying. */
+const GITHUB_DEPLOYMENT_STATE = new Map<string, DeploymentState>([
+  ["SUCCESS", DEPLOYMENT_STATE.READY],
+  ["ACTIVE", DEPLOYMENT_STATE.READY],
+  ["FAILURE", DEPLOYMENT_STATE.FAILED],
+  ["ERROR", DEPLOYMENT_STATE.FAILED],
+  ["INACTIVE", DEPLOYMENT_STATE.INACTIVE],
+  ["DESTROYED", DEPLOYMENT_STATE.INACTIVE],
+  ["ABANDONED", DEPLOYMENT_STATE.INACTIVE],
+]);
+
+/** The address a deployment serves, only where it is https, since the window opens it in the browser. */
+function deploymentUrlOf(spelled: string | null | undefined): string | null {
+  if (spelled === null || spelled === undefined) return null;
+  try {
+    return new URL(spelled).protocol === "https:" ? spelled : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One deployment as the wire carries it; none for one GitHub names no environment of. */
+function deploymentOf(node: typeof DeploymentSchema.Type): PullRequestDeployment | undefined {
+  if (node.environment === null || node.environment === "") return undefined;
+  const spelled = node.latestStatus?.state ?? node.state ?? "";
+  const deployment: PullRequestDeployment = {
+    environment: nameOf(node.environment),
+    state: GITHUB_DEPLOYMENT_STATE.get(spelled) ?? DEPLOYMENT_STATE.PENDING,
+    url: deploymentUrlOf(node.latestStatus?.environmentUrl),
+  };
+  const avatarUrl = githubAvatarUrl(node.creator?.avatarUrl);
+  return avatarUrl === undefined ? deployment : { ...deployment, avatarUrl };
+}
+
+/** The newest deployment of each environment, newest first, up to the bound. */
+function newestOfEach(
+  deployments: readonly PullRequestDeployment[],
+): readonly PullRequestDeployment[] {
+  const seen = new Set<string>();
+  return deployments
+    .filter((deployment) => {
+      if (seen.has(deployment.environment)) return false;
+      seen.add(deployment.environment);
+      return true;
+    })
+    .slice(0, OVERVIEW_BOUNDS.MAX_DEPLOYMENTS);
+}
+
+/**
+ * A pull request's head's deployments, such as its Vercel Previews: the
+ * newest of each environment, newest first, up to the bound, each with
+ * where its newest status left it and the https address it serves. It is
+ * one request whatever their number (`DEPLOYMENTS_QUERY`). A pull request
+ * the repository does not hold, or a repository where the App may not read
+ * deployments, lists none, said once in the log, rather than failing the
+ * checks read it stands beside.
+ */
+export function pullRequestDeployments(
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Effect.Effect<readonly PullRequestDeployment[], never, HttpClient.HttpClient> {
+  const [owner = "", name = ""] = fullName.split("/");
+  const request = githubPost(GRAPHQL_PATH, token, {
+    query: DEPLOYMENTS_QUERY,
+    variables: { owner, name, number },
+  });
+  return Effect.scoped(
+    Effect.flatMap(send(request), (response) => readBody(response, DeploymentsAnswerSchema)),
+  ).pipe(
+    Effect.flatMap((answer) => {
+      const head = answer.data?.repository?.pullRequest?.commits.nodes.at(-1);
+      const listed = head?.commit.deployments;
+      if (listed === undefined || listed === null) {
+        return Effect.as(
+          Effect.logWarning(
+            `GitHub answered no deployments of pull request ${number} (${answer.errors?.length ?? 0} errors)`,
+          ),
+          [],
+        );
+      }
+      const deployments = listed.nodes.flatMap((node) =>
+        node === null ? [] : (deploymentOf(node) ?? []),
+      );
+      return Effect.succeed(newestOfEach(deployments));
+    }),
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `the deployments of pull request ${number} were not read: ${failure._tag}`,
+        ),
+        [],
+      ),
+    ),
+  );
+}

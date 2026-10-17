@@ -38,7 +38,7 @@ const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const DAY = 86_400_000;
 const NOW = Date.now();
 
-/** A plan of the personal workspace, saved `ago` before now. */
+/** A task of the personal workspace, saved `ago` before now. */
 function task(n: number, name: string, ago: number, repository: string | null): TaskSummary {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
@@ -90,20 +90,20 @@ const EMAIL = item(1, "Email the invitee when an invite is withdrawn?", NOW - 6 
 const SETTLED = item(2, "Expire after 7 days?", NOW - 60_000, INBOX_STATUS.ANSWERED);
 const ACCOUNT = item(3, "Which billing account does the export read?", NOW - 2 * 3_600_000);
 
-/** Each plan's inbox as the service answers a read of it. */
+/** Each task's inbox as the service answers a read of it. */
 const INBOXES = new Map<string, readonly InboxItem[]>([
   [INVITES.id, [EMAIL, SETTLED]],
   [BILLING.id, [ACCOUNT]],
 ]);
 
-/** An agent with no plan an automation started, and the question it waits on. */
+/** An agent with no task an automation started, and the question it waits on. */
 const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
 const QUARANTINE: InboxItem = {
   ...item(9, "Quarantine the flaky test?", NOW - 60_000),
   agentId: SWEEP_AGENT,
 };
 
-/** The automation that started the agent with no plan, as its workspace's list reads it. */
+/** The automation that started the agent with no task, as its workspace's list reads it. */
 const SWEEP: AutomationSummary = {
   id: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
   planId: null,
@@ -121,10 +121,10 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** Each agent with no plan's inbox as the service answers a read of it. */
+/** Each agent with no task's inbox as the service answers a read of it. */
 const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUARANTINE]]]);
 
-/** The plans holding items, and those of them with an item waiting, as main reads the account. */
+/** The tasks holding items, and those of them with an item waiting, as main reads the account. */
 const HOLDING: Pick<TasksControl, "inbox" | "inboxTasks"> = {
   inbox: [
     { taskId: INVITES.id, items: [waitingOf(EMAIL)] },
@@ -417,7 +417,7 @@ test("↑ and ↓ pressed on New plan leave the focus on it", async () => {
 });
 
 test("Home lists every open item of the listed plans, a teammate's agent's included, though main counts only the account's own as waiting on it", async () => {
-  // Billing's question is a teammate's agent's: main's account read holds the plan, but waits the account on Invitations' alone.
+  // Billing's question is a teammate's agent's: main's account read holds the task, but waits the account on Invitations' alone.
   const { page } = mount({
     listed: {
       tasks: TASKS,
@@ -526,7 +526,7 @@ test("a waiting row wears its agent's tile, whose card names the teammate who st
   act(() => {
     mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Started by.*Charles Pan/u);
   const face = card?.querySelector<HTMLImageElement>('.actor-mark[data-kind="person"] img');
   assert.equal(
@@ -586,7 +586,7 @@ test("a waiting row of an agent with no plan names the automation that started i
   act(() => {
     mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Sweep the flaky tests.*Started by.*Nightly flake sweep/u);
 });
 

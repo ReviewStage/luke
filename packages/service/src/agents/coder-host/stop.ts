@@ -31,7 +31,7 @@ import { type AgentTurnStanding, codingAgentSummary, summaryAccounts } from "./s
 /**
  * stop.ts -- the one Stop: eve's cancel of a coding agent's turn under way, then the row's stamp.
  *
- * A Stop pressed on the agent, its archive, and the delete of the plan it
+ * A Stop pressed on the agent, its archive, and the delete of the task it
  * works on all stop it here, reaching eve as the developer over the
  * request's own authorization. The cancel names the turn the row was
  * written for, so a turn that ended meanwhile is not followed by a newer
@@ -41,7 +41,7 @@ import { type AgentTurnStanding, codingAgentSummary, summaryAccounts } from "./s
  * Stop could name yet: a session still coming up, or a line awaiting the
  * turn it opens, is refused as not ready until that turn exists or has
  * ended. Every agent here was read through the caller's membership of its
- * plan's workspace, so a member stops a teammate's agent on the agent's own
+ * task's workspace, so a member stops a teammate's agent on the agent's own
  * conversation, whichever of them started it.
  */
 
@@ -66,7 +66,7 @@ export const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* eveSessions({ origin, caller: { authorization }, mount });
 });
 
-/** Where each of the agents' conversations named stands now, read by id since the agents passed the plan's gate: its newest turn, and whether a line of the developer's awaits one. */
+/** Where each of the agents' conversations named stands now, read by id since the agents passed the task's gate: its newest turn, and whether a line of the developer's awaits one. */
 export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationIds: readonly string[],
 ): Effect.fn.Return<

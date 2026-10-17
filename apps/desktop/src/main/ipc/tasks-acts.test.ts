@@ -89,7 +89,7 @@ const ISSUE = {
 };
 const ISSUE_NONE = 8;
 
-/** The plan the host has open, as the fixture's main process reads it. */
+/** The task the host has open, as the fixture's main process reads it. */
 interface OpenTask {
   activeTaskId: string | undefined;
 }
@@ -98,7 +98,7 @@ interface OpenTask {
 interface StartScript {
   answer: TasksStartAnswer;
   voiceReady: boolean;
-  /** Whether a call is already in progress, about whichever plan. */
+  /** Whether a call is already in progress, about whichever task. */
   callStanding: boolean;
 }
 
@@ -391,7 +391,7 @@ function fixture() {
     callStanding: () => start.callStanding,
     colourCode: highlightSnippet,
   });
-  // SAFETY: only the planning rows are under test; the router dispatches on
+  // SAFETY: only the task rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
   return { router, asked, talked, opened, view, start, page, host };

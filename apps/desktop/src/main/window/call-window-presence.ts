@@ -2,7 +2,7 @@
  * call-window-presence.ts -- whether the floating call window stands, and where it opens.
  *
  * The call is drawn in one place at a time. While a Luke window has the
- * keyboard, that window draws it: its call bar on the call's own plan, its
+ * keyboard, that window draws it: its call bar on the call's own task, its
  * call card anywhere else. Once none does (another app in front, Luke
  * minimised or hidden), the floating window draws the same card over
  * whatever is in front, for as long as the call is in progress. On a video

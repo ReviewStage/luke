@@ -8,12 +8,12 @@ import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-vi
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
+import { EmptyState } from "@luke/ui";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
 import { AutomationDirectory } from "../automation-directory";
 import { LinkWorkspaceProvider } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { ReadFailure } from "../read-failure";
@@ -55,25 +55,25 @@ import { type InboxWaitingOnly, useInboxTaskFolds, useInboxViewChoices } from ".
 import { taskCardOf } from "./task-card";
 
 /**
- * desktop-inbox.tsx -- the window's Inbox: every item of every plan of the listed workspace holding one in a list of its own, and the chosen item read beside it.
+ * desktop-inbox.tsx -- the window's Inbox: every item of every task of the listed workspace holding one in a list of its own, and the chosen item read beside it.
  *
- * It stands in the plan's place beside the sidebar, whose Inbox row is
+ * It stands in the task's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
- * folders. The list (`inbox-list.tsx`) holds the items of each plan of the
+ * folders. The list (`inbox-list.tsx`) holds the items of each task of the
  * workspace the sidebar lists that main says holds one (the switcher counts
- * what waits in the others), needing the developer or settled, each plan read whole
- * as main says it changed (`use-inbox-items.ts`), under its plan or newest
+ * what waits in the others), needing the developer or settled, each task read whole
+ * as main says it changed (`use-inbox-items.ts`), under its task or newest
  * first, all or only what needs them, as the developer last chose; Needs
  * you is the Inbox's one name for an item not yet answered
  * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
  * same items. A press on a row chooses it, and the pane beside the
  * list (`inbox-pane.tsx`) shows it as a thread, answered in place, on its
- * plan's own held read, which stands in for the list's read of that plan
+ * task's own held read, which stands in for the list's read of that task
  * so an answer shows at once. With nothing chosen, the first item listed
  * that waits stands chosen, else the first listed. The pane's crumbs open
- * the plan or the agent's tab, and a code block's Open its file, each
+ * the task or the agent's tab, and a code block's Open its file, each
  * leaving the Inbox. With nothing listed, it says so under the Inbox's
- * glyph (`empty-state.tsx`); with Needs you leaving out every item, the list
+ * glyph (`@luke/ui`'s `EmptyState`); with Needs you leaving out every item, the list
  * says so and offers Show all, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
@@ -91,10 +91,10 @@ import { taskCardOf } from "./task-card";
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
 const BACK_TO_INBOX = "Back to Inbox";
 
-/** What the list says where a plan's read did not answer. */
+/** What the list says where a task's read did not answer. */
 const NOT_READ = "Some items could not be read.";
 
-/** The plans the list holds items of, in main's order: each holding one that the listed workspace's list holds, so an archived plan, one not yet read, or another workspace's is listed nowhere. */
+/** The tasks the list holds items of, in main's order: each holding one that the listed workspace's list holds, so an archived task, one not yet read, or another workspace's is listed nowhere. */
 function listedHoldings(
   holdings: TasksControl["inboxTasks"],
   listed: TasksControl["tasks"],
@@ -138,11 +138,11 @@ function ListNote({
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
 }
 
-/** A planless item's code reads no file, there being no plan whose repository it reads through. */
+/** A taskless item's code reads no file, there being no task whose repository it reads through. */
 const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
   Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
-/** The window's Inbox, in the plan's place: every plan's items and every automation's, and the chosen one read beside them. */
+/** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them. */
 export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const view = tasks.inboxView;
   const { act, tell } = useAct();
@@ -152,7 +152,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const folds = useInboxTaskFolds();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const { onOpen: onOpenAutomations } = tasks.automationsView;
-  // Note that the Inbox reads the automations whenever it stands, because the items of agents with no plan it lists are every one an automation's.
+  // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
@@ -195,7 +195,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
         : act(ACT_KIND.CODING_AGENTS_AGENT_INBOX, { agentId: chosenAgentId, after }),
     [act, chosenAgentId],
   );
-  // Note that an agent with no plan holds its own read, by its id, as a plan's is held by the plan's.
+  // Note that an agent with no task holds its own read, by its id, as a task's is held by the task's.
   const live = useTaskInbox({
     taskId: taskId ?? chosenAgentId,
     ...(chosenAgentId === undefined ? undefined : { reader: readAgentInbox }),
@@ -205,7 +205,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       tasks.inboxTaskless.some((each) => each.agentId === chosenAgentId),
     agents,
   });
-  // Note that the models come from the open plan's agents where this plan's have not read them, so an agent is named alike in both.
+  // Note that the models come from the open task's agents where this task's have not read them, so an agent is named alike in both.
   const named = { ...agents, models: agents.models ?? tasks.agents.models };
   // The chosen holder's own held read stands in for the list's once it answered, so an answer shows
   // at once, and only while it holds, since one that failed stops hearing what changed.
@@ -259,8 +259,8 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     choices.waitingOnly &&
     listedItems(list).length === 0 &&
     entries.some(({ items }) => items.length > 0);
-  // Note that a chosen item whose plan or agent is listed but not read yet keeps its place, because
-  // it may be listed once the read lands; one whose plan left the list, archived elsewhere, gives way.
+  // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because
+  // it may be listed once the read lands; one whose task left the list, archived elsewhere, gives way.
   // A holder whose agents' read answered none, or that it is not there, holds no Inbox to read;
   // one whose agents are not read yet may still hold the item, until its Inbox's own read answers.
   const holderEmpty = agents.listMissing || agents.heldIds?.length === 0;
@@ -404,11 +404,9 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                   <NotFound
                     thing={NOT_FOUND_THING.INBOX_ITEM}
                     action={
-                      columns.onBack === undefined ? undefined : (
-                        <button type="button" className="toolbar-button" onClick={columns.onBack}>
-                          {BACK_TO_INBOX}
-                        </button>
-                      )
+                      columns.onBack === undefined
+                        ? undefined
+                        : { label: BACK_TO_INBOX, onClick: columns.onBack }
                     }
                   />
                 ) : reading || filteredOut ? null : (
@@ -477,10 +475,10 @@ function answerPlace(
 }
 
 /**
- * The pane's doors for what holds its item: a plan's open the plan, its
+ * The pane's doors for what holds its item: a task's open the task, its
  * agents' tabs, and its files; an automation's open its page where the
  * Automations experiment is on, its agents' own pages, and no file, there
- * being no plan whose repository a file is read through.
+ * being no task whose repository a file is read through.
  */
 function paneDoors(
   tasks: TasksControl,

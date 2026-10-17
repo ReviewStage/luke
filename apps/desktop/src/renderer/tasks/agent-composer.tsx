@@ -78,7 +78,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * and what mends it (`../failure-note.tsx`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
  * once, or, for a repository out of reach, the press its reason names
- * (`repository-remedy.tsx`), a move of the plan sending it again by itself
+ * (`repository-remedy.tsx`), a move of the task sending it again by itself
  * once it lands; an agent that takes no message any more keeps the box,
  * disabled, with the reason under it; a change of model that did not take
  * says why in the same place, and with nothing else to say there, a server
@@ -118,8 +118,8 @@ import type { AgentModelControl } from "./use-agent-model";
  * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
  * is said in the same note a file's refusal is.
  *
- * An `@` at the start of a word, on a plan's page, opens the list of what
- * the message can mention, the plan's repository's files and folders, the
+ * An `@` at the start of a word, on a task's page, opens the list of what
+ * the message can mention, the task's repository's files and folders, the
  * plan's sections, the pages agents showed on it, its other coding agents,
  * the repository's skills, and the account's connected MCP servers and
  * their tools
@@ -129,7 +129,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * handed to the agent's next turn even where its switch is off, and to that
  * turn alone.
  *
- * A `/` at the start of a word opens the list of the skills the plan's
+ * A `/` at the start of a word opens the list of the skills the task's
  * repository keeps, at the caret, and the one chosen is written into the
  * words as its chip, read as `/name`, which the agent loads before it acts
  * and a press opens the `SKILL.md` of (`skill-picker.tsx`).
@@ -448,7 +448,7 @@ export function AgentComposer({
   const handBack = (set: (open: boolean) => void) => (open: boolean) => {
     const more = foot.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
     const returning =
-      !open && (document.activeElement?.closest(".anchored-popover") ?? null) !== null;
+      !open && (document.activeElement?.closest(".luke-anchored-popover") ?? null) !== null;
     set(open);
     if (returning && more !== null && getComputedStyle(more).display !== "none") {
       queueMicrotask(() => more.focus());

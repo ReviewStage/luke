@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { FEEDBACK_KIND } from "@luke/features/feedback";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ConfirmDialog, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useState } from "react";
@@ -12,7 +13,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { FeedbackDialog } from "./feedback-dialog";
-import { ConfirmDialog, useConfirmDialog } from "./settings/confirm-dialog";
 import { AttachmentViewer } from "./tasks/attachment-viewer";
 import { NewTaskDialog } from "./tasks/new-task-dialog";
 
@@ -152,8 +152,7 @@ function open({ Owner, role }: Dialog) {
   act(() => opener.click());
   const card = () => document.querySelector<HTMLElement>(`[role="${role}"][aria-modal="true"]`);
   assert.ok(card(), "the dialog opens");
-  const backdrop =
-    document.querySelector<HTMLElement>(".confirm-dialog-backdrop") ?? assert.fail("no backdrop");
+  const backdrop = card()?.parentElement ?? assert.fail("no backdrop");
   const key = (key: string, shiftKey = false) =>
     act(() => {
       (document.activeElement ?? document.body).dispatchEvent(

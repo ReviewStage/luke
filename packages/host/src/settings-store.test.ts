@@ -18,6 +18,13 @@ import {
   THEME,
 } from "@luke/settings";
 import {
+  DIFF_FONT,
+  DIFF_INDICATORS,
+  DIFF_LAYOUT,
+  DIFF_LINE_HEIGHT,
+  INLINE_DIFF,
+} from "@luke/settings/diff-view";
+import {
   type AppSettings,
   appSettingsView,
   type SettingsResetScope,
@@ -210,6 +217,20 @@ const SAMPLE_VALUE = {
   macCommands: false,
   // Atlas is the default, so another is the choice that has to survive a reopen.
   videoAvatar: VIDEO_AVATAR.CELIA,
+  // Each diff setting away from its default, the look a review tool's reader picked.
+  lineNumbers: false,
+  wordWrap: false,
+  diffLayout: DIFF_LAYOUT.SPLIT,
+  diffIndicators: DIFF_INDICATORS.CLASSIC,
+  inlineDiff: INLINE_DIFF.CHAR,
+  diffBackgrounds: false,
+  diffDarkTheme: "dracula",
+  diffLightTheme: "one-light",
+  diffFont: DIFF_FONT.MENLO,
+  diffFontSize: "13",
+  diffLineHeight: DIFF_LINE_HEIGHT.SPACIOUS,
+  diffLigatures: true,
+  diffMinimizeComments: true,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**

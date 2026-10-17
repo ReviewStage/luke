@@ -1,21 +1,32 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { ArchiveIcon, ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { LINK_PLACE } from "@luke/features/luke-link";
+import { ConfirmDialog, useConfirmDialog } from "@luke/ui";
+import { ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { ActorRef } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
-import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
+import { usePerson } from "../member-directory";
+import { RelativeTime } from "../tasks/relative-time";
+import { useMinute } from "../tasks/task-time";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, useActionMenu } from "./action-menu";
+import {
+  archiveAnswered,
+  archiveItem,
+  archiveQuestion,
+  ISSUE_ACTIONS_LABEL,
+} from "./issue-actions";
 import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
 import type { IssueChange } from "./use-issues";
 
 /**
- * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, its status and priority changed from their chips, its description written in place, and its archive.
+ * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, its description written in place, its link copied, and its archive.
  *
  * Every change is sent at once and the page draws the issue the service
  * answers, so what stands is what was kept; a change the service refused
@@ -23,9 +34,6 @@ import type { IssueChange } from "./use-issues";
  * Archiving asks first, and once it lands the page goes back to the list,
  * which no longer holds the issue.
  */
-
-/** What the ⋯ menu is called. */
-const ACTIONS_LABEL = "Issue actions";
 
 /**
  * The toolbar's path, as the automation editor's: the Issues list a press
@@ -51,23 +59,21 @@ export function IssueCrumbs({
   );
 }
 
-/** The toolbar: the path back to the list, and the issue's ⋯ menu. */
+/** The toolbar: the path back to the list, and the issue's ⋯ menu: Copy link, and Archive. */
 function DetailToolbar({
+  issueId,
   identifier,
   onBack,
   onArchive,
 }: {
+  issueId: string;
   identifier: string;
   onBack: () => void;
   onArchive: () => void;
 }): React.JSX.Element {
   const menu = useActionMenu(true);
-  const archive: MenuAction = {
-    label: "Archive",
-    icon: <ArchiveIcon />,
-    onSelect: onArchive,
-    danger: true,
-  };
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId });
+  const archive = archiveItem(onArchive);
   return (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
@@ -75,11 +81,11 @@ function DetailToolbar({
         <ExperimentTag />
       </div>
       <div className="desktop-toolbar-actions">
-        <Tooltip label={ACTIONS_LABEL}>
+        <Tooltip label={ISSUE_ACTIONS_LABEL}>
           <button
             type="button"
             className="icon-button"
-            aria-label={ACTIONS_LABEL}
+            aria-label={ISSUE_ACTIONS_LABEL}
             {...menu.trigger()}
           >
             <EllipsisIcon className="icon-button-glyph" />
@@ -87,9 +93,9 @@ function DetailToolbar({
         </Tooltip>
         {menu.drawn === undefined ? null : (
           <ActionMenu
-            label={ACTIONS_LABEL}
+            label={ISSUE_ACTIONS_LABEL}
             menu={menu.drawn}
-            groups={[[archive]]}
+            groups={copyLink === undefined ? [[archive]] : [[copyLink], [archive]]}
             onClose={menu.close}
           />
         )}
@@ -167,6 +173,39 @@ function IssueTitle({
   );
 }
 
+/**
+ * Who filed the issue and when, and when it last changed, under its title,
+ * in a task's own words (`task-actions.tsx`'s menu foot): "Created by
+ * [Charles] Charles Pan · 3d ago" and "Last edited · 2h ago", the times
+ * moving on with the window's minute. An issue whose creator's account is
+ * gone says only when it was created, and one unchanged since it was filed
+ * says nothing of an edit.
+ */
+function IssueByline({ issue }: { issue: Issue }): React.JSX.Element {
+  const now = useMinute();
+  const creator = usePerson(issue.creator ?? undefined);
+  return (
+    <p className="issue-byline">
+      <span className="actor-line">
+        {issue.creator === null ? "Created" : "Created by "}
+        {issue.creator === null ? null : <ActorRef actor={creator} sentence />}
+        {" · "}
+        <RelativeTime at={issue.createdAt} now={now} ago />
+      </span>
+      {/* Note that the space between the phrases is read, not drawn: the line's gap draws it. */}
+      {issue.updatedAt <= issue.createdAt ? null : (
+        <>
+          {" "}
+          <span className="actor-line">
+            {"Last edited · "}
+            <RelativeTime at={issue.updatedAt} now={now} ago />
+          </span>
+        </>
+      )}
+    </p>
+  );
+}
+
 /** One issue's page, drawn from the issue as the service last answered it. */
 export function IssueDetail({
   issue,
@@ -182,23 +221,26 @@ export function IssueDetail({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
   const archiving = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    onChange({ archived: true }).then((archived): ActionResult => {
-      if (!archived) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: "Couldn't archive it. Try again." };
-      }
-      onBack();
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    onChange({ archived: true }).then((archived) => {
+      if (archived) onBack();
+      return archiveAnswered(archived);
     }),
   );
   const identifier = issueIdentifier(workspaceName, issue.number);
   return (
     <section className="automations-view" aria-label={identifier}>
-      <DetailToolbar identifier={identifier} onBack={onBack} onArchive={archiving.ask} />
+      <DetailToolbar
+        issueId={issue.id}
+        identifier={identifier}
+        onBack={onBack}
+        onArchive={archiving.ask}
+      />
       {/* The issue is drawn as a task's document is (`version-view.tsx`): its title, then its body, at the document's measure. */}
       <div className="desktop-document">
         <div className="plan-document-scroll scroll-fade">
           <article className="plan-body">
             <IssueTitle issue={issue} onChange={onChange} />
+            <IssueByline issue={issue} />
             <div className="issue-properties">
               <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
               <PriorityMenu
@@ -213,15 +255,7 @@ export function IssueDetail({
           </article>
         </div>
       </div>
-      <ConfirmDialog
-        confirm={archiving}
-        question={{
-          title: `Archive ${identifier}?`,
-          body: "It leaves the list. Nothing else about it changes.",
-          verb: "Archive",
-          running: "Archiving",
-        }}
-      />
+      <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
     </section>
   );
 }

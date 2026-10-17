@@ -28,7 +28,7 @@ import { PlanBody } from "./plan-body";
 import type { TaskLooks } from "./use-task-looks";
 
 /**
- * plan-body.test.ts -- the open plan's document says who last wrote it,
+ * plan-body.test.ts -- the open task's document says who last wrote it,
  * over its text and on each section, each writer on their own face hanging
  * their card, and the time opening the version history. Synthetic people.
  */
@@ -157,7 +157,7 @@ function cardOf(view: HTMLElement, selector = ".actor-ref", line = ".plan-edit-n
   act(() => {
     anchor.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return document.querySelector<HTMLElement>(".tooltip-card") ?? assert.fail("the card hangs");
+  return document.querySelector<HTMLElement>(".luke-tooltip-card") ?? assert.fail("the card hangs");
 }
 
 test("the saved body is drawn as Markdown", () => {

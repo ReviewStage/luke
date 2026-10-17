@@ -118,12 +118,12 @@ import {
 import { type TaskTranscript, taskTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
- * task-client.ts -- the Plans tab's side of the named plans, as the host asks the service for them.
+ * task-client.ts -- the Tasks tab's side of the named tasks, as the host asks the service for them.
  *
  * Every call is the one account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. What the window has to say about a
  * call that did not answer is one of a few reasons: the service never
- * answered, the plan is gone, or, on a call that names a repository, GitHub's
+ * answered, the task is gone, or, on a call that names a repository, GitHub's
  * reach refused it.
  */
 
@@ -140,12 +140,12 @@ export interface HostedTaskClientOptions extends AccountToken {
 
 const UNANSWERED = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
-/** The list with the archived plans among it, each flagged, which this build sorts into its own place. */
+/** The list with the archived tasks among it, each flagged, which this build sorts into its own place. */
 const LIST_WITH_ARCHIVED_PATH = `${HOSTED_SERVICE_PATH.TASKS}?${new URLSearchParams({
   [TASK_LIST_QUERY.ARCHIVED]: TASK_LIST_ARCHIVED.INCLUDE,
 })}`;
 
-/** What a plan's pin and archive change names: pinned or not, where the pin stands, archived or not, or both. */
+/** What a task's pin and archive change names: pinned or not, where the pin stands, archived or not, or both. */
 export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "archived">;
 
 function succeeded<Answer>(answer: Answer) {
@@ -163,7 +163,7 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
 } as const;
 
-/** The refusals a move can answer with: the plan or the workspace not the account's, the plan archived, or the workspace not reaching its repository. */
+/** The refusals a move can answer with: the task or the workspace not the account's, the task archived, or the workspace not reaching its repository. */
 const MOVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: TASK_CALL_FAILURE.TASK_ARCHIVED,
@@ -186,9 +186,9 @@ function refusedAs<Failure extends TaskCallFailure>(
 }
 
 /**
- * The Plans tab's reads and its writes of the service: the list of plans,
- * one plan opened with its document, the repositories the account reaches,
- * and a plan started, renamed, given its repository, pinned, archived, or deleted. Each
+ * The Tasks tab's reads and its writes of the service: the list of tasks,
+ * one task opened with its document, the repositories the account reaches,
+ * and a task started, renamed, given its repository, pinned, archived, or deleted. Each
  * resolves to a result rather than failing, because every caller does the
  * same thing with a failure: draws why, and offers to try again.
  */
@@ -218,7 +218,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** One plan with its saved document; opening it moves no row of the list. */
+  /** One task with its saved document; opening it moves no row of the list. */
   open(
     taskId: string,
   ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
@@ -236,10 +236,10 @@ export class HostedTaskClient {
   }
 
   /**
-   * Saves the developer's edit of the document, answering the plan as saved,
+   * Saves the developer's edit of the document, answering the task as saved,
    * the text as it now stands where the edit no longer lands in it, or why
    * it was refused; or why there is no answer: the service did not answer,
-   * the plan is gone, or it is archived. An edit the service would refuse by shape is
+   * the task is gone, or it is archived. An edit the service would refuse by shape is
    * refused here without traveling at all.
    */
   edit(
@@ -311,8 +311,8 @@ export class HostedTaskClient {
   }
 
   /**
-   * Gives one plan its repository, or takes it away with null, answering
-   * the plan as changed; or why it is unchanged: the service did not answer,
+   * Gives one task its repository, or takes it away with null, answering
+   * the task as changed; or why it is unchanged: the service did not answer,
    * or the App does not reach that repository for the account. A name the service would refuse by shape
    * is refused here without traveling at all.
    */
@@ -340,10 +340,10 @@ export class HostedTaskClient {
   }
 
   /**
-   * Moves one plan to another of the account's workspaces, answering the
-   * plan as moved; or why it stands where it was: the service did not
-   * answer, the plan or the workspace is not the account's to move it to,
-   * the plan is archived, or the workspace does not reach its repository.
+   * Moves one task to another of the account's workspaces, answering the
+   * task as moved; or why it stands where it was: the service did not
+   * answer, the task or the workspace is not the account's to move it to,
+   * the task is archived, or the workspace does not reach its repository.
    */
   move(
     taskId: string,
@@ -368,7 +368,7 @@ export class HostedTaskClient {
     });
   }
 
-  /** One plan's whiteboard as it stands; nothing where the service did not answer one. */
+  /** One task's whiteboard as it stands; nothing where the service did not answer one. */
   readBoard(taskId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
     return Effect.map(
       this.#call.ask({ method: HTTP_METHOD.GET, path: taskBoardPath(taskId) }, boardAnswerSchema),
@@ -376,7 +376,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** What was said on one plan's calls; nothing where the service did not answer it. */
+  /** What was said on one task's calls; nothing where the service did not answer it. */
   readTranscript(
     taskId: string,
   ): Effect.Effect<TaskTranscript | undefined, never, HttpClient.HttpClient> {
@@ -389,7 +389,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** A page of one plan's work as the service keeps it, the newest or the one before a turn, with every code shown on the newest; nothing where the service did not answer it. */
+  /** A page of one task's work as the service keeps it, the newest or the one before a turn, with every code shown on the newest; nothing where the service did not answer it. */
   readWork(
     taskId: string,
     before?: string,
@@ -400,7 +400,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** Every code Luke showed on one plan, oldest first; nothing where the service did not answer it. */
+  /** Every code Luke showed on one task, oldest first; nothing where the service did not answer it. */
   readCode(
     taskId: string,
   ): Effect.Effect<TaskCodeAnswer | undefined, never, HttpClient.HttpClient> {
@@ -411,7 +411,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * One window of a file of the plan's repository as GitHub holds it now,
+   * One window of a file of the task's repository as GitHub holds it now,
    * or why it is not shown; nothing where the service did not answer, or
    * where the window asked is not one the wire admits.
    */
@@ -428,7 +428,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * One folder of the plan's repository as GitHub holds it now, or why it
+   * One folder of the task's repository as GitHub holds it now, or why it
    * is not listed; nothing where the service did not answer, or where the
    * folder asked is not one the wire admits.
    */
@@ -444,7 +444,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** The skills a developer may choose of the plan's repository as GitHub holds it now, or why they are not read; nothing where the service did not answer. */
+  /** The skills a developer may choose of the task's repository as GitHub holds it now, or why they are not read; nothing where the service did not answer. */
   readSkills(
     taskId: string,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
@@ -620,7 +620,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** Puts one revision of a plan back as its content, answering the plan as it now stands, or nothing where the service did not restore it. */
+  /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */
   restore(
     taskId: string,
     seq: number,
@@ -654,7 +654,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** Deletes one plan with its document and its conversation; whether the service deleted it. */
+  /** Deletes one task with its document and its conversation; whether the service deleted it. */
   delete(taskId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return Effect.map(
       this.#call.ask(
@@ -666,7 +666,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Renames one plan, answering it as renamed with its document, or nothing
+   * Renames one task, answering it as renamed with its document, or nothing
    * where the service did not rename it; a name the service would refuse by
    * shape is refused here without traveling at all.
    */
@@ -686,7 +686,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Pins or unpins one plan, archives it or brings it back, answering it as
+   * Pins or unpins one task, archives it or brings it back, answering it as
    * changed with its document, or nothing where the service did not change
    * it; a change that names neither never travels.
    */
@@ -747,7 +747,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Starts a plan from the account's template, on the repository the
+   * Starts a task from the account's template, on the repository the
    * request names where it names one; a request the service would refuse by
    * shape is refused here without traveling at all, and a repository the
    * service refused is answered as the refusal it was.

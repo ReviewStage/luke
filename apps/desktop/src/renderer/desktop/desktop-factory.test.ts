@@ -166,7 +166,7 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
   draw(plans);
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
   const redraw = (patch: Partial<TasksControl>) => draw({ ...plans, ...patch });
-  /** The same page drawn again over another read of the plan list. */
+  /** The same page drawn again over another read of the task list. */
   const rerender = (next: readonly TaskSummary[]) =>
     draw({ ...plans, tasks: next, listed: { ...plans.listed, tasks: next } });
   return { page: container, opened, redraw, rerender };
@@ -267,7 +267,7 @@ test("the task on the call stands in Talk however old, and with nothing standing
   act(() => root?.unmount());
 
   const { page } = mount([old]);
-  assert.equal(page.querySelector(".empty-state p")?.textContent, "No agents at work");
+  assert.equal(page.querySelector(".luke-empty-state p")?.textContent, "No agents at work");
   assert.equal(page.querySelector("section[data-step]"), null);
   assert.equal(page.querySelector(".factory-scroll button"), null);
 });
@@ -288,7 +288,7 @@ test("a plan list that could not be read says so, and Retry reads it again", () 
   });
   const alert = page.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
-  assert.equal(page.querySelector(".empty-state"), null);
+  assert.equal(page.querySelector(".luke-empty-state"), null);
   const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
     (each) => each.textContent === "Retry",
   );

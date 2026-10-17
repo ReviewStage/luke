@@ -11,10 +11,12 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import {
+  AnchoredPopover,
   ArrowLeftIcon,
   ChevronRightIcon,
   GearIcon,
   McpIcon,
+  POPOVER_ALIGN,
   ProviderMark,
   SearchIcon,
 } from "@luke/ui";
@@ -34,7 +36,6 @@ import {
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { CHIP_LOOK, Chip } from "../chip";
 import { useIntegrationGrant } from "../integration-grant";
 import type { IntegrationStatuses } from "../integration-statuses";
@@ -50,7 +51,7 @@ import { Tooltip } from "../tooltip";
  *
  * Between the model chip and the context ring stands the MCP mark. A press
  * opens a popover from the button's trailing edge, as the model menu and
- * the context popover hang from theirs (`../anchored-popover.tsx`), drawn
+ * the context popover hang from theirs (`@luke/ui`'s `AnchoredPopover`), drawn
  * as the searchable menu is: a search field first, then the servers under
  * Connected and Not connected (`agent-servers-model.ts`), and Manage in
  * Settings pinned at the foot. A connected server's row names how many
@@ -167,7 +168,7 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
       ) : null}
       {row.kind === SERVER_ROW.SIGNING_IN ? (
         <span
-          className="spinner agent-servers-waiting"
+          className="luke-spinner agent-servers-waiting"
           data-size={SPINNER_SIZE.INLINE}
           role="status"
           title={row.note}

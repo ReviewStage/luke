@@ -31,6 +31,11 @@
   --desktop-well: #0f0f12;
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
+  /* A tab's own bar under a tab strip and its hairline: a control's height
+     with --space-4 above and below it. Every tab that leads with a bar, in
+     the side panel or in a task's column, stands it this tall, so moving
+     between tabs never moves the content under the bar. */
+  --secondary-bar-height: calc(var(--control-height) + 2 * var(--space-4) + 1px);
   /* The call bar's own row, which the passing notices stand clear of. */
   --call-row-height: 36px;
   /* The spacing scale, one control's box, corner, and glyph, the gaps
@@ -2104,7 +2109,7 @@ ul.actor-stack {
 .danger-button,
 .luke-button,
 .luke-chip,
-.segment,
+.luke-segment,
 .desktop-toolbar-actions,
 .desktop-toolbar .file-breadcrumbs,
 .sidebar-new-task,
@@ -2320,7 +2325,7 @@ ul.actor-stack {
   font-size: 12px;
 }
 
-.failure-note-remedy :is(svg, .spinner-ring) {
+.failure-note-remedy :is(svg, .luke-spinner-ring) {
   width: 13px;
   height: 13px;
 }
@@ -2744,62 +2749,18 @@ ul.actor-stack {
   line-height: 1.55;
 }
 
-/* A whole tab with nothing in it yet (empty-state.tsx) fills the room its
-   pane leaves under the pane's header and stands a little above that room's
-   middle, where the eye takes the middle to be: the room above it and the
-   room below it are shared two to three. Where the pane is shorter than the
-   state, both shares are nothing and the state scrolls rather than run under
-   the header. */
-.empty-state {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 0;
-  flex-direction: column;
-  align-items: center;
-  overflow-y: auto;
-}
-
-.empty-state::before,
-.empty-state::after {
-  content: "";
-}
-
-.empty-state::before {
-  flex: 2 1 0;
-}
-
-.empty-state::after {
-  flex: 3 1 0;
-}
-
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. Settings' column holds its page's name over the
    page, which keep their measure. */
 :is(.automations-scroll, .factory-scroll, .inbox-tasks-scroll, .settings-page-scroll):has(
-  .empty-state
+  .luke-empty-state
 ) {
   display: flex;
   flex-direction: column;
 }
 
-.settings-page-scroll:has(.empty-state) > * {
+.settings-page-scroll:has(.luke-empty-state) > * {
   width: 100%;
-}
-
-/* A whole tab with nothing in it yet (empty-state.tsx): the tab's glyph,
-   large and fainter than the faintest ink, which no token is, over its one
-   line. The stroke is thinned so the glyph keeps the weight of the tab's
-   own at more than twice its size. */
-.empty-state-icon {
-  display: flex;
-  color: var(--text-tertiary);
-  opacity: 0.6;
-}
-
-.empty-state-icon svg {
-  width: 40px;
-  height: 40px;
-  stroke-width: 1.4;
 }
 
 /* Something wanting a hand (`attention-mark.tsx`): a white exclamation on a
@@ -3714,24 +3675,9 @@ ul.actor-stack {
   white-space: nowrap;
 }
 
-/* A popover hung from its own button (`anchored-popover.tsx`): the layer
-   stands a small gap above the box that holds the button, or below it
-   where only there is room, its asked edge at the inset and width it was
-   measured to, and the popover inside stands in the layer's place. */
-.anchored-popover {
-  position: absolute;
-  z-index: 2;
-}
-
-.anchored-popover[data-side="above"] {
-  bottom: calc(100% + var(--space-4));
-}
-
-.anchored-popover[data-side="below"] {
-  top: calc(100% + var(--space-4));
-}
-
-.anchored-popover > .searchable-menu {
+/* A searchable menu hung from its own button (`@luke/ui`'s
+   `AnchoredPopover`) stands in the layer's place. */
+.luke-anchored-popover > .searchable-menu {
   position: static;
   width: auto;
 }
@@ -4194,11 +4140,11 @@ button.integration-tool-head:hover,
 /* The window's Inbox, in the plan's place beside the sidebar, and a plan's
    own Inbox tab: the items in a column on the Inbox's own ground, so the
    list and the item read as one surface parted by a hairline, under a bar
-   the work column's height, and the chosen item beside it, at the Inbox's
-   own measure (`.desktop-inbox`). The column is as wide as it was last
-   dragged (`inbox-list.tsx`), held to what the Inbox's own width leaves the
-   pane, which is why the Inbox is the container it measures; its edge is
-   drawn as the sidebar's is. */
+   the work column's height (a tab's bar's in a task's tab), and the chosen
+   item beside it, at the Inbox's own measure (`.desktop-inbox`). The column
+   is as wide as it was last dragged (`inbox-list.tsx`), held to what the
+   Inbox's own width leaves the pane, which is why the Inbox is the
+   container it measures; its edge is drawn as the sidebar's is. */
 .inbox-view {
   container-type: inline-size;
   display: grid;
@@ -4284,6 +4230,13 @@ button.integration-tool-head:hover,
   padding-inline: var(--column-inset);
 }
 
+/* Under the strip, its list's head and its item's bar are the tab's own bar,
+   as tall as every other tab's (`.file-view-bar`), rather than a top row. */
+.desktop-task-main .inbox-view .desktop-toolbar {
+  min-height: var(--secondary-bar-height);
+  padding-block: var(--space-4);
+}
+
 /* The list standing alone is a page rather than a column, so its name leads
    its bar past the title bar's buttons, as a page's title does. */
 .desktop-shell[data-sidebar-collapsed="true"]
@@ -4348,22 +4301,222 @@ button.integration-tool-head:hover,
   box-shadow: inset 0 0 0 1.5px var(--text-tertiary); /* off-scale: a hairline ring at the dot's size */
 }
 
-/* The agent's byline names it in the thread's own ink, as a message's sender is named. */
-.inbox-byline-agent {
+/* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
+   as a plan leads with its title: the title at a document heading's size,
+   then a muted line of its agent, when it asked, and where it stands, over a
+   hairline that parts it from the comments. */
+.inbox-subject {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.inbox-subject-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.inbox-subject-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.inbox-subject-agent {
   display: flex;
   min-width: 0;
   color: var(--text-primary);
+}
+
+/* An item that needs the reader wears the attention mark beside its
+   words, in the primary ink, since it is the one standing that asks for
+   their hand; a teammate's open item names whom it waits on, and a settled
+   one says where it stands, in the line's muted ink. */
+.inbox-standing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.inbox-standing[data-status="open"]:not([data-waiting]) {
+  color: var(--text-primary);
+}
+
+/* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
+   its writer's face in a column of its own, a list row's 20px, then its
+   name and when on one line and its words under it, and a line down from
+   the face to the next comment's, as an issue's timeline joins them. */
+.inbox-thread {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-comment {
+  --inbox-face: 20px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--inbox-face) minmax(0, 1fr);
+  column-gap: var(--space-12);
+  padding-bottom: var(--space-20);
+}
+
+.inbox-comment:last-child {
+  padding-bottom: 0;
+}
+
+.inbox-comment:not(:last-child)::before {
+  position: absolute;
+  top: calc(var(--inbox-face) + var(--space-6));
+  bottom: var(--space-6);
+  left: calc(var(--inbox-face) / 2 - 1px);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--hairline);
+  content: "";
+}
+
+.inbox-comment-face {
+  display: flex;
+  height: var(--inbox-face);
+}
+
+.inbox-comment-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.inbox-comment-head {
+  display: flex;
+  min-width: 0;
+  min-height: var(--inbox-face);
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* The writer is named by name alone in the thread's own ink, since their
+   face already stands in the column beside it. */
+.inbox-comment-name {
+  display: flex;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 500;
 }
 
-/* The pane's words under the agent's byline start where its name does, past
-   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). They clip
-   what runs past them, as a message does, though not the keyboard's ring on
-   an option laid edge to edge in them. */
-.inbox-indent {
+.inbox-comment-name .actor-ref > .actor-mark {
+  display: none;
+}
+
+.inbox-comment-when {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-4);
+}
+
+/* A comment's words are set as a message's are, and clip what runs past
+   them as a message does, though not the keyboard's ring on an option laid
+   edge to edge in them. */
+.inbox-comment-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-8);
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
-  padding-left: 21px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.625;
+}
+
+/* What the developer picked leads their comment as a chip, a check and the
+   option's label, so the pick is said once. A label too long for the
+   comment, a path or an identifier, wraps anywhere inside the chip, as an
+   option's does, rather than running past the comment's clip; the check
+   stays on its first line. */
+.inbox-pick {
+  display: inline-flex;
+  max-width: 100%;
+  align-self: flex-start;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: 1px var(--space-6);
+  border-radius: 6px;
+  background: var(--raised-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.inbox-pick > span,
+.inbox-offered > summary > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-pick svg {
+  margin-top: calc((1lh - 12px) / 2);
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* What a settled item offered, folded to one line as the transcript folds a
+   finished step (`inbox-pane.tsx`'s `Offered`): its chevron turns down once
+   it is opened, on transform alone. */
+.inbox-offered > summary {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: flex-start;
+  gap: var(--space-6);
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  cursor: default;
+  list-style: none;
+}
+
+.inbox-offered > summary::-webkit-details-marker {
+  display: none;
+}
+
+.inbox-offered > summary:hover {
+  color: var(--text-primary);
+}
+
+.inbox-offered > summary svg {
+  margin-top: calc((1lh - 14px) / 2);
+  width: 14px;
+  height: 14px;
+  flex: none;
+  transition: transform var(--duration-hover) ease;
+}
+
+.inbox-offered[open] > summary {
+  margin-bottom: var(--space-6);
+}
+
+.inbox-offered[open] > summary svg {
+  transform: rotate(90deg);
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
@@ -4829,7 +4982,7 @@ button.integration-tool-head:hover,
   flex: 3 1 0;
 }
 
-.automations-empty > .empty-state {
+.automations-empty > .luke-empty-state {
   flex: none;
   overflow: visible;
 }
@@ -7450,39 +7603,15 @@ button.automation-run:hover {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-/* A control with more to say than a pill hangs a card in the pill's place
-   (`tooltip.tsx`'s `card`), as a browser's tab hover card hangs: a small
-   panel of the window's own, light in the light, hung from the control's
-   start. Every card says what it says in the same parts (`hover-card.tsx`),
-   in one type scale: its head is its glyph where it wears one, on the name's
-   first line, then the name in the medium weight wrapped to two lines, or a
-   task standing in for one on a single line faded at its end, a quieter line
-   under the name a size down, and the corner muted a size down at the head's
-   right; under the head, its notes, read whole and so wrapped to three
-   lines, or one line of a latest step faded at its end, and a hairline
-   before what it lists. Its words stand as far in from its sides as a
-   menu's do, so a row it lists (`.task-card-line`) washes off its edge as a
-   menu item does. */
-.tooltip-card {
-  display: flex;
-  width: 280px;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-4);
-  padding: var(--space-6) calc(var(--menu-inset) + var(--row-inset));
-  border-color: var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
-  box-shadow: var(--menu-shadow);
-  color: var(--text-primary);
-  font-weight: 400;
-  white-space: normal;
-}
-
-.tooltip-card[data-side="below"] {
-  transform-origin: top left;
-}
-
+/* Every card the window hangs in a pill's place (`tooltip.tsx`'s `card`,
+   drawn as `@luke/ui`'s `TooltipCard`) says what it says in the same parts
+   (`hover-card.tsx`), in one type scale: its head is its glyph where it
+   wears one, on the name's first line, then the name in the medium weight
+   wrapped to two lines, or a task standing in for one on a single line
+   faded at its end, a quieter line under the name a size down, and the
+   corner muted a size down at the head's right; under the head, its notes,
+   read whole and so wrapped to three lines, or one line of a latest step
+   faded at its end, and a hairline before what it lists. */
 .card {
   display: flex;
   flex-direction: column;
@@ -7857,50 +7986,14 @@ button.automation-run:hover {
   border-radius: var(--control-radius);
 }
 
-/* Confirm dialog -------------------------------------------------------------- */
+/* Dialog parts ---------------------------------------------------------------- */
 
-/* An irreversible act asks the way every desktop app asks: the window dims
-   behind a centred card. Over the menu and the window's drag strip alike, so
-   it claims its own presses back from the frame. Its motion is spent from the
-   tokens, which reduced motion and a capture run already hold still. The
-   card is never taller than the window less its margins: its body (the
-   question, a list of choices, a note being written) is the part that gives
-   way and scrolls, so its title and its answers stay on screen however short
-   the window is. */
-.confirm-dialog-backdrop {
-  position: fixed;
-  z-index: var(--z-dialog);
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: var(--space-24);
-  background: var(--scrim);
-  animation: confirm-dialog-dim var(--duration-quick) ease-out;
-  -webkit-app-region: no-drag;
-}
-
-.confirm-dialog {
-  display: flex;
-  width: min(400px, 100%);
-  max-height: calc(100vh - 2 * var(--space-24));
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-20);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 14px;
-  background: var(--surface-popover);
-  box-shadow: 0 24px 64px var(--shadow-deep);
-  color: var(--text-primary);
-  font-size: 13px;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit),
-    confirm-dialog-rise var(--duration-fast) var(--spring-fast);
-}
-
-.confirm-dialog:focus {
-  outline: none; /* no ring: a dialog holding focus for its controls */
-}
-
+/* The title, body, and answers of the window's dialogs not yet on
+   `@luke/ui`'s `ConfirmDialog` (New task, Send feedback, Move to
+   workspace), in `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a
+   list of choices, a note being written) is the part that gives way and
+   scrolls, so its title and its answers stay on screen however short the
+   window is. */
 .confirm-dialog-title {
   margin: 0;
   font-size: 15px;
@@ -7932,12 +8025,6 @@ button.automation-run:hover {
 @keyframes confirm-dialog-dim {
   from {
     opacity: 0;
-  }
-}
-
-@keyframes confirm-dialog-rise {
-  from {
-    transform: scale(0.96);
   }
 }
 
@@ -8857,7 +8944,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 /* A modal's question is answered before anything behind it changes, so
    while one stands an action toast lets the pointer through to the dimmed
    window, as the modal's own Tab already keeps focus off it. */
-body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
+body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: none;
 }
 

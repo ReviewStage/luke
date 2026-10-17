@@ -247,7 +247,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The page of the agent, standing in the plan's place, as the window's plans control holds it. */
+/** The page of the agent, standing in the task's place, as the window's tasks control holds it. */
 function mount(tasks: TasksControl = tasksControl({})): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

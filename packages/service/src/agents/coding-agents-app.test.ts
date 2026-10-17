@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
-import { readAccountPreferences } from "@luke/database/models/account-store";
+import {
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@luke/database/models/account-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import {
   createAutomation,
@@ -15,6 +18,7 @@ import {
   ensureMember,
   ensurePlanChannel,
   findOrMakeDm,
+  memberNamed,
   postAsk,
   postMessage,
   roster,
@@ -63,8 +67,10 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
+  CHANNEL_KIND,
   CHAT_ASK,
   CHAT_BLOCK,
+  CHAT_BOUNDS,
   CHAT_REPLY,
   MEMBER_KIND,
   mentionedHandles,
@@ -80,6 +86,8 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPullRequestAnswerSchema,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ANSWER_LEAD,
@@ -96,8 +104,10 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { and, eq } from "drizzle-orm";
@@ -118,6 +128,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
+  ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
@@ -147,6 +158,7 @@ import {
   openGithubUser,
   type RepositoryScript,
   type SentToGitHub,
+  standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
@@ -159,6 +171,7 @@ import {
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
 import { CODER } from "./coder-host/bounds.js";
+import { CHAT_TOOL_REFUSAL, type ChatAgent, postAsAgent, readAsAgent } from "./coder-host/chat.js";
 import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
@@ -172,7 +185,7 @@ import { codingAgentsApp } from "./coding-agents-app.js";
  * newest turn, the transcript answers the conversation's rows past a cursor,
  * and a Stop is eve's cancel of the turn under way and the row's stamp. eve
  * is a fake at the client's boundary, GitHub a script, the catalog fixed,
- * and the store PGlite. Synthetic accounts, bearers, plans, and words
+ * and the store PGlite. Synthetic accounts, bearers, tasks, and words
  * throughout.
  */
 
@@ -188,15 +201,15 @@ const AGENT_OVERVIEW = [
   "/api/agents/overview-checks",
   "/api/agents/overview-conversation",
 ] as const;
-/** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
+/** One task, served by the tasks group, whose delete stops the task's agents through the same Stop. */
 const TASK = "/api/plans/plan";
-/** The account's plans, served by the plans group, each naming its agents in brief. */
+/** The account's tasks, served by the tasks group, each naming its agents in brief. */
 const TASKS = "/api/plans";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
-/** The installation ids handed out so far: one installation stands for one workspace, so each plan's workspace connects its own. */
+/** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
 let installationsConnected = 0;
 
 /** A fresh installation reaching the repository, on an account of its own. */
@@ -208,7 +221,7 @@ function freshInstallation(): InstallationFixture {
 const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
 
-/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the plan is handed. */
+/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
 const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
 
 const SOL = "openai/gpt-6.1-sol";
@@ -399,7 +412,7 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a plan's own path and the list land on the plans group. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path and the list land on the tasks group. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const { pathname } = new URL(request.url);
@@ -494,7 +507,7 @@ const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
   });
 
 /**
- * An owner who holds one plan on the repository, its workspace connected to
+ * An owner who holds one task on the repository, its workspace connected to
  * an installation reaching it, another account beside them, and the group
  * over that GitHub and the eve given.
  */
@@ -506,11 +519,13 @@ const openTask = (
     readonly github?: RepositoryScript;
     /** Whether the deployment holds the Anthropic key workers' titles are generated on. */
     readonly titles?: boolean;
+    /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
+    readonly otherToken?: string | null;
   } = {},
 ) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
-    const other = yield* openGithubUser();
+    const other = yield* otherAccount(options.otherToken);
     const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
@@ -531,53 +546,74 @@ const openTask = (
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
 
+/** An account beside the owner: signed in with GitHub on the token given, the standing row's when unsaid, or with no GitHub sign-in at all. */
+const otherAccount = (token: string | null | undefined) =>
+  Effect.gen(function* () {
+    if (token === undefined) return yield* openGithubUser();
+    if (token !== null) {
+      return yield* openGithubUser({
+        ...standingGithubRow(yield* Clock.currentTimeMillis),
+        accessToken: token,
+      });
+    }
+    const db = yield* Database;
+    const userId = `user-${randomUUID()}`;
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    return userId;
+  });
+
 /** The pull request an agent published from its branch, as GitHub holds it. */
 const PUBLISHED = { branch: "luke/teammate-invitations", number: 12, headSha: "c0ffee1" } as const;
 
 /** The repository answering the published pull request's reads, its overview's among them: no checks, no comments, no reviews. */
-const publishedPullRequest: RepositoryScript = (sent) => {
-  const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
-  const pull = `${repository}/pulls/${PUBLISHED.number}`;
-  const commit = `${repository}/commits/${PUBLISHED.headSha}`;
-  // The overview's checks name the head by the ref GitHub keeps on the pull request.
-  const head = `${repository}/commits/refs%2Fpull%2F${PUBLISHED.number}%2Fhead`;
-  switch (new URL(sent.url).pathname) {
-    case `${repository}/pulls`:
-      return Response.json([{ number: PUBLISHED.number }]);
-    case pull:
-      return Response.json({
-        number: PUBLISHED.number,
-        title: "Expire teammate invitations",
-        html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
-        state: "open",
-        draft: false,
-        merged: false,
-        merged_at: null,
-        additions: 4,
-        deletions: 1,
-        changed_files: 1,
-        body: "Invitations expire.",
-        body_html: "<p>Invitations expire.</p>",
-        base: { ref: "main" },
-        head: { ref: PUBLISHED.branch, sha: PUBLISHED.headSha },
-        created_at: "2026-10-15T09:00:00Z",
-        mergeable_state: "clean",
-        user: null,
-        requested_reviewers: [],
-      });
-    case `${commit}/check-runs`:
-    case `${head}/check-runs`:
-      return Response.json({ check_runs: [] });
-    case `${commit}/status`:
-    case `${head}/status`:
-      return Response.json({ statuses: [] });
-    case `${repository}/issues/${PUBLISHED.number}/comments`:
-    case `${pull}/reviews`:
-      return Response.json([]);
-    default:
-      return undefined;
-  }
-};
+/** The same, the pull request a draft while `draft` says it is. */
+const publishedPullRequestDrafted =
+  (draft: () => boolean): RepositoryScript =>
+  (sent) => {
+    const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+    const pull = `${repository}/pulls/${PUBLISHED.number}`;
+    const commit = `${repository}/commits/${PUBLISHED.headSha}`;
+    // The overview's checks name the head by the ref GitHub keeps on the pull request.
+    const head = `${repository}/commits/refs%2Fpull%2F${PUBLISHED.number}%2Fhead`;
+    switch (new URL(sent.url).pathname) {
+      case `${repository}/pulls`:
+        return Response.json([{ number: PUBLISHED.number }]);
+      case pull:
+        return Response.json({
+          number: PUBLISHED.number,
+          title: "Expire teammate invitations",
+          html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
+          state: "open",
+          draft: draft(),
+          merged: false,
+          merged_at: null,
+          additions: 4,
+          deletions: 1,
+          changed_files: 1,
+          body: "Invitations expire.",
+          body_html: "<p>Invitations expire.</p>",
+          base: { ref: "main" },
+          head: { ref: PUBLISHED.branch, sha: PUBLISHED.headSha },
+          created_at: "2026-10-15T09:00:00Z",
+          mergeable_state: "clean",
+          user: null,
+          requested_reviewers: [],
+        });
+      case `${commit}/check-runs`:
+      case `${head}/check-runs`:
+        return Response.json({ check_runs: [] });
+      case `${commit}/status`:
+      case `${head}/status`:
+        return Response.json({ statuses: [] });
+      case `${repository}/issues/${PUBLISHED.number}/comments`:
+      case `${pull}/reviews`:
+        return Response.json([]);
+      default:
+        return undefined;
+    }
+  };
+
+const publishedPullRequest = publishedPullRequestDrafted(() => false);
 
 /** What GitHub was asked on the way to a repository token: the installation read, its listing and the token minted for it, and the repository's own token. */
 function reachRequests(sent: readonly SentToGitHub[], installationId: number) {
@@ -1148,6 +1184,486 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 });
 
+const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
+const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+
+/** The GraphQL id GitHub gives the published pull request. */
+const PULL_REQUEST_NODE_ID = "PR_kwDOfixture12";
+
+/** One GraphQL call as GitHub saw it: the bearer it came under, and its document's words. */
+interface GraphqlCall {
+  readonly authorization: string | null;
+  readonly query: string;
+  readonly variables: Readonly<Record<string, string | number>>;
+}
+
+/**
+ * The repository answering the published pull request's reads as
+ * `publishedPullRequest` does, and GitHub's GraphQL endpoint answering each
+ * call as `answer` says, every call written down: by default the pull
+ * request's id for its read and an empty answer for any mutation.
+ */
+function graphqlAnswering(
+  calls: GraphqlCall[],
+  answer: (call: GraphqlCall) => Response = (call) =>
+    Response.json({
+      data: call.query.includes("mutation")
+        ? {}
+        : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+    }),
+  repository: RepositoryScript = publishedPullRequest,
+): RepositoryScript {
+  return (sent) => {
+    if (new URL(sent.url).pathname !== "/graphql") return repository(sent);
+    const { query, variables } = JSON.parse(sent.body);
+    const call = { authorization: sent.headers.get("authorization"), query, variables };
+    calls.push(call);
+    return answer(call);
+  };
+}
+
+/** A change to the agent's pull request as the bearer given. */
+function actionAs(bearer: string, agentId: string, action: string): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, {
+    method: "POST",
+    id: agentId,
+    body: { action },
+  });
+}
+
+/** A review submitted on the agent's pull request as the bearer given. */
+function reviewAs(
+  bearer: string,
+  agentId: string,
+  review: { readonly event: string; readonly body: string },
+): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, {
+    method: "POST",
+    id: agentId,
+    body: { action: "submit-review", ...review },
+  });
+}
+
+/**
+ * GitHub answering a review's calls: the pull request's id, the pending
+ * reviews given for its read of them, and each mutation as `mutation`
+ * says, an empty answer by default.
+ */
+function reviewsAnswering(
+  pending: readonly { readonly id: string; readonly viewerDidAuthor: boolean }[],
+  mutation: (call: GraphqlCall) => Response = () => Response.json({ data: {} }),
+): (call: GraphqlCall) => Response {
+  return (call) => {
+    if (call.query.includes("mutation")) return mutation(call);
+    if (call.query.includes("reviews(states: PENDING")) {
+      return Response.json({ data: { node: { reviews: { nodes: pending } } } });
+    }
+    return Response.json({ data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } } });
+  };
+}
+
+/** The review mutations GitHub was sent, each as which (a new review, or a pending one submitted) and its variables. */
+function reviewMutations(calls: readonly GraphqlCall[]) {
+  return calls
+    .filter((call) => call.query.includes("mutation"))
+    .map((call) => [
+      call.query.includes("submitPullRequestReview") ? "submit" : "add",
+      call.variables,
+    ]);
+}
+
+/** A change to one of the pull request's review threads as the bearer given. */
+function threadActionAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
+}
+
+/** GitHub answering a thread's calls: the pull request's id, every thread named as one of the pull request given, and an empty answer to each mutation. */
+function threadsAnswering(threadPullRequestId: string): (call: GraphqlCall) => Response {
+  return (call) => {
+    if (call.query.includes("mutation")) return Response.json({ data: {} });
+    if (call.query.includes("PullRequestReviewThread")) {
+      return Response.json({ data: { node: { pullRequest: { id: threadPullRequestId } } } });
+    }
+    return Response.json({ data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } } });
+  };
+}
+
+/** The GitHub mutation a document makes, by the name its first field spells. */
+function mutationName(query: string): string {
+  return /\{\s*(\w+)\(/u.exec(query)?.[1] ?? "";
+}
+
+it.layer(getTestDB())("changing an agent's pull request", (it) => {
+  /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
+  const published = (options: {
+    readonly answer?: (call: GraphqlCall) => Response;
+    readonly repository?: RepositoryScript;
+    readonly otherToken?: string | null;
+    readonly otherJoins?: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const calls: GraphqlCall[] = [];
+      const opened = yield* openTask({
+        github: graphqlAnswering(calls, options.answer, options.repository),
+        ...(options.otherToken === undefined ? undefined : { otherToken: options.otherToken }),
+      });
+      if (options.otherJoins ?? true) yield* joinWorkspace(opened.task.workspaceId, opened.other);
+      const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
+      return { ...opened, agent, calls };
+    });
+
+  it.effect(
+    "a teammate marks the owner's agent's draft ready for review and turns it back into a draft, each on the teammate's own GitHub token and never the App's",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: "ghu_teammate" });
+
+        const ready = yield* ask(actionAs(other, agent.id, "ready-for-review"));
+        const draft = yield* ask(actionAs(other, agent.id, "convert-to-draft"));
+
+        assert.deepEqual(ready, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(draft, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.ok(calls.length > 0);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+        const mutations = calls.filter((call) => call.query.includes("mutation"));
+        assert.deepEqual(
+          mutations.map((call) => [
+            call.query.includes("markPullRequestReadyForReview")
+              ? "ready"
+              : call.query.includes("convertPullRequestToDraft")
+                ? "draft"
+                : "other",
+            call.variables.id,
+          ]),
+          [
+            ["ready", PULL_REQUEST_NODE_ID],
+            ["draft", PULL_REQUEST_NODE_ID],
+          ],
+        );
+        assert.deepEqual(calls[0]?.variables, {
+          owner: RELAY.owner,
+          name: RELAY.name,
+          number: PUBLISHED.number,
+        });
+      }),
+  );
+
+  it.effect(
+    "a member with no GitHub sign-in is asked to sign in with GitHub, and nothing is sent to GitHub as anyone else",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: null });
+
+        const answered = yield* ask(actionAs(other, agent.id, "ready-for-review"));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "sign-in-required" },
+        });
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "a token GitHub refuses asks the member to sign in with GitHub again, and nothing is tried on the App's token",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_revoked",
+          answer: () => Response.json({ message: "Bad credentials" }, { status: 401 }),
+        });
+
+        const answered = yield* ask(actionAs(other, agent.id, "convert-to-draft"));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "sign-in-required" },
+        });
+        assert.ok(calls.length > 0);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_revoked"));
+      }),
+  );
+
+  it.effect(
+    "a change GitHub refuses is answered in GitHub's own words, whether as GraphQL errors or a refusal status",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, ask } = yield* published({
+          answer: (call) =>
+            !call.query.includes("mutation")
+              ? Response.json({
+                  data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+                })
+              : call.query.includes("convertPullRequestToDraft")
+                ? Response.json(
+                    { message: "Resource not accessible by integration" },
+                    { status: 403 },
+                  )
+                : Response.json({
+                    data: null,
+                    errors: [{ type: "FORBIDDEN", message: "Pull request is not a draft." }],
+                  }),
+        });
+
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "ready-for-review")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Pull request is not a draft." },
+        });
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "convert-to-draft")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Resource not accessible by integration" },
+        });
+      }),
+  );
+
+  it.effect(
+    "a teammate who read the pull request a moment before another member marked it ready reads it ready at once, not from what was kept",
+    () =>
+      Effect.gen(function* () {
+        let draft = true;
+        const { owner, other, agent, ask } = yield* published({
+          repository: publishedPullRequestDrafted(() => draft),
+          answer: (call) => {
+            if (call.query.includes("markPullRequestReadyForReview")) draft = false;
+            return Response.json({
+              data: call.query.includes("mutation")
+                ? {}
+                : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+            });
+          },
+        });
+        const stateAs = (bearer: string) =>
+          Effect.map(
+            ask(request(AGENT_PULL_REQUEST, bearer, { id: agent.id })),
+            (answered) =>
+              readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .pullRequest?.state,
+          );
+        assert.equal(yield* stateAs(owner), PULL_REQUEST_STATE.DRAFT);
+
+        yield* ask(actionAs(other, agent.id, "ready-for-review"));
+
+        assert.equal(yield* stateAs(owner), PULL_REQUEST_STATE.OPEN);
+      }),
+  );
+
+  it.effect(
+    "a pull request GitHub answers as none, with no word of why, is refused in words saying so",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: () => Response.json({ data: { repository: { pullRequest: null } } }),
+        });
+
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "ready-for-review")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words: "Could not resolve to a pull request your GitHub account can see.",
+          },
+        });
+        assert.ok(calls.every((call) => !call.query.includes("mutation")));
+      }),
+  );
+
+  it.effect(
+    "a review is made and submitted at once where the member holds no pending review, on their own token, and GitHub's refusal of it is answered in its words",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: reviewsAnswering([], (call) =>
+            call.variables.event === "APPROVE"
+              ? Response.json({
+                  data: null,
+                  errors: [{ message: "Review Can not approve your own pull request" }],
+                })
+              : Response.json({ data: {} }),
+          ),
+        });
+
+        const commented = yield* ask(
+          reviewAs(other, agent.id, { event: "comment", body: "Looks close; one question." }),
+        );
+        const approved = yield* ask(reviewAs(other, agent.id, { event: "approve", body: "" }));
+
+        assert.deepEqual(commented, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(approved, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Review Can not approve your own pull request" },
+        });
+        assert.deepEqual(reviewMutations(calls), [
+          [
+            "add",
+            {
+              id: PULL_REQUEST_NODE_ID,
+              event: "COMMENT",
+              body: "Looks close; one question.",
+            },
+          ],
+          ["add", { id: PULL_REQUEST_NODE_ID, event: "APPROVE" }],
+        ]);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "the member's own pending review is the one submitted, keeping its words where the press sends none, and nobody else's is touched",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: reviewsAnswering([
+            { id: "PRR_someone_else", viewerDidAuthor: false },
+            { id: "PRR_member_pending", viewerDidAuthor: true },
+          ]),
+        });
+
+        const changes = yield* ask(
+          reviewAs(other, agent.id, { event: "request-changes", body: "Please split this." }),
+        );
+        const kept = yield* ask(reviewAs(other, agent.id, { event: "comment", body: "  " }));
+
+        assert.deepEqual(changes, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(kept, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(reviewMutations(calls), [
+          [
+            "submit",
+            { id: "PRR_member_pending", event: "REQUEST_CHANGES", body: "Please split this." },
+          ],
+          ["submit", { id: "PRR_member_pending", event: "COMMENT" }],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a review naming no event GitHub knows, or longer than GitHub takes, never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, calls, ask } = yield* published({ answer: reviewsAnswering([]) });
+
+        const unnamed = yield* ask(
+          request(AGENT_PULL_REQUEST_ACTION, owner, {
+            method: "POST",
+            id: agent.id,
+            body: { action: "submit-review", event: "dismiss", body: "" },
+          }),
+        );
+        const long = yield* ask(
+          reviewAs(owner, agent.id, {
+            event: "comment",
+            body: "x".repeat(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS + 1),
+          }),
+        );
+
+        for (const answered of [unnamed, long]) {
+          assert.deepEqual(
+            answered,
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "a member replies on a review thread of the pull request, resolves it, and opens it again, each on their own token",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: threadsAnswering(PULL_REQUEST_NODE_ID),
+        });
+
+        const answers = [
+          yield* ask(
+            threadActionAs(other, agent.id, {
+              action: "reply-to-thread",
+              threadId: "PRRT_flag",
+              body: "Renamed in the next push.",
+            }),
+          ),
+          yield* ask(
+            threadActionAs(other, agent.id, { action: "resolve-thread", threadId: "PRRT_flag" }),
+          ),
+          yield* ask(
+            threadActionAs(other, agent.id, { action: "unresolve-thread", threadId: "PRRT_flag" }),
+          ),
+        ];
+
+        for (const answered of answers) {
+          assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        }
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables]),
+          [
+            [
+              "addPullRequestReviewThreadReply",
+              { id: "PRRT_flag", body: "Renamed in the next push." },
+            ],
+            ["resolveReviewThread", { id: "PRRT_flag" }],
+            ["unresolveReviewThread", { id: "PRRT_flag" }],
+          ],
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a thread of another pull request is refused in words saying so and never changed, and a blank reply never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: threadsAnswering("PR_kwDOsomeOtherPull"),
+        });
+
+        const elsewhere = yield* ask(
+          threadActionAs(other, agent.id, { action: "resolve-thread", threadId: "PRRT_elsewhere" }),
+        );
+        const blank = yield* ask(
+          threadActionAs(other, agent.id, {
+            action: "reply-to-thread",
+            threadId: "PRRT_flag",
+            body: " \n ",
+          }),
+        );
+
+        assert.deepEqual(elsewhere, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words: "Could not resolve to a review thread on this pull request.",
+          },
+        });
+        assert.deepEqual(
+          blank,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.ok(calls.every((call) => !call.query.includes("mutation")));
+      }),
+  );
+
+  it.effect(
+    "an account outside the agent's workspace is answered as if the agent were none, and a change the wire does not name is refused, neither reaching GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, agent, calls, ask } = yield* published({ otherJoins: false });
+
+        assert.deepEqual(
+          yield* ask(actionAs(other, agent.id, "ready-for-review")),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(actionAs(owner, agent.id, "merge-it-all")),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(calls, []);
+      }),
+  );
+});
+
 /** A message to the agent as the bearer given, with the body given. */
 function messageAs(bearer: string | undefined, agentId: string, body: WireBoundaryInput): Request {
   return request(AGENT_MESSAGES, bearer, { method: "POST", id: agentId, body });
@@ -1166,7 +1682,7 @@ function userTexts(page: {
 }
 
 it.layer(getTestDB())("messaging a coding agent", (it) => {
-  /** An agent started on the owner's plan, its session claimed, and its first turn where asked. */
+  /** An agent started on the owner's task, its session claimed, and its first turn where asked. */
   const startedAgent = (
     eve: ReturnType<typeof fakeEve>,
     turn: { readonly running: boolean } | undefined,
@@ -1445,7 +1961,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, { running: false });
-        // An automation's run leaves an agent so: in its workspace, on no plan.
+        // An automation's run leaves an agent so: in its workspace, on no task.
         yield* Database.use((db) =>
           db
             .update(codingAgent)
@@ -2224,7 +2740,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 });
 
-/** An agent started on the plan, with its conversation as the writer targets it. */
+/** An agent started on the task, with its conversation as the writer targets it. */
 const startedAgent = (
   owner: string,
   taskId: string,
@@ -2257,7 +2773,7 @@ const INBOX_ATTACHMENT = "/api/inbox/attachment";
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
 it.layer(getTestDB())("the developer's inbox", (it) => {
-  /** The owner's plan with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
+  /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
   const openInbox = (eve = fakeEve()) =>
     Effect.gen(function* () {
       const opened = yield* openTask({ eve });
@@ -2268,7 +2784,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       /** An item posted for the agent, as its tool will post one, with the pictures its image blocks name read. */
       const post = (value: InboxPost, images?: readonly InboxImage[]) =>
         postInboxItem(owned, value, images);
-      /** The plan's inbox as the owner reads it past the cursor. */
+      /** The task's inbox as the owner reads it past the cursor. */
       const read = (after?: string) =>
         Effect.map(
           opened.ask(
@@ -2594,6 +3110,10 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
       const opened = yield* openTask({ eve });
       const workspace = opened.task.workspaceId;
       if (secondByTeammate) yield* joinWorkspace(workspace, opened.other);
+      // Chat is an experiment each starter turns on; the tests below are of its telling.
+      for (const starter of [opened.owner, opened.other]) {
+        yield* writeAccountPreferences(starter, { experiments: { [EXPERIMENT.CHAT]: true } });
+      }
       const agents = [];
       for (const at of [0, 1]) {
         const starter = at === 1 && secondByTeammate ? opened.other : opened.owner;
@@ -2968,5 +3488,338 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
       yield* tell(answered.ask);
       assert.equal(eve.sent.length, 1);
     }),
+  );
+
+  it.effect(
+    "an agent whose starter has not turned Chat on is steered nothing, however it is addressed",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve, true);
+        yield* writeAccountPreferences(chat.other, { experiments: { [EXPERIMENT.CHAT]: false } });
+        const told = yield* chat.post(chat.person, "@agent-2 please carry on.");
+        assert.deepEqual([told.receipt.told, told.receipt.held], [[], ["agent-2"]]);
+        assert.equal(eve.sent.length, 0);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding agent's chat tools", (it) => {
+  /**
+   * The owner's plan with two agents on it, each session claimed so a notice
+   * reaches it, and each agent's tools as its own calls run them: a post
+   * under a fresh call id, with the turn's count given, and a read.
+   */
+  const openAgents = (eve = fakeEve()) =>
+    Effect.gen(function* () {
+      const opened = yield* openTask({ eve });
+      yield* writeAccountPreferences(opened.owner, { experiments: { [EXPERIMENT.CHAT]: true } });
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      const telling = {
+        eveFor: (starter: string) => eve.eve(`Bearer ${starter}`),
+        writer: Effect.succeed(writer),
+        doors: HELD_DOORS,
+      };
+      const agents: ChatAgent[] = [];
+      for (const at of [0, 1]) {
+        const started = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+        const sessionId = eve.opened[at]?.sessionId ?? "";
+        assert.equal(
+          yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
+          true,
+        );
+        agents.push({
+          userId: opened.owner,
+          agentId: started.agent.id,
+          planId: opened.task.id,
+          telling,
+        });
+      }
+      const [first, second] = agents;
+      assert.ok(first && second);
+      const post = (agent: ChatAgent, value: WireBoundaryInput, postsInTurn = 0) =>
+        postAsAgent(agent, unparsedWire(value), randomUUID(), postsInTurn).pipe(
+          Effect.provide(opened.github.layer),
+        );
+      const read = (agent: ChatAgent, value: WireBoundaryInput = {}) =>
+        readAsAgent(agent, unparsedWire(value));
+      // Note that the handles are read back rather than assumed, because two agents started at one instant mint in either order.
+      const handleOf = (agent: ChatAgent) =>
+        Effect.map(read(agent, { channel: "#teammate-invitations" }), (answer) => {
+          assert.ok("you" in answer);
+          return answer.you;
+        });
+      const handles = { first: yield* handleOf(first), second: yield* handleOf(second) };
+      return { ...opened, first, second, handles, post, read };
+    });
+
+  it.effect(
+    "a plain post lands in the plan's channel and tells nobody, the other agent reads it once as unread, and a mention tells the agent it names and names a handle that names no one",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const plain = yield* chat.post(chat.first, { text: "Starting on the emails." });
+        assert.ok(plain.status === ACTION_RESULT_STATUS.ACCEPTED && "seq" in plain);
+        assert.deepEqual(
+          { ...plain, seq: 0 },
+          {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            seq: 0,
+            in: "#teammate-invitations",
+            told: [],
+            held: [],
+            left: [],
+            unresolved: [],
+          },
+        );
+        assert.equal(eve.sent.length, 0);
+
+        const unread = yield* chat.read(chat.second);
+        assert.ok(unread.status === ACTION_RESULT_STATUS.ACCEPTED && "messages" in unread);
+        assert.equal(unread.you, chat.handles.second);
+        assert.deepEqual(unread.messages, [
+          {
+            seq: plain.seq,
+            in: "#teammate-invitations",
+            from: chat.handles.first,
+            text: "Starting on the emails.",
+          },
+        ]);
+        assert.deepEqual(unread.channels, [
+          { name: "#teammate-invitations", kind: CHANNEL_KIND.PLAN, unread: 0 },
+        ]);
+        const again = yield* chat.read(chat.second);
+        assert.ok("messages" in again);
+        assert.deepEqual(again.messages, [], "a message read is read once");
+
+        const mentioned = yield* chat.post(chat.first, {
+          text: `${chat.handles.second} take the invite table; @nobody FYI`,
+        });
+        assert.ok("told" in mentioned);
+        assert.deepEqual(
+          [mentioned.told, mentioned.unresolved],
+          [[chat.handles.second], ["@nobody"]],
+        );
+        assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a post to @handle is a DM the other agent reads by its handle, a reply lands in the thread it answers and tells its poster, and every message names its thread's root",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const { first: one, second: two } = chat.handles;
+        const dm = yield* chat.post(chat.first, { text: "Is the invite table yours?", to: two });
+        assert.ok("told" in dm);
+        assert.deepEqual([dm.in, dm.told], [two, [two]]);
+        const direct = yield* chat.read(chat.second, { channel: one });
+        assert.ok("messages" in direct);
+        assert.deepEqual(
+          direct.messages.map((message) => [message.in, message.text]),
+          [[one, "Is the invite table yours?"]],
+        );
+        // The read of one channel marks nothing read.
+        const unread = yield* chat.read(chat.second);
+        assert.ok("messages" in unread);
+        assert.deepEqual(
+          unread.channels.map((channel) => [channel.name, channel.unread]),
+          [
+            ["#teammate-invitations", 0],
+            [one, 0],
+          ],
+        );
+        assert.equal(unread.messages.length, 1);
+
+        const root = yield* chat.post(chat.first, { text: "Who owns the emails?" });
+        assert.ok("seq" in root);
+        const reply = yield* chat.post(chat.second, { text: "I do.", replyTo: root.seq });
+        assert.ok("told" in reply);
+        assert.deepEqual([reply.thread, reply.in, reply.told], [root.seq, undefined, [one]]);
+        const nested = yield* chat.post(chat.first, { text: "Thanks.", replyTo: reply.seq });
+        assert.ok("seq" in nested);
+        assert.equal(nested.thread, root.seq, "a reply to a reply lands in its root's thread");
+        const thread = yield* chat.read(chat.first, { thread: root.seq });
+        assert.ok("messages" in thread);
+        assert.deepEqual(
+          thread.messages.map((message) => [message.from, message.thread]),
+          [
+            [one, undefined],
+            [two, root.seq],
+            [one, root.seq],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent started on another plan of the workspace answers to its handle before it ever posts or reads, and is told a DM to it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const other = yield* startTask(chat.owner, {
+          name: "Billing export",
+          repository: RELAY_FULL_NAME,
+        });
+        const third = yield* startedAgent(chat.owner, other.id, chat.ask);
+        const sessionId = eve.opened[2]?.sessionId ?? "";
+        assert.equal(
+          yield* claimRuntimeSession(third.target, sessionId, yield* DateTime.nowAsDate),
+          true,
+        );
+        const dm = yield* chat.post(chat.first, { text: "Take the emails?", to: "@agent-3" });
+        assert.ok("told" in dm);
+        assert.deepEqual(dm.told, ["@agent-3"]);
+        assert.deepEqual(
+          eve.sent.map((each) => each.sessionId),
+          [sessionId],
+        );
+      }),
+  );
+
+  it.effect(
+    "a #name no channel holds opens a topic channel, and the read lists the roster and every channel the agent sees",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const topic = yield* chat.post(chat.first, {
+          text: "Release notes go here.",
+          to: "#releases",
+        });
+        assert.ok("in" in topic);
+        assert.equal(topic.in, "#releases");
+        yield* chat.post(chat.first, { text: "Hello all.", to: "#general" });
+        const read = yield* chat.read(chat.second);
+        assert.ok("members" in read);
+        assert.deepEqual(
+          read.members.toSorted((a, b) => a.handle.localeCompare(b.handle)),
+          [
+            { handle: "@agent-1", kind: MEMBER_KIND.AGENT },
+            { handle: "@agent-2", kind: MEMBER_KIND.AGENT },
+          ],
+        );
+        assert.deepEqual(read.channels.map((channel) => [channel.name, channel.kind]).toSorted(), [
+          ["#general", CHANNEL_KIND.GENERAL],
+          ["#releases", CHANNEL_KIND.TOPIC],
+          ["#teammate-invitations", CHANNEL_KIND.PLAN],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a post refused names why: both a reply and a target, a handle naming no one or the agent itself, a message that is not there, words that do not read, and a turn past its bound; a read of a channel the agent does not see",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Hi.", to: "#general", replyTo: 1 }),
+          refused(CHAT_TOOL_REFUSAL.REPLY_AND_TO),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Hi.", to: "@nobody" }),
+          refused(CHAT_TOOL_REFUSAL.NO_MEMBER),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Hi.", to: chat.handles.first }),
+          refused(CHAT_TOOL_REFUSAL.TO_SELF),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Hi.", replyTo: 9_999 }),
+          refused(CHAT_TOOL_REFUSAL.NO_MESSAGE),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "" }),
+          refused(CHAT_TOOL_REFUSAL.UNREADABLE_POST),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "One more." }, CHAT_BOUNDS.MAX_POSTS_PER_TURN),
+          refused(CHAT_TOOL_REFUSAL.TOO_MANY_POSTS),
+        );
+        assert.deepEqual(
+          yield* chat.read(chat.first, { channel: "#nowhere" }),
+          refused(CHAT_TOOL_REFUSAL.NO_CHANNEL),
+        );
+        const history = yield* chat.read(chat.second, { channel: "#teammate-invitations" });
+        assert.ok("messages" in history);
+        assert.deepEqual(history.messages, [], "nothing refused was posted");
+        assert.equal(eve.sent.length, 0);
+      }),
+  );
+
+  it.effect(
+    "a planless agent posts in its workspace's general channel by default, and its @luke names no one",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const db = yield* Database;
+        yield* db
+          .update(codingAgent)
+          .set({ taskId: null })
+          .where(eq(codingAgent.id, chat.first.agentId));
+        const planless = { ...chat.first, planId: null };
+        const posted = yield* chat.post(planless, { text: "@luke who owns the invite table?" });
+        assert.ok("seq" in posted);
+        assert.deepEqual([posted.in, posted.unresolved], ["#general", ["@luke"]]);
+      }),
+  );
+
+  it.effect("an agent started where its starter has not turned Chat on joins no chat", () =>
+    Effect.gen(function* () {
+      const opened = yield* openTask();
+      yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      assert.deepEqual(yield* roster(opened.owner, opened.task.workspaceId), []);
+      yield* writeAccountPreferences(opened.owner, { experiments: { [EXPERIMENT.CHAT]: true } });
+      yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      assert.equal((yield* roster(opened.owner, opened.task.workspaceId)).length, 1);
+    }),
+  );
+
+  it.effect(
+    "a post is the calling agent's own, whatever member, author, or 'as' its input names",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const other = Option.getOrThrow(
+          yield* memberNamed(chat.owner, chat.task.workspaceId, chat.handles.second.slice(1)),
+        );
+        const posted = yield* chat.post(chat.first, {
+          text: "Who wrote this?",
+          authorMemberId: other.id,
+          author: other.id,
+          as: chat.handles.second,
+          memberId: other.id,
+        });
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* chat.read(chat.second);
+        assert.ok("messages" in read);
+        assert.deepEqual(
+          read.messages.map((message) => [message.from, message.text]),
+          [[chat.handles.first, "Who wrote this?"]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a read seats the other agents on its task only where their starters turned Chat on",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        yield* joinWorkspace(chat.task.workspaceId, chat.other);
+        const theirs = yield* startedAgent(chat.other, chat.task.id, chat.ask);
+        const seated = () =>
+          Effect.map(roster(chat.owner, chat.task.workspaceId), (members) =>
+            members.some((member) => member.agentId === theirs.agent.id),
+          );
+        yield* chat.read(chat.first);
+        assert.equal(yield* seated(), false, "a teammate with Chat off is not seated");
+        yield* writeAccountPreferences(chat.other, { experiments: { [EXPERIMENT.CHAT]: true } });
+        yield* chat.read(chat.first);
+        assert.equal(yield* seated(), true);
+      }),
   );
 });

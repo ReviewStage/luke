@@ -337,7 +337,7 @@ afterEach(() => {
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
 
-/** The page as drawn over the plans control given, rendered again in place where one stands. */
+/** The page as drawn over the tasks control given, rendered again in place where one stands. */
 function render(tasks: ReturnType<typeof tasksControl>): void {
   act(() =>
     root?.render(
@@ -354,7 +354,7 @@ function render(tasks: ReturnType<typeof tasksControl>): void {
   );
 }
 
-/** The Automations page, standing in the plan's place over the workspace listed. */
+/** The Automations page, standing in the task's place over the workspace listed. */
 function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -1305,7 +1305,7 @@ test("a Run now still out on a toolbar too narrow for its words draws its ring i
     assert.deepEqual(
       {
         pressable: !run.disabled,
-        ring: run.querySelector('.spinner[role="status"]') !== null,
+        ring: run.querySelector('.luke-spinner[role="status"]') !== null,
         glyph: run.querySelector("svg.lucide-play") !== null,
       },
       { pressable: false, ring: true, glyph: false },
@@ -1647,7 +1647,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(
-    page.querySelector("aside[aria-label='Runs'] .empty-state")?.textContent ?? "",
+    page.querySelector("aside[aria-label='Runs'] .luke-empty-state")?.textContent ?? "",
     /^No runs yet$/u,
     "the panel with no run stands the empty state",
   );
@@ -1730,7 +1730,7 @@ test("a default model that could not be read is said as unknown, and a model can
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
       return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
-    if (this.classList.contains("anchored-popover"))
+    if (this.classList.contains("luke-anchored-popover"))
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
@@ -1842,7 +1842,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   act(() => button("New secret").click());
   act(() => {
     const confirm = [
-      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
     ].find((each) => each.textContent === "New secret");
     confirm?.click();
   });
@@ -1902,7 +1902,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");
   act(() => {
     const confirm = [
-      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
     ].find((each) => each.textContent === "New secret");
     assert.ok(confirm, "the dialog asks first");
     confirm.click();

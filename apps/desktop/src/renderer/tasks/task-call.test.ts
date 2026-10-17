@@ -29,7 +29,7 @@ import { TaskCall } from "./task-call";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import { workRowsOf } from "./work-model";
 
-/** The Call tab as a test draws it: what it is given over a plan with no planning turn, which reads no older page and opens nothing. */
+/** The Call tab as a test draws it: what it is given over a task with no brain turn, which reads no older page and opens nothing. */
 function callTab(
   props: Partial<Parameters<typeof TaskCall>[0]> & Pick<Parameters<typeof TaskCall>[0], "region">,
 ) {
@@ -302,7 +302,7 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     assert.ok(row, "the row is drawn");
     document.documentElement.dataset.keyboard = "true";
     act(() => row.focus());
-    const card = document.querySelector(".tooltip-card [data-tab-card]");
+    const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
     assert.ok(card, "the row hangs a tab's card");
     return [
       card.querySelector(".card-name")?.textContent,
@@ -363,7 +363,7 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   assert.equal(row.textContent, `Showed ${ref.path}, ${lines}`);
   document.documentElement.dataset.keyboard = "true";
   act(() => row.focus());
-  const card = document.querySelector(".tooltip-card [data-file-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.deepEqual(
     [
       card?.querySelector(".card-name")?.textContent,
@@ -378,7 +378,7 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
 /** Charles's sign-in picture, which the members read lists. */
 const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/charles=s96-c";
 
-/** The plan's workspace's members as the members read answers them: the reader, Dean, and Charles with his picture. */
+/** The task's workspace's members as the members read answers them: the reader, Dean, and Charles with his picture. */
 const MEMBERS: readonly WorkspaceMember[] = [
   {
     userId: "user-dean",

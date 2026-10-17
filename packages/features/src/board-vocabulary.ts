@@ -7,15 +7,15 @@
  */
 
 /**
- * The planning model's tool that draws on a board. The Mac reads it off the
- * planning call's activity, where a pending call names its tool, to know a
+ * The brain's tool that draws on a board. The Mac reads it off the
+ * task call's activity, where a pending call names its tool, to know a
  * drawing just landed and read the board again.
  */
 export const DRAW_ON_BOARD_TOOL_NAME = "draw_on_board";
 
 /**
- * The planning model's tool that looks at a board. The Mac reads it off the
- * planning call's activity the same way, and draws the board it shows for
+ * The brain's tool that looks at a board. The Mac reads it off the
+ * task call's activity the same way, and draws the board it shows for
  * the look to see.
  */
 export const LOOK_AT_BOARD_TOOL_NAME = "look_at_board";
@@ -36,7 +36,7 @@ export const DRAWING_ZONE = "zone";
 
 /**
  * The longest side, in pixels, of the image the Mac draws of a board for the
- * planning model to look at: legible, and cheap to send again on later turns.
+ * brain to look at: legible, and cheap to send again on later turns.
  */
 export const BOARD_IMAGE_MAX_SIDE = 1_200;
 

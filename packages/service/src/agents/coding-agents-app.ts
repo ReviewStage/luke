@@ -54,6 +54,12 @@ import {
   inboxReplyRefusal,
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
+import {
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_BOUNDS,
+  type PullRequestActionRequest,
+  pullRequestActionRequestSchema,
+} from "@luke/features/pull-request-write-wire";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, type Redacted, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -68,9 +74,17 @@ import {
 } from "../github/github-people.js";
 import { githubReadOrRefusal } from "../github/github-refusal.js";
 import {
+  pullRequestNodeId,
+  replyToReviewThread,
+  setPullRequestDraft,
+  setReviewThreadResolved,
+  submitPullRequestReview,
+} from "../github/pull-request-writes.js";
+import {
   type PullRequestReadFailure,
   pullRequestChecks,
   pullRequestConversation,
+  pullRequestDeployments,
   pullRequestFiles,
   pullRequestOverview,
 } from "../github/pull-requests.js";
@@ -130,22 +144,27 @@ import {
   titleMayLand,
   transcriptPast,
 } from "./coder-host/transcript.js";
+import {
+  type MemberPullRequest,
+  memberPullRequestWrite,
+  writeAnswerOf,
+} from "./pull-request-write.js";
 
 /**
- * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
+ * coding-agents-app.ts -- a task's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one of a workspace the bearer's account is a member of: a
- * plan or an agent of any other workspace answers exactly as one that names
+ * task or an agent of any other workspace answers exactly as one that names
  * nothing. A member reads, messages, renames, re-chooses, and stops an agent
  * a teammate started, its conversation read and written under that teammate,
  * whose conversation it is. A Start
  * (`POST /api/plans/{id}/agents`) takes the one path a start takes
  * (`packages/service/src/agents/coder-host/start.ts`), which the voice brain's tool shares: the
  * model and effort checked against the catalog, the account's default where
- * the request names none, the plan's repository confirmed reachable through
+ * the request names none, the task's repository confirmed reachable through
  * the Luke GitHub App, the agent and its conversation made, and its eve
- * session opened with the plan's document, or the prompt the request named in
+ * session opened with the task's document, or the prompt the request named in
  * its place, as the first message, here under the developer's own bearer so
  * eve's door admits it as the developer. A retry carrying the same key is
  * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
@@ -196,9 +215,16 @@ import {
  * tab asks for at once and draws as each lands: the pull request itself,
  * its description, branches, mergeability, author, and the reviewers it
  * asks for (`GET /api/agents/{id}/overview/pull-request`); its head's checks
- * one by one (`GET /api/agents/{id}/overview/checks`); and its conversation
+ * one by one and its deployments (`GET /api/agents/{id}/overview/checks`); and its conversation
  * and where its reviewers stand (`GET /api/agents/{id}/overview/conversation`),
- * its words as GitHub renders them. An image those words name (`GET /api/agents/{id}/github-image`) is
+ * its words as GitHub renders them. A change to that pull request
+ * (`POST /api/agents/{id}/pull-request/action`), such as marking it ready for
+ * review, submitting a review, or replying on or resolving a review
+ * thread, is made on GitHub as the member who asks, on their own GitHub
+ * sign-in and never the App's, through the one seam every such change takes
+ * (`pull-request-write.ts`), and answers how GitHub took it; the agent's kept
+ * published answer is let go, so the next read asks GitHub afresh. An image
+ * those words name (`GET /api/agents/{id}/github-image`) is
  * read on a token for the agent's repository too, an upload re-signed by its
  * asset's id (`github/github-images.ts`), and answered as bytes.
  * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
@@ -215,7 +241,7 @@ import {
  */
 
 const AGENTS_PATH = {
-  /** GET lists the plan's agents, the archived ones too where `archived=include` asks; POST starts one; the rewrite moves the path's plan id into the `id` query. */
+  /** GET lists the task's agents, the archived ones too where `archived=include` asks; POST starts one; the rewrite moves the path's task id into the `id` query. */
   OF_TASK: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
@@ -233,17 +259,19 @@ const AGENTS_PATH = {
   OVERVIEW_CHECKS: "/api/agents/overview-checks",
   /** GET reads the agent's pull request's conversation, as its overview draws it; the rewrite moves the path's agent id into the `id` query. */
   OVERVIEW_CONVERSATION: "/api/agents/overview-conversation",
+  /** POST makes one change to the agent's pull request as the asking member; the rewrite moves the path's agent id into the `id` query. */
+  PULL_REQUEST_ACTION: "/api/agents/pull-request-action",
   /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
   GITHUB_IMAGE: "/api/agents/github-image",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
   SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
-  /** GET reads the plan's inbox past `after`; the rewrite moves the path's plan id into the `id` query. */
+  /** GET reads the task's inbox past `after`; the rewrite moves the path's task id into the `id` query. */
   INBOX_OF_TASK: "/api/plans/inbox",
-  /** GET reads one agent's inbox past `after`, an agent with no plan as much as one on a plan; the rewrite moves the path's agent id into the `id` query. */
+  /** GET reads one agent's inbox past `after`, an agent with no task as much as one on a task; the rewrite moves the path's agent id into the `id` query. */
   INBOX_OF_AGENT: "/api/agents/inbox",
   /** POST answers one inbox item; the rewrite moves the path's item id into the `id` query. */
   INBOX_ITEM: "/api/inbox/item",
-  /** GET reads what waits on the developer across the account's plans past `after`. */
+  /** GET reads what waits on the developer across the account's tasks past `after`. */
   INBOX: "/api/inbox",
   /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
   INBOX_ATTACHMENT: "/api/inbox/attachment",
@@ -295,6 +323,14 @@ const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
         (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
   2_048;
+
+/**
+ * A change to a pull request names the change and its few fields, a
+ * review's words the longest of them, so a body past this is no change.
+ * Note that each of those words' characters may take six bytes as JSON,
+ * a control character escaped as `\u0000`.
+ */
+const MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS * 6 + 4_096;
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
@@ -391,7 +427,7 @@ const choiceOrInvalid = <A, E, R>(
   Effect.catchTag(effect, "ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST));
 
 /**
- * POST: an agent started on the plan, or the one a retry under the same key
+ * POST: an agent started on the task, or the one a retry under the same key
  * already started, on the one start path (`packages/service/src/agents/coder-host/start.ts`),
  * reaching eve as the developer.
  */
@@ -448,7 +484,7 @@ function listsArchived(request: Request): boolean {
   return asked === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
 }
 
-/** GET lists the plan's agents with their status; POST starts one. */
+/** GET lists the task's agents with their status; POST starts one. */
 const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -478,7 +514,7 @@ const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(f
 });
 
 /**
- * GET lists a workspace's agents, on a plan or with none, newest started
+ * GET lists a workspace's agents, on a task or with none, newest started
  * first, the archived ones left out unless `archived=include` asks,
  * narrowed to one repository where the query names one and to agents whose
  * title or task's name holds the query's words where it names some, as the plan list
@@ -710,7 +746,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   });
 });
 
-/** GET reads the agent as its own page, an agent with no plan as much as one on a plan; PATCH changes it as `changeEndpoint` does. */
+/** GET reads the agent as its own page, an agent with no task as much as one on a task; PATCH changes it as `changeEndpoint` does. */
 const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
   seams: CodingAgentsAppSeams,
   writer: Effect.Effect<StoreWriter>,
@@ -770,6 +806,21 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/**
+ * The instance's kept answers for the agent let go, every member's and on
+ * either side of its end, so the next ask on this instance reads GitHub
+ * afresh whoever asks. Note that another instance keeps its own for at most
+ * `CODER.PUBLISHED_TTL`, as it keeps one past a change made on GitHub itself.
+ */
+const forgetPublished = (published: PublishedCache, agentId: string) =>
+  Effect.flatMap(Cache.keys(published), (keys) =>
+    Effect.forEach(
+      [...keys].filter((key) => key.agentId === agentId),
+      (key) => Cache.invalidate(published, key),
+      { discard: true },
+    ),
+  );
+
 /** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
 const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -788,7 +839,7 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
 /**
  * GET reads the agent's changes: the files of the pull request its kept
  * published answer names, and who it names (`github-people.ts`), read from
- * GitHub afresh on a token minted for the agent's repository on its plan's
+ * GitHub afresh on a token minted for the agent's repository on its task's
  * workspace installation, with who its row says it writes as, or none
  * where it names no pull request yet.
  */
@@ -899,13 +950,25 @@ const overviewPullRequestEndpoint = /* @__PURE__ */ Effect.fn(
   );
 });
 
-/** GET reads the checks on the agent's pull request's head, failures first, up to the bound. */
+/**
+ * GET reads the checks on the agent's pull request's head, failures first,
+ * up to the bound, and its head's deployments beside them: three requests
+ * to GitHub at once whatever their number, the check runs, the commit
+ * statuses, and the deployments.
+ */
 const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewChecksEndpoint")(
   function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
     return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-      Effect.map(pullRequestChecks(token, agent.repository, pullRequest.number), (checks) => ({
-        checks,
-      })),
+      Effect.map(
+        Effect.all(
+          [
+            pullRequestChecks(token, agent.repository, pullRequest.number),
+            pullRequestDeployments(token, agent.repository, pullRequest.number),
+          ],
+          { concurrency: "unbounded" },
+        ),
+        ([checks, deployments]) => ({ checks, deployments }),
+      ),
     );
   },
 );
@@ -924,6 +987,69 @@ const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
     ),
   );
 });
+
+/** The write a change makes on the pull request, on the member's token. */
+function actionWrite(
+  request: PullRequestActionRequest,
+): (pullRequest: MemberPullRequest) => ReturnType<typeof setPullRequestDraft> {
+  return ({ token, repository, number }) =>
+    Effect.flatMap(pullRequestNodeId(token, repository, number), (id) => {
+      switch (request.action) {
+        case PULL_REQUEST_ACTION.READY_FOR_REVIEW:
+        case PULL_REQUEST_ACTION.CONVERT_TO_DRAFT:
+          return setPullRequestDraft(
+            token,
+            id,
+            request.action === PULL_REQUEST_ACTION.CONVERT_TO_DRAFT,
+          );
+        case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
+          return submitPullRequestReview(token, id, request);
+        case PULL_REQUEST_ACTION.REPLY_TO_THREAD:
+          return replyToReviewThread(token, id, request);
+        case PULL_REQUEST_ACTION.RESOLVE_THREAD:
+        case PULL_REQUEST_ACTION.UNRESOLVE_THREAD:
+          return setReviewThreadResolved(
+            token,
+            id,
+            request.threadId,
+            request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD,
+          );
+      }
+    });
+}
+
+/**
+ * POST makes one change to the pull request the agent's kept published
+ * answer names, as the asking member on their own GitHub sign-in
+ * (`pull-request-write.ts`), and answers how GitHub took it; not found
+ * where it names no pull request yet. Whatever GitHub answered, the kept
+ * answer is let go, so the reads after it ask GitHub afresh.
+ */
+const pullRequestActionEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestActionEndpoint")(
+  function* (
+    seams: CodingAgentsAppSeams,
+    published: PublishedCache,
+  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method !== HTTP_METHOD.POST) {
+      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+    }
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const { userId, agent } = yield* reachedAgent(seams, request);
+    const body = yield* readJsonBodyEffect(MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES);
+    const asked = readEither(pullRequestActionRequestSchema)(body);
+    if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    const { pullRequest } = yield* keptPublished(published, userId, agent);
+    if (pullRequest === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const written = yield* memberPullRequestWrite(
+      userId,
+      agent,
+      pullRequest.number,
+      actionWrite(asked.success),
+    ).pipe(Effect.ensuring(forgetPublished(published, agent.id)));
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, writeAnswerOf(written));
+  },
+);
 
 /**
  * GET reads one image the agent's pull request's overview names, by the
@@ -981,7 +1107,7 @@ const inboxCursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return after.success;
 });
 
-/** GET reads the plan's inbox past the cursor: every item its agents posted, held open while nothing changed. */
+/** GET reads the task's inbox past the cursor: every item its agents posted, held open while nothing changed. */
 const taskInboxEndpoint = /* @__PURE__ */ Effect.fn("web/taskInboxEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -1014,7 +1140,7 @@ const agentInboxEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxEndpoint")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
-/** GET reads what waits on the developer across the account's plans past the cursor: every open item, held open while nothing changed. */
+/** GET reads what waits on the developer across the account's tasks past the cursor: every open item, held open while nothing changed. */
 const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -1097,7 +1223,7 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
 }
 
 /**
- * POST answers one item of a plan of the account's workspaces, whichever
+ * POST answers one item of a task of the account's workspaces, whichever
  * member started its agent. An answer naming a
  * revision the agent has since moved on from, or an item no longer open,
  * is answered with the item as it stands and not taken. Otherwise the
@@ -1231,6 +1357,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.OVERVIEW_CONVERSATION,
           hostedRefusing(overviewConversationEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.PULL_REQUEST_ACTION,
+          hostedRefusing(pullRequestActionEndpoint(seams, published)),
         ),
         HttpRouter.add(
           ANY_METHOD,

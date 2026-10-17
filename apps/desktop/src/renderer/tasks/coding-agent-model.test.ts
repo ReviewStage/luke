@@ -540,7 +540,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to Luke on GitHub is pressed on GitHub, not the plan, so it stands for an agent with no plan.
+  // Giving the repository to Luke on GitHub is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,

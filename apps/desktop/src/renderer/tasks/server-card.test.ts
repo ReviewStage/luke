@@ -259,7 +259,7 @@ async function cardOf(chip: Element | null | undefined) {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   await settle();
-  const card = [...document.querySelectorAll(".tooltip-card > [data-server-card]")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
   assert.ok(card, "the chip hangs the server's card");
   const drawnSwitch = card.querySelector<HTMLElement>(".luke-switch");
   const look = {

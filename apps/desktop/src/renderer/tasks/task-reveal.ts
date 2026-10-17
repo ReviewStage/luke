@@ -4,7 +4,7 @@ import { diffArrays } from "diff";
 import type { MarkdownEdit } from "../markdown-message";
 
 /**
- * plan-reveal.ts -- how the open plan writes itself in: one caret taking each note down where it lands, as a person taking notes on a call would.
+ * task-reveal.ts -- how the open plan writes itself in: one caret taking each note down where it lands, as a person taking notes on a call would.
  *
  * The notetaker changes the plan one note at a time, and the service sends
  * the document after each (`textNotesInProgress` in `@luke/features/plan-template`):
@@ -425,7 +425,7 @@ export function chaseOpened(body: string): ChaseState {
 }
 
 /**
- * The same plan's newer document as the next target. What is shown stays,
+ * The same task's newer document as the next target. What is shown stays,
  * the act standing folded into it, and the caret works toward the newer
  * words from there. A unit the newer document added starts empty where it
  * stands; a unit it dropped stays, aimed at nothing, until it is erased. A

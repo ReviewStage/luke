@@ -22,12 +22,12 @@ import { useEffect, useRef, useState } from "react";
 import { rendererRuntime } from "../renderer-runtime";
 
 /**
- * use-plan-editing.ts -- the open plan's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.
+ * use-plan-editing.ts -- the open task's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.
  *
  * The words save a beat after the developer stops typing and again as the
  * editor closes, and the editor waits for that save before it goes
- * (`plan-edit-model.ts` decides every save). Another plan opening takes the
- * editor with it, and words not yet saved go to the plan they were typed in.
+ * (`plan-edit-model.ts` decides every save). Another task opening takes the
+ * editor with it, and words not yet saved go to the task they were typed in.
  * Unsaved words live in this window's memory alone and are never written to
  * disk. The editor itself is `plan-document-editor.tsx`.
  */
@@ -40,7 +40,7 @@ const savePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(SAVE_PAUSE), stamp),
 );
 
-/** A save that failed as a plan was left, which nothing is left to say to. */
+/** A save that failed as a task was left, which nothing is left to say to. */
 const ignore = () => undefined;
 
 /** How the document saves an edit: what the words were written from, and the developer's. */
@@ -97,7 +97,7 @@ export function usePlanEditing(
   const [placement, setPlacement] = useState<EditorPlacement | undefined>(undefined);
   const [selecting, setSelecting] = useState<EditorHost | undefined>(undefined);
   const [cursor, setCursor] = useState<EditorHost | undefined>(undefined);
-  // The open editor's words not yet handed over, which a plan leaving must save too.
+  // The open editor's words not yet handed over, which a task leaving must save too.
   const heldWords = useRef<(() => void) | undefined>(undefined);
   const [pause, restartPause] = useAtom(savePauseAtom);
   // Note that these are refs, because a save's answer and the pause's end
@@ -106,10 +106,10 @@ export function usePlanEditing(
   latest.current = editor;
   const stamp = useRef(0);
   const opening = useRef(0);
-  // The save out, which words typed after it wait on as a plan is left.
+  // The save out, which words typed after it wait on as a task is left.
   const flight = useRef<Promise<TasksEditAnswer> | undefined>(undefined);
-  // The door of the plan last drawn, moved on after each commit, so a
-  // cleanup as another plan opens still holds the door of the one it leaves.
+  // The door of the task last drawn, moved on after each commit, so a
+  // cleanup as another task opens still holds the door of the one it leaves.
   const door = useRef(edit);
   useEffect(() => {
     door.current = edit;
@@ -157,10 +157,10 @@ export function usePlanEditing(
     else send();
   });
 
-  // Another plan opened, or the document gone, takes the editor with it, and
-  // words not yet saved are sent through the door of the plan they were
+  // Another task opened, or the document gone, takes the editor with it, and
+  // words not yet saved are sent through the door of the task they were
   // typed in. Note that the cleanup is what sends them, because it still
-  // holds that plan's door and runs before the document can go.
+  // holds that task's door and runs before the document can go.
   useEffect(() => {
     opening.current += 1;
     setEditor(undefined);
@@ -194,7 +194,7 @@ export function usePlanEditing(
     },
     typeText: (words) => changed((now) => editorTyped(now, words)),
     // The save starts with the close, not a render later, since the close may
-    // be focus leaving for another plan that takes the document with it.
+    // be focus leaving for another task that takes the document with it.
     close: (select) => {
       if (latest.current === undefined) return;
       if (select !== undefined) setSelecting(select);

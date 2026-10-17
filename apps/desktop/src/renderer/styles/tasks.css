@@ -131,7 +131,7 @@
   border-top-color: var(--accent);
   border-radius: 50%;
   vertical-align: 0.05em;
-  animation: spinner-turn 900ms linear infinite;
+  animation: luke-spinner-turn 900ms linear infinite;
   animation-play-state: var(--loop-motion);
   content: "";
 }
@@ -885,11 +885,13 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The bar: history, the path, then the file's actions and the tree's
-   toggle at its end, in the window's toolbar buttons. */
+   toggle at its end, in the window's toolbar buttons. It stands the one
+   height of a tab's bar whatever it holds, words alone or nothing yet. */
 .file-view-bar {
   container: file-bar / inline-size;
   display: flex;
   min-width: 0;
+  min-height: var(--secondary-bar-height);
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-4);
@@ -1348,6 +1350,61 @@ button.file-ref:hover .file-ref-path {
   color: var(--state-working);
 }
 
+/* The Files changed bar's diff settings (diff-settings.tsx): the button,
+   and under it a popover in the context popover's look, its rows the
+   settings page's own, scrolling within the room the panel leaves. */
+.diff-settings {
+  position: relative;
+  display: flex;
+}
+
+.diff-settings-popover {
+  display: flex;
+  max-height: min(560px, 70vh);
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16) var(--space-16);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
+}
+
+.diff-settings-popover:focus-visible {
+  outline: none; /* no ring: a popover holding focus for its controls */
+}
+
+.diff-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-right: calc(-1 * var(--space-8));
+}
+
+.diff-settings-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.diff-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.diff-settings-group + .diff-settings-group {
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--hairline);
+}
+
 /* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
    of its own, in the panel's look (diff-view/index.ts); its box fills the
    File tab's place and scrolls as a File tab's lines do. */
@@ -1769,6 +1826,200 @@ button.file-ref:hover .file-ref-path {
   font-weight: 600;
 }
 
+/* The pill as the press that opens what may be done from where the pull
+   request stands (`pull-request-writes.tsx`): its tone deepens under the
+   pointer, and a chevron says it opens. */
+.pull-request-state-button {
+  font: inherit;
+  font-weight: 600;
+  cursor: default;
+}
+
+.pull-request-state-button:not(:disabled):hover,
+.pull-request-state-button[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--pull-request-tone) 20%, transparent);
+}
+
+.pull-request-state-button:disabled {
+  opacity: 0.7;
+}
+
+.pull-request-state-chevron {
+  width: 12px;
+  height: 12px;
+  margin-inline-start: calc(-1 * var(--space-2));
+}
+
+/* Where GitHub did not take the last change: a line under the bar, at the
+   content inset, its dismissal at the row's end. */
+.pull-request-write-note {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pull-request-write-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pull-request-write-dismiss {
+  margin-inline-start: auto;
+}
+
+/* The bar's Review press and the panel it opens (`pull-request-review.tsx`):
+   the press holds the panel's anchor, and the panel is a popover card as
+   the context ring's is, its words' field over what the review says, each
+   choice a row with its meaning under its name, as stage-cli draws them. */
+.pull-request-review {
+  position: relative;
+  display: flex;
+}
+
+/* Never taller than the room its side of the press leaves (`@luke/ui`'s
+   `AnchoredPopover` sets it as `--luke-popover-room`), scrolling within it,
+   so a short window keeps Submit in reach. */
+.pull-request-review-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  max-height: var(--luke-popover-room, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-12) var(--space-16) var(--space-16);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
+}
+
+.pull-request-review-panel:focus-visible {
+  outline: none; /* no ring: a popover holding focus for its controls */
+}
+
+.pull-request-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-right: calc(-1 * var(--space-8));
+}
+
+.pull-request-review-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pull-request-review-lead {
+  margin: calc(-1 * var(--space-8)) 0 0;
+  color: var(--text-secondary);
+}
+
+.pull-request-review-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.pull-request-review-panel > * {
+  flex-shrink: 0;
+}
+
+.pull-request-review-field,
+.pull-request-review-preview {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  max-height: 240px;
+}
+
+.pull-request-review-field {
+  resize: vertical;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.pull-request-review-preview {
+  overflow-y: auto;
+  padding: 9px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+}
+
+.pull-request-review-preview > p:only-child {
+  margin: 0;
+}
+
+.pull-request-review-events {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pull-request-review-event {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+}
+
+.pull-request-review-event:has(input:checked) {
+  border-color: var(--hairline-strong);
+  background: var(--selected);
+}
+
+.pull-request-review-events:disabled .pull-request-review-event {
+  opacity: 0.6;
+}
+
+.pull-request-review-event input {
+  margin: 2px 0 0;
+  accent-color: var(--message-sent);
+}
+
+.pull-request-review-event-words {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pull-request-review-event-label {
+  font-weight: 600;
+}
+
+.pull-request-review-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pull-request-review-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pull-request-review-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--control-gap);
+}
+
 /* The branches it merges, quiet in the code face under the title. */
 .pull-request-branches {
   margin: var(--space-2) 0 0;
@@ -1914,18 +2165,60 @@ button.file-ref:hover .file-ref-path {
   border-radius: var(--control-radius);
 }
 
-/* The checks, one boxed list, each row opening the check's page. */
+/* The checks, one boxed list, each row opening the check's page, folded
+   past five behind a quiet control along its foot. */
 .pull-request-checks {
-  margin: 0;
-  padding: 0;
   overflow: clip;
   border: 1px solid var(--hairline);
   border-radius: var(--control-radius);
+}
+
+.pull-request-check-list {
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
-.pull-request-checks > li + li {
+.pull-request-check-list > li + li {
   border-top: 1px solid var(--hairline);
+}
+
+.pull-request-checks-fold {
+  display: block;
+  width: 100%;
+  padding: var(--space-6) var(--boxed-inset);
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.pull-request-checks-fold:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+/* A deployment's door to the address it serves, quiet at its row's end. */
+.pull-request-deployment-open > svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+/* The App that runs a check, by its square logo as GitHub draws an App. */
+.pull-request-check-avatar {
+  display: block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--raised);
+  object-fit: cover;
 }
 
 .pull-request-check {
@@ -2156,6 +2449,79 @@ button.pull-request-check:hover {
 
 .pull-request-thread-more {
   margin: 0 var(--boxed-inset) var(--space-8);
+}
+
+/* Under a thread's comments, what a member does on it
+   (`pull-request-thread-actions.tsx`): a quiet field-shaped Reply… that
+   opens the reply's own field, and Resolve or Unresolve at the row's end;
+   GitHub's refusal of the last one under them. */
+.pull-request-thread-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--boxed-inset);
+  border-top: 1px solid var(--hairline);
+}
+
+.pull-request-thread-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--control-gap);
+}
+
+.pull-request-thread-reply-open {
+  min-width: 0;
+  height: var(--control-height);
+  flex: 1 1 auto;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--input-fill);
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: start;
+  cursor: text;
+}
+
+.pull-request-thread-reply-open:hover {
+  border-color: var(--hairline-strong);
+}
+
+.pull-request-thread-resolve {
+  margin-inline-start: auto;
+}
+
+.pull-request-thread-reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.pull-request-thread-reply-field {
+  box-sizing: border-box;
+  min-height: 72px;
+  max-height: 240px;
+  resize: vertical;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.pull-request-thread-reply-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--control-gap);
+}
+
+.pull-request-thread-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pull-request-thread-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* The earlier entries a read left on GitHub, counted where they would stand. */
@@ -3313,24 +3679,15 @@ button.attached-file-face:hover img {
    and the file under them, an image fitted to the window, a text file's
    lines scrolling inside the card, any other file its icon over Download. */
 .attachment-viewer {
-  display: flex;
+  width: auto;
   min-width: min(360px, 100%);
   max-width: min(1200px, 100%);
-  max-height: calc(100vh - 2 * var(--space-24));
-  flex-direction: column;
+  gap: 0;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 14px;
-  background: var(--surface-popover);
-  box-shadow: 0 24px 64px var(--shadow-deep);
-  color: var(--text-primary);
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
     menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.attachment-viewer:focus {
-  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .attachment-viewer[data-view="text"] {
@@ -3866,11 +4223,11 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 /* The chips along the box's foot: the model chip, the MCP button, and the
-   context ring, each the box its popover hangs from (`anchored-popover.tsx`),
-   above itself since the box stands at the panel's foot, and before them what
-   the agent published, in the composer's pill (`chip.tsx`), the pull
-   request's wearing its state's colour, the branch's its name in the code
-   face. */
+   context ring, each the box its popover hangs from (`@luke/ui`'s
+   `AnchoredPopover`), above itself since the box stands at the panel's foot,
+   and before them what the agent published, in the composer's pill
+   (`chip.tsx`), the pull request's wearing its state's colour, the branch's
+   its name in the code face. */
 .agent-model-chip,
 .agent-servers,
 .agent-context {

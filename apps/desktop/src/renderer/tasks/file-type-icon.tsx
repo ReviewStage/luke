@@ -9,8 +9,8 @@ import { fileTreeModuleAtom } from "./file-tree-bundle";
  * The icons ride in the file tree bundle (`file-tree-bundle.ts`), loaded the
  * first time one is drawn, so the bundle every window parses carries none of
  * them; a bundle that fails to load leaves the blank page standing. Note
- * that the stand-in is a page with nothing on it rather than the plan's
- * document glyph, so a file never reads as a plan while the icons load. The
+ * that the stand-in is a page with nothing on it rather than the task's
+ * document glyph, so a file never reads as a task while the icons load. The
  * icon's colour is its type's, as `styles/tasks.css` gives it.
  */
 

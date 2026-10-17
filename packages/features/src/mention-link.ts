@@ -36,8 +36,8 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * out of Luke, into Slack, a pull request or a mail, still leads somewhere
  * (`docs/proposals/web-and-links.md`):
  *
- * - A plan is `https://tryluke.dev/<workspace>/plan/<id>`, and one of its
- *   sections that with `#<anchor>` after it. Only the id finds the plan: the
+ * - A task is `https://tryluke.dev/<workspace>/plan/<id>`, and one of its
+ *   sections that with `#<anchor>` after it. Only the id finds the task: the
  *   workspace's slug reads well and is never trusted, so a slug spelled
  *   another way later breaks no link. The desktop's own scheme is the same
  *   address with `tryluke:` for `https:`, which reads as the same mention.
@@ -57,14 +57,14 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
  *   anchor names one section, and one of a heading since renamed or
  *   deleted names nothing, which its reader says.
- * - A file or a folder of the plan's repository is its GitHub page on the
+ * - A file or a folder of the task's repository is its GitHub page on the
  *   default branch, `https://github.com/<owner>/<name>/blob/HEAD/<path>`
  *   (`/tree/` for a folder), and a file's lines are pinned to the commit
  *   they were read at, `/blob/<commit>/<path>#L3-L5`, since lines drift and
  *   a branch's would point at whatever moved into them. Its path is from
  *   the repository's root and never climbs out of it: no leading `/`, no
- *   `..` step, no backslash. A GitHub page is a file of the plan only when
- *   it is of the plan's own repository, which a reader is handed, and only
+ *   `..` step, no backslash. A GitHub page is a file of the task only when
+ *   it is of the task's own repository, which a reader is handed, and only
  *   on `HEAD` or a commit, since a branch's name may hold a slash and leave
  *   no telling where it ends and the path begins; it is read as that before
  *   anything else a GitHub address might name.
@@ -85,7 +85,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * A page of one of the integrations, a Linear issue or a pull request, is
  * named by its own web address, which a host of the integration's
  * (`INTEGRATION_HOSTS`) says it is the integration's. It is read last, after
- * every form above, so a GitHub page that is a file of the plan stays one;
+ * every form above, so a GitHub page that is a file of the task stays one;
  * a link to any other page is a link, never a mention, whatever its label
  * says.
  */
@@ -104,11 +104,11 @@ export const MENTION_KIND = {
 } as const;
 
 const MENTION_BOUNDS = {
-  /** The most characters a mention's target may spell: an anchor or a path at its bound, every character encoded as UTF-8's widest, and the plan's id. */
+  /** The most characters a mention's target may spell: an anchor or a path at its bound, every character encoded as UTF-8's widest, and the task's id. */
   MAX_TARGET_CHARS: 24_000,
   /** The most characters an anchor may spell: a heading at its bound, each character lowered into as many as two, and a suffix telling it from an earlier one. */
   MAX_ANCHOR_CHARS: PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS * 2 + 16,
-  /** The most characters a plan's id may spell; the service mints them far shorter. */
+  /** The most characters a task's id may spell; the service mints them far shorter. */
   MAX_TASK_ID_CHARS: 200,
   /** The most characters a repository path may spell. */
   MAX_PATH_CHARS: 1_000,
@@ -327,7 +327,7 @@ const mentionSchema = EffectSchema.Union([
 
 export type Mention = typeof mentionSchema.Type;
 
-/** A mention of the plan or one of its sections. */
+/** A mention of the task or one of its sections. */
 export type PlanMention = Extract<
   Mention,
   { readonly kind: typeof MENTION_KIND.TASK | typeof MENTION_KIND.SECTION }
@@ -353,7 +353,7 @@ export function isMentionableTool(name: string): boolean {
 /** A file's lines a mention names, at the commit they were read at. */
 export type MentionLines = typeof linesSchema.Type;
 
-/** Where a mention is written: the plan's workspace, by its slug, and the repository the plan is about, `owner/name`, or null before one is chosen. */
+/** Where a mention is written: the task's workspace, by its slug, and the repository the task is about, `owner/name`, or null before one is chosen. */
 export interface MentionPlace {
   readonly workspace: string;
   readonly repository: string | null;
@@ -510,11 +510,11 @@ function linesOf(ref: string, hash: string): MentionLines | undefined {
   return { commit: ref, startLine, endLine };
 }
 
-/** The fields a page of the plan's repository on GitHub spells, a file's or a folder's on `HEAD` or a commit; nothing for any other page. */
+/** The fields a page of the task's repository on GitHub spells, a file's or a folder's on `HEAD` or a commit; nothing for any other page. */
 function repositoryFields(url: URL, repository: string | null) {
   const [first, owner, name, step, ref, ...path] = url.pathname.split("/");
   if (first !== "" || repository === null || ref === undefined) return undefined;
-  // Note that a branch's page is no file of the plan, since `feature/rollout` spells two steps and the path's first is not to be told from its last.
+  // Note that a branch's page is no file of the task, since `feature/rollout` spells two steps and the path's first is not to be told from its last.
   if (ref !== GITHUB.DEFAULT_BRANCH && !COMMIT.test(ref)) return undefined;
   // GitHub reads an owner and a name in any case, so a link spelled in another names the same repository.
   if (`${owner}/${name}`.toLowerCase() !== repository.toLowerCase()) return undefined;
@@ -560,7 +560,7 @@ function linkFields(url: URL) {
 /**
  * The fields a target spells, for the schema to read; nothing where it is
  * no target of a mention. A GitHub page is read as a file or a folder of
- * the plan's repository first, so a page of it is never read as anything
+ * the task's repository first, so a page of it is never read as anything
  * else a GitHub address names.
  */
 function fieldsOf(target: string, repository: string | null) {
@@ -568,7 +568,7 @@ function fieldsOf(target: string, repository: string | null) {
   if (url === undefined) return undefined;
   if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
   if (isLinkHome(url)) return planFields(url);
-  // Note that a page of an integration's is read last, so a GitHub page that is a file of the plan stays one.
+  // Note that a page of an integration's is read last, so a GitHub page that is a file of the task stays one.
   const fields = url.origin === GITHUB.ORIGIN ? repositoryFields(url, repository) : undefined;
   return fields ?? linkFields(url);
 }
@@ -716,13 +716,13 @@ export function sectionAnchors(headings: readonly string[]): readonly string[] {
   });
 }
 
-/** A plan's address, a section's with its anchor; the plan's own where the anchor is empty. */
+/** A task's address, a section's with its anchor; the task's own where the anchor is empty. */
 function taskTarget(taskId: string, place: MentionPlace, anchor: string): string {
   const plan = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.TASK_STEP}/${encodedPart(taskId)}`;
   return anchor === "" ? plan : `${plan}#${encodedPart(anchor)}`;
 }
 
-/** A file's or a folder's page on GitHub, or the legacy form where the plan has no repository to name it under. */
+/** A file's or a folder's page on GitHub, or the legacy form where the task has no repository to name it under. */
 function repositoryTarget(
   kind: typeof MENTION_KIND.FILE | typeof MENTION_KIND.FOLDER,
   path: string,
@@ -743,7 +743,7 @@ function repositoryTarget(
     : `${page}#L${lines.startLine}-L${lines.endLine}`;
 }
 
-/** The target a mention is written with, in the plan's workspace and of its repository. */
+/** The target a mention is written with, in the task's workspace and of its repository. */
 export function encodeMention(mention: Mention, place: MentionPlace): string {
   switch (mention.kind) {
     case MENTION_KIND.FILE:
@@ -778,7 +778,7 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
 
 /**
  * The mention a link's target names, a GitHub page read as a file or a
- * folder only of `repository`, the plan's; nothing where it names none, or
+ * folder only of `repository`, the task's; nothing where it names none, or
  * is no target of a mention.
  */
 export function decodeMention(target: string, repository: string | null): Mention | undefined {
@@ -914,10 +914,10 @@ export function isBareLink(label: string, target: string): boolean {
 }
 
 /**
- * Whether a link's target may name a mention for some plan, so a reader
- * who does not yet know the plan's repository knows to read it again when
+ * Whether a link's target may name a mention for some task, so a reader
+ * who does not yet know the task's repository knows to read it again when
  * it does: one that names a mention with no repository, or any page of
- * GitHub's, which may be a file or a folder of the plan's.
+ * GitHub's, which may be a file or a folder of the task's.
  */
 export function mayNameMention(target: string): boolean {
   if (decodeMention(target, null) !== undefined) return true;
@@ -927,7 +927,7 @@ export function mayNameMention(target: string): boolean {
 /**
  * A link in written words as the mention its chip draws, whoever wrote it:
  * any link whose target names a mention, a GitHub page as a file or a
- * folder only of `repository`, the plan's, is one, whatever its label says,
+ * folder only of `repository`, the task's, is one, whatever its label says,
  * so an agent's `[the store](<GitHub page>)` reads as the developer's
  * `[@store.ts](<GitHub page>)` does. Its name is its label, without its `@`;
  * a bare address, its label the address spelled out, is named by what the
@@ -1172,7 +1172,7 @@ export function handedMentionsIn(
  * Words with each Markdown link written as its name, as a place that draws
  * plain words says it, a notification or a list's title: a link naming a
  * mention by the name its chip says (`linkMention`, read with no
- * repository, as a place off a plan's page draws it), and any other link
+ * repository, as a place off a task's page draws it), and any other link
  * by its label, never its address. A bare address is words, and stays as
  * written. The words are read once, front to back: a label is the words
  * since the last `[` on its line, so of nested brackets the inner link is

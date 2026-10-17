@@ -317,7 +317,7 @@ test("a settled choice keeps every option the agent offered with the developer's
   );
 });
 
-/** A plan of the account's, holding inbox items. */
+/** A task of the account's, holding inbox items. */
 function task(id: string, name: string): TaskSummary {
   return {
     id,
@@ -343,7 +343,7 @@ const TASKS = [
   { holder: taskHolder(INVITES), items: [item({ id: "expiry", updatedAt: 40 })] },
 ];
 
-/** Each group of a list as its plan's name, or its person's, You for the reader's own, and its items' ids, or the one run's ids. */
+/** Each group of a list as its task's name, or its person's, You for the reader's own, and its items' ids, or the one run's ids. */
 function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
   if (view.grouping === INBOX_GROUPING.TASK) {
     return view.groups.map(
@@ -646,7 +646,7 @@ test("a code block near the file's top reads from its first line, a file that en
   );
 });
 
-/** An item of an agent with no plan as main's read lists it. */
+/** An item of an agent with no task as main's read lists it. */
 function waitingTaskless(
   agentId: string,
   patch: Partial<AppInboxTasklessItem> = {},

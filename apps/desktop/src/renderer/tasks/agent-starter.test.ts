@@ -132,7 +132,7 @@ function hover(element: Element): void {
 
 /** The cards standing in the window, the first hung first. */
 function cards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(".tooltip-card:not([data-leaving])")];
+  return [...document.querySelectorAll<HTMLElement>(".luke-tooltip-card:not([data-leaving])")];
 }
 
 /** The agent named where `readerId` reads it, as the Inbox's thread names it, its card hung once the pointer rests on it, and how many times it was opened. */

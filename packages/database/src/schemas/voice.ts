@@ -62,14 +62,14 @@ export const voiceSessions = pgTable(
     /** The `devices` row's id an earlier build's session named; nothing writes it any more. */
     deviceId: text("device_id"),
     /**
-     * The plan the call was opened about; null only for a session an
+     * The task the call was opened about; null only for a session an
      * earlier build opened with none, which a re-attach refuses. A plain
-     * column rather than a reference: a session is bound to its plan for its
-     * whole life, so a re-attach after the plan was deleted must still read
-     * the binding and find no plan to land in. The session goes once it has
-     * ended: with the plan's delete, or the sweep after it (`soft-delete.ts`).
+     * column rather than a reference: a session is bound to its task for its
+     * whole life, so a re-attach after the task was deleted must still read
+     * the binding and find no task to land in. The session goes once it has
+     * ended: with the task's delete, or the sweep after it (`soft-delete.ts`).
      */
-    taskId: uuid("plan_id"),
+    taskId: uuid("task_id"),
     liveSessionId: text("live_session_id").notNull().unique(),
     delegationMode: text("delegation_mode").$type<VoiceDelegationMode>().notNull(),
     startedAt: timestamptz("started_at").notNull().defaultNow(),

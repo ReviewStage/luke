@@ -57,9 +57,9 @@ import {
 } from "./graceful-close.js";
 
 /**
- * The peer's side of one hosted planning call, which is everything the Mac
+ * The peer's side of one hosted task call, which is everything the Mac
  * still holds of a session once the exchange is the service's. It creates
- * the session about the open plan for the renderer's offer, and holds the
+ * the session about the open task for the renderer's offer, and holds the
  * sideband the service answered on for three things: the graceful close,
  * which asks the service for the `session.close` it owns and waits for
  * `session.closed` as the conversations guide prescribes; and the stop key
@@ -152,22 +152,22 @@ export interface LiveSessionHolderOptions {
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
   /**
-   * The service's notetaker sent a draft of the plan the standing planning
-   * call is about: a draft for any other plan, or from a session already
+   * The service's notetaker sent a draft of the plan the standing task
+   * call is about: a draft for any other task, or from a session already
    * ended, never reaches it. What the draft is shown as is the caller's.
    */
   onPlanDraft?: (draft: PlanDraftFrame) => void;
   /**
    * The service said what each part of Luke is doing on the standing
-   * planning call, on the same terms as `onPlanDraft`. A planning call's end
+   * task call, on the same terms as `onPlanDraft`. A task call's end
    * is told as a snapshot with nothing doing, so none outlives the call.
    */
   onTaskActivity?: (activity: TaskActivityFrame) => void;
-  /** Luke put code on screen on the standing planning call, on the same terms as `onPlanDraft`. */
+  /** Luke put code on screen on the standing task call, on the same terms as `onPlanDraft`. */
   onTaskCode?: (code: TaskCodeFrame) => void;
-  /** A planning turn's work on the standing planning call changed, on the same terms as `onPlanDraft`. */
+  /** A brain turn's work on the standing task call changed, on the same terms as `onPlanDraft`. */
   onTaskWork?: (work: TaskWorkFrame) => void;
-  /** The planning call about the plan named ended, so what it put on screen goes with it. */
+  /** The task call about the task named ended, so what it put on screen goes with it. */
   onTaskCallEnded?: (taskId: string) => void;
 }
 
@@ -177,7 +177,7 @@ export interface LiveSessionHolderOptions {
  * code for every path that could have closed it.
  */
 export const LIVE_SESSION_END_CAUSE = {
-  /** The plan the call is about was deleted. */
+  /** The task the call is about was deleted. */
   TASK_DELETED: "task_deleted",
   /** The account signed out. */
   SIGNED_OUT: "signed_out",
@@ -202,7 +202,7 @@ export const LIVE_SESSION_END_CAUSE = {
 export type LiveSessionEndCause =
   (typeof LIVE_SESSION_END_CAUSE)[keyof typeof LIVE_SESSION_END_CAUSE];
 
-/** A creation under way: the plan it is about, and the end a delete or a sign-out asked for meanwhile. */
+/** A creation under way: the task it is about, and the end a delete or a sign-out asked for meanwhile. */
 interface Creating {
   readonly taskId: string;
   endedBy: LiveSessionEndCause | undefined;
@@ -215,7 +215,7 @@ interface HeldSession {
   /** The hand that first decided the end, and the peer's own reason where it reported one. */
   endCause: LiveSessionEndCause | undefined;
   peerReason: LivePeerEndReason | undefined;
-  /** The plan the call is about, which the session is bound to for its life. */
+  /** The task the call is about, which the session is bound to for its life. */
   readonly taskId: string;
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
@@ -258,10 +258,10 @@ export class LiveSessionHolder {
   readonly #options: LiveSessionHolderOptions;
   #held: HeldSession | undefined;
   /**
-   * The session being created and not yet held: the plan it is about, and
+   * The session being created and not yet held: the task it is about, and
    * whether a delete or a sign-out has meanwhile asked for a call about that
-   * plan to end, so the session is ended the moment it stands rather than
-   * left standing about a plan that is gone.
+   * task to end, so the session is ended the moment it stands rather than
+   * left standing about a task that is gone.
    */
   #creating: Creating | undefined;
   /** The release still running for the session last declared over, so an end asked for meanwhile waits for it. */
@@ -359,11 +359,11 @@ export class LiveSessionHolder {
   }
 
   /**
-   * Ends the standing session where it is a planning call about `planId`,
-   * or whatever it is about where none is named: the plan is being deleted,
+   * Ends the standing session where it is a task call about `planId`,
+   * or whatever it is about where none is named: the task is being deleted,
    * and a call still standing would go on writing a document that is gone,
-   * or the account signed out. The panel opening another plan or leaving
-   * this one ends nothing, because the call outlives the plan on screen.
+   * or the account signed out. The panel opening another task or leaving
+   * this one ends nothing, because the call outlives the task on screen.
    */
   endTaskCall(taskId: string | undefined): Effect.Effect<void> {
     return Effect.suspend(() => {
@@ -381,7 +381,7 @@ export class LiveSessionHolder {
   }
 
   /**
-   * Creates the one session for the peer's offer, about its plan, and
+   * Creates the one session for the peer's offer, about its task, and
    * attaches the sideband before the answer is returned, so no transcript
    * precedes attachment. The session is seeded with nothing: what it knows
    * is the plan's, and the service holds that. A session already standing is
@@ -785,26 +785,26 @@ export class LiveSessionHolder {
     this.#options.onPlanDraft?.(draft);
   }
 
-  /** The service's activity about the plan the session is bound to, passed on while the session stands. */
+  /** The service's activity about the task the session is bound to, passed on while the session stands. */
   #activity(session: HeldSession, activity: TaskActivityFrame): void {
     if (session.ended || activity.planId !== session.taskId) return;
     this.#options.onTaskActivity?.(activity);
   }
 
-  /** Code Luke put on screen on the call about the plan the session is bound to, passed on while the session stands. */
+  /** Code Luke put on screen on the call about the task the session is bound to, passed on while the session stands. */
   #code(session: HeldSession, code: TaskCodeFrame): void {
     if (session.ended || code.planId !== session.taskId) return;
     this.#options.onTaskCode?.(code);
   }
 
-  /** A planning turn's work on the call about the plan the session is bound to, passed on while the session stands. */
+  /** A brain turn's work on the call about the task the session is bound to, passed on while the session stands. */
   #work(session: HeldSession, work: TaskWorkFrame): void {
     if (session.ended || work.planId !== session.taskId) return;
     this.#options.onTaskWork?.(work);
   }
 
   /**
-   * Luke ending the call about the plan the session is bound to, told to the
+   * Luke ending the call about the task the session is bound to, told to the
    * peer while the session stands. The peer decides when, once his goodbye
    * has played, and hangs up through its own hang-up, so nothing ends here.
    */
@@ -879,7 +879,7 @@ export class LiveSessionHolder {
     session.ended = true;
     session.endCause ??= cause;
     if (this.#held === session) this.#held = undefined;
-    // Note that we say a planning call's end as nothing doing, because the
+    // Note that we say a task call's end as nothing doing, because the
     // service's own last word may never arrive once the socket is gone.
     this.#options.onTaskActivity?.({
       type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
