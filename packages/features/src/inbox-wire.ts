@@ -131,6 +131,8 @@ export const INBOX_BOUNDS = {
   MAX_MESSAGE_CHARS: 8_000,
   /** The most messages an item read carries, the latest ones, oldest first among them: a thread read at a glance, never a log. */
   MAX_MESSAGES_READ: 50,
+  /** The most pictures the agent's message on a thread may carry, each held to the image bound. */
+  MAX_REPLY_IMAGES: 4,
 } as const;
 
 /** The tools an agent keeps its items with, by the names their tool parts carry in its transcript. */
@@ -141,6 +143,8 @@ export const INBOX_TOOL = {
   CLOSE: "close_inbox_item",
   /** Reads the agent's items as they stand, answers and all. */
   READ: "read_inbox",
+  /** Writes the agent's message on one of its items' threads, by key. */
+  REPLY: "reply_inbox",
 } as const;
 
 /** The blocks an item's context is made of. */
@@ -430,6 +434,24 @@ export const inboxCloseInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
 });
+
+/**
+ * What a reply's tool part carries as its input: the key of one of the
+ * agent's own items, its words in Markdown, and the pictures it shows, each
+ * by the path of its file in the agent's sandbox, as an image block names
+ * one; words or pictures or both, which the tool holds it to.
+ */
+export const inboxReplyInputSchema = EffectSchema.Struct({
+  key: inboxKeySchema,
+  text: boundedText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
+  images: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({ path: filledText(INBOX_BOUNDS.MAX_PATH_CHARS) }),
+    ).check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_REPLY_IMAGES)),
+  ),
+});
+
+export type InboxReplyInput = typeof inboxReplyInputSchema.Type;
 
 /** What a read's tool part carries as its input: nothing, since an agent reads its own items alone. */
 export const inboxReadInputSchema = EffectSchema.Struct({});

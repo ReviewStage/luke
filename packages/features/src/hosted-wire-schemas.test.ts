@@ -157,6 +157,7 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxPostInputSchema: inboxWire.inboxPostInputSchema,
     inboxCloseInputSchema: inboxWire.inboxCloseInputSchema,
     inboxReadInputSchema: inboxWire.inboxReadInputSchema,
+    inboxReplyInputSchema: inboxWire.inboxReplyInputSchema,
     inboxFieldValueSchema: inboxWire.inboxFieldValueSchema,
     inboxFormValueSchema: inboxWire.inboxFormValueSchema,
     inboxFormValuesSchema: inboxWire.inboxFormValuesSchema,
