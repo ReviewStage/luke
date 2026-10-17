@@ -1,3 +1,4 @@
+import { cssCustomProperties } from "@luke/ui";
 import { useLayoutEffect, useRef, useState } from "react";
 
 /**
@@ -41,7 +42,7 @@ type PopoverAlign = (typeof POPOVER_ALIGN)[keyof typeof POPOVER_ALIGN];
 /** The gap between the anchor and its popover, which is desktop.css's `--space-4`. */
 const POPOVER_GAP = 4;
 
-/** The width a popover asks for, the searchable menu's own, which the room may narrow. */
+/** The width a popover asks for unless its owner asks another, the searchable menu's own, which the room may narrow. */
 const POPOVER_WIDTH = 340;
 
 /** The least gap a popover keeps from its room's edges, as the action menu keeps from the window's. */
@@ -58,11 +59,12 @@ interface Box {
   bottom: number;
 }
 
-/** Where a popover stands: its side, how far its asked edge stands in from its anchor's, and its width. */
+/** Where a popover stands: its side, how far its asked edge stands in from its anchor's, its width, and the height that side leaves it. */
 interface PopoverPlace {
   side: PopoverSide;
   inset: number;
   width: number;
+  room: number;
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -71,8 +73,9 @@ function clamp(value: number, low: number, high: number): number {
 
 /**
  * Where a popover of this width and height stands against its anchor in
- * its room: above unless only below has room for it, at the asked edge
- * unless only the other keeps it inside, else pushed back inside.
+ * its room: above unless only below has room for it, or, where neither
+ * side has, on the side with more, at the asked edge unless only the other
+ * keeps it inside, else pushed back inside.
  */
 function popoverPlace(input: {
   anchor: Box;
@@ -93,15 +96,28 @@ function popoverPlace(input: {
   const left = fits(asked) ? asked : fits(other) ? other : clamp(asked, low, high);
   const above = anchor.top - room.top - POPOVER_GAP - POPOVER_MARGIN;
   const below = room.bottom - anchor.bottom - POPOVER_GAP - POPOVER_MARGIN;
-  const side =
-    above < input.height && below >= input.height ? POPOVER_SIDE.BELOW : POPOVER_SIDE.ABOVE;
+  const fitsBelow = above < input.height && below >= input.height;
+  const neither = above < input.height && below < input.height;
+  const side = fitsBelow || (neither && below > above) ? POPOVER_SIDE.BELOW : POPOVER_SIDE.ABOVE;
   const inset = align === POPOVER_ALIGN.START ? left - anchor.left : anchor.right - left - width;
-  return { side, inset, width };
+  return { side, inset, width, room: Math.max(side === POPOVER_SIDE.BELOW ? below : above, 0) };
 }
 
-/** The layer's inline place: its asked edge's inset, as `left` or `right`, and its width. */
-function placeStyle(align: PopoverAlign, inset: number, width: number): React.CSSProperties {
-  return align === POPOVER_ALIGN.START ? { left: inset, width } : { right: inset, width };
+/**
+ * The layer's inline place: its asked edge's inset, as `left` or `right`,
+ * its width, and, once measured, the height its side leaves it as
+ * `--popover-room`, which a popover taller than a menu bounds itself by.
+ */
+function placeStyle(
+  align: PopoverAlign,
+  inset: number,
+  width: number,
+  room?: number,
+): React.CSSProperties {
+  const edge = align === POPOVER_ALIGN.START ? { left: inset, width } : { right: inset, width };
+  return room === undefined
+    ? edge
+    : { ...edge, ...cssCustomProperties({ "--popover-room": `${room}px` }) };
 }
 
 /** The room a popover inside `element` may fill: its marked room cut to the window, or the window. */
@@ -123,9 +139,12 @@ function roomAround(element: HTMLElement): Box {
  */
 export function AnchoredPopover({
   align,
+  width = POPOVER_WIDTH,
   children,
 }: {
   align: PopoverAlign;
+  /** The width it asks for, a form's wider than a menu's. */
+  width?: number;
   children: React.ReactNode;
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
@@ -140,7 +159,7 @@ export function AnchoredPopover({
         popoverPlace({
           anchor: anchor.getBoundingClientRect(),
           room: roomAround(anchor),
-          width: POPOVER_WIDTH,
+          width,
           height: drawn.getBoundingClientRect().height,
           align,
         }),
@@ -159,7 +178,7 @@ export function AnchoredPopover({
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [align]);
+  }, [align, width]);
 
   return (
     <div
@@ -168,8 +187,8 @@ export function AnchoredPopover({
       data-side={place?.side ?? POPOVER_SIDE.ABOVE}
       style={
         place === undefined
-          ? placeStyle(align, 0, POPOVER_WIDTH)
-          : placeStyle(align, place.inset, place.width)
+          ? placeStyle(align, 0, width)
+          : placeStyle(align, place.inset, place.width, place.room)
       }
     >
       {children}
