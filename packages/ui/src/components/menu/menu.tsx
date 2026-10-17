@@ -422,7 +422,7 @@ function Submenu({
   useLayoutEffect(() => {
     const drawn = surface.current;
     const menu = anchor.closest('[role="menu"]');
-    if (drawn === null || menu === null || rows === 0) return;
+    if (drawn === null || menu === null) return;
     const { width, height } = drawn.getBoundingClientRect();
     const beside = menu.getBoundingClientRect();
     const opener = anchor.getBoundingClientRect();
