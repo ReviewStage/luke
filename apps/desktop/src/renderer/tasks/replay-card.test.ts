@@ -62,13 +62,17 @@ const SOURCE = summary({
 });
 
 const STEPS: Replay["steps"] = [
-  { kind: REPLAY_STEP_KIND.LINE, summary: "Use seven days.", words: "Use seven days." },
+  {
+    kind: REPLAY_STEP_KIND.LINE,
+    summary: "Charles Pan: Use seven days.",
+    words: "Use seven days.",
+  },
   {
     kind: REPLAY_STEP_KIND.TOOL,
-    summary: "Read invite.ts",
+    summary: "Read: src/invite.ts",
     words: 'read_file("src/invite.ts")\n→ 42 lines (result trimmed)',
   },
-  { kind: REPLAY_STEP_KIND.SAID, summary: "Seven days it is.", words: "Seven days it is." },
+  { kind: REPLAY_STEP_KIND.SAID, summary: "Said: Seven days it is.", words: "Seven days it is." },
 ];
 
 const PREAMBLE = "Below is the work of the agent you continue from.";
@@ -98,7 +102,7 @@ afterEach(() => {
 });
 
 /** The new agent's tab drawn with its first message as given, every tab and place it opens recorded. */
-async function drawn(agent: CodingAgentSummary, first: string, source = SOURCE) {
+async function drawn(agent: CodingAgentSummary, first: string, source = SOURCE, listed = true) {
   const opened: ToolTarget[] = [];
   const places: LinkPlace[] = [];
   const messages: readonly CodingAgentMessage[] = [
@@ -109,7 +113,9 @@ async function drawn(agent: CodingAgentSummary, first: string, source = SOURCE) 
   let reads = 0;
   const control = codingAgentsControl({
     agents: [agent],
-    archived: [source],
+    // An agent's own page lists that agent alone, and reads any other by its id.
+    archived: listed ? [source] : [],
+    readAgent: (agentId) => Promise.resolve(agentId === source.id ? source : undefined),
     me: DEAN.userId,
     readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
       reads += 1;
@@ -131,7 +137,7 @@ async function drawn(agent: CodingAgentSummary, first: string, source = SOURCE) 
   const cards: TranscriptCards = {
     target: () => undefined,
     worker: () => undefined,
-    agent: (agentId) => (agentId === SOURCE.id ? SOURCE_TILE : undefined),
+    agent: (agentId) => (listed && agentId === SOURCE.id ? SOURCE_TILE : undefined),
   };
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -205,6 +211,9 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   );
   assert.equal(bubbles.length, 1);
   assert.match(bubbles[0]?.textContent ?? "", /Try five days\./u);
+  // The note is a part of the first message, drawn under no id of the transcript's, so neither a link to the first message nor a Copy link under the note brings the wrong one into view.
+  assert.equal(cards[0]?.getAttribute("data-message-id"), "first");
+  assert.notEqual(bubbles[0]?.getAttribute("data-message-id"), "first");
   assert.ok(!container.textContent?.includes("<!--"));
   assert.ok(!container.textContent?.includes("The work you continue from"));
   assert.ok(!container.textContent?.includes("Note from the developer"));
@@ -237,10 +246,10 @@ test("opened, the card says what it holds, a row per step naming who, each openi
   const rows = [...container.querySelectorAll("[data-replay-step] > summary")].map((row) =>
     [...row.children].map((each) => each.textContent),
   );
-  // The member who started the source sent its line.
+  // A line is named by whoever sent it, Charles here though Dean started the source.
   assert.deepEqual(rows, [
-    ["Dean Stratakos", "Use seven days."],
-    ["Agent", "Read invite.ts"],
+    ["Charles Pan", "Use seven days."],
+    ["Agent", "Read: src/invite.ts"],
     ["Agent", "Seven days it is."],
   ]);
   press(container.querySelectorAll("[data-replay-step] > summary")[1]);
@@ -324,4 +333,21 @@ test("a first message whose markers do not add up is drawn whole as the plan's c
   assert.equal(container.querySelectorAll(".agent-origin").length, 1);
   press(container.querySelector("[data-task-card] > summary"));
   assert.match(container.querySelector("[data-task-card]")?.textContent ?? "", /Use seven days\./u);
+});
+
+test("on an agent's own page, which lists no source, the card names the source as a read of it does and opens it as a link to it would", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const { container, opened, places } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay(), undefined),
+    SOURCE,
+    false,
+  );
+  assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
+  press(container.querySelector("[data-replay-card] > summary .actor-ref"));
+  assert.deepEqual(opened, []);
+  assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: PLAN_ID, agentId: SOURCE.id }]);
 });

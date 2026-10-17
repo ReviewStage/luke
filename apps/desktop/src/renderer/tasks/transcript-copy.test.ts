@@ -158,10 +158,10 @@ const FORKED_FIRST = firstMessageText(
     messageId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
     preamble: "This is the work you continue from.",
     steps: [
-      { kind: REPLAY_STEP_KIND.LINE, summary: "Make it round.", words: "Make it round." },
+      { kind: REPLAY_STEP_KIND.LINE, summary: "Luke: Make it round.", words: "Make it round." },
       {
         kind: REPLAY_STEP_KIND.TOOL,
-        summary: "Ran pnpm test",
+        summary: "Ran: pnpm test",
         words: "bash(pnpm test)\n→ exit 1 (output trimmed)",
       },
     ],
@@ -189,7 +189,7 @@ test("an agent started from another is copied as its brief, the source's steps i
       "Fix the tile.",
       "## Forked from an earlier agent · 2 of 3 steps",
       "_1 earlier step was left out to keep the replay within its size limit._",
-      "- **Developer:** Make it round.\n- **Agent:** Ran pnpm test",
+      "- **Luke:** Make it round.\n- **Agent:** Ran: pnpm test",
       "## Developer",
       "Try a square instead.",
       "## Agent",
@@ -199,7 +199,7 @@ test("an agent started from another is copied as its brief, the source's steps i
   const full = transcriptMarkdown(copied, TRANSCRIPT_COPY.FULL);
   assert.ok(
     full.includes(
-      "**Agent:** Ran pnpm test\n\n```\nbash(pnpm test)\n→ exit 1 (output trimmed)\n```",
+      "**Agent:** Ran: pnpm test\n\n```\nbash(pnpm test)\n→ exit 1 (output trimmed)\n```",
     ),
   );
   for (const copy of [concise, full]) {

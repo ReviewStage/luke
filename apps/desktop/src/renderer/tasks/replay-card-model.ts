@@ -29,16 +29,17 @@ export const REPLAY_VERB = {
 
 type ReplayVerb = (typeof REPLAY_VERB)[keyof typeof REPLAY_VERB];
 
-/** Who a replayed step is: a line a member sent the source, or the source agent's own words or call. */
-export const STEP_WHO = {
-  MEMBER: "member",
-  AGENT: "agent",
-} as const;
+/** What a step's row names the agent by, for its words and its calls. */
+const AGENT_WORD = "Agent";
 
-type StepWho = (typeof STEP_WHO)[keyof typeof STEP_WHO];
+/** What a line's row names its sender by where its summary names none. */
+const SENDER_WORD = "Developer";
 
-/** What a step's row names the agent by. */
-export const AGENT_WORD = "Agent";
+/** What stands between who a summary is of and what they did, as the service writes a line's and the agent's words' summaries ("Luke: Check the tests", "Said: Done."). */
+const SPEAKER_SEPARATOR = ": ";
+
+/** The word the service leads the agent's words' summary with, which the row's "Agent" already says. */
+const SAID_WORD = "Said";
 
 /** The most links of a `from` chain a brief's source is looked for along, so a chain that loops ends. */
 const MAX_CHAIN = 32;
@@ -50,6 +51,21 @@ export interface ReplayOpening {
   readonly replay: Replay;
   /** The note as the developer's line: the first message with the note for its words and no files; none where no note was written. */
   readonly note: CodingAgentMessage | undefined;
+}
+
+/**
+ * The id the note's line is drawn under. Note that it is none of the
+ * transcript's, because the note is a part of the first message, and a
+ * Copy link under the first message's id would bring the brief into view
+ * rather than the note; a line whose id the transcript does not hold offers
+ * no link (`message-links.tsx`).
+ */
+const NOTE_LINE_ID = "replay-note";
+
+/** One step's row: who it names and the one line after. */
+export interface StepLine {
+  readonly who: string;
+  readonly line: string;
 }
 
 /** The message with the words given in place of its own words, its files kept or dropped. */
@@ -76,7 +92,10 @@ export function replayOpening(first: CodingAgentMessage): ReplayOpening | undefi
   return {
     brief: withWords(first, parts.brief, true),
     replay: parts.replay,
-    note: parts.note === undefined ? undefined : withWords(first, parts.note.text, false),
+    note:
+      parts.note === undefined
+        ? undefined
+        : { ...withWords(first, parts.note.text, false), id: NOTE_LINE_ID },
   };
 }
 
@@ -108,9 +127,24 @@ export function replayLede(source: string): string {
   );
 }
 
-/** Who a step is: the member for a line sent to the source, the agent for its words and its calls. */
-export function stepWho(step: ReplayStep): StepWho {
-  return step.kind === REPLAY_STEP_KIND.LINE ? STEP_WHO.MEMBER : STEP_WHO.AGENT;
+/**
+ * A step's row: a line under whoever sent it, as its summary names them
+ * (a member, Luke, an automation, GitHub, another agent), and the agent's
+ * words and calls under the agent, the words without the summary's own
+ * "Said" since the row names the agent.
+ */
+export function stepLine(step: ReplayStep): StepLine {
+  const split = step.summary.indexOf(SPEAKER_SEPARATOR);
+  const head = split < 0 ? undefined : step.summary.slice(0, split);
+  const tail = split < 0 ? step.summary : step.summary.slice(split + SPEAKER_SEPARATOR.length);
+  switch (step.kind) {
+    case REPLAY_STEP_KIND.LINE:
+      return head === undefined ? { who: SENDER_WORD, line: tail } : { who: head, line: tail };
+    case REPLAY_STEP_KIND.SAID:
+      return { who: AGENT_WORD, line: head === SAID_WORD ? tail : step.summary };
+    case REPLAY_STEP_KIND.TOOL:
+      return { who: AGENT_WORD, line: step.summary };
+  }
 }
 
 /**

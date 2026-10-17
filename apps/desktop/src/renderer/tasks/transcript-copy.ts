@@ -29,15 +29,7 @@ import {
   turnStretches,
   workerLines,
 } from "./coding-agent-model";
-import {
-  AGENT_WORD,
-  leftOutLine,
-  replayCount,
-  replayOpening,
-  replayVerb,
-  STEP_WHO,
-  stepWho,
-} from "./replay-card-model";
+import { leftOutLine, replayCount, replayOpening, replayVerb, stepLine } from "./replay-card-model";
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
 import type { TranscriptReader } from "./use-agent-transcript";
 
@@ -440,9 +432,9 @@ function replaySaid(replay: Replay, copy: TranscriptCopy): string[] {
   const heading = `## ${replayVerb(replay)} ${REPLAY_SOURCE_WORDS} · ${replayCount(replay)}`;
   const left = leftOutLine(replay);
   const steps = replay.steps.map((step) => {
-    const who = stepWho(step) === STEP_WHO.MEMBER ? SPEAKER.DEVELOPER : AGENT_WORD;
-    if (copy === TRANSCRIPT_COPY.CONCISE) return `- **${who}:** ${oneLine(step.summary)}`;
-    return `**${who}:** ${step.summary}\n\n${fenced(step.words, "")}`;
+    const { who, line } = stepLine(step);
+    if (copy === TRANSCRIPT_COPY.CONCISE) return `- **${who}:** ${oneLine(line)}`;
+    return `**${who}:** ${line}\n\n${fenced(step.words, "")}`;
   });
   const listed = copy === TRANSCRIPT_COPY.CONCISE && steps.length > 0 ? [steps.join("\n")] : steps;
   return [heading, ...(left === undefined ? [] : [`_${left}_`]), ...listed];

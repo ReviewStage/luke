@@ -22,8 +22,7 @@ import {
   replayCount,
   replayOpening,
   replayVerb,
-  STEP_WHO,
-  stepWho,
+  stepLine,
 } from "./replay-card-model";
 
 /**
@@ -39,13 +38,13 @@ const SOURCE_ID = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
 const FORKED_AT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 const STEPS: Replay["steps"] = [
-  { kind: REPLAY_STEP_KIND.LINE, summary: "Use seven days.", words: "Use seven days." },
+  { kind: REPLAY_STEP_KIND.LINE, summary: "Luke: Use seven days.", words: "Use seven days." },
   {
     kind: REPLAY_STEP_KIND.TOOL,
-    summary: "Read invite.ts",
+    summary: "Read: invite.ts",
     words: "read_file(invite.ts)\n→ 42 lines",
   },
-  { kind: REPLAY_STEP_KIND.SAID, summary: "Done.", words: "Done." },
+  { kind: REPLAY_STEP_KIND.SAID, summary: "Said: Done: for now.", words: "Done: for now." },
 ];
 
 function replay(overrides: Partial<Replay> = {}): Replay {
@@ -85,8 +84,8 @@ test("a first message holding a replay opens on its brief with its files, the re
   assert.ok(opening.note !== undefined);
   assert.equal(messageWords(opening.note), "Try five days instead.");
   assert.deepEqual(messageFileChips(opening.note), []);
-  // The note keeps the first message's id, so a link to it names the message it is of.
-  assert.equal(opening.note.id, "first");
+  // The note is drawn under an id of its own, so no Copy link under it names the brief's message.
+  assert.notEqual(opening.note.id, "first");
 });
 
 test("a replay with no note opens on its brief and the replay alone, a coding agent's note read as a note too", () => {
@@ -128,8 +127,17 @@ test("a replay is a continue with no message and a fork at one, and says its ste
   );
 });
 
-test("a line sent to the source is the member's step, and the source's words and calls the agent's", () => {
-  assert.deepEqual(STEPS.map(stepWho), [STEP_WHO.MEMBER, STEP_WHO.AGENT, STEP_WHO.AGENT]);
+test("a line sent to the source is named by whoever its summary says sent it, and the source's words and calls are the agent's", () => {
+  assert.deepEqual(STEPS.map(stepLine), [
+    { who: "Luke", line: "Use seven days." },
+    { who: "Agent", line: "Read: invite.ts" },
+    { who: "Agent", line: "Done: for now." },
+  ]);
+  // A summary that names no sender is the developer's.
+  assert.deepEqual(stepLine({ kind: REPLAY_STEP_KIND.LINE, summary: "Go", words: "Go" }), {
+    who: "Developer",
+    line: "Go",
+  });
 });
 
 test("an agent continued from an automation's run, at any remove, is drawn from the run's automation, and one from a plan's agent as itself", () => {

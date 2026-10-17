@@ -14,15 +14,7 @@ import { Plan, PlanContent, PlanHeader } from "../ai-elements/task";
 import { usePerson } from "../member-directory";
 import { linkChip } from "./mention-chip";
 import { useMentionDoors } from "./plan-mentions";
-import {
-  AGENT_WORD,
-  leftOutLine,
-  replayCount,
-  replayLede,
-  replayVerb,
-  STEP_WHO,
-  stepWho,
-} from "./replay-card-model";
+import { leftOutLine, replayCount, replayLede, replayVerb, stepLine } from "./replay-card-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenPlace } from "./use-open-link";
@@ -46,9 +38,6 @@ import { useOpenPlace } from "./use-open-link";
 /** What the foot's way to the source's whole transcript says. */
 const FULL_TRANSCRIPT_WORDS = "Open the full transcript";
 
-/** What a step's line is named by where the source's starter is not known. */
-const MEMBER_WORD = "Developer";
-
 /**
  * Where an agent's replay card stands: the agents of its task, archived ones
  * among them, which its source is found among, and the doors to that source:
@@ -66,6 +55,8 @@ export interface ReplayPlace {
   readonly onOpen: ((agentId: string) => void) | undefined;
   /** Each agent's pull request, of those that have one. */
   readonly pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
+  /** Reads one agent by its id, as a page that lists only its own agent names the source; none where nothing reads one. */
+  readonly readAgent: ((agentId: string) => Promise<CodingAgentSummary | undefined>) | undefined;
   /** Reads what an agent published, its branch among it; none where nothing reads it. */
   readonly readPublished:
     | ((agentId: string) => Promise<CodingAgentPullRequestAnswerView>)
@@ -84,7 +75,10 @@ const NO_AGENTS: readonly CodingAgentSummary[] = [];
  */
 export function replayPlace(input: {
   agent: CodingAgentSummary;
-  control: Pick<CodingAgentsControl, "agents" | "archived" | "pullRequests" | "readPullRequest">;
+  control: Pick<
+    CodingAgentsControl,
+    "agents" | "archived" | "pullRequests" | "readPullRequest" | "readAgent"
+  >;
   tile: ((agentId: string) => Actor | undefined) | undefined;
   target: ((target: ToolTarget) => ReactNode) | undefined;
   onOpenTarget: ((target: ToolTarget) => void) | undefined;
@@ -102,6 +96,7 @@ export function replayPlace(input: {
         ? undefined
         : (agentId) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId }),
     pullRequests: control.pullRequests,
+    readAgent: control.readAgent,
     readPublished: control.readPullRequest,
     openGitHub,
   };
@@ -113,14 +108,40 @@ interface Published {
   readonly pullRequest: CodingAgentPullRequest | null;
 }
 
-/** The source agent named on a card, as its chip wears it, when the place does not list it. */
-function unlistedActor(): Actor {
+/** The source agent named on a card, as its chip wears it, when the place does not list it: by its title where a read found it. */
+function unlistedActor(agentId: string, read: CodingAgentSummary | undefined): Actor {
   return {
     kind: ACTOR_KIND.AGENT,
-    name: TAB_WORDS.CODING_AGENT,
+    agentId,
+    name: read?.title ?? TAB_WORDS.CODING_AGENT,
     provider: undefined,
     state: ACTOR_STATE.REST,
   };
+}
+
+/**
+ * The source agent: as the place lists it, or, where it does not, as one
+ * might be read on an agent's own page, which lists that agent alone, read
+ * once; nothing until it answers, or where it cannot be read.
+ */
+function useSource(agentId: string, place: ReplayPlace): CodingAgentSummary | undefined {
+  const listed = place.agents.find((each) => each.id === agentId);
+  const [read, setRead] = useState<CodingAgentSummary | undefined>(undefined);
+  const reader = place.readAgent;
+  const unlisted = listed === undefined;
+  useEffect(() => {
+    if (!unlisted || reader === undefined) return;
+    let current = true;
+    reader(agentId)
+      .then((answer) => {
+        if (current) setRead(answer);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [agentId, reader, unlisted]);
+  return listed ?? (read?.id === agentId ? read : undefined);
 }
 
 /** What the source published, read once as the card's body is drawn; nothing until it answers, or where it cannot be read. */
@@ -142,13 +163,13 @@ function usePublished(agentId: string, read: ReplayPlace["readPublished"]): Publ
 }
 
 /** One step: who and its one line, opening onto its words exactly as they were sent. */
-function StepRow({ step, member }: { step: ReplayStep; member: string }): React.JSX.Element {
-  const who = stepWho(step) === STEP_WHO.MEMBER ? member : AGENT_WORD;
+function StepRow({ step }: { step: ReplayStep }): React.JSX.Element {
+  const { who, line } = stepLine(step);
   return (
     <Fold className="text-[12.5px]" data-replay-step={step.kind}>
       <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
         <span className="w-[4.5rem] shrink-0 font-medium text-foreground">{who}</span>
-        <span className="min-w-0 flex-1 truncate">{step.summary}</span>
+        <span className="min-w-0 flex-1 truncate">{line}</span>
       </FoldSummary>
       <FoldBody>
         <pre className="m-0 mb-1 ml-[5.25rem] whitespace-pre-wrap rounded-md bg-secondary px-2 py-1.5 font-mono text-[11.5px] text-foreground [overflow-wrap:anywhere]">
@@ -230,17 +251,27 @@ export function ReplayCard({
   planId: string | undefined;
 }): React.JSX.Element {
   const { agentId, messageId } = replay;
-  const source = place.agents.find((each) => each.id === agentId);
-  const tile = place.tile(agentId) ?? unlistedActor();
+  const source = useSource(agentId, place);
+  const listed = place.agents.some((each) => each.id === agentId);
+  const tile = place.tile(agentId) ?? unlistedActor(agentId, source);
   const name = actorName(tile);
-  const sourceStarter = usePerson(source?.startedBy);
-  const member = source?.startedBy === undefined ? MEMBER_WORD : actorName(sourceStarter);
   const starter = usePerson(place.startedBy);
   const openPlace = useOpenPlace();
   const open = place.onOpen;
-  const openSource = open === undefined || source === undefined ? undefined : () => open(agentId);
+  // Note that a source the place does not list, as on an agent's own page, opens as a link to it would.
+  const openSource =
+    listed && open !== undefined
+      ? () => open(agentId)
+      : openPlace === undefined
+        ? undefined
+        : () =>
+            openPlace(
+              planId === undefined
+                ? { kind: LINK_PLACE.AGENT, agentId }
+                : { kind: LINK_PLACE.AGENT, planId, agentId },
+            );
   const onOpenTranscript =
-    messageId !== undefined && openPlace !== undefined && source !== undefined
+    messageId !== undefined && openPlace !== undefined
       ? () =>
           openPlace(
             planId === undefined
@@ -271,7 +302,7 @@ export function ReplayCard({
           )}
           {replay.steps.map((step, index) => (
             // Note that a step is keyed by its place, because the replay never changes once handed.
-            <StepRow key={index} step={step} member={member} />
+            <StepRow key={index} step={step} />
           ))}
           <ReplayFoot agentId={agentId} place={place} onOpenTranscript={onOpenTranscript} />
         </PlanContent>
