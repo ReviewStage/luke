@@ -229,6 +229,8 @@ interface TurnEnqueue {
 interface TurnCancelRequest {
   readonly turnId: string;
   readonly at: Date;
+  /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it, written beside the instant. */
+  readonly key?: string;
 }
 
 type TurnCancelResult = Result.Result<StoreWriteEffect, typeof NO_CONVERSATION | typeof NO_TURN>;
@@ -2263,13 +2265,14 @@ const stampTurnCancel = SqlSchema.findAll({
     turnId: Schema.String,
     conversationId: Schema.String,
     at: Schema.Date,
+    key: Schema.NullOr(Schema.String),
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (row) =>
     Database.use((db) =>
       db
         .update(turns)
-        .set({ cancelRequestedAt: row.at })
+        .set({ cancelRequestedAt: row.at, cancelRequestKey: row.key })
         .where(
           and(
             eq(turns.id, row.turnId),
@@ -2282,10 +2285,11 @@ const stampTurnCancel = SqlSchema.findAll({
 });
 
 /**
- * The Stop on a turn's row: the instant it was asked, written once, so the
- * record says a Stop was asked whatever eve does with it. A second Stop finds
- * the first instant standing and writes nothing; a turn the conversation does
- * not hold is refused.
+ * The Stop on a turn's row: the instant it was asked, and the key of the
+ * tool call that asked it where one did, written once, so the record says a
+ * Stop was asked whatever eve does with it. A second Stop finds the first
+ * instant standing and writes nothing, its key included; a turn the
+ * conversation does not hold is refused.
  */
 const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(function* (
   context: WriterContext,
@@ -2296,6 +2300,7 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(fun
     turnId: cancel.turnId,
     conversationId: context.target.conversationId,
     at: cancel.at,
+    key: cancel.key ?? null,
   });
   return Result.succeed(
     stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,

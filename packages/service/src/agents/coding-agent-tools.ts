@@ -3,6 +3,7 @@ import {
   archiveIdleCodingAgent,
   awaitingLinesOfReached,
   type CodingAgent,
+  type CodingAgentLatestTurn,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
   planNamesOf,
@@ -11,7 +12,7 @@ import {
   readCodingAgentByKey,
   unarchiveCodingAgentFrom,
 } from "@luke/database/models/coding-agent-store";
-import { listJournals } from "@luke/database/models/message-reads";
+import { listJournals, turnStoppedUnderReached } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
 import { createTask, deleteTask, listTasks, readTask } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
@@ -49,7 +50,11 @@ import {
   taskWorkspace,
   workspaceRepository,
 } from "../github/workspace-repository.js";
-import type { HostedRefusal } from "../http/http-effect.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedStoreOrUnavailable,
+} from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import {
   ModelCatalog,
@@ -65,6 +70,7 @@ import { callEntry } from "./coder-host/replay.js";
 import { accountModelChoices, startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
+import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
   AGENT_LIST_INPUT,
@@ -140,6 +146,16 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * agent never archives itself, and an unarchive brings back only the
  * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
  * a call eve runs again does nothing twice.
+ * A stop takes the one path the Stop button's does (`coder-host/stop.ts`):
+ * eve's cancel of the turn under way, named by eve's own id for it, then the
+ * row's stamp, which `list_agents` then reads as cancelled. The agent stays
+ * as it was, its transcript and branch kept, and a later message starts a
+ * new turn. A Stop already standing on a turn still ending answers as done,
+ * so a call eve runs again cancels nothing twice; an agent already idle is
+ * answered as idle and nothing changes; one whose turn is still coming, a
+ * session coming up or a line awaiting the turn it opens, has nothing a Stop
+ * can name yet and is refused as such; an archived agent and the caller
+ * itself are never stopped.
  * A page read finds a page an agent showed on any task of the caller's
  * workspace by the page's id, as the caller's member could open it in the
  * side panel, and answers its HTML cut on a line to a bound, which a
@@ -220,6 +236,19 @@ export const ARCHIVE_AGENT_REFUSAL = {
   REARCHIVED:
     "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
     `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
+} as const;
+
+/** Why a stop changed nothing, in words the model can act on. */
+export const STOP_AGENT_REFUSAL = {
+  UNREADABLE: `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
+  SELF: "Not stopped: that id is your own, and an agent does not stop itself; end your turn by finishing it.",
+  ARCHIVED:
+    "Not stopped: that agent is archived, and an archived agent's turn was stopped as it was archived.",
+  NOT_READY:
+    "Not stopped: that agent's turn is still coming up, so there is no turn to stop yet; call again in a moment.",
+  NO_SERVICE: "Not stopped: this deployment cannot reach the coding agents' service.",
+  UNAVAILABLE:
+    "Not stopped: the service could not reach that agent's session just now. The call may be made again.",
 } as const;
 
 /** The most characters of a page's HTML a read answers, about ten thousand tokens: the rest is counted, never sent. */
@@ -575,6 +604,20 @@ export const UNARCHIVE_AGENT_TOOL = {
     "transcript and pull request as they were. Unarchive one archived by mistake, or one the " +
     "developer asks for. Answers `accepted`, also for an agent not archived, or `rejected` " +
     "and why.",
+  inputSchema: READ_AGENT_INPUT,
+} as const;
+
+export const STOP_AGENT_TOOL = {
+  name: AGENT_TOOL.STOP_AGENT,
+  description:
+    "Stop a coding agent of your workspace by its id, as the developer's Stop button would: " +
+    "its turn under way is cancelled and its status reads cancelled, while the agent stays " +
+    "available, its transcript and branch kept, and a later message starts a new turn. Stop " +
+    "an agent you or the developer started that is going the wrong way, or one the developer " +
+    "asked you to stop; never a teammate's agent still in use unless the developer asked for " +
+    "it. No agent stops itself, and an archived one is refused. Answers `accepted` with the " +
+    "agent's status now and whether it was stopped, `stopped` false for an agent already " +
+    "idle, which changes nothing, or `rejected` and why. Then say which agent you stopped and why.",
   inputSchema: READ_AGENT_INPUT,
 } as const;
 
@@ -1359,6 +1402,95 @@ export function runUnarchiveAgent(
         return archiveAnswer(agent, task, false, true);
       }
       return agentToolRejected(ARCHIVE_AGENT_REFUSAL.REARCHIVED);
+    }),
+  );
+}
+
+/** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
+function stopRefusalWords(refusal: HostedRefusal, eve: EveSessions | undefined): string {
+  if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
+  return eve === undefined ? STOP_AGENT_REFUSAL.NO_SERVICE : STOP_AGENT_REFUSAL.UNAVAILABLE;
+}
+
+/** Whether a Stop already stands on the turn, which is still ending. */
+function stopStands(turn: CodingAgentLatestTurn | undefined): boolean {
+  return (
+    turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status) && turn.cancelRequestedAt !== null
+  );
+}
+
+/**
+ * The agent stopped as the Stop button stops it under the call's key, and
+ * where it stands: whether it was stopped, by this call now or when it first
+ * ran, by eve taking its cancel, or by a Stop already standing on the turn
+ * it stood on as the call began and still stands on, and its status read
+ * after. A call run again finds the turn it stopped by its key and cancels
+ * nothing, so a turn begun since, by a message the agent took meanwhile,
+ * runs on. Note that eve is asked for only where there is a turn to cancel,
+ * so a deployment with no eve still answers an idle agent as idle.
+ */
+const stopOf = (
+  eve: EveSessions | undefined,
+  writer: Effect.Effect<StoreWriter>,
+  agent: CodingAgent,
+  key: string,
+) =>
+  Effect.gen(function* () {
+    const earlier = yield* hostedStoreOrUnavailable(
+      turnStoppedUnderReached(agent.conversationId, key),
+    );
+    const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
+    const eveOf = eve === undefined ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE) : Effect.succeed(eve);
+    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, key);
+    const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
+    const status = codingAgentStatusOf(after.turn, {
+      createdAt: agent.createdAt,
+      now: yield* Clock.currentTimeMillis,
+      awaitingLineAt: after.awaitingLineAt,
+    });
+    const standing = stopStands(before.turn) && after.turn?.id === before.turn?.id;
+    return { stopped: earlier || cancelled || standing, status };
+  });
+
+/** One call of `stop_agent`: the turn under way of an agent of the caller's workspace stopped as a Stop stops it, an idle one answered as idle, or why nothing was stopped. */
+export function runStopAgent(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readAgentRef(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.UNREADABLE));
+  }
+  const { agentId } = asked.success;
+  const { caller, eve } = call;
+  if (caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
+    return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.SELF));
+  }
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const found = yield* workspaceAgentOf(caller, agentId);
+      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      const { agent, task } = found.value;
+      if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
+      const stop = yield* Effect.result(stopOf(eve, call.writer, agent, call.clientKey));
+      if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure, eve));
+      // Note that a Stop already standing on a turn still ending is this call's own run again, or
+      // the developer's, and is answered as stopped so a call run again reads as it first did.
+      const { stopped, status } = stop.success;
+      const working =
+        status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING;
+      if (!stopped && working) return agentToolRejected(STOP_AGENT_REFUSAL.NOT_READY);
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        agent: {
+          id: agent.id,
+          title: agentName(agent),
+          task: task.task === null ? null : { ...task.task },
+          onYourTask: task.onYourTask,
+          status,
+        },
+        stopped,
+      };
     }),
   );
 }

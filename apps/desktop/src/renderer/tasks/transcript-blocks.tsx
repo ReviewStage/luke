@@ -576,6 +576,7 @@ const CALL_ICON = {
   [CALL_KIND.ARCHIVE_AGENT]: ArchiveIcon,
   [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
   [CALL_KIND.LIST_MODELS]: CpuIcon,
+  [CALL_KIND.STOP_AGENT]: CircleStopIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,

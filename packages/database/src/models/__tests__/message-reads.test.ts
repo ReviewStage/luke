@@ -23,11 +23,14 @@ import {
   messageCursorNow,
   messageSeqOf,
   runningChildTurns,
+  turnStoppedUnderReached,
 } from "../message-reads.js";
+import { storeWriter } from "../writer.js";
 
 /**
  * Where a reader of a conversation stands once it has every row, and whether
- * a subagent's session under a conversation still runs, over a real dialect.
+ * a subagent's session under a conversation still runs, and which turn a
+ * tool call's Stop stands on by its key, over a real dialect.
  *
  * Synthetic accounts, conversations, and rows throughout.
  */
@@ -258,6 +261,26 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
           [[agent, new Date(5_000)]],
         );
         assert.deepEqual([...(yield* awaitingLinesOf(other, [agent]))], []);
+      }),
+  );
+
+  it.effect(
+    "a Stop made under a key is found by that key in its conversation alone, and a second Stop under another key keeps the first",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const conversation = yield* openConversation(owner);
+        const elsewhere = yield* openConversation(owner);
+        const writer = yield* storeWriter({ tools: {} });
+        const target = { userId: owner, conversationId: conversation };
+        const turnId = yield* openTurn(owner, conversation, TURN_STATUS.RUNNING);
+        assert.equal(yield* turnStoppedUnderReached(conversation, "call-1"), false);
+
+        yield* writer.requestTurnCancel(target, { turnId, at: new Date(), key: "call-1" });
+        yield* writer.requestTurnCancel(target, { turnId, at: new Date(), key: "call-2" });
+        assert.equal(yield* turnStoppedUnderReached(conversation, "call-1"), true);
+        assert.equal(yield* turnStoppedUnderReached(conversation, "call-2"), false);
+        assert.equal(yield* turnStoppedUnderReached(elsewhere, "call-1"), false);
       }),
   );
 });
