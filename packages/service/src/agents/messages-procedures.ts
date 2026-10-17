@@ -62,6 +62,7 @@ import {
   brainTitleAwaited,
   brainTurnsPage,
   brainWorkerSession,
+  taskConversationLiveStatements,
 } from "../tasks/brain-transcript.js";
 import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "./coder-host/start.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
@@ -330,7 +331,16 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const page = yield* hostedStoreOrUnavailable(
         after === undefined
           ? brainTurnsPage(target, before)
-          : (unheld ? brainPageNow : brainPagePast)(target, cursorOfWire(after)),
+          : unheld
+            ? brainPageNow(target, cursorOfWire(after))
+            : brainPagePast(
+                target,
+                cursorOfWire(after),
+                Option.match(taskConversationLiveStatements(context.userId, taskId), {
+                  onNone: () => [],
+                  onSome: ({ mark }) => [mark],
+                }),
+              ),
       );
       return taskAnswer(page, null);
     }),

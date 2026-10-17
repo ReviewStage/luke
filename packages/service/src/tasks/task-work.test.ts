@@ -37,7 +37,7 @@ import {
 } from "@luke/features/tasks-view";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Option, Schema } from "effect";
+import { Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
@@ -48,6 +48,7 @@ import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../agents/repository-shell.js";
 import { ASK_ORIGIN, MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_STATUS } from "../core.js";
+import { LiveWake } from "../live/live-wake.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN } from "../testing/eve-turns.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
@@ -1132,4 +1133,51 @@ test("a plan never planned on is marked at the start, and a reader past the curs
   const now = await database.run(brainPageNow(target, cursor));
   assert.deepEqual(now.messages, []);
   assert.equal(now.status, CODING_AGENT_STATUS.RUNNING);
+});
+
+test("a held reader watched by Realtime looks again as the conversation's mark changes, not on the poll: a turn that settles is heard though the clock never moves", async () => {
+  const target = await taskConversation();
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls" } },
+      ]),
+    ],
+    standingFor(target),
+  );
+  const { cursor } = await database.run(brainTurnsPage(target, undefined));
+  const { mark } = Option.getOrThrow(planConversationLiveStatements(target.userId, target.taskId));
+
+  const answered = await database.run(
+    Effect.gen(function* () {
+      const parked = yield* Deferred.make<void>();
+      const fired = yield* Deferred.make<void>();
+      const watched: string[] = [];
+      const wake = {
+        watch: (statements: readonly { readonly sql: string }[]) =>
+          Effect.sync(() => {
+            watched.push(...statements.map((statement) => statement.sql));
+            return {
+              live: Effect.succeed(true),
+              changed: Effect.andThen(Deferred.succeed(parked, undefined), Deferred.await(fired)),
+            };
+          }),
+      };
+      const read = yield* Effect.forkChild(
+        brainPagePast(target, cursor, [mark]).pipe(Effect.provideService(LiveWake, wake)),
+      );
+      yield* Deferred.await(parked);
+      const db = yield* Database;
+      yield* db
+        .update(turns)
+        .set({ status: TURN_STATUS.SETTLED, settledAt: new Date() })
+        .where(eq(turns.conversationId, target.conversationId));
+      yield* Deferred.succeed(fired, undefined);
+      const page = yield* Fiber.join(read);
+      assert.deepEqual(watched, [mark.sql]);
+      return page;
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  assert.equal(answered.status, CODING_AGENT_STATUS.COMPLETED);
 });
