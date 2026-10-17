@@ -62,6 +62,10 @@ const draftPlaceSchema = Schema.Union([
     planId: Schema.String,
     /** The key the draft agent starts under, which a relaunch keeps, so a Start asked again is the same one. */
     draftId: Schema.String,
+    /** The agent and message the draft forks, with the message's opening words, which a relaunch keeps beside its words. */
+    fork: Schema.optionalKey(
+      Schema.Struct({ agentId: Schema.String, messageId: Schema.String, opening: Schema.String }),
+    ),
   }),
   Schema.Struct({
     kind: Schema.Literal(DRAFT_PLACE.INBOX),

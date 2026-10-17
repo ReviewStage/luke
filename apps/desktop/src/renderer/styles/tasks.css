@@ -2995,6 +2995,71 @@ button.pull-request-check:hover {
   margin-top: 0;
 }
 
+/* The quiet line under an agent's message naming the agents forked at it
+   (`fork-action.tsx`), in the meta voice a finished turn's line speaks in,
+   its chips wrapping as words do. */
+.agent-forked-to {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: var(--space-2) 0 0;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.agent-forked-to-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* A forked draft's chip over its box: what it forks, the message's opening
+   words, and the × that lets the fork go, docked on the composer's own
+   inset as the to-do list is. */
+.draft-fork-dock {
+  padding: 0 16px 8px;
+}
+
+.draft-fork-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.draft-fork-quote {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.draft-fork-quote:hover {
+  text-decoration: underline;
+}
+
+.draft-fork-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  border-radius: 4px;
+  color: var(--text-tertiary);
+}
+
+.draft-fork-drop:hover {
+  background: var(--section-fill);
+  color: var(--text-primary);
+}
+
 /* The room under the transcript for the composer, with no rule between
    them: the card's own edge is where the transcript ends. It keeps to the
    tab's foot where no transcript stands above it, as in a draft's tab. */

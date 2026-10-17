@@ -3,10 +3,11 @@ import type { ReactNode } from "react";
 import { MessageAction, MessageActions } from "../ai-elements/message";
 import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback";
 import { useCopyLink } from "../copy-link-item";
+import { ForkMessageAction } from "./fork-action";
 import { useMessagePlace } from "./message-links";
 
 /**
- * copy-message.tsx -- the actions under a transcript's message: a copy of its words to the clipboard, and, where its transcript names its messages, Copy link.
+ * copy-message.tsx -- the actions under a transcript's message: a copy of its words to the clipboard, where its transcript names its messages Copy link, and, on an agent's own message where its tab offers it, Fork to new agent (`fork-action.tsx`).
  *
  * A thin wrapper over AI Elements' message actions, shared by the voice
  * Call tab and a coding agent's tab, answered as every copy button
@@ -20,11 +21,14 @@ const COPY_LABEL = "Copy";
 export function CopyMessageAction({
   words,
   messageId,
+  forkable = false,
   className,
 }: {
   words: string;
   /** The message's id, by which its transcript names it for its Copy link; none where it has no link. */
   messageId?: string | undefined;
+  /** Whether the message is the agent's own and settled, which its tab may offer to fork. */
+  forkable?: boolean;
   className?: string;
 }): ReactNode {
   const { state, copy } = useCopyFeedback();
@@ -49,6 +53,9 @@ export function CopyMessageAction({
         >
           <LinkIcon />
         </MessageAction>
+      )}
+      {!forkable || messageId === undefined ? null : (
+        <ForkMessageAction messageId={messageId} words={words} />
       )}
     </MessageActions>
   );
