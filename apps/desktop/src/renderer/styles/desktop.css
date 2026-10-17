@@ -5272,8 +5272,7 @@ button.integration-tool-head:hover,
 
 /* A field beside the pickers stands at their height and corner, so a row's
    controls read as one set. */
-.automation-row-controls > .settings-input,
-.settings-row > .automation-rules-file {
+.automation-row-controls > .settings-input {
   height: var(--control-height);
   padding-block: 0;
   border-radius: var(--control-radius);
@@ -5319,15 +5318,10 @@ button.integration-tool-head:hover,
   min-width: min(200px, 100%);
 }
 
-/* A schedule's cron or time, at a picker's width beside them. */
+/* A schedule's cron or time, or a review's rules file, at a picker's width beside them. */
 .automation-field {
   width: 200px;
   max-width: 100%;
-}
-
-.automation-rules-file {
-  width: 200px;
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .automation-webhook-url {
