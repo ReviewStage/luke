@@ -49,6 +49,7 @@ import { PullRequestMark } from "./pull-request-mark";
 const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: "Ready for review",
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: "Convert to draft",
+  [PULL_REQUEST_ACTION.SUBMIT_REVIEW]: "Submit review",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
@@ -95,7 +96,8 @@ export interface PullRequestWrites {
   /** The change out now; none while nothing is. */
   readonly pending: PullRequestAction | undefined;
   readonly note: WriteNote | undefined;
-  readonly write: (request: PullRequestActionRequest) => void;
+  /** Sends the change; `onDone` hears once GitHub made it, so the press that sent it can let go of what it held. */
+  readonly write: (request: PullRequestActionRequest, onDone?: () => void) => void;
   readonly dismiss: () => void;
 }
 
@@ -122,7 +124,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   const [pending, setPending] = useState<PullRequestAction | undefined>(undefined);
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
   const write = useCallback(
-    (request: PullRequestActionRequest) => {
+    (request: PullRequestActionRequest, onDone?: () => void) => {
       setPending(request.action);
       setNote(undefined);
       void act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request })
@@ -134,6 +136,9 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
         .then((answer) => {
           setPending(undefined);
           setNote(noteOf(answer));
+          if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
+            onDone?.();
+          }
           // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again.
           if (!("failure" in answer)) onWritten();
         });
@@ -144,8 +149,13 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   return { pending, note, write, dismiss };
 }
 
+/** The changes the pill's menu offers: where the pull request stands, never a review. */
+type StateAction =
+  | typeof PULL_REQUEST_ACTION.READY_FOR_REVIEW
+  | typeof PULL_REQUEST_ACTION.CONVERT_TO_DRAFT;
+
 /** The changes the pill's menu offers from where the pull request stands. */
-function actionsFrom(state: PullRequestState): readonly PullRequestAction[] {
+function actionsFrom(state: PullRequestState): readonly StateAction[] {
   switch (state) {
     case PULL_REQUEST_STATE.DRAFT:
       return [PULL_REQUEST_ACTION.READY_FOR_REVIEW];
@@ -160,7 +170,7 @@ function actionsFrom(state: PullRequestState): readonly PullRequestAction[] {
 const ACTION_GLYPHS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: <GitPullRequestIcon aria-hidden="true" />,
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: <GitPullRequestDraftIcon aria-hidden="true" />,
-} as const satisfies Record<PullRequestAction, React.JSX.Element>;
+} as const satisfies Record<StateAction, React.JSX.Element>;
 
 /**
  * The pill saying where the pull request stands, in its colour; a press
@@ -219,17 +229,24 @@ export function PullRequestStateMenu({
   );
 }
 
-/** The line under the bar where GitHub did not take the last change: why, the sign-in that mends it where that is why, and its dismissal. */
+/**
+ * The line where GitHub did not take the last change: why, the sign-in
+ * that mends it where that is why, and its dismissal. It stands under the
+ * bar unless the control that sent the change draws it in its own place
+ * (`className`), as the review panel does.
+ */
 export function PullRequestWriteNote({
   writes,
+  className = "pull-request-write-note",
 }: {
   writes: PullRequestWrites;
+  className?: string;
 }): React.JSX.Element | null {
   const { connect } = useGitHubConnection();
   const { note, dismiss } = writes;
   if (note === undefined) return null;
   return (
-    <p className="failure-note pull-request-write-note" role="alert">
+    <p className={`failure-note ${className}`} role="alert">
       <span className="failure-note-words">
         {note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words}
       </span>

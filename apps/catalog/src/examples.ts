@@ -6,6 +6,7 @@ import { CHIPS_EXAMPLE } from "./examples/chips";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
+import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
@@ -41,4 +42,5 @@ export const EXAMPLES: readonly Example[] = [
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
   BADGES_EXAMPLE,
+  SETTINGS_ROW_EXAMPLE,
 ];
