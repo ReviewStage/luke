@@ -1,13 +1,24 @@
 /* The Issues page (`issues-page.tsx`). Its frame, headings, rows, chips, and
    title are the window's own: the Automations page's view and scroll, Home's
    sections and rows, a person's page's column, and a task's heading. Only
-   what an issue adds is drawn here: its identifier, its status and priority
-   marks, its properties' row, and its description's editor. Tokens only. */
+   what an issue adds is drawn here: its group's heading, its identifier, its
+   status and priority marks, its properties' row, and its description's
+   editor. Tokens only. */
 
 /* The pages and the new issue's card share one root, which C is read
    against; it draws no box of its own. */
 .issues-pages {
   display: contents;
+}
+
+/* A status group's heading and its count, on its rows' inset. */
+.issue-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+  margin-bottom: var(--luke-space-2);
+  padding: 0 var(--row-inset);
+  font-variant-numeric: tabular-nums;
 }
 
 .issue-row-identifier {

@@ -1,6 +1,6 @@
 import { ISSUE_STATUS_WORDS, issueGroups, issueIdentifier } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
-import { useMenu } from "@luke/ui";
+import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text, useMenu } from "@luke/ui";
 import { useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
 import { IssueActions } from "./issue-actions";
@@ -10,8 +10,8 @@ import type { IssueChange } from "./use-issues";
 /**
  * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, each row its status, its identifier, its title, how much it matters, and when it last changed.
  *
- * The headings and rows are Home's own (`desktop-home.tsx`): a section
- * title with its count over the sidebar's rows, each a button inside its
+ * The rows are Home's own (`desktop-home.tsx`): a section heading with its
+ * count over the sidebar's rows, each a button inside its
  * item, so the page's ↑ and ↓ move through the rows and Return opens the
  * one reached. A right-click on a row, or the menu key or ⇧F10 on it,
  * opens its actions (`issue-actions.tsx`).
@@ -103,10 +103,14 @@ export function IssueList({
           className="home-section"
           aria-label={ISSUE_STATUS_WORDS[group.status]}
         >
-          <h2 className="home-section-title">
-            {ISSUE_STATUS_WORDS[group.status]}
-            <span className="home-section-count">{group.issues.length}</span>
-          </h2>
+          <header className="issue-group-head">
+            <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
+              {ISSUE_STATUS_WORDS[group.status]}
+            </Text>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {group.issues.length}
+            </Text>
+          </header>
           <ul className="sidebar-tasks">
             {group.issues.map((issue) => (
               <IssueRow
