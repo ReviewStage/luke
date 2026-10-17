@@ -63,6 +63,7 @@ const DECLARED_TABLES = [
   "hosted_usage",
   "inbox_attachment",
   "inbox_item",
+  "inbox_message",
   "integration_connection",
   "invitation",
   "issue",

@@ -142,7 +142,7 @@ const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
       const status = codingAgentStatusOf(turns.get(agent.conversationId), {
         createdAt: agent.createdAt,
         now,
-        lineAwaits: awaiting.has(agent.conversationId),
+        awaitingLineAt: awaiting.get(agent.conversationId),
       });
       const finishedWell = agent.archivedAt === null && status === CODING_AGENT_STATUS.COMPLETED;
       // Note that the archive takes only while the agent's lines stand where they were read, so

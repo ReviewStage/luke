@@ -17,6 +17,7 @@ import { Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { useAct } from "../act";
+import { appBridge } from "../app-bridge";
 import { startAvatarFeed } from "../avatar-feed/start-avatar-feed";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
@@ -99,7 +100,7 @@ export function useVoiceSession(
     reportView: (view, exchangeOpened) => {
       speakerMuted.current = view.speakerMuted;
       playRemoteAudio();
-      window.luke.reportVoiceView(view, exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined);
+      appBridge().reportVoiceView(view, exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined);
     },
     requestMicrophone: () =>
       Effect.promise(
@@ -164,7 +165,7 @@ export function useVoiceSession(
         // document that says whether a writer stands behind the bridge.
         onWireEvent: (direction, event) => {
           if (appStateNow()?.run.agentTraceEnabled !== true) return;
-          window.luke.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
+          appBridge().recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
         },
       });
       call.reportAvatarStatus(appStateNow()?.voice.avatar.status ?? AVATAR_STATUS.OFF);
@@ -260,7 +261,7 @@ export function useVoiceSession(
   // a turn the developer did not, and a Clear reaches the record on main alone.
   useEffect(
     () =>
-      window.luke.onVoiceCommand(({ command }) => {
+      appBridge().onVoiceCommand(({ command }) => {
         if (command === VOICE_COMMAND.STOP_SPEAKING) {
           callRef.current?.interruptAvatar();
           drive(orchestrator.stopSpeaking());
@@ -283,14 +284,14 @@ export function useVoiceSession(
   // that task opened and heard, or its microphone toggled, as the main process
   // forwards the press.
   useEffect(
-    () => window.luke.onTasksTalk(({ taskId }) => drive(orchestrator.talkAboutTask(taskId))),
+    () => appBridge().onTasksTalk(({ taskId }) => drive(orchestrator.talkAboutTask(taskId))),
     [drive, orchestrator],
   );
 
   // The host's word on its one session: closing hangs up.
   useEffect(
     () =>
-      window.luke.onVoiceLiveSessionChanged((change) =>
+      appBridge().onVoiceLiveSessionChanged((change) =>
         drive(orchestrator.obeySessionChange(change)),
       ),
     [drive, orchestrator],
@@ -307,7 +308,7 @@ export function useVoiceSession(
   // The call is told too, since a hold over Luke gone quiet flushes his avatar.
   useEffect(
     () =>
-      window.luke.onVoiceHotkeyPress((press) => {
+      appBridge().onVoiceHotkeyPress((press) => {
         callRef.current?.reportTalkKey(true);
         drive(orchestrator.beginTalk(press?.taskId));
       }),
@@ -315,7 +316,7 @@ export function useVoiceSession(
   );
   useEffect(
     () =>
-      window.luke.onVoiceHotkeyRelease(() => {
+      appBridge().onVoiceHotkeyRelease(() => {
         callRef.current?.reportTalkKey(false);
         drive(orchestrator.endTalk());
       }),
@@ -327,7 +328,7 @@ export function useVoiceSession(
   // nothing. Luke's avatar, a second behind him, is flushed at once.
   useEffect(
     () =>
-      window.luke.onStopHotkeyPress(() => {
+      appBridge().onStopHotkeyPress(() => {
         callRef.current?.interruptAvatar();
         drive(orchestrator.stopSpeaking());
       }),

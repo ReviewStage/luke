@@ -1,6 +1,6 @@
+import { DetailPage, Menu, SKELETON_SHAPE, Skeleton, TEXT_TONE, Text, useMenu } from "@luke/ui";
 import { accountInitials, accountLabel } from "@luke/ui/account-initials";
-import { useEffect, useRef, useState } from "react";
-import { Skeleton } from "../skeleton";
+import { useState } from "react";
 
 /** The signed-in account the header names; read from the session, shown as-is. */
 export interface ViewerAccount {
@@ -13,6 +13,11 @@ const AVATAR_FRAME = {
   small: "size-8",
   large: "size-14",
 } as const;
+
+/** The header avatar's stand-in while the session is still being read, the small avatar's size. */
+function AvatarSkeleton(): React.JSX.Element {
+  return <Skeleton shape={SKELETON_SHAPE.CIRCLE} width="32px" />;
+}
 
 const AVATAR_TEXT = {
   small: "text-xs",
@@ -58,13 +63,12 @@ export function AccountAvatar({
 }
 
 /**
- * The focus ring is drawn inside the item: the page's own `:focus-visible`
- * outline would otherwise sit astride the panel's border, which reads as a
- * seam rather than as focus.
+ * The account's menu, opened from its avatar: whose account it is over the
+ * one act, signing out. The shared menu draws itself over the page, from the
+ * body, which is what keeps it clear of the page's header: the header clips
+ * what it holds to its own box. The body sits under the root that names the
+ * admin's profile, theme, and density, so the menu is drawn at them too.
  */
-const ACCOUNT_MENU_ITEM =
-  "flex min-h-11 w-full cursor-pointer items-center px-3 py-2 text-left text-sm font-medium transition-colors duration-150 outline-offset-[-2px] hover:bg-muted focus-visible:bg-muted";
-
 function AccountMenu({
   account,
   avatarSkeleton = false,
@@ -74,113 +78,83 @@ function AccountMenu({
   avatarSkeleton?: boolean;
   onSignOut: () => void;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const itemRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    itemRef.current?.focus();
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && containerRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
+  const menu = useMenu(true);
+  const label = `Account menu for ${accountLabel(account)}`;
   return (
-    <div className="relative" ref={containerRef}>
+    <>
       <button
         type="button"
-        ref={triggerRef}
-        className="flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`Account menu for ${accountLabel(account)}`}
-        onClick={() => setOpen(!open)}
+        className="ml-auto flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
+        aria-label={label}
+        {...menu.trigger()}
       >
-        {avatarSkeleton ? (
-          <Skeleton circle className={AVATAR_FRAME.small} />
-        ) : (
-          <AccountAvatar account={account} />
-        )}
+        {avatarSkeleton ? <AvatarSkeleton /> : <AccountAvatar account={account} />}
       </button>
-      {open ? (
-        <div
-          role="menu"
-          className="absolute top-[calc(100%+8px)] right-0 z-10 min-w-[200px] rounded-lg border border-border bg-card py-1 text-left shadow-[0_16px_48px_rgba(0,0,0,0.32)]"
-        >
-          <div className="border-b border-border px-3 py-2">
-            <div className="text-sm leading-tight font-medium">{account.name}</div>
-            <div className="truncate text-xs text-muted-foreground">{account.email}</div>
-          </div>
-          <button
-            type="button"
-            ref={itemRef}
-            role="menuitem"
-            className={ACCOUNT_MENU_ITEM}
-            onClick={onSignOut}
-          >
-            Sign out
-          </button>
-        </div>
-      ) : null}
-    </div>
+      {menu.drawn === undefined ? null : (
+        <Menu
+          label={label}
+          menu={menu.drawn}
+          heading={
+            <>
+              <Text>{account.name}</Text>
+              <Text tone={TEXT_TONE.MUTED}>{account.email}</Text>
+            </>
+          }
+          groups={[[{ label: "Sign out", onSelect: onSignOut }]]}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
-/** The heading and account menu every view wears; controls sit between them. */
-export function PageHeader({
+/**
+ * The page every view past the gate stands on: `@luke/ui`'s detail page,
+ * titled, with the view's controls and the account menu as its acts and the
+ * view's own content under them. The page owns the scroll, so the title and
+ * the controls stay put while the content moves beneath them. The `main`
+ * landmark is this page's, which is why the shell's content region is a div.
+ */
+export function AdminPage({
   title,
   controls,
   account,
   accountSkeleton = false,
   onSignOut,
+  children,
 }: {
   title: string;
   controls: React.ReactNode;
   account: ViewerAccount | undefined;
   accountSkeleton?: boolean;
   onSignOut: () => void;
+  children: React.ReactNode;
 }): React.JSX.Element {
-  const hasControls = controls !== null && controls !== undefined;
-
   return (
-    <header className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-4 min-[720px]:flex min-[720px]:gap-x-6 min-[720px]:gap-y-3">
-      {/* On a phone the identity is one row and the controls are a deliberate
-          second row. This keeps the account trigger from becoming a stray
-          button after whichever control happened to wrap first. */}
-      <h1 className="col-start-1 row-start-1 text-lg font-semibold tracking-[-0.01em]">{title}</h1>
-      {hasControls ? (
-        <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-3 min-[720px]:ml-auto min-[720px]:gap-4">
-          {controls}
-        </div>
-      ) : null}
-      {accountSkeleton || account ? (
-        <div
-          className={`col-start-2 row-start-1 flex items-center ${hasControls ? "" : "min-[720px]:ml-auto"}`}
-        >
-          {account ? (
-            <AccountMenu account={account} avatarSkeleton={accountSkeleton} onSignOut={onSignOut} />
-          ) : accountSkeleton ? (
-            <div className="flex size-11 items-center justify-center">
-              <Skeleton circle className={AVATAR_FRAME.small} />
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </header>
+    <main className="flex min-h-0 flex-1 flex-col">
+      <DetailPage
+        title={title}
+        actions={
+          <>
+            {controls}
+            {/* The avatar keeps to the actions' far end, on a phone too, where
+                it wraps under the controls onto a row of its own. */}
+            {account ? (
+              <AccountMenu
+                account={account}
+                avatarSkeleton={accountSkeleton}
+                onSignOut={onSignOut}
+              />
+            ) : accountSkeleton ? (
+              <div className="ml-auto flex size-11 items-center justify-center">
+                <AvatarSkeleton />
+              </div>
+            ) : null}
+          </>
+        }
+      >
+        {children}
+      </DetailPage>
+    </main>
   );
 }
