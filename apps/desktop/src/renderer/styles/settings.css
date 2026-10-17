@@ -140,6 +140,7 @@
    wrap well, ending in an ellipsis where they are cut short, the pointer
    resting on them reading them whole (`one-line.tsx`). */
 .settings-one-line {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -310,7 +311,7 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   white-space: nowrap;
 }
 

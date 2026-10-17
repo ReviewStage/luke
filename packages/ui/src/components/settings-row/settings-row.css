@@ -1,7 +1,7 @@
 /* settings-row.css -- a setting's words and its controls on one line, the
    words taking what room the controls leave and wrapping in it, and the
    controls dropping below the words to the row's end once the row is
-   narrower than 380px. A compact row stands bare, at a menu row's height,
+   narrower than 380px, a leading mark staying beside the words. A compact row stands bare, at a menu row's height,
    and keeps its controls beside its words at any width. */
 
 @layer components {
@@ -40,6 +40,22 @@
     display: flex;
     align-items: center;
     gap: var(--luke-space-12);
+  }
+
+  /* The words and the mark leading them, which stay on one line together
+     wherever the controls stand. */
+  .luke-settings-row-subject {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    gap: var(--luke-space-12);
+    min-width: 0;
+  }
+
+  .luke-settings-row-leading {
+    display: flex;
+    flex: none;
+    align-items: center;
   }
 
   .luke-settings-row-copy {
@@ -108,7 +124,7 @@
       gap: var(--luke-space-8);
     }
 
-    .luke-settings-row:not([data-density="compact"]) .luke-settings-row-copy {
+    .luke-settings-row:not([data-density="compact"]) .luke-settings-row-subject {
       flex-basis: auto;
     }
   }

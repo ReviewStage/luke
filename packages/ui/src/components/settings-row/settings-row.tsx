@@ -15,6 +15,11 @@ import { type ReactNode, useId } from "react";
  * room between its parts; its edges and the rules between rows are its
  * section's.
  *
+ * A row that stands for someone or something of its own, an account or a
+ * provider, leads with its face or mark (`leading`), centred before its
+ * words. The mark stays beside the words when the controls drop below them,
+ * and names nothing: the label alone names the row's control.
+ *
  * A compact row (`SETTINGS_ROW_DENSITY.COMPACT`) stands bare, without
  * padding and at a menu row's least height, where the surface around it, a
  * popover, already insets it. Unlike a card's row it does not stack under
@@ -48,11 +53,14 @@ export function SettingsRow({
   label,
   description,
   error,
+  leading,
   density = SETTINGS_ROW_DENSITY.CARD,
   children,
 }: {
   label: ReactNode;
   description?: ReactNode;
+  /** The face or mark the row leads with, before its words, where it stands for something of its own. */
+  leading?: ReactNode;
   /** What went wrong with the last write, or nothing while none did. */
   error?: ReactNode;
   /** How the row stands; in a section's card where none is named. */
@@ -73,15 +81,18 @@ export function SettingsRow({
     <div className="luke-settings-row" data-invalid={failed} data-density={density}>
       <div className="luke-settings-row-body">
         <div className="luke-settings-row-line">
-          <div className="luke-settings-row-copy">
-            <span className="luke-settings-row-label" id={labelId}>
-              {label}
-            </span>
-            {described ? (
-              <p className="luke-settings-row-description" id={descriptionId}>
-                {description}
-              </p>
-            ) : null}
+          <div className="luke-settings-row-subject">
+            {said(leading) ? <div className="luke-settings-row-leading">{leading}</div> : null}
+            <div className="luke-settings-row-copy">
+              <span className="luke-settings-row-label" id={labelId}>
+                {label}
+              </span>
+              {described ? (
+                <p className="luke-settings-row-description" id={descriptionId}>
+                  {description}
+                </p>
+              ) : null}
+            </div>
           </div>
           <div className="luke-settings-row-controls">
             {children({
