@@ -16,7 +16,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--luke-space-6);
-  margin-bottom: var(--luke-space-2);
+  margin: 0 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
   font-variant-numeric: tabular-nums;
 }

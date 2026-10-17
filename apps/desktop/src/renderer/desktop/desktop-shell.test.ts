@@ -8,6 +8,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -18,12 +19,13 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { handState, stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { tasksControl } from "#testing/tasks-control";
 import { useAct } from "../act";
+import { appBridge } from "../app-bridge";
 import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -98,13 +100,8 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
 });
 
@@ -744,15 +741,12 @@ async function handBridge(): Promise<void> {
   await import("./desktop-settings");
   handState(experimentsOn(EXPERIMENT.FACTORY, EXPERIMENT.AUTOMATIONS));
   sentActs = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: { kind: string }) => {
-        sentActs.push(request.kind);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: { kind: string }) => {
+      sentActs.push(request.kind);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
   });
 }
@@ -943,14 +937,14 @@ function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
   );
 }
 
-test("the sidebar's Chat row stands only while the account has Chat on and a chat is read, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
+test("the sidebar's Chat row stands only while the account has Chat on and a chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
-  assert.equal(chatRow(mount(false)), undefined, "no chat is read");
+  assert.equal(chatRow(mount(false)), undefined, "no chat is available");
   act(() => root?.unmount());
 
   let opened = 0;
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat, onOpen: () => (opened += 1) };
+  const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
   const page = mount(false, false, { chatView: view });
   await settle();
   const row = chatRow(page);
@@ -971,7 +965,12 @@ test("with Chat off for the account, its row stands nowhere, and Chat standing i
   handState({});
   const closed: string[] = [];
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat, onClose: () => closed.push("closed") };
+  const view = {
+    ...tasksControl().chatView,
+    available: true,
+    chat,
+    onClose: () => closed.push("closed"),
+  };
   const off = mount(false, false, { chatView: view });
   await settle();
   assert.equal(chatRow(off), undefined);
@@ -986,7 +985,7 @@ test("with Chat off for the account, its row stands nowhere, and Chat standing i
 
 test("a fixture run staged on Chat offers it with no account to turn its experiment on, where any other run does not", async () => {
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat };
+  const view = { ...tasksControl().chatView, available: true, chat };
   const run = { ...stateWith({}, {}).run, fixtureMode: true };
   handState({}, { run: { ...run, profile: RUN_PROFILE.CHAT } });
   const staged = mount(false, false, { chatView: view });

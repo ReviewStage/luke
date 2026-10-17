@@ -17,10 +17,10 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
