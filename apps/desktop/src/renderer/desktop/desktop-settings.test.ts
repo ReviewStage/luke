@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -17,6 +17,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
@@ -200,10 +201,9 @@ beforeEach(() => {
     }),
   });
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
+  fakeAppPlatform(QUIET_PANEL);
 });
 
 afterEach(() => {
@@ -405,8 +405,8 @@ function pressEscape(composing = false): void {
 /** Counts the searches the window reports opened. */
 function countSearchOpens() {
   let opens = 0;
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
+  fakeAppPlatform({
+    ...QUIET_PANEL,
     recordSurfaceEvent: (event: string) => {
       if (event === PRODUCT_SURFACE_EVENT.SEARCH_OPEN) opens += 1;
     },
@@ -558,14 +558,7 @@ test("the plan template's version history keeps a call's card at the foot of its
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
   const copied: string[] = [];
-  fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   const row = pageButtons(page).find((each) => each.textContent === "Workspace");
   assert.ok(row, "the Workspace page is listed");

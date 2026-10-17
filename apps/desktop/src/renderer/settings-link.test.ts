@@ -37,7 +37,6 @@ const roots: Root[] = [];
 beforeEach(() => {
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }),
-    recordSurfaceEvent: () => undefined,
   });
 });
 

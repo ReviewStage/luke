@@ -382,7 +382,6 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   });
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),
-    recordSurfaceEvent: ignore,
   });
   const box = await mounted();
   typeInComposer(box.container, "Fix this later");

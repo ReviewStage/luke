@@ -412,7 +412,7 @@ function answerMotion(): void {
  */
 async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   answerMotion();
-  fakeAppBridge({ onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined });
+  fakeAppBridge({});
   const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
   const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,

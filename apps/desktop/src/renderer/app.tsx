@@ -42,6 +42,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { appBridge } from "./app-bridge";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
+import { appPlatform } from "./app-platform";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useCallCardVideo } from "./call/panel-avatar";
 import { useWindowFocused } from "./call/use-window-focused";
@@ -166,7 +167,7 @@ export function App(): React.JSX.Element {
         setSettingsView(SETTINGS_VIEW.ACCOUNT);
         // `PanelTab` and the counted tab are the same union: both are
         // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
-        appBridge().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+        appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
           panel_tab: tab,
         });
       })(next),
@@ -244,7 +245,7 @@ export function App(): React.JSX.Element {
     shortcutCapture.current = capturing;
     // The talk and stop keys are routed by the main process to a window that
     // is not this one, so the recording is reported there to be honored.
-    appBridge().setShortcutCapturing(capturing);
+    appPlatform().setShortcutCapturing(capturing);
   }, []);
 
   // A capture run stages its conversation from the launch profile, since no

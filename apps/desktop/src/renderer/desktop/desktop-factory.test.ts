@@ -22,6 +22,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -105,7 +106,7 @@ const QUESTION = "Which Mercury account should payouts draw from: Operating or P
 let root: Root | undefined;
 
 beforeEach(() => {
-  fakeAppBridge({ onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -703,13 +704,7 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
 
 test("a row's right-click offers Copy link, copying what a press on it opens: its task's link, its question's, its agent's, or its pull request's page", async () => {
   const copied: string[] = [];
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
     callTaskId: DRAFT.id,
     workspace: {
@@ -777,13 +772,7 @@ test("an agent with no task stands in Build by its automation, opens its own pag
   };
   const pages: string[] = [];
   const copied: string[] = [];
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount([SEARCH], {
     workspace: {
       id: "workspace-personal",

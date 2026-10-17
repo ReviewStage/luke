@@ -99,7 +99,7 @@ beforeEach(() => {
   refuseRead = false;
   holdRead = false;
   holdSaves = undefined;
-  fakeAppBridge({ act: answer, recordSurfaceEvent: () => undefined });
+  fakeAppBridge({ act: answer });
 });
 
 afterEach(() => {

@@ -35,6 +35,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -305,7 +306,6 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(done(undefined));
     }
     case ACT_KIND.WORKSPACE_LEAVE:
-    case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
@@ -335,7 +335,7 @@ beforeEach(() => {
   automations = undefined;
   macRepositories = [];
   githubRepositories = [];
-  fakeAppBridge({ act: answer, recordSurfaceEvent: () => undefined });
+  fakeAppBridge({ act: answer });
 });
 
 afterEach(() => {
@@ -1431,6 +1431,8 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
 }
 
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
@@ -1468,15 +1470,12 @@ test("the owner invites an address as a role, sees it pending with its link to c
       ],
       [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
       [
-        ACT_KIND.WINDOW_COPY_TEXT,
-        { words: "https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com" },
-      ],
-      [
         ACT_KIND.WORKSPACE_INVITATION_CANCEL,
         { workspaceId: ACME.id, invitationId: "inv-alan@example.com" },
       ],
     ],
   );
+  assert.deepEqual(copied, ["https://tryluke.dev/accept-invitation.html?id=inv-alan@example.com"]);
 });
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {

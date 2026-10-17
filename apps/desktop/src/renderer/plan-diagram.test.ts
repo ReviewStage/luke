@@ -74,7 +74,6 @@ beforeEach(() => {
   fakeAppBridge({
     act: (): Promise<ActOutcome> =>
       Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    recordSurfaceEvent: () => undefined,
   });
 });
 

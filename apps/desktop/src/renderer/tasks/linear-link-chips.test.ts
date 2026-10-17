@@ -105,7 +105,6 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
   const asked: Act[] = [];
   const state = stateWith(workspace);
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
       deliver = listener;
       return () => undefined;

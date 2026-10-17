@@ -64,7 +64,6 @@ function standHost(
   unanswered: ReadonlySet<string> = new Set(),
 ): void {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> => {
       if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });

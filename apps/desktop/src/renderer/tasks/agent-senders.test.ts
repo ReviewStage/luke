@@ -126,7 +126,6 @@ afterEach(() => {
 /** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`. */
 async function drawnFor(reader: string): Promise<readonly Element[]> {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ

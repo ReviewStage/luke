@@ -186,7 +186,6 @@ async function drawn(text: string, workspace: Workspace) {
   const asked: Act[] = [];
   const state = stateWith(workspace);
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
     act: (request: Act): Promise<ActOutcome> => {

@@ -8,11 +8,12 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
@@ -60,15 +61,9 @@ const copied: string[] = [];
 beforeEach(() => {
   copied.length = 0;
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      }
-      copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-    recordSurfaceEvent: () => undefined,
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
 });
 
 afterEach(() => {
@@ -361,17 +356,20 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
     },
   };
   const opened: [string, MentionLines | undefined][] = [];
+  const onGitHub: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, openGitHub: (url) => onGitHub.push(url) });
   const container = drawnFiles((path, lines) => opened.push([path, lines]), task);
 
   act(() => chipNamed(container, "session-store.ts").click());
   act(() => chipNamed(container, "session-store.ts:3").click());
-  // Another repository's file is no file of the task's, but GitHub's own page, which opens no tab.
+  // Another repository's file is no file of the task's, but GitHub's own page, which opens there rather than in a tab.
   act(() => chipNamed(container, "other.ts").click());
 
   assert.deepEqual(opened, [
     ["apps/web/session-store.ts", undefined],
     ["apps/web/session-store.ts", { commit: "0123456", startLine: 3, endLine: 5 }],
   ]);
+  assert.deepEqual(onGitHub, ["https://github.com/acme/other/blob/HEAD/other.ts"]);
 });
 
 test("a heading the plan bears twice: a mention of the second opens the second, and each ⋯ copies its own", async () => {

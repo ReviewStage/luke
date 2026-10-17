@@ -22,22 +22,27 @@ import {
   withoutAccessTokens,
 } from "#shared/sentry-breadcrumbs";
 import { installAppBridge } from "./app-bridge";
+import { installAppPlatform } from "./app-platform";
+import { DESKTOP_PLATFORM } from "./desktop-platform";
 import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead } from "./use-app-state";
 
 /**
- * Installs the window's bridge, starts its tracing, and draws `surface` into
- * its root once the window's document has been read. A window whose document
- * cannot be read mounts nothing: a fallback would protect nothing.
+ * Installs the window's bridge and platform, starts its tracing, and draws
+ * `surface` into its root once the window's document has been read. A window
+ * whose document cannot be read mounts nothing: a fallback would protect
+ * nothing.
  */
 export function mountWindow(surface: ReactNode): void {
   // The desktop's bridge is the one the preload exposed as `window.luke`, and
   // this is the one place that global is read: everything else reaches main
   // through `appBridge()`, which reads what is installed here before anything
-  // below subscribes or draws.
+  // below subscribes or draws. What only the shell can do is answered beside
+  // it, through `appPlatform()`, by the desktop's own acts and events.
   const preloadWindow: Window & { readonly luke?: AppBridge } = window;
   if (preloadWindow.luke === undefined) throw new Error("The preload's bridge is missing");
   installAppBridge(preloadWindow.luke);
+  installAppPlatform(DESKTOP_PLATFORM);
 
   // Every window's tracing, as Sentry's Electron guide sets up a renderer;
   // the DSN, release, and environment are main's, which every renderer event

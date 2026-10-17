@@ -104,8 +104,6 @@ function handBridge(first: AppStateSnapshot): void {
     onAvatarViewSignal: () => () => undefined,
     signalAvatarView: () => undefined,
     onCallWindowMoved: () => () => undefined,
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: { kind: string; payload?: unknown }) => {
       sent.push(request);
       return Promise.resolve({ status: "done", value: undefined });

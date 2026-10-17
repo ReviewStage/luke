@@ -39,6 +39,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState, stateWith } from "#testing/app-state";
 import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
@@ -162,11 +163,10 @@ beforeEach(() => {
   earlier = 0;
   openedOnGitHub = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   workspace = [];
   gitHub = new Map();
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) => {
       told.push(request);
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
@@ -228,10 +228,6 @@ beforeEach(() => {
         const held = gitHub.get(number);
         const value = held === undefined ? null : { number, author: "octo-dev", ...held };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: workspace } });

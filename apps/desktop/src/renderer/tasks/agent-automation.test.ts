@@ -94,7 +94,6 @@ beforeEach(() => {
   listed = [];
   automations = [TRIAGE];
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         listed.push(request.payload.workspaceId ?? "");

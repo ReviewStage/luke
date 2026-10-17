@@ -164,7 +164,6 @@ function answer(request: Act): ActOutcome {
 /** The words drawn as the Inbox draws them, off any task's page, in the workspace given. */
 async function drawn(text: string): Promise<HTMLElement> {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(STATE),
     act: (request: Act): Promise<ActOutcome> => {

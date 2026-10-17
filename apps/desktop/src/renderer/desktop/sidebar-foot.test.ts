@@ -40,7 +40,6 @@ beforeEach(() => {
       sent.push({ kind: request.kind });
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
-    recordSurfaceEvent: () => undefined,
   });
 });
 

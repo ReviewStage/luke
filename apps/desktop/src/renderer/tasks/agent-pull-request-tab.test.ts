@@ -43,6 +43,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -211,8 +212,8 @@ beforeEach(() => {
       return { update: () => undefined, unmount: () => undefined };
     },
   };
+  fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) => {
       if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
       if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);

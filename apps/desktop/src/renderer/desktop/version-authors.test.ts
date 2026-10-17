@@ -59,7 +59,6 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
-    recordSurfaceEvent: () => undefined,
   });
 });
 

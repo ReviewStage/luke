@@ -136,7 +136,6 @@ afterEach(() => {
 /** The words drawn as a transcript draws them, in a window holding `STATE`, every place a chip opened kept. */
 async function drawn(text: string, opened: LinkPlace[]): Promise<HTMLElement> {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(STATE),
     act: (request: Act): Promise<ActOutcome> =>
