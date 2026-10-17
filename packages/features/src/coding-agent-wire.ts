@@ -181,6 +181,10 @@ export const CODING_AGENT_FAILURE = {
   FAST_ON_OWN_KEY: "fast_own_key",
   /** The provider refused fast mode for the organization of the key the step ran on. */
   FAST_NOT_ENABLED: "fast_not_enabled",
+  /** The provider refused the step's prompt as longer than the model's context window. */
+  CONTEXT_OVERFLOW: "context_overflow",
+  /** The agent's session ended for good while its turn ran, and eve no longer runs it: nothing reaches it again, and only a new agent, a continue of it among them, goes on. */
+  SESSION_ENDED: "session_ended",
   OTHER: "other",
 } as const;
 
@@ -327,12 +331,29 @@ export const disabledServersSchema = EffectSchema.Array(
  * The agent a Start takes over from, on the same plan: everything it did
  * where no message is named, which is a continue, or its transcript up to
  * and including one of its own assistant messages, by that message's id as
- * its transcript carries it, which is a fork.
+ * its transcript carries it, which is a fork. A fork of a reply still being
+ * written names where the developer saw it end as they pressed Fork: how
+ * many of that message's steps had begun, and how many words and calls the
+ * last of them held, so the cut keeps those and nothing the agent wrote
+ * after; a fork naming none keeps the message whole, as a desktop before
+ * the count asked.
  */
 const codingAgentStartFromSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   messageId: EffectSchema.optionalKey(wireUuidSchema),
-});
+  messageSteps: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+  messageStepParts: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+  ),
+}).check(
+  EffectSchema.makeFilter(
+    ({ messageId, messageSteps, messageStepParts }) =>
+      (messageSteps === undefined || messageId !== undefined) &&
+      (messageStepParts === undefined || messageSteps !== undefined),
+  ),
+);
 
 export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
 
@@ -602,7 +623,10 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   automationName: EffectSchema.optionalKey(EffectSchema.String),
   /**
    * The agent this one was started from, on the same plan, and the message
-   * of its it was forked at where it was forked rather than continued, with
+   * of its it was forked at where it was forked rather than continued, and
+   * how many of that message's steps it kept, and of the last of them how
+   * many words and calls, where it was forked while that message was still
+   * written, with
    * how many of that agent's steps its replay kept of how many there were,
    * and the branch that agent's work was copied to for this one where it
    * could be; absent for an agent started afresh, and from a service before it.
@@ -611,10 +635,29 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
     EffectSchema.Struct({
       agentId: wireUuidSchema,
       messageId: EffectSchema.optionalKey(wireUuidSchema),
+      messageSteps: EffectSchema.optionalKey(countedNumber),
+      messageStepParts: EffectSchema.optionalKey(countedNumber),
       steps: countedNumber,
       totalSteps: countedNumber,
       branch: EffectSchema.optionalKey(EffectSchema.String),
     }),
+  ),
+  /**
+   * The agents started from this one, oldest first, archived ones among
+   * them: each by its id and its title, null where it has none yet, whether
+   * it forked this one at a message rather than continuing it, and that
+   * message where it did; absent where none was, and from a service before
+   * it.
+   */
+  continuedBy: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({
+        agentId: wireUuidSchema,
+        title: EffectSchema.NullOr(EffectSchema.String),
+        forked: EffectSchema.Boolean,
+        messageId: EffectSchema.optionalKey(wireUuidSchema),
+      }),
+    ),
   ),
 });
 
@@ -1331,6 +1374,21 @@ const codingAgentSenderSchema = EffectSchema.Struct({
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
   /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
   agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /**
+   * The catalog id of the model that agent ran on when it sent the line,
+   * which the window reads its harness's mark off; absent for any other
+   * sender, for an agent's line sent before it was kept, and from a service
+   * older than it.
+   */
+  model: EffectSchema.optionalKey(recordedChoice),
+  /**
+   * That agent's id, which the window opens its tab and reads its card by;
+   * absent for any other sender, for an agent's line sent before it was
+   * kept, once that agent is gone, and from a service older than it.
+   */
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** The task that agent works on, where `agentId` is given and it works on one. */
+  taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;

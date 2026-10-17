@@ -2,6 +2,7 @@ import {
   BUTTON_SHAPE,
   BUTTON_VARIANT,
   Button,
+  ButtonLink,
   CloseIcon,
   EllipsisIcon,
   GAP,
@@ -24,8 +25,8 @@ import { CatalogSection } from "../section";
 /**
  * buttons.tsx -- every Button look at rest, with a glyph, unavailable,
  * unavailable but focusable, and busy; the IconButton's looks and toggle;
- * the round shape a call's controls take, a danger toggle off and on; and a
- * long label in a narrow column.
+ * ButtonLink's looks; the round shape a call's controls take, a danger
+ * toggle off and on; and a long label in a narrow column.
  */
 
 const STATES = [
@@ -73,6 +74,15 @@ function Buttons(): React.JSX.Element {
           <IconButton icon={<PlusIcon />} label="New plan" variant={BUTTON_VARIANT.OUTLINE} />
           <IconButton icon={<TrashIcon />} label="Delete" disabled />
           <IconButton icon={<EllipsisIcon />} label="Loading" busy busyLabel="Loading" />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="buttons-link" title="As a link">
+        <Inline>
+          {Object.values(BUTTON_VARIANT).map((variant) => (
+            <ButtonLink key={variant} variant={variant} href="#buttons-link">
+              {variant}
+            </ButtonLink>
+          ))}
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-round" title="Round, as a call's controls">

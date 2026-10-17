@@ -7,16 +7,12 @@ import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";
-import { actRequest } from "../act";
-import { bundleAtom } from "../bundle-loader";
+import { askAct } from "../act";
+import { BOARD_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 import { rendererRuntime } from "../renderer-runtime";
 import { SpinnerRegion } from "../spinner";
 import { useAppState } from "../use-app-state";
-import {
-  WHITEBOARD_ASSET,
-  type WhiteboardHandle,
-  type WhiteboardModule,
-} from "../whiteboard/contract";
+import type { WhiteboardHandle, WhiteboardModule } from "../whiteboard/contract";
 
 /**
  * task-board.tsx -- the open task's whiteboard in the Tasks tab: Excalidraw's bundle loaded once, mounted over the board main holds, and its scene saved.
@@ -49,16 +45,6 @@ import {
 /** How long the developer's drawing rests before it is saved. */
 const SAVE_PAUSE = Duration.millis(800);
 
-/** Where the board stands while its bundle loads or fails to. */
-const BOARD_LOAD_FAILED = "The board could not be opened.";
-
-/** The whiteboard bundle, loaded once per window (`../bundle-loader.ts`). */
-const whiteboardModuleAtom = bundleAtom(
-  { script: WHITEBOARD_ASSET.SCRIPT, stylesheet: WHITEBOARD_ASSET.STYLESHEET },
-  () => window.lukeWhiteboard,
-  BOARD_LOAD_FAILED,
-);
-
 /** One save the canvas asked for: the task, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
 interface BoardSave {
   readonly taskId: string;
@@ -86,7 +72,7 @@ const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
       : undefined;
     const payload = image === undefined ? scene : { ...scene, image };
     yield* Effect.tryPromise({
-      try: () => window.luke.act(actRequest(ACT_KIND.TASKS_BOARD_SAVE, payload)),
+      try: () => askAct(ACT_KIND.TASKS_BOARD_SAVE, payload),
       catch: (error) => error,
     });
   }),
@@ -162,7 +148,7 @@ export function TaskBoard({
   /** Whether the board only shows, as an archived task's does. */
   viewOnly?: boolean;
 }): React.JSX.Element {
-  const loaded = useAtomValue(whiteboardModuleAtom);
+  const loaded = useAtomValue(useSideBundles().whiteboard);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   return (
     <section className="task-board ph-no-capture" aria-label="Whiteboard">

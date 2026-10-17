@@ -4,19 +4,22 @@ import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import type { TasksEditAnswer } from "@luke/features/tasks-view";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { DIAGRAM_DRAWING } from "../diagram/contract";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
+import type { SideBundles } from "../bundle-loader";
 import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
 import { PlanBody } from "./plan-body";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
  * tested beside it. Here the document mounts a stand-in for that bundle at
- * its one boundary, `window.lukePlanEditor`, and the tests speak as the
+ * its one boundary, the bundle's importer, and the tests speak as the
  * editor would: the text it hands over, its finish, and its leaving up.
  */
 
@@ -51,16 +54,25 @@ const STAND_IN: PlanEditorModule = {
   mountComposer: () => assert.fail("the plan document mounts no message box"),
 };
 
-// Set before any document renders, since the document reads the bundle once per window.
-window.lukePlanEditor = STAND_IN;
-
 /** The diagram bundle's stand-in: a picture named by the code and the appearance it was asked to draw. */
 const diagramPicture = (code: string, appearance: string) =>
   `data:image/svg+xml,${encodeURIComponent(`${appearance}:${code}`)}`;
-window.lukeDiagram = {
+const DIAGRAM_STAND_IN: DiagramModule = {
   draw: (code, appearance) =>
     Promise.resolve({ kind: DIAGRAM_DRAWING.DRAWN, url: diagramPicture(code, appearance) }),
 };
+
+let bundles: SideBundles;
+
+// Landed before any document renders, as both are once a plan has been shown in this window.
+beforeAll(async () => {
+  bundles = await Effect.runPromise(
+    landedBundles({
+      planEditor: () => Promise.resolve(STAND_IN),
+      diagram: () => Promise.resolve(DIAGRAM_STAND_IN),
+    }),
+  );
+});
 
 const roots: Root[] = [];
 
@@ -108,7 +120,14 @@ function mount(answers: readonly TasksEditAnswer[] = []) {
     return Promise.resolve(true);
   };
   const render = (task: Task, door: typeof onEdit = onEdit) =>
-    act(() => root.render(createElement(PlanBody, { task, live: false, onEdit: door, onRename })));
+    act(() =>
+      root.render(
+        onSideBundles(
+          bundles,
+          createElement(PlanBody, { task, live: false, onEdit: door, onRename }),
+        ),
+      ),
+    );
   render(DOCUMENT_TASK);
   const unmount = () => {
     act(() => root.unmount());
@@ -200,6 +219,93 @@ test("a press on a diagram's Show code shows its code and opens no editor", asyn
   assert.equal(container.querySelector(".plan-diagram pre")?.textContent, `${code}\n`);
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+});
+
+test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused, and opens no editor", async () => {
+  const body = [
+    "## Goal",
+    "Invite a *teammate*.",
+    "",
+    "## Steps",
+    "- [ ] Send the invite",
+    "  - [ ] Write the email",
+    "* [X] Pick a role",
+    "",
+    "> 1. [ ] Quoted",
+    "",
+  ].join("\n");
+  const { container, sent, render } = mount([
+    { saved: true },
+    { conflict: { current: body } },
+    { saved: true },
+  ]);
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const boxes = [
+    ...block(container, "Steps").querySelectorAll<HTMLInputElement>("input[type=checkbox]"),
+  ];
+  assert.deepEqual(
+    boxes.map((box) => [box.getAttribute("aria-label"), box.disabled, box.checked]),
+    [
+      ["Send the invite", false, false],
+      ["Write the email", false, false],
+      ["Pick a role", false, true],
+      ["Quoted", false, false],
+    ],
+  );
+  const [, nested, ticked, quoted] = boxes;
+  assert.ok(nested && ticked && quoted, "every box is drawn");
+
+  for (const box of [nested, ticked, quoted]) {
+    act(() => box.click());
+    await settle();
+  }
+
+  assert.deepEqual(
+    sent.map((request) => request.document),
+    [
+      { base: body, value: body.replace("  - [ ] Write", "  - [x] Write") },
+      { base: body, value: body.replace("* [X] Pick", "* [ ] Pick") },
+      { base: body, value: body.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
+    ],
+  );
+  assert.equal(nested.checked, true, "a saved tick stands");
+  assert.equal(ticked.checked, true, "a tick the save refused goes back");
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+});
+
+test("a press while a tick is out sends nothing and goes back, and a box is named by its item's words or its picture's", async () => {
+  const body = "## Steps\n- [ ] One\n- [ ] ![Upload screenshot](shot.png)\n";
+  const first = Promise.withResolvers<TasksEditAnswer>();
+  const sent: PlanEditRequest[] = [];
+  const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
+    sent.push(request);
+    return first.promise;
+  };
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
+  await settle();
+  const boxes = [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")];
+  assert.deepEqual(
+    boxes.map((box) => box.getAttribute("aria-label")),
+    ["One", "Upload screenshot"],
+  );
+
+  act(() => {
+    for (const box of boxes) box.click();
+  });
+  first.resolve({ saved: true });
+  await settle();
+
+  assert.deepEqual(
+    sent.map((request) => request.document),
+    [{ base: body, value: body.replace("[ ] One", "[x] One") }],
+  );
+  assert.deepEqual(
+    boxes.map((box) => box.checked),
+    [true, false],
+  );
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {

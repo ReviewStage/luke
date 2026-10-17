@@ -7,11 +7,13 @@ import { SkeletonFrame, type SkeletonFrameProps, SkeletonRegionFrame } from "./s
  * A line stands one line of words in whatever type it is set in, so a
  * caller shapes a heading or a row by the type it puts the block in rather
  * than by sizes of its own, and only its width is the caller's. A control
- * stands one control's box, and a circle a person's mark at the control's
- * glyph. Every block breathes on one opacity loop, in step so a wait reads as
- * one object, in the strong fill, and holds still with every other endless
- * loop on `--loop-motion` under reduced motion and a capture run. The blocks
- * are decoration: the region around them says what is being read, to a
+ * stands one control's box, a circle a person's mark at the control's
+ * glyph, and a block the whole box its container gives it, so a plot's
+ * stand-in takes its size from the room the plot will stand in. Every block
+ * breathes on one opacity loop, in step so a wait reads as one object, in
+ * the strong fill, and holds still with every other endless loop on
+ * `--loop-motion` under reduced motion and a capture run. The blocks are
+ * decoration: the region around them says what is being read, to a
  * reader and to nobody else.
  */
 

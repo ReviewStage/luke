@@ -2,11 +2,11 @@ import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot
 import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ComposeIcon, IconButton, SidebarIcon } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
