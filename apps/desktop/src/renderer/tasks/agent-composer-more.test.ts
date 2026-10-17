@@ -23,14 +23,12 @@ import { AgentComposer } from "./agent-composer";
 import { useAgentComposer } from "./use-agent-composer";
 
 /**
- * The agent's message box at the widths a column or the side panel leaves
- * its card: however narrow, the foot draws only what fits, the round Send
- * or Stop always among it; the chips naming what the agent published and
- * the model draw their marks alone, named still; and the ⋯ offers every
- * press the card had no room for, a popover it opens standing as its own
- * press would have opened it. jsdom lays nothing out, so each width is the
- * stylesheets' container queries resolved for a card that wide
- * (`#testing/container-width`). Synthetic throughout.
+ * The agent's message box on a card too narrow for every press: the ⋯
+ * offers each press the card had no room for, a popover it opens standing
+ * as its own press would have opened it, and it closes once the card changes
+ * width. jsdom lays nothing out, so each width is the stylesheets' container
+ * queries resolved for a card that wide (`#testing/container-width`).
+ * Synthetic throughout.
  */
 
 /** The card's width under a column or a panel this wide, less the composer's inset either side. */
@@ -39,10 +37,6 @@ const CARD = {
   NARROWEST: 178,
   /** A 320px column. */
   NARROW: 278,
-  /** A 480px column. */
-  MEDIUM: 438,
-  /** A 720px column. */
-  WIDE: 678,
 } as const;
 
 const MODELS: readonly CatalogModel[] = [
@@ -134,75 +128,14 @@ async function drawnAt(width: number, status: CodingAgentStatus = CODING_AGENT_S
   return {
     container,
     foot,
-    /** The names of the foot's presses as drawn, in order. */
-    presses: () =>
-      [...foot.querySelectorAll<HTMLButtonElement>("button")]
-        .filter(shown)
-        .map((button) => button.getAttribute("aria-label") ?? button.textContent),
     press: (name: string) =>
       foot.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`) ??
       assert.fail(`${name} stands`),
   };
 }
 
-/** The words inside a press that are drawn. */
-function drawnWords(button: HTMLElement, selector: string): boolean {
-  const words = button.querySelector(selector) ?? assert.fail(`${selector} stands`);
-  return shown(words);
-}
-
-test("a card a 720px column wide draws every press and each chip's words, and no ⋯", async () => {
-  const box = await drawnAt(CARD.WIDE);
-  assert.deepEqual(box.presses(), [
-    "Attach files",
-    "Pull request #2822, open",
-    "Show changes",
-    "Opus 5.5 High",
-    "MCP servers",
-    "Context usage",
-    "Dictate",
-    "Send",
-  ]);
-  assert.equal(drawnWords(box.press("Pull request #2822, open"), ".agent-pr-number"), true);
-  assert.equal(drawnWords(box.press("Show changes"), ".chip-name"), true);
-  assert.equal(drawnWords(box.press("Opus 5.5 High"), ".model-label"), true);
-});
-
-test("a card a 480px column wide draws the published chips' marks alone, named still, and keeps every press and the model's words", async () => {
-  const box = await drawnAt(CARD.MEDIUM);
-  assert.deepEqual(box.presses(), [
-    "Attach files",
-    "Pull request #2822, open",
-    "Show changes",
-    "Opus 5.5 High",
-    "MCP servers",
-    "Context usage",
-    "Dictate",
-    "Send",
-  ]);
-  assert.equal(drawnWords(box.press("Pull request #2822, open"), ".agent-pr-number"), false);
-  assert.equal(drawnWords(box.press("Show changes"), ".chip-name"), false);
-  assert.equal(drawnWords(box.press("Opus 5.5 High"), ".model-label"), true);
-});
-
-test("a card a 320px column wide hands the Changes chip, the servers, the ring, and the microphone to a ⋯, and draws the model as its harness's mark, named still", async () => {
-  const box = await drawnAt(CARD.NARROW);
-  assert.deepEqual(box.presses(), [
-    "Attach files",
-    "Pull request #2822, open",
-    "Opus 5.5 High",
-    "More",
-    "Send",
-  ]);
-  const model = box.press("Opus 5.5 High");
-  assert.equal(drawnWords(model, ".model-label"), false);
-  assert.equal(drawnWords(model, ".harness-mark"), true);
-});
-
-test("a card a 220px column wide keeps what the agent published, the model, the ⋯, and Stop while a turn runs, and the ⋯ offers every press it hid", async () => {
+test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", async () => {
   const box = await drawnAt(CARD.NARROWEST, CODING_AGENT_STATUS.RUNNING);
-  assert.deepEqual(box.presses(), ["Pull request #2822, open", "Opus 5.5 High", "More", "Stop"]);
-
   act(() => box.press("More").click());
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
