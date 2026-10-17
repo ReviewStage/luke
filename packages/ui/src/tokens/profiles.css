@@ -43,7 +43,10 @@
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
 
+  --luke-text-area-grow-max: 320px;
+
   --luke-dialog-confirm-width: 400px;
+  --luke-dialog-wide-width: 520px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
@@ -90,7 +93,10 @@
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
 
+  --luke-text-area-grow-max: 320px;
+
   --luke-dialog-confirm-width: 400px;
+  --luke-dialog-wide-width: 520px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);

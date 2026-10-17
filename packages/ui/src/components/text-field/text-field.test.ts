@@ -10,7 +10,8 @@ import { TextArea, TextField } from "./text-field.js";
 /**
  * text-field.test.ts -- a text entry draws the value its caller holds and
  * hands every change back, answers Enter only when no input method is
- * composing, stays out of spell check where asked, and inside a field is named, described, and marked invalid by
+ * composing, stays out of spell check where asked, hands a paste to a
+ * caller that takes pasted files itself, and inside a field is named, described, and marked invalid by
  * the field's words.
  */
 
@@ -110,6 +111,35 @@ test("a text area holds the many lines its caller holds and hands back every cha
   type(area, "One\nTwo");
   assert.equal(page.querySelector("output")?.textContent, "2");
   assert.equal(area.value, "One\nTwo");
+});
+
+test("a paste reaches a text area's caller, which may take it instead of the text", () => {
+  function Note(): React.JSX.Element {
+    const [taken, setTaken] = useState(0);
+    return createElement(
+      "div",
+      null,
+      createElement(TextArea, {
+        label: "Note",
+        value: "",
+        onChange: () => undefined,
+        grow: true,
+        onPaste: (event) => {
+          event.preventDefault();
+          setTaken((count) => count + 1);
+        },
+      }),
+      createElement("output", null, `${String(taken)} taken`),
+    );
+  }
+  const page = render(createElement(Note));
+  const area = page.querySelector("textarea") ?? assert.fail("no text area");
+  const paste = new Event("paste", { bubbles: true, cancelable: true });
+  act(() => {
+    area.dispatchEvent(paste);
+  });
+  assert.equal(page.querySelector("output")?.textContent, "1 taken");
+  assert.equal(paste.defaultPrevented, true);
 });
 
 test("a text entry asked not to is left out of the system's spell check, and is checked otherwise", () => {

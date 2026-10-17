@@ -119,7 +119,11 @@ test("each of Help's items opens the dialog of its own kind, with the field taki
   assert.equal(feedback.querySelector("h2")?.textContent, "Send feedback");
   assert.equal(document.activeElement, field());
   assert.equal(field().placeholder, "What happened, and what did you expect?");
-  assert.ok(feedback.closest(".ph-no-capture"), "the dialog is left out of the screen recording");
+  assert.ok(
+    feedback.children.length > 0 &&
+      [...feedback.children].every((part) => part.classList.contains("ph-no-capture")),
+    "everything the dialog holds is left out of the screen recording",
+  );
 
   act(() => button("Cancel").click());
   const prompt = openFromHelp(APP_COMMAND.SUGGEST_FEATURE);
@@ -202,4 +206,31 @@ test("a note kept from one experiment's row is not sent under another place's ti
   draw(undefined);
   assert.equal(dialog()?.querySelector("h2")?.textContent, "Send feedback");
   assert.equal(field().value, "");
+});
+
+test("a refused send says why and keeps the note, and sending again delivers it", async () => {
+  mount();
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field(), "The board missed a plan.");
+    field().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  answer = { delivered: false };
+  await act(async () => button("Send").click());
+  assert.equal(
+    dialog()?.querySelector('[role="alert"]')?.textContent,
+    "Could not send that. Try again.",
+  );
+  assert.equal(field().value, "The board missed a plan.");
+
+  answer = { delivered: true };
+  await act(async () => button("Send").click());
+  assert.equal(dialog(), null);
+  assert.equal(
+    sent.filter((request) => request.kind === ACT_KIND.FEEDBACK_SEND).length,
+    2,
+    "the kept note went again",
+  );
 });
