@@ -6367,9 +6367,11 @@ button.automation-run:hover {
 }
 
 /* A quiet act ends the line flush with the card's edge, its words rather than
-   its hover's pill standing in the column. */
-.settings-page .luke-settings-page-actions > .luke-button {
-  margin-right: calc(-1 * var(--space-8));
+   its hover's pill standing in the column. Note that the actions take the
+   margin rather than the button, because a button wider than its container
+   by its own negative margin would be held to it and cut short. */
+.settings-page .luke-settings-page-actions {
+  margin-right: calc(-1 * var(--luke-control-inset));
 }
 
 /* Version history ------------------------------------------------------------ */
