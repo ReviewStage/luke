@@ -114,7 +114,10 @@ test("a failed run's toast is under its automation's name, and its View opens th
   const toast = document.querySelector<HTMLElement>(".toast");
   assert.ok(toast);
   assert.equal(toast.querySelector(".toast-detail")?.textContent, "Flaky test sweep");
-  act(() => toast.querySelector<HTMLButtonElement>(".toast-action")?.click());
+  const view = [...toast.querySelectorAll("button")].find(
+    (button) => button.textContent === "View",
+  );
+  act(() => view?.click());
   assert.deepEqual(viewed, [
     { automationId: SWEEP, runId: RUN_ID, workspaceId: "workspace-other" },
   ]);

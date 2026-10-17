@@ -8861,16 +8861,16 @@ button.automation-run:hover {
 .toast-stack {
   position: fixed;
   z-index: var(--z-toast);
-  right: var(--space-16);
-  bottom: var(--space-16);
-  width: min(340px, calc(100vw - 2 * var(--space-16)));
+  right: var(--luke-space-16);
+  bottom: var(--luke-space-16);
+  width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
   pointer-events: none;
 }
 
 .toast-stack > ol {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -8886,26 +8886,22 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 }
 
 /* Its glyph, its words' first line, and its action share a first row as
-   tall as the action, each centred on it, so they read across on one line
+   tall as a control, each centred on it, so they read across on one line
    however many follow; its words wrap at the card's own line. */
 .toast {
-  --toast-line: 18px;
-  --toast-row: 24px;
-  --toast-glyph: 16px;
+  --toast-row: var(--luke-control-height);
+  --toast-line: var(--luke-type-section-leading);
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: var(--glyph-gap);
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--hairline-strong);
+  gap: var(--luke-icon-gap);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 12px;
-  background: var(--surface-popover);
+  background: var(--luke-color-overlay);
   box-shadow:
     0 1px 2px var(--shadow-soft),
     0 12px 36px var(--shadow);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: var(--toast-line);
   pointer-events: none;
   animation:
     toast-fade var(--duration-quick) var(--motion-exit),
@@ -8917,25 +8913,25 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 
 .toast[data-leaving="true"] {
   opacity: 0;
-  transform: translateX(var(--space-8));
+  transform: translateX(var(--luke-space-8));
 }
 
 .toast > svg {
-  width: var(--toast-glyph);
-  height: var(--toast-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  margin-top: calc((var(--toast-row) - var(--toast-glyph)) / 2);
+  margin-top: calc((var(--toast-row) - var(--luke-control-icon)) / 2);
   color: var(--state-complete);
 }
 
 .toast[data-tone="failed"] > svg {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 /* An ask is the developer's to answer, not news of something done, so its
-   tray stands in the secondary ink rather than the success green. */
+   tray stands in the muted ink rather than the success green. */
 .toast[data-tone="ask"] > svg {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 /* Its words, and the line under them that says where or what, a title's
@@ -8946,7 +8942,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   padding-block: calc((var(--toast-row) - var(--toast-line)) / 2);
 }
 
@@ -8959,20 +8955,10 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   -webkit-line-clamp: 2;
 }
 
-.toast-words {
-  font-weight: 600;
-}
-
-.toast-detail {
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 16px;
-}
-
 /* A toast with an action is pointed at, so it takes the pointer that one
    with none lets pass through to whatever is under it. */
 .toast[data-action="true"] {
-  padding-right: var(--space-8);
+  padding-right: var(--luke-space-8);
   pointer-events: auto;
 }
 
@@ -8983,59 +8969,18 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: none;
 }
 
-/* The action is a small solid button in the full ink, the one thing on the
-   card to press. */
-.toast-action {
-  height: var(--toast-row);
-  flex: none;
-  padding: 0 var(--space-8);
-  border: 0;
-  border-radius: 6px;
-  background: var(--ink);
-  color: var(--surface-popover);
-  font-size: 12px;
-  font-weight: 600;
-  transition: opacity var(--duration-hover) ease;
-}
-
-.toast-action:hover {
-  opacity: 0.86;
-}
-
-/* A toast with an action shows its × on its corner under the pointer or
-   focus, standing over the card's edge so it takes no room from the words. */
+/* A toast with an action shows its × at its end under the pointer or focus,
+   keeping its room at rest so the words never reflow as it comes. */
 .toast-dismiss {
-  position: absolute;
-  top: calc(-1 * var(--space-8));
-  left: calc(-1 * var(--space-8));
-  display: grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 50%;
-  background: var(--surface-popover);
-  box-shadow: 0 1px 2px var(--shadow-soft);
-  color: var(--text-secondary);
+  display: flex;
+  flex: none;
   opacity: 0;
-  transition:
-    opacity var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+  transition: opacity var(--duration-hover) ease;
 }
 
 .toast:hover .toast-dismiss,
 .toast:focus-within .toast-dismiss {
   opacity: 1;
-}
-
-.toast-dismiss:hover {
-  color: var(--text-primary);
-}
-
-.toast-dismiss svg {
-  width: 12px;
-  height: 12px;
 }
 
 @keyframes toast-fade {
@@ -9046,7 +8991,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 
 @keyframes toast-rise {
   from {
-    transform: translateY(var(--space-12));
+    transform: translateY(var(--luke-space-12));
   }
 }
 
