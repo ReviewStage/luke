@@ -45,9 +45,8 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { EmptyState } from "../empty-state";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import { ReadFailure } from "../read-failure";
 import { Skeleton, SkeletonRegion } from "../skeleton";
-import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
@@ -77,15 +76,16 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
  * moment the agent ends, since that is when what it published settles
  * (`useAgentRead`, as the Changes tab reads). It is three reads, each
  * landing on its own: the pull request itself (its description, branches,
- * mergeability, and people), asked as the tab is shown, since the header
- * always draws it; its conversation, asked as the Conversation tab is first
- * shown; and its checks, as the Checks tab is. What Luke already holds of
+ * mergeability, and people) and its conversation, whose reviews say where
+ * each reviewer the header draws stands, both asked as the tab is shown;
+ * and its checks, as the Checks tab is first shown. What Luke already holds of
  * the pull request, what the agent published, draws the bar, the title, and
  * the Files changed tab's lines at once; each part stands as a skeleton
  * until its read lands, and says so with its own Retry where its read
- * failed. Refresh reads again the header and every tab read so far, each
- * part drawn standing until its answer lands; an agent with no pull request
- * yet says that.
+ * failed, the other parts and the tabs standing. Refresh reads again the
+ * header's reads and the checks where their tab was shown, each part drawn
+ * standing until its answer lands; an agent with no pull request yet says
+ * that.
  *
  * The header stays put while the tab under it scrolls: a bar like a File
  * tab's, wearing the pull request's mark and the word for where it stands,
@@ -1100,34 +1100,6 @@ function ConversationView({
   );
 }
 
-/** Whether there is a pull request to draw: none, a wait, a failure, or the header and the tabs under it. */
-const STANDING = {
-  NONE: "none",
-  WAITING: "waiting",
-  FAILED: "failed",
-  DRAWN: "drawn",
-} as const;
-
-type Standing = (typeof STANDING)[keyof typeof STANDING];
-
-/**
- * Whether there is a pull request to draw, as the reads asked so far
- * stand: none where one says so; a wait while nothing is held or read of
- * it, or, where every read asked failed, one failure whose Retry reads them
- * again; else the header and the tabs under it.
- */
-function standingOf(
-  parts: readonly Part<unknown>[],
-  published: CodingAgentPullRequest | undefined,
-): Standing {
-  if (parts.some((part) => part.kind === PART.NONE)) return STANDING.NONE;
-  // Note that with nothing held, only a part landing says there is a pull request to draw.
-  if (published !== undefined || parts.some((part) => part.kind === PART.LANDED)) {
-    return STANDING.DRAWN;
-  }
-  return parts.some((part) => part.kind === PART.PENDING) ? STANDING.WAITING : STANDING.FAILED;
-}
-
 /** One of the overview's reads, as `useAgentRead` holds it, and whether it has been asked yet. */
 function askedYet(read: { readonly answer: unknown; readonly out: boolean }): boolean {
   return read.answer !== undefined || read.out;
@@ -1141,8 +1113,12 @@ function askedYet(read: { readonly answer: unknown; readonly out: boolean }): bo
  * reviewers; and, while it is open, whether it would merge), then a row of
  * tabs, Conversation, Checks, and Files changed (`AgentChangesTab`), each
  * with its count. Each tab stands once shown, the others hidden, so
- * switching draws what each last read rather than asking GitHub again; each
- * reads as it is first shown, the header's own read as the tab is.
+ * switching draws what each last read rather than asking GitHub again. The
+ * header's reads, the pull request and its conversation, whose reviews say
+ * where each reviewer stands, are asked as the tab is shown; the checks and
+ * the files as their tab is first shown. Only a read saying there is no
+ * pull request yet takes the header and the tabs away; a read that failed
+ * says so in its own part, with its own Retry, the others standing.
  */
 export function AgentPullRequestTab({
   agentId,
@@ -1171,7 +1147,7 @@ export function AgentPullRequestTab({
     tab: `${id}-${each}-tab`,
     panel: `${id}-${each}-panel`,
   });
-  // The header's read is asked as the tab is first shown; each tab's own as it is first shown.
+  // The header's reads are asked as the tab is shown, the conversation among them for where its reviewers stand; the checks as their tab is first shown.
   const pullRequestRead = useAgentRead(
     agentId,
     shown,
@@ -1181,7 +1157,7 @@ export function AgentPullRequestTab({
   );
   const conversationRead = useAgentRead(
     agentId,
-    shown && view === PULL_REQUEST_VIEW.CONVERSATION,
+    shown,
     ended,
     control.readOverviewConversation,
     UNANSWERED,
@@ -1198,11 +1174,11 @@ export function AgentPullRequestTab({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header and every tab read so far, never one not yet shown.
+  // Refresh reads again the header's reads and the checks where their tab was shown, never before.
   const refresh = () => {
     ask.pullRequest();
+    ask.conversation();
     if (askedYet(checksRead)) ask.checks();
-    if (askedYet(conversationRead)) ask.conversation();
   };
   const parts: OverviewParts = {
     pullRequest: partOf(pullRequestRead),
@@ -1213,31 +1189,16 @@ export function AgentPullRequestTab({
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
   const published = control.pullRequests.get(agentId);
   const bar = barPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
-  const standing = standingOf(
-    [
-      parts.pullRequest,
-      ...(askedYet(checksRead) ? [parts.checks] : []),
-      ...(askedYet(conversationRead) ? [parts.conversation] : []),
-    ],
-    published,
+  const none = [parts.pullRequest, parts.checks, parts.conversation].some(
+    (part) => part.kind === PART.NONE,
   );
   const title = landed(parts.pullRequest) ?? published;
   const now = useMinute();
   return (
     <div className="file-view pull-request-tab ph-no-capture">
       <PullRequestBar published={bar} reading={reading} onRefresh={refresh} />
-      {standing === STANDING.NONE ? (
+      {none ? (
         <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
-      ) : standing === STANDING.WAITING ? (
-        <SpinnerRegion label={PULL_REQUEST_WORDS.READING} />
-      ) : standing === STANDING.FAILED ? (
-        <div className="side-panel-empty">
-          <ReadFailure
-            line={PULL_REQUEST_WORDS.FAILED}
-            onRetry={refresh}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
-        </div>
       ) : (
         <>
           <header className="pull-request-header">
@@ -1272,18 +1233,17 @@ export function AgentPullRequestTab({
           </div>
         </>
       )}
-      {/* The files stand outside the header's wait, since they read on their own and say on their own that there is no pull request yet. */}
       <div
         className="pull-request-view"
         role="tabpanel"
         id={ids(PULL_REQUEST_VIEW.FILES).panel}
         aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-        hidden={standing !== STANDING.DRAWN || view !== PULL_REQUEST_VIEW.FILES}
+        hidden={none || view !== PULL_REQUEST_VIEW.FILES}
       >
         <AgentChangesTab
           agentId={agentId}
           control={control}
-          shown={shown && standing === STANDING.DRAWN && view === PULL_REQUEST_VIEW.FILES}
+          shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
           repository={repository}
           tree={tree}
         />
