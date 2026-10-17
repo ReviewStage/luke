@@ -1,3 +1,9 @@
+/**
+ * replay.test.ts -- the preamble a replay hands on, told from the steps it kept, the summary of
+ * the ones before them, and how many there were. Synthetic agent and steps; nothing reaches a
+ * database.
+ */
+
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
@@ -6,12 +12,6 @@ import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { it } from "vitest";
 import { replayOf, type StartFrom } from "./replay.js";
 import { SNAPSHOT_MISS } from "./snapshot.js";
-
-/**
- * replay.test.ts -- the preamble a replay hands on, told from the steps it kept, the summary of
- * the ones before them, and how many there were. Synthetic agent and steps; nothing reaches a
- * database.
- */
 
 /** A step of the agent's own words. */
 const said = (at: number): ReplayStep => ({
