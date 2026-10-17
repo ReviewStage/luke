@@ -17,7 +17,7 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
-import { ChartFrame, ChartTrend } from "./chart-frame";
+import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame";
 
 const SIGNUPS_CHART = {
   count: { label: "New accounts", color: "var(--chart-1)" },
@@ -40,9 +40,7 @@ export function SignupsChart({
   if (seriesHasNoData(daily.map((point) => point.count))) {
     return (
       <ChartFrame title="New accounts per day" aside={<ChartTrend trend={trend} />}>
-        <p className="m-0 py-6 text-center text-sm text-muted-foreground">
-          No accounts created in this window yet.
-        </p>
+        <ChartEmpty>No accounts created in this window yet.</ChartEmpty>
       </ChartFrame>
     );
   }
@@ -120,9 +118,7 @@ export function SignInMethodsChart({
   if (rows.length === 0) {
     return (
       <ChartFrame title="Linked sign-in methods">
-        <p className="m-0 py-6 text-center text-sm text-muted-foreground">
-          No linked sign-in methods recorded yet.
-        </p>
+        <ChartEmpty>No linked sign-in methods recorded yet.</ChartEmpty>
       </ChartFrame>
     );
   }
