@@ -4,8 +4,7 @@ import {
   type GitHubInstallStatus,
   githubInstallStatusFromWire,
 } from "@luke/features";
-import { MARK_PROVIDER, ProviderMark } from "@luke/ui";
-import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { AUTH_STATUS_TONE, AuthPage, MARK_PROVIDER, ProviderMark } from "@luke/ui";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
@@ -86,30 +85,29 @@ function statusFromAddress(): GitHubInstallStatus {
   );
 }
 
+/**
+ * The page is one AuthPage card that opens on GitHub's mark joined to
+ * Luke's, the same pairing the sign-in card draws: the status word says
+ * where the installation stands, the title what happened, and the
+ * description what to do next.
+ */
 function GitHubInstalled(): React.JSX.Element {
   const [status] = useState(statusFromAddress);
   const card = LANDING_CARD[status];
   return (
-    <main className={AUTH_SHELL}>
-      <section className={AUTH_CARD} aria-labelledby="landing-title">
-        {/* The same pairing the sign-in card draws: the provider's mark, an
-            arrow, and Luke's own face. */}
-        <div className="mb-5">
-          <ConnectionGraphic
-            mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
-          />
-        </div>
-        <div>
-          <span className={AUTH_PILL} data-tone={card.settled ? "settled" : "attention"}>
-            {card.badge}
-          </span>
-        </div>
-        <h1 id="landing-title" className={AUTH_TITLE}>
-          {card.title}
-        </h1>
-        <p className="m-0 text-muted-foreground">{card.body}</p>
-      </section>
-    </main>
+    <AuthPage
+      mark={
+        <ConnectionGraphic
+          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
+        />
+      }
+      status={{
+        tone: card.settled ? AUTH_STATUS_TONE.SETTLED : AUTH_STATUS_TONE.ATTENTION,
+        label: card.badge,
+      }}
+      title={card.title}
+      description={card.body}
+    />
   );
 }
 
