@@ -65,6 +65,7 @@ import { HOSTED_API_ERROR } from "@luke/features";
 import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
+  firstMessageText,
   newestStepsWithin,
   REPLAY_STEP_KIND,
   START_NOTE_HEADING,
@@ -4672,7 +4673,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
         const { parts, files } = openedWithFiles(eve);
 
-        assert.deepEqual(parts.note, { heading: START_NOTE_HEADING.DEVELOPER, text: note });
+        assert.deepEqual(parts.note, {
+          heading: START_NOTE_HEADING.DEVELOPER,
+          text: note,
+          files: { text: 0, other: 1 },
+        });
         assert.equal(parts.replay?.steps.length, 6);
         assert.deepEqual(files, ["flow.png"]);
         const kept = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
@@ -4828,6 +4833,47 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
         assert.equal(again.id, first.id);
         assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  it.effect(
+    "a source whose prompt holds a note's heading in its prose hands on its brief whole, and a note it was handed behind its marker becomes its first step",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const prose = `Write the guide.\n\n${START_NOTE_HEADING.DEVELOPER}\n\nExplain this heading in the guide.`;
+        const sourceOf = (handed: string) =>
+          Effect.gen(function* () {
+            const made = Option.getOrThrow(
+              yield* createCodingAgent(owner, {
+                taskId: task.id,
+                planSnapshot: null,
+                prompt: handed,
+                idempotencyKey: randomUUID(),
+                model: SOL,
+                effort: "low",
+                repository: RELAY_FULL_NAME,
+              }),
+            ).agent;
+            yield* transcriptRow(made, 1, MESSAGE_ROLE.USER, [text(handed)]);
+            return made;
+          });
+        const continueFrom = (agentId: string) =>
+          ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } }));
+
+        yield* continueFrom((yield* sourceOf(prose)).id);
+        assert.equal(openedParts(eve).parts.brief, prose);
+        assert.deepEqual(openedParts(eve).parts.replay?.steps, []);
+
+        yield* continueFrom(
+          (yield* sourceOf(firstMessageText(prose, undefined, "Keep it short."))).id,
+        );
+        const read = openedParts(eve).parts;
+        assert.equal(read.brief, prose);
+        assert.deepEqual(
+          read.replay?.steps.map((step) => step.summary),
+          ["The developer: Keep it short."],
+        );
       }),
   );
 
