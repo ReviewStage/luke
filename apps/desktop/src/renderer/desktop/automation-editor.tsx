@@ -72,6 +72,7 @@ import {
   POPOVER_ALIGN,
   ProviderMark,
   SettingsRow,
+  SettingsSection,
   SidePanelIcon,
   Switch,
   TEXT_ELEMENT,
@@ -1386,7 +1387,7 @@ function EditorForm({
   return (
     <div className="automation-form">
       {offersOwner ? (
-        <SettingsGroup title="Sharing">
+        <SettingsSection title="Sharing">
           <OwnerRow
             owner={draft.owner}
             owners={owners}
@@ -1394,7 +1395,7 @@ function EditorForm({
             workspace={workspace}
             onOwner={(owner) => onDraft({ owner })}
           />
-        </SettingsGroup>
+        </SettingsSection>
       ) : null}
       <SettingsGroup title="Trigger">
         <SelectRow

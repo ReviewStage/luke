@@ -732,7 +732,7 @@ function pick(page: HTMLElement, label: string, option: string): void {
 
 /** The titles of the page's cards, in order. */
 function cards(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".settings-group-title")].map(
+  return [...page.querySelectorAll("section[aria-labelledby] h2")].map(
     (title) => title.textContent ?? "",
   );
 }
@@ -974,7 +974,7 @@ test("the Owner row stands in a shared workspace, and not in the account's perso
 
 /** The groups of the editor's form, by their titles, top to bottom. */
 function formGroups(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".automation-form .settings-group-title")].map(
+  return [...page.querySelectorAll(".automation-form section[aria-labelledby] h2")].map(
     (title) => title.textContent ?? "",
   );
 }
