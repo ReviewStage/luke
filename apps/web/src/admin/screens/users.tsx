@@ -213,8 +213,7 @@ export function UsersScreen({
         ? list.rows.filter((row) => `${row.name} ${row.email}`.toLowerCase().includes(needle))
         : list.rows;
       const failure = state.refreshFailure;
-      // A miss among a truncated roster's loaded rows is not yet the service's
-      // answer, so the note saying search reads every account stays with it.
+      // Note that a miss may lie past a truncated roster's rows, so its note stays.
       const truncatedTo = list.total > list.rows.length ? list.rows.length : undefined;
       const notice = (
         <RefreshFailureNotice failure={failure} refreshing={refreshing} onRetry={reload} />
