@@ -571,7 +571,6 @@ export function AgentComposer({
           setDraft={composer.setDraft}
           placeholder={placeholder}
           label="Message to the agent"
-          className="ph-no-capture agent-composer-input"
           input={
             held
               ? COMPOSER_INPUT.DISABLED

@@ -343,7 +343,6 @@ function AnswerCard({
             setDraft={(text) => control.onDraft(item, { ...draft, note: text })}
             placeholder={placeholder}
             label={placeholder}
-            className="ph-no-capture agent-composer-input"
             input={
               sending
                 ? COMPOSER_INPUT.DISABLED

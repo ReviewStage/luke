@@ -3291,12 +3291,33 @@ button.draft-fork-quote:hover {
   padding-left: 4px;
 }
 
-/* The box's field (`composer-field.tsx`): its editor, set in the card's
-   type with no space between its paragraphs, as a textarea's lines stand,
-   and the placeholder the field draws at the editor's own insets while the
-   words are empty, dimmed with the editor while the box is held. */
+/* The box's field (`composer-field.tsx`): its editor in the body type, one
+   line to eight and then scrolling, with no space between its paragraphs,
+   as a textarea's lines stand, and the placeholder the field draws at the
+   editor's own insets while the words are empty, dimmed with the editor
+   while the box is held. No ring: the card around it rings (`.field-well`). */
 .agent-composer-field {
   position: relative;
+  --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
+}
+
+.agent-composer-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  overflow-y: auto;
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
+  background: transparent;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+  outline: none;
+  user-select: text;
+}
+
+.agent-composer-input[aria-disabled="true"] {
+  opacity: 0.6;
 }
 
 /* Note that the editor keeps its spaces as typed, as TipTap's own base rules
@@ -3322,10 +3343,10 @@ button.draft-fork-quote:hover {
   right: 0;
   left: 0;
   overflow: hidden;
-  padding: 1rem 1rem 0;
-  color: var(--text-secondary);
-  font-size: var(--composer-type);
-  line-height: 1.45;
+  padding: var(--luke-space-16) var(--luke-space-16) 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   pointer-events: none;
   text-overflow: ellipsis;
   white-space: nowrap;
