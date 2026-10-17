@@ -40,7 +40,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -1559,4 +1559,36 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
     }),
   );
   assert.equal(merged.querySelector(".pull-request-review-button"), null);
+});
+
+test("a press outside the review panel closes it, its words kept, and one on a short window opens it on the side with more room, bounded to that room", async () => {
+  // Note that jsdom lays out nothing, so the press stands low in a 768px window and the panel is taller than either side.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.classList.contains("pull-request-review")) {
+      return DOMRect.fromRect({ x: 600, y: 300, width: 80, height: 28 });
+    }
+    if (this.classList.contains("anchored-popover")) {
+      return DOMRect.fromRect({ x: 0, y: 0, width: 480, height: 600 });
+    }
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  try {
+    const tab = await draw(controlAnswering());
+    const panel = openReview(tab);
+    const layer =
+      tab.querySelector<HTMLElement>(".anchored-popover") ??
+      assert.fail("the panel hangs from Review");
+    assert.equal(layer.dataset.side, "below");
+    assert.equal(layer.style.getPropertyValue("--popover-room"), `${768 - 328 - 4 - 8}px`);
+
+    writeReview(panel, "Half a thought");
+    act(() => {
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+
+    assert.equal(tab.querySelector(".pull-request-review-panel"), null);
+    assert.equal(openReview(tab).querySelector("textarea")?.value, "Half a thought");
+  } finally {
+    vi.restoreAllMocks();
+  }
 });

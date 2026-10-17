@@ -232,6 +232,19 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
+  // Note that a press outside closes it too, as a menu's does, because the
+  // field keeps the focus through a press on words nothing can focus, so no
+  // blur says it was left; a review on its way holds it open all the same.
+  const sending = writes.pending !== undefined;
+  useEffect(() => {
+    if (!open || sending) return undefined;
+    const pressed = (event: PointerEvent) => {
+      if (!(event.target instanceof Node && root.current?.contains(event.target))) setOpen(false);
+    };
+    document.addEventListener("pointerdown", pressed, true);
+    return () => document.removeEventListener("pointerdown", pressed, true);
+  }, [open, sending]);
+
   // Note that we hand focus back to the press, as a menu returns it to its
   // trigger, because closing takes the focused field away with it.
   const close = () => {
@@ -271,7 +284,7 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
               // press it was sent from is disabled as it goes, which drops the
               // focus the way a click outside would, and GitHub's answer is
               // drawn in the panel.
-              if (writes.pending !== undefined) return;
+              if (sending) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}
           />

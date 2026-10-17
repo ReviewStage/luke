@@ -1877,10 +1877,16 @@ button.file-ref:hover .file-ref-path {
   display: flex;
 }
 
+/* Never taller than the room its side of the press leaves
+   (`anchored-popover.tsx`'s `--popover-room`), scrolling within it, so a
+   short window keeps Submit in reach. */
 .pull-request-review-panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-12);
+  max-height: var(--popover-room, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-12) var(--space-16) var(--space-16);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--menu-radius);
@@ -1920,6 +1926,10 @@ button.file-ref:hover .file-ref-path {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-8);
+}
+
+.pull-request-review-panel > * {
+  flex-shrink: 0;
 }
 
 .pull-request-review-field,
