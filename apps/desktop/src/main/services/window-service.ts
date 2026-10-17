@@ -157,13 +157,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const preloadPath = path.join(config.resourceDirectory, "preload.js");
   const rendererHtmlPath = path.join(config.resourceDirectory, "renderer", "index.html");
   const rendererUrl = pathToFileURL(rendererHtmlPath).href;
-  // The hidden voice window loads the panels' bundle from a document of its
-  // own, mounting what `windowFactsFor`'s role says. Both documents are files
+  // The hidden voice window loads its own entry from a document of its own,
+  // which mounts the voice host alone. Both documents are files
   // this build wrote into the resource directory, and the pair is the whole
   // of what any window here may navigate to or speak from.
   const voiceHtmlPath = path.join(config.resourceDirectory, "renderer", "voice.html");
   const voiceUrl = pathToFileURL(voiceHtmlPath).href;
-  // The call window's document, on the same terms: the one bundle, no host.
+  // The call window's document, on the same terms: its own entry, no host.
   const callHtmlPath = path.join(config.resourceDirectory, "renderer", "call.html");
   const callUrl = pathToFileURL(callHtmlPath).href;
 

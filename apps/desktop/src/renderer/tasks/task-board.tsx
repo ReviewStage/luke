@@ -6,7 +6,7 @@ import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";
-import { actRequest } from "../act";
+import { askAct } from "../act";
 import { bundleAtom } from "../bundle-loader";
 import { rendererRuntime } from "../renderer-runtime";
 import { SpinnerRegion } from "../spinner";
@@ -85,7 +85,7 @@ const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
       : undefined;
     const payload = image === undefined ? scene : { ...scene, image };
     yield* Effect.tryPromise({
-      try: () => window.luke.act(actRequest(ACT_KIND.TASKS_BOARD_SAVE, payload)),
+      try: () => askAct(ACT_KIND.TASKS_BOARD_SAVE, payload),
       catch: (error) => error,
     });
   }),

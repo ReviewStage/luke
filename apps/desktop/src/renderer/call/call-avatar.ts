@@ -47,6 +47,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { tellAct } from "../act";
+import { appBridge } from "../app-bridge";
 import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
 import { avatarSessionModuleAtom } from "./avatar-session-bundle";
 
@@ -229,7 +230,7 @@ const subscription = <A>(subscribe: (deliver: (value: A) => void) => () => void)
 
 /** The panel's own doors: main's two channels, the act it alone may send, and the SDK's bundle. */
 const windowDoors: CallAvatarDoors = {
-  feeds: subscription<AvatarFeed>((deliver) => window.luke.onAvatarFeed(deliver)),
+  feeds: subscription<AvatarFeed>((deliver) => appBridge().onAvatarFeed(deliver)),
   report: (avatar) => Effect.sync(() => tellAct(ACT_KIND.AVATAR_REPORT, avatar)),
   module: AtomRegistry.getResult(rendererRegistry, avatarSessionModuleAtom),
 };
@@ -245,7 +246,7 @@ const windowDoors: CallAvatarDoors = {
 export const callAvatarAtom = Atom.keepAlive(
   rendererRuntime.atom(
     callAvatar(
-      subscription<AvatarGrant | undefined>((deliver) => window.luke.onAvatarSession(deliver)),
+      subscription<AvatarGrant | undefined>((deliver) => appBridge().onAvatarSession(deliver)),
       windowDoors,
     ),
   ),

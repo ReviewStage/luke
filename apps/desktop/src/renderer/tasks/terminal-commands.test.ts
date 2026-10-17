@@ -13,6 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
@@ -84,22 +85,18 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   // Main answers how each agent's sandbox stands: the working agent's runs, the other's is stopped.
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.TERMINAL_LIST) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        const running = request.payload.agentId === WORKING.id;
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: running
-            ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
-            : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
-        });
-      },
-      onMenuCommand: () => () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.TERMINAL_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
+      const running = request.payload.agentId === WORKING.id;
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: running
+          ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
+          : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
+      });
     },
   });
 });

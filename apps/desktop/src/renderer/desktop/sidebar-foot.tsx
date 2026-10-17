@@ -32,6 +32,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { useOpenPerson } from "../person-door";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuEntry } from "./action-menu";
@@ -235,7 +236,7 @@ function AccountMenu({
       openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
     onSettings,
     onOpenChangelog: () => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG),
-    onOpenIssues: () => tell(ACT_KIND.GITHUB_OPEN, { url: ISSUES_URL }),
+    onOpenIssues: () => appPlatform().openGitHub(ISSUES_URL),
     onEmail: () => tell(ACT_KIND.CONTACT_EMAIL),
     onLogOut: logOut.ask,
   });

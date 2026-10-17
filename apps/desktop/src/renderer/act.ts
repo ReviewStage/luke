@@ -12,16 +12,14 @@ import {
 import type { AppSettingField, AppSettingValue } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { useMemo } from "react";
+import { appBridge } from "./app-bridge";
 
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends ActKind> =
   ActPayload<Kind> extends undefined ? [] : [payload: ActPayload<Kind>];
 
 /** Pairs a kind with the payload it takes, the pairing {@link Act} declares. */
-export function actRequest<Kind extends ActKind>(
-  kind: Kind,
-  payload: ActPayload<Kind> | undefined,
-): Act {
+function actRequest<Kind extends ActKind>(kind: Kind, payload: ActPayload<Kind> | undefined): Act {
   // SAFETY: ActArguments guarantees payload is present exactly when the kind's own schema takes one.
   return (payload === undefined ? { kind } : { kind, payload }) as Act;
 }
@@ -54,7 +52,7 @@ function decodedOutcome<Kind extends ActKind>(kind: Kind, outcome: ActOutcome): 
  * transcript read is held open by the service for seconds, and any act sent
  * meanwhile would have handed the reader its answer, and taken the reader's.
  */
-const send = (request: Act): Promise<ActOutcome> => window.luke.act(request);
+const send = (request: Act): Promise<ActOutcome> => appBridge().act(request);
 
 async function performAct<Kind extends ActKind>(
   send: (request: Act) => Promise<ActOutcome>,

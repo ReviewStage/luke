@@ -11,11 +11,11 @@ import {
   type SandboxState,
   type TerminalSummary,
 } from "@luke/features/terminal-wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { openGithubUser } from "../testing/github-app-fake.js";
-import { noNetwork } from "../testing/no-network.js";
 import { AGENT_TERMINALS_PATH, agentTerminalsApp } from "./agent-terminals-app.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
