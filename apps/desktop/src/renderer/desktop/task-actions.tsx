@@ -3,7 +3,9 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, type TaskSummary } from "@luke/features/task-wire";
 import {
   ArchiveIcon,
+  ConfirmDialog,
   CopyIcon,
+  type DialogQuestion,
   EllipsisIcon,
   ExternalIcon,
   PinIcon,
@@ -11,6 +13,7 @@ import {
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
@@ -25,7 +28,6 @@ import { usePlanDrafted } from "../composer-drafts";
 import { useCopyToast } from "../copy-feedback";
 import { DraftMark } from "../draft-mark";
 import { useMemberDirectory } from "../member-directory";
-import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref";
 import { lastEditOf } from "../tasks/plan-body";
 import { RelativeTime } from "../tasks/relative-time";

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
@@ -17,7 +18,6 @@ import {
   type DiagramDrawing,
 } from "./diagram/contract";
 import { MarkdownMessage } from "./markdown-message";
-import { useConfirmDialog } from "./settings/confirm-dialog";
 import { PlanBody } from "./tasks/plan-body";
 import { HISTORY_READ } from "./tasks/use-plan-history";
 import { VersionView } from "./tasks/version-view";

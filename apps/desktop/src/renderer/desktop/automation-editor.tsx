@@ -64,10 +64,12 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   AnchoredPopover,
+  ConfirmDialog,
   EllipsisIcon,
   POPOVER_ALIGN,
   ProviderMark,
   SidePanelIcon,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -83,7 +85,6 @@ import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
-import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
 import { SettingsGroup } from "../settings/settings-group";

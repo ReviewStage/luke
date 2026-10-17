@@ -4,12 +4,15 @@ import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
 import {
+  ConfirmDialog,
+  DIALOG_TONE,
   ExternalIcon,
   GearIcon,
   KeyboardIcon,
   ProviderMark,
   riseAbove,
   UpdateIcon,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
@@ -29,7 +32,6 @@ import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
 import { useOpenPerson } from "../person-door";
-import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuEntry } from "./action-menu";
 

@@ -1,7 +1,7 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { useMenu } from "@luke/ui";
+import { ConfirmDialog, useConfirmDialog, useMenu } from "@luke/ui";
 import { ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -11,7 +11,6 @@ import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { usePerson } from "../member-directory";
-import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { RelativeTime } from "../tasks/relative-time";
 import { useMinute } from "../tasks/task-time";
 import { Tooltip } from "../tooltip";
