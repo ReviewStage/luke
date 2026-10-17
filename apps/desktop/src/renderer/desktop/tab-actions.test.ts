@@ -19,7 +19,7 @@ import { DesktopTasks } from "./desktop-tasks";
 
 /**
  * tab-actions.test.ts -- a column's bar holds a ⋯ for its chosen tab's
- * content actions: the plan's own menu on the plan's tab, and on an agent's
+ * content actions: the task's own menu on the task's tab, and on an agent's
  * or a subagent's tab the actions its right-click offers on what it shows,
  * without the tab's own keeping (Close, Close others, Pin tab), which stays
  * on the right-click alone. A tab with no content action shows no ⋯, and no
@@ -66,8 +66,8 @@ const SUBAGENT = { subagent: "call-1", delegation: { agent: AGENT.id, task: "Aud
 const TAB_KEEPING = new Set(["Close", "Close others", "Pin tab", "Unpin tab"]);
 
 /**
- * The plan's page with a tab of every kind open, `main` chosen in its column
- * and `side` in the side panel: the plan's, an agent's, the draft's, and the
+ * The task's page with a tab of every kind open, `main` chosen in its column
+ * and `side` in the side panel: the task's, an agent's, the draft's, and the
  * Inbox's in the column, and in the side panel the fixed tabs, the agent's
  * delegated worker's, a file's, the agent's Changes and Terminal, and a page's.
  */
@@ -156,13 +156,13 @@ function rightClickChosen(strip: HTMLElement): string[] {
   return readAndClose();
 }
 
-/** The two columns' bars: the plan's column's toolbar, and the side panel's. */
+/** The two columns' bars: the task's column's toolbar, and the side panel's. */
 interface Bars {
   main: HTMLElement;
   side: HTMLElement;
 }
 
-/** The two columns' bars, as the plan's page draws them. */
+/** The two columns' bars, as the task's page draws them. */
 function bars(container: HTMLElement): Bars {
   const main = container.querySelector<HTMLElement>(".desktop-task-main .desktop-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");

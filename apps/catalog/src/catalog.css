@@ -188,6 +188,41 @@ body {
   white-space: nowrap;
 }
 
+/* A popover's anchor, the positioned box that holds its button alone, and
+   the room the popover opens in: tall enough above the buttons to hold it. */
+.catalog-anchor {
+  position: relative;
+}
+
+.catalog-popover-stage {
+  max-width: 760px;
+  padding-top: 120px;
+}
+
+.catalog-popover {
+  padding: var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-ground);
+  box-shadow: 0 4px 16px var(--luke-color-shadow);
+}
+
+/* A short room that scrolls, its button low enough that the popover opens
+   above it until a scroll lifts the button toward the room's top. */
+.catalog-popover-room {
+  position: relative;
+  max-width: 560px;
+  height: 200px;
+  overflow: auto;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-popover-scroll {
+  height: 480px;
+  padding: 140px var(--luke-space-12) 0;
+}
+
 /* An example's column of samples, each a row of its own. */
 .catalog-stack {
   display: flex;
@@ -238,6 +273,13 @@ body {
   max-width: 360px;
 }
 
+/* A dialog's long words, which give way and scroll in a short window so the
+   answers under them stay on the card. */
+.catalog-dialog-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* A settings card standing in for the section that holds a page's rows:
    its edge, and a rule between rows. */
 .catalog-settings {
@@ -253,6 +295,11 @@ body {
 
 .catalog-settings-narrow {
   max-width: 320px;
+}
+
+/* The tooltip example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
+.catalog-hinted {
+  display: inline-flex;
 }
 
 /* A bare text input standing in for a control an example holds. */

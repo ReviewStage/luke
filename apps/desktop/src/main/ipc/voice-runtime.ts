@@ -63,8 +63,8 @@ export function voiceRuntimeActRows(
       voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
     },
     // The call card's way back, from the floating window or from a panel's
-    // own card, names no plan: the call's is read here, so it cannot bring
-    // forward a plan the call is not about.
+    // own card, names no task: the call's is read here, so it cannot bring
+    // forward a task the call is not about.
     [ACT_KIND.CALL_SHOW_TASK]: (_payload, { call, panel }) => {
       const taskId = state.snapshot().voice.view?.callTaskId;
       if ((!call && !panel) || taskId === undefined) return;

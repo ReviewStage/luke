@@ -12,10 +12,9 @@ import {
   INLINE_DIFF,
   INLINE_DIFF_LABEL,
 } from "@luke/settings/diff-view";
-import { CloseIcon } from "@luke/ui";
+import { AnchoredPopover, CloseIcon, POPOVER_ALIGN } from "@luke/ui";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { Segmented } from "../segmented";
 import { ChangedMark } from "../settings/marks";
 import { PickerRow } from "../settings/picker-row";

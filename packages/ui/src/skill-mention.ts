@@ -9,7 +9,7 @@
  * inside a fenced block) opens nothing. A chosen skill stands in the message
  * as its own word, `/name`, which the composer's editor holds as a chip
  * (the desktop's `plan-editor/composer-editor.ts`) and a sent message draws
- * as one (its `planning/skill-chip.tsx`). Nothing here draws, and nothing here is the panel's
+ * as one (its `tasks/skill-chip.tsx`). Nothing here draws, and nothing here is the panel's
  * alone: the editor bundle reads the same words.
  */
 

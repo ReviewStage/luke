@@ -1,10 +1,10 @@
 import { DICTATION_BOUNDS } from "./dictation-wire.js";
 
 /**
- * dictation-keywords.ts -- the words a dictated clip is likely to say, read off the plan it is about: what tells the transcription model to spell "pnpm" rather than hear "P N P M".
+ * dictation-keywords.ts -- the words a dictated clip is likely to say, read off the task it is about: what tells the transcription model to spell "pnpm" rather than hear "P N P M".
  *
- * The repository's full name and its own name, the plan's title, and the
- * paths and file names the plan's document spells, in that order and each
+ * The repository's full name and its own name, the task's title, and the
+ * paths and file names the task's document spells, in that order and each
  * once, held to the wire's bounds: one line, no angle bracket, a hundred
  * characters, fifty words. A word past a bound is left out rather than cut,
  * because half a path is a word nobody says.

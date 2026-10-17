@@ -18,7 +18,7 @@ import {
 import { type TabMove, useTabDrag } from "./use-tab-drag";
 
 /**
- * tab-strip.tsx -- the window's one tab strip, drawn alike across the plan's column and the side panel, the way an editor draws its tabs.
+ * tab-strip.tsx -- the window's one tab strip, drawn alike across the task's column and the side panel, the way an editor draws its tabs.
  *
  * A tab is its glyph and its label in a compact pill: raised while it is the
  * chosen one, plain and muted otherwise. A tab that may be closed carries an
@@ -32,12 +32,12 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * along it (use-tab-drag.ts), or the focused one stepped left or right by
  * ⇧⌘← and ⇧⌘→, as VS Code moves an editor, with focus kept on it. Either
  * way the strip says where the tab now stands to whoever reads it aloud. A
- * tab anchored at the strip's start, as the plan's tab is in its column,
+ * tab anchored at the strip's start, as the task's tab is in its column,
  * stands there for good, as a browser's pinned tab does: it is not moved,
  * and no tab is moved before it.
  *
  * A tab something arrived on while another was chosen reads in semibold
- * until it is chosen, the sidebar's convention for a plan saved unseen,
+ * until it is chosen, the sidebar's convention for a task saved unseen,
  * rather than wearing a dot, and says "New result" in its hint and to a
  * reader.
  *
@@ -379,7 +379,7 @@ export function Tab({
   onClose?: (() => void) | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
 }): React.JSX.Element {
-  // Whether the label is cut short: a label renamed, or the plan's one tab
+  // Whether the label is cut short: a label renamed, or the task's one tab
   // giving way to its toolbar.
   const [words, clipped] = useClipped();
   // Note that a tab other than the chosen one is named in its hint whether or

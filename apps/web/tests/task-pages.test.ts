@@ -11,9 +11,9 @@ import { Effect, Option } from "effect";
 /**
  * A plan's pages, through the store's write and reads: a write is a page's
  * next version and every version stands as written, the plan lists each page
- * by its newest, a member of the plan's workspace reads and writes its pages
- * whoever started it, and a plan of a workspace the account is not in, or a
- * page the plan does not hold, reads and writes as none. Synthetic accounts, plans, and pages
+ * by its newest, a member of the task's workspace reads and writes its pages
+ * whoever started it, and a task of a workspace the account is not in, or a
+ * page the task does not hold, reads and writes as none. Synthetic accounts, tasks, and pages
  * throughout.
  */
 

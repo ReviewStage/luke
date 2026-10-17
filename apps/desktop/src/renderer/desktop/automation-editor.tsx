@@ -62,12 +62,17 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import {
+  AnchoredPopover,
+  EllipsisIcon,
+  POPOVER_ALIGN,
+  ProviderMark,
+  SidePanelIcon,
+} from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
@@ -103,7 +108,7 @@ import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choic
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
  *
- * It stands where the list stood, in the plan's place, and the first crumb
+ * It stands where the list stood, in the task's place, and the first crumb
  * goes back to the list. Its form is drawn as a Settings page is, from
  * Settings' own rows: a group per part, each a card of rows naming a
  * setting and why on the left and its control on the right, every pick a

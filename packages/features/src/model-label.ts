@@ -5,7 +5,7 @@ import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
  *
  * Shared by the panel, which draws the tabs and the Start menu, the main
  * process, which posts the notification an agent's end is announced in, and
- * the planning model's coding-agent tools, whose answers Luke says aloud, so
+ * the brain's coding-agent tools, whose answers Luke says aloud, so
  * no two of them name one model two ways; and the service, which names
  * every model it records by the catalog's id before it sends one.
  */

@@ -368,7 +368,7 @@ function journaled(
   return workTurn(state, journal, { workers });
 }
 
-/** The planning model's background delegate as eve stores it: answered at its receipt. */
+/** The brain's background delegate as eve stores it: answered at its receipt. */
 const DELEGATE_CALL = {
   type: "tool-delegate",
   toolCallId: "call-1",

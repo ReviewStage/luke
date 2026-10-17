@@ -1,13 +1,13 @@
 /**
- * child-models.ts -- what a planning worker's newest task ran on and spent, read off the turn row its journal was written under.
+ * child-models.ts -- what a brain worker's newest task ran on and spent, read off the turn row its journal was written under.
  *
- * A worker's turns are recorded in its child conversation as the planning
- * model's are in the plan's, each turn row naming the model eve resolved it
+ * A worker's turns are recorded in its child conversation as the brain's
+ * are in the task's, each turn row naming the model eve resolved it
  * to and, once it settles, its tokens and how it ended, so the Work tab
  * names the worker's model from that record, the way an agent's subagent
  * row names the pair its delegation chose, and its tab's footer card says
  * the rest (`turn-record.ts`). A leaf over the store alone, read by the
- * plan's work read back and by the live follow.
+ * task's work read back and by the live follow.
  */
 
 import { turnsNamed } from "@luke/database/models/message-reads";

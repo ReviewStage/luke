@@ -17,7 +17,7 @@ import { task } from "./task.js";
  * history starts it with the one revision its
  * first later save found, under `earlier`. The developer restoring an
  * earlier revision writes a revision of its own naming the one it brought
- * back, which nothing joins. Rows go with their plan, and outlive the coding
+ * back, which nothing joins. Rows go with their task, and outlive the coding
  * agent that wrote them unnamed, and the member's account unnamed too.
  */
 export const planRevision = pgTable(

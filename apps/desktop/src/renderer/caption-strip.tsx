@@ -11,7 +11,7 @@ import {
  * Laid out the way a call app's live captions are: who is speaking in a
  * small label, then at most two lines of their words with the newest at the
  * foot, the older lines leaving through a faded top edge. It stands above the
- * call bar in the plan's column, never over the side panel or the call's
+ * call bar in the task's column, never over the side panel or the call's
  * controls, and the shell floats it at the window's foot wherever no call bar
  * is drawn. One element in every state, so both edges of its fade can run.
  */

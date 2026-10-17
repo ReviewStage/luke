@@ -49,9 +49,9 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * the caret at its end; and Esc in the editor saves and selects the section
  * the caret stood in. The title is edited where it stands (Return or ↓ goes
  * into the text, ↑ on the text's first line comes back to it, Esc saves and
- * selects it) and saved by renaming the plan as the typing pauses and as it
+ * selects it) and saved by renaming the task as the typing pauses and as it
  * is left, so the name never enters the text; meanwhile its words are drawn
- * as the plan's name wherever the window names it. The words save as the
+ * as the task's name wherever the window names it. The words save as the
  * developer pauses (`use-plan-editing.ts`), and the service merges them with
  * what Luke writes.
  * A save's merged answer is taken into the open editor block by block, and
@@ -202,8 +202,8 @@ function boundTitle(element: HTMLElement): void {
  * The title over the text, edited where it stands. A click puts the caret
  * in it; Return or ↓ saves it and goes into the text at its start; Esc saves
  * it and selects it as a block, from which Return comes back into it. Its
- * words are drawn as the plan's name everywhere at every keystroke, through
- * `onDraft`, and saved by renaming the plan at each pause in the typing and
+ * words are drawn as the task's name everywhere at every keystroke, through
+ * `onDraft`, and saved by renaming the task at each pause in the typing and
  * as it is left. A title left empty or unchanged renames nothing, as a
  * rename anywhere else does, and one left empty is drawn as the saved name
  * again. Its words are the name's own but while they are typed, so a
@@ -226,7 +226,7 @@ export function EditableTitle({
   editing: PlanEditing;
   /** How many times Rename was chosen; each change is an ask of its own. */
   renaming?: number;
-  /** Renames the plan, answering whether the name was taken. */
+  /** Renames the task, answering whether the name was taken. */
   onRename: (name: string) => Promise<boolean>;
   onDraft: (name: string | undefined) => void;
 }): React.JSX.Element {
@@ -298,7 +298,7 @@ export function EditableTitle({
     if (element === null || !typed.current || !AsyncResult.isSuccess(pause)) return;
     if (!pause.waiting && pause.value === stamp.current) rename(element);
   });
-  // Note that a title going while typed in saves its words to the plan it
+  // Note that a title going while typed in saves its words to the task it
   // was drawn for, because no blur reaches an element taken out of the page.
   useLayoutEffect(() => {
     const element = text.current;

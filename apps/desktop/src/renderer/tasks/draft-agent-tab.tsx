@@ -10,7 +10,7 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 /**
  * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.
  *
- * Opened from the plan's column's "+", it is drawn as an agent's tab is with
+ * Opened from the task's column's "+", it is drawn as an agent's tab is with
  * nothing yet said: nothing where the transcript would be, since the
  * composer's placeholder is the one prompt, and at the tab's foot the
  * composer, focused as the tab opens, with the model
@@ -18,16 +18,16 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * service until the first send, which starts the agent with those words, the
  * files attached, or both as its prompt, never the plan, on the model
  * the chip names where the developer
- * changed it and else on the account's default, in the plan's repository;
+ * changed it and else on the account's default, in the task's repository;
  * the tab then gives way to the agent's own. The words and the choice are
  * the draft's, held by its owner, as are the files, so they wait while the
  * tab is away. A
  * send that did not start it
  * leaves the words in the box with why under it and what mends it: Retry,
  * which asks again under the draft's own key, or, for a repository out of
- * reach, the press its reason names, a move of the plan asking again by
+ * reach, the press its reason names, a move of the task asking again by
  * itself once it lands. Closing the tab lets the draft go, and since
- * nothing was started, nothing is left behind. While the plan is archived,
+ * nothing was started, nothing is left behind. While the task is archived,
  * nothing starts on it, so the box gives way to the note that offers
  * Unarchive, and the words written wait in the draft until it is back.
  */

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAct } from "../act";
 
 /**
- * use-workspace-members.ts -- a workspace's members as a place that draws them holds them: the plan's member directory, the command palette, and a plan's version history.
+ * use-workspace-members.ts -- a workspace's members as a place that draws them holds them: the task's member directory, the command palette, and a plan's version history.
  *
  * The members are read once per workspace the place stands in, and again
  * whenever the workspace's own count changes, as a member joining or leaving

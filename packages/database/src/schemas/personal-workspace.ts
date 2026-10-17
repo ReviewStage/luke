@@ -4,7 +4,7 @@ import { organization, user } from "./auth.js";
 
 /**
  * Which workspace was made for an account when it first needed one: the
- * Better Auth `organization` its plans start in until it names another, and
+ * Better Auth `organization` its tasks start in until it names another, and
  * otherwise a workspace like any other. One row per account and one account
  * per workspace, so two Macs ensuring it at once settle on the same row. The
  * workspace's metadata reads `{"personal":true}` as well, stored only. The

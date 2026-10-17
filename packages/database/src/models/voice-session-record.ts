@@ -18,7 +18,7 @@ import { readTask } from "./task-store.js";
  * The one row per live session the storage rework keeps, written only here.
  * Creation writes the row, and the model the session was created on, so a
  * later function connection can prove the account asking to re-attach is the
- * one that opened the session and the plan's transcript can say what a call
+ * one that opened the session and the task's transcript can say what a call
  * ran on; every `session.usage.updated` overwrites the usage with an unconfirmed snapshot,
  * never a sum, and only while the row is still open, so a snapshot arriving
  * late on an earlier connection cannot unconfirm a close; and `session.closed`
@@ -42,13 +42,13 @@ import { readTask } from "./task-store.js";
  * the newer one attached, and that late stamp must not hand a live call to
  * the sweep.
  *
- * The row also names the plan the call was opened about, checked to be in a
+ * The row also names the task the call was opened about, checked to be in a
  * workspace the account is a member of before anything is spent, and that binding is what a
- * re-attach reads back: the attaching connection says nothing of a plan, so
- * a session cannot be moved onto another plan, or off its own, by what a
+ * re-attach reads back: the attaching connection says nothing of a task, so
+ * a session cannot be moved onto another task, or off its own, by what a
  * later connection sends. The same binding is what a new call about the
- * plan reads its earlier calls back by, so a call picks up the conversation
- * the last one left off, whichever member of the plan's workspace made it.
+ * task reads its earlier calls back by, so a call picks up the conversation
+ * the last one left off, whichever member of the task's workspace made it.
  */
 /**
  * What every method answers: an effect over the ambient client, so the socket
@@ -61,7 +61,7 @@ type VoiceSessionRecordEffect<A> = Effect.Effect<
   DatabaseServices
 >;
 
-/** The session as its creation names it: the account, the live session, the plan the call is about, the connection that holds it, and the model it was created on. */
+/** The session as its creation names it: the account, the live session, the task the call is about, the connection that holds it, and the model it was created on. */
 interface VoiceSessionRegistration {
   userId: string;
   sessionId: string;
@@ -70,7 +70,7 @@ interface VoiceSessionRegistration {
   model: string;
 }
 
-/** A plan as the account asking for a call about it names it. */
+/** A task as the account asking for a call about it names it. */
 interface VoiceSessionTaskClaim {
   userId: string;
   taskId: string;
@@ -82,7 +82,7 @@ interface VoiceSessionOwnership {
   sessionId: string;
 }
 
-/** A live session the account was shown to have opened: the plan its creation bound it to, where its row names one. */
+/** A live session the account was shown to have opened: the task its creation bound it to, where its row names one. */
 interface OwnedVoiceSession {
   /** The store's own id for the session's row. */
   readonly voiceSessionId: string;
@@ -149,12 +149,12 @@ export interface VoiceSessionRecord {
    * session is already another account's, since the first owner keeps it.
    */
   register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<string | undefined>;
-  /** The plan named, where the account is a member of its workspace: the check the door makes before a planning call is spent, and what the call opens knowing. */
+  /** The task named, where the account is a member of its workspace: the check the door makes before a task's call is spent, and what the call opens knowing. */
   heldTask(input: VoiceSessionTaskClaim): VoiceSessionRecordEffect<Task | undefined>;
-  /** The live session named, where the account created it, with the plan it was bound to: one lookup over the indexed pair. */
+  /** The live session named, where the account created it, with the task it was bound to: one lookup over the indexed pair. */
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<OwnedVoiceSession | undefined>;
   /**
-   * What was said on the plan's calls so far, oldest first, adjacent words of
+   * What was said on the task's calls so far, oldest first, adjacent words of
    * one speaker on one call run together: the newest `EARLIER_CALL_SEGMENTS`
    * segments, which is more than a session's startup history holds.
    */
@@ -255,9 +255,9 @@ const EarlierSegmentSchema = Schema.Struct({
 });
 
 /**
- * The newest segments of the plan's calls, whichever member of its workspace
+ * The newest segments of the task's calls, whichever member of its workspace
  * made each, newest first: the call by its start, then the segment by its
- * place. The plan alone keys them, because the door read it through
+ * place. The task alone keys them, because the door read it through
  * `heldTask`, under the account's membership, before it asks.
  */
 const findEarlierSegments = SqlSchema.findAll({

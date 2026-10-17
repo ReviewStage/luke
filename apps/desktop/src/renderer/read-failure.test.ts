@@ -33,10 +33,10 @@ import { AgentChangesTab } from "./tasks/agent-changes-tab";
 
 /**
  * A read that did not land says so alike on every surface that reads: the
- * sidebar's plans, the Inbox's list, a side panel tab, and a Settings
+ * sidebar's tasks, the Inbox's list, a side panel tab, and a Settings
  * page's card each draw one alert, a sentence of the shape "The inbox
  * could not be read.", and one Retry, whose press reads again. Synthetic
- * plans and keys.
+ * tasks and keys.
  */
 
 const ignore = () => undefined;

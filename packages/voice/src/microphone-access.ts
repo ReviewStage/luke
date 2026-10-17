@@ -62,7 +62,7 @@ interface MicrophoneAccessRow {
  * Reads the row from the system's answer and whether there is a voice to talk
  * to.
  *
- * The microphone has two uses: talking a plan through with Luke, and
+ * The microphone has two uses: talking a task through with Luke, and
  * dictating into a message box, whose clip goes through Luke's service to
  * OpenAI and comes back as words. Either is a use the macOS prompt is the
  * consent for, so the ask is offered wherever macOS has not answered, voice

@@ -5,14 +5,14 @@ import { BusyLabel } from "../spinner";
 import type { ArchivedByReading } from "./coding-agent-model";
 
 /**
- * archived-plan.tsx -- what an archived plan draws where its actions would stand: the banner over its document, and the note in place of an agent's composer.
+ * archived-task.tsx -- what an archived task draws where its actions would stand: the banner over its document, and the note in place of an agent's composer.
  *
- * An archived plan reads but takes nothing: its document is not edited,
+ * An archived task reads but takes nothing: its document is not edited,
  * no call is about it, no agent starts on it, and no agent of it is sent a
  * message, until it is brought back. So each place that would have taken
- * something says why it does not, with the one press that brings the plan
+ * something says why it does not, with the one press that brings the task
  * back, rather than standing there as a dead control. The banner is the
- * plan's call to action, the way Notion marks a page in the trash: the
+ * task's call to action, the way Notion marks a page in the trash: the
  * archive glyph, what it means, and Unarchive as the primary button.
  */
 
@@ -23,7 +23,7 @@ const ARCHIVED_TASK_COPY = {
   UNARCHIVE: "Unarchive",
 } as const;
 
-/** The banner across the top of an archived plan's document, with Unarchive as its primary button. */
+/** The banner across the top of an archived task's document, with Unarchive as its primary button. */
 export function ArchivedBanner({ onUnarchive }: { onUnarchive: () => void }): React.JSX.Element {
   return (
     <Banner
