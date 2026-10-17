@@ -5,6 +5,7 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { Schema } from "effect";
 import {
@@ -15,7 +16,6 @@ import {
   SquareKanbanIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";

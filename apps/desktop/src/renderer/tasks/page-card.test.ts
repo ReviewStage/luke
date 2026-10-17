@@ -6,7 +6,8 @@ import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { PageCard } from "./page-card";
 
@@ -32,6 +33,8 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
+
+beforeEach(() => fakeAppPlatform({ pageFrameUrl }));
 
 test("a version written while the card stands is hidden until it loads, never the last version under its number", () => {
   const container = document.body.appendChild(document.createElement("div"));

@@ -1,4 +1,5 @@
-import { EmptyState } from "@luke/ui";
+import { CHANNEL_KIND } from "@luke/features/chat-wire";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import {
   CHAT_PLACE,
   type ChatPlace,
@@ -9,6 +10,7 @@ import {
 } from "@luke/ui/chat-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo } from "react";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 import { ChatPane, MemberMark } from "../tasks/chat-pane";
 import { useMinute } from "../tasks/task-time";
 import { useOpenLink } from "../tasks/use-open-link";
@@ -35,6 +37,9 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 
 /** What the view says where no chat is read. */
 const NO_CHAT = "Chat is not available yet.";
+
+/** What the view says where the workspace's chat could not be read. */
+const CHAT_FAILED = "The workspace's chat could not be read.";
 
 /** Whether a row stands for the place shown. */
 function shows(place: ChatPlace, row: ChatRailRow): boolean {
@@ -102,12 +107,22 @@ export function DesktopChat({
     () => chatNames(listed, read?.agents ?? [], accountName),
     [listed, read, accountName],
   );
-  if (read === undefined) {
+  if (read === undefined || view.failed) {
+    // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
+    const standIn = view.failed ? (
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={view.onRetry}>
+        {CHAT_FAILED}
+      </ErrorState>
+    ) : view.available ? (
+      <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
+    ) : (
+      <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
+    );
     return (
       <div className="chat-view">
         <section className="chat-stream" aria-label="Chat">
           <header className="desktop-toolbar" />
-          <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
+          {standIn}
         </section>
       </div>
     );
@@ -170,5 +185,58 @@ export function DesktopChat({
         onAnswer={view.onAnswer}
       />
     </div>
+  );
+}
+
+/** What the plan's Chat tab says where its plan has no channel yet. */
+const NO_PLAN_CHANNEL = "Nothing is posted in this plan's channel yet.";
+
+/**
+ * The plan's own Chat tab, in the plan's column: its channel of the
+ * workspace's chat, at reading size, as the window's Chat shows it, its
+ * composer posting there. A plan whose channel is not opened yet, which
+ * its first post opens, says so; a chat not read yet waits on the read.
+ */
+export function TaskChatTab({
+  tasks,
+  taskId,
+}: {
+  tasks: TasksControl;
+  taskId: string;
+}): React.JSX.Element {
+  const view = tasks.chatView;
+  const now = useMinute();
+  const openLink = useOpenLink();
+  const read = view.chat;
+  const listed = tasks.tasks;
+  const names = useMemo(() => chatNames(listed, read?.agents ?? [], undefined), [listed, read]);
+  const channel = read?.answer.channels.find(
+    (each) => each.kind === CHANNEL_KIND.PLAN && each.planId === taskId,
+  );
+  if (read === undefined || channel === undefined) {
+    return (
+      <section className="chat-stream plan-chat" aria-label="Chat">
+        {view.failed ? (
+          <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={view.onRetry}>
+            {CHAT_FAILED}
+          </ErrorState>
+        ) : read === undefined && view.available ? (
+          <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
+        ) : (
+          <EmptyState icon={<MessagesSquareIcon />}>{NO_PLAN_CHANNEL}</EmptyState>
+        )}
+      </section>
+    );
+  }
+  return (
+    <ChatPane
+      chat={read.answer}
+      names={names}
+      place={{ kind: CHAT_PLACE.CHANNEL, channelId: channel.id }}
+      now={now}
+      openLink={openLink}
+      onPost={view.onPost}
+      onAnswer={view.onAnswer}
+    />
   );
 }
