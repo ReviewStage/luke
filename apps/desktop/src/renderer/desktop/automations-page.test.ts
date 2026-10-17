@@ -1418,24 +1418,22 @@ test("Escape while writing the prompt lets go of the caret and keeps the press f
   type(prompt, "Triage the issues opened overnight.");
   act(() => prompt.focus());
 
-  const cancel = new KeyboardEvent("keydown", {
-    key: "Escape",
-    bubbles: true,
-    cancelable: true,
-    isComposing: true,
-  });
-  act(() => {
-    prompt.dispatchEvent(cancel);
-  });
-  assert.equal(cancel.defaultPrevented, true, "an input method's Escape does not leave the page");
+  const reached: string[] = [];
+  const listen = (event: KeyboardEvent) => reached.push(event.key);
+  window.addEventListener("keydown", listen);
+  const pressEscape = (init: KeyboardEventInit) =>
+    act(() => {
+      prompt.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true, ...init }),
+      );
+    });
+
+  pressEscape({ isComposing: true });
   assert.equal(document.activeElement, prompt, "the input method's cancel keeps the caret");
+  pressEscape({});
+  window.removeEventListener("keydown", listen);
 
-  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
-  act(() => {
-    prompt.dispatchEvent(press);
-  });
-
-  assert.equal(press.defaultPrevented, true, "the page's Escape passes it by");
+  assert.deepEqual(reached, [], "neither Escape reaches the window, which would leave the page");
   assert.notEqual(document.activeElement, prompt);
   assert.equal(prompt.value, "Triage the issues opened overnight.");
 });

@@ -72,7 +72,7 @@ type TextEntryProps = Named & {
   maxLength?: number | undefined;
   /** Whether the system's spell check marks the words; off for a name, an identifier, or code. */
   spellCheck?: boolean | undefined;
-  /** What an Escape does, pressed while no input method is composing; every Escape is marked taken, so a page Escape would close passes it by. */
+  /** What an Escape does, pressed while no input method is composing; no Escape reaches the page, which it would close. */
   onEscape?: (() => void) | undefined;
 };
 
@@ -102,11 +102,18 @@ function composing(event: KeyboardEvent): boolean {
   return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
-/** Keeps an Escape from the page where `onEscape` is given, and answers it there unless an input method is composing. */
+/**
+ * Keeps an Escape from the page where `onEscape` is given, as a SearchField
+ * does, and answers it unless an input method is composing. Note that a
+ * composing Escape keeps its default, because the input method may cancel
+ * its candidates by it.
+ */
 function answerEscape(event: KeyboardEvent, onEscape: (() => void) | undefined): void {
   if (event.key !== "Escape" || onEscape === undefined) return;
+  event.stopPropagation();
+  if (composing(event)) return;
   event.preventDefault();
-  if (!composing(event)) onEscape();
+  onEscape();
 }
 
 /** One line of text, answering Enter with `onEnter` where it is given. */
