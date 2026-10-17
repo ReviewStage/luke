@@ -158,6 +158,11 @@ export function atPointer(event: React.MouseEvent<HTMLElement>): MenuPlacement {
   return { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
 }
 
+/** Whether a key opens what holds the keyboard's own menu, as a right-click would: the menu key, or ⇧F10. */
+export function opensMenu(event: React.KeyboardEvent): boolean {
+  return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+}
+
 /**
  * One control's menu: where it hangs while it stands open, the door that
  * opens it from an element, which takes focus back when it closes by key,
@@ -166,13 +171,15 @@ export function atPointer(event: React.MouseEvent<HTMLElement>): MenuPlacement {
  * stands on, so it starts leaving in the render that finds the surface off
  * screen.
  *
- * It also hands out the two doors every owner draws, so each opens its menu
+ * It also hands out the doors every owner draws, so each opens its menu
  * the same way: `trigger`, the props of the button the menu drops from,
  * whose press opens it where `place` says (under the button, right edges
  * level, unless told otherwise) and closes it again while it stands; and
  * `contextMenu`, a right-click's handler that hangs it at the pointer and
  * hands focus back to `opener` where one is given, the ⋯ or the row the
- * keyboard reaches the menu from, else to what was clicked.
+ * keyboard reaches the menu from, else to what was clicked; and `keyMenu`,
+ * the same row's key handler, which hangs it under the row from its start
+ * on the menu key or ⇧F10, for a row with no ⋯ to reach it by.
  */
 export function useActionMenu(shown: boolean) {
   const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
@@ -204,7 +211,12 @@ export function useActionMenu(shown: boolean) {
       event.preventDefault();
       show(atPointer(event), opener?.current ?? event.currentTarget);
     };
-  return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu };
+  const keyMenu = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!opensMenu(event)) return;
+    event.preventDefault();
+    show(dropBelowStart(event.currentTarget), event.currentTarget);
+  };
+  return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu, keyMenu };
 }
 
 function clamp(value: number, low: number, high: number): number {

@@ -1127,3 +1127,114 @@ test("the toolbar's New issue and C still open the card on Backlog", async () =>
   assert.equal(fromButton, "Backlog");
   assert.equal(picked(document.body, "Status"), "Backlog");
 });
+
+/** The button a card or row draws for the issue given. */
+function cardOf(page: HTMLElement, issueId: string): HTMLButtonElement {
+  const found = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issueId}"] > button`);
+  assert.ok(found, `no card for ${issueId}`);
+  return found;
+}
+
+/** A right-click on an element, at a point in the window, as the pointer makes one. */
+function rightClick(target: HTMLElement): void {
+  act(() => {
+    target.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }),
+    );
+  });
+}
+
+/** Opens the submenu named in the menu standing open and picks its item. */
+function pickFrom(submenu: string, item: string): void {
+  act(() => menuItem(submenu).click());
+  act(() => menuItem(item).click());
+}
+
+test("a status picked from a card's right-click menu, the current one checked, is sent and moves the card to its new column", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  act(() => menuItem("Status").click());
+  assert.equal(menuItem("Backlog").getAttribute("aria-checked"), "true");
+  assert.equal(menuItem("Done").getAttribute("aria-checked"), "false");
+  act(() => menuItem("Done").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page), [
+    ["Backlog", []],
+    ["Todo1", ["ACME-2"]],
+    ["In progress", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled", []],
+  ]);
+});
+
+test("a list row's menu opens from the keyboard with ⇧F10, and a priority picked there is sent and moves the row", async () => {
+  standing = [issue(1), issue(2, { priority: ISSUE_PRIORITY.LOW })];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = cardOf(page, issue(1).id);
+  act(() => row.focus());
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Priority", "Urgent");
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { priority: ISSUE_PRIORITY.URGENT } },
+  ]);
+  assert.deepEqual(groups(page), [["Backlog2", ["ACME-1 Issue 1", "ACME-2 Issue 2"]]]);
+});
+
+test("Archive from a card's menu asks first in the issue page's words, then sends the archive and takes the card off the board", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  act(() => menuItem("Archive").click());
+  assert.deepEqual(changes, [], "nothing is sent before the answer");
+  assert.match(
+    document.querySelector("[role=alertdialog]")?.textContent ?? "",
+    /Archive ACME-1\?/u,
+  );
+  act(() => dialogButton("Archive").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { archived: true } }]);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-2 Issue 2"]]]);
+  assert.equal(document.querySelector("[role=alertdialog]"), null, "the question is gone");
+});
+
+test("a card's menu offers Copy link, copying its issue's link under the listed workspace", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(2).id));
+  await act(async () => menuItem("Copy link").click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/${WORKSPACE.id}/issue/${issue(2).id}`]);
+  assert.deepEqual(changes, []);
+});
+
+test("a change from a card's menu the service refused leaves the card where it stood and says so", async () => {
+  standing = [issue(1)];
+  changeRefused = true;
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  pickFrom("Status", "Done");
+  await settle();
+
+  assert.equal(changes.length, 1);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
+});

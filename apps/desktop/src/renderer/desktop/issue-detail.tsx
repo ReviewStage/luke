@@ -1,8 +1,7 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { ArchiveIcon, ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -11,7 +10,13 @@ import { ExperimentTag } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, useActionMenu } from "./action-menu";
+import {
+  archiveAnswered,
+  archiveItem,
+  archiveQuestion,
+  ISSUE_ACTIONS_LABEL,
+} from "./issue-actions";
 import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
 import type { IssueChange } from "./use-issues";
@@ -25,9 +30,6 @@ import type { IssueChange } from "./use-issues";
  * Archiving asks first, and once it lands the page goes back to the list,
  * which no longer holds the issue.
  */
-
-/** What the ⋯ menu is called. */
-const ACTIONS_LABEL = "Issue actions";
 
 /**
  * The toolbar's path, as the automation editor's: the Issues list a press
@@ -67,12 +69,7 @@ function DetailToolbar({
 }): React.JSX.Element {
   const menu = useActionMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId });
-  const archive: MenuAction = {
-    label: "Archive",
-    icon: <ArchiveIcon />,
-    onSelect: onArchive,
-    danger: true,
-  };
+  const archive = archiveItem(onArchive);
   return (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
@@ -80,11 +77,11 @@ function DetailToolbar({
         <ExperimentTag />
       </div>
       <div className="desktop-toolbar-actions">
-        <Tooltip label={ACTIONS_LABEL}>
+        <Tooltip label={ISSUE_ACTIONS_LABEL}>
           <button
             type="button"
             className="icon-button"
-            aria-label={ACTIONS_LABEL}
+            aria-label={ISSUE_ACTIONS_LABEL}
             {...menu.trigger()}
           >
             <EllipsisIcon className="icon-button-glyph" />
@@ -92,7 +89,7 @@ function DetailToolbar({
         </Tooltip>
         {menu.drawn === undefined ? null : (
           <ActionMenu
-            label={ACTIONS_LABEL}
+            label={ISSUE_ACTIONS_LABEL}
             menu={menu.drawn}
             groups={copyLink === undefined ? [[archive]] : [[copyLink], [archive]]}
             onClose={menu.close}
@@ -187,12 +184,9 @@ export function IssueDetail({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
   const archiving = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    onChange({ archived: true }).then((archived): ActionResult => {
-      if (!archived) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: "Couldn't archive it. Try again." };
-      }
-      onBack();
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    onChange({ archived: true }).then((archived) => {
+      if (archived) onBack();
+      return archiveAnswered(archived);
     }),
   );
   const identifier = issueIdentifier(workspaceName, issue.number);
@@ -223,15 +217,7 @@ export function IssueDetail({
           </article>
         </div>
       </div>
-      <ConfirmDialog
-        confirm={archiving}
-        question={{
-          title: `Archive ${identifier}?`,
-          body: "It leaves the list. Nothing else about it changes.",
-          verb: "Archive",
-          running: "Archiving",
-        }}
-      />
+      <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
     </section>
   );
 }
