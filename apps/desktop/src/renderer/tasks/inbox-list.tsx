@@ -1,7 +1,7 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { DocumentIcon, useMenu } from "@luke/ui";
+import { DocumentIcon, EmptyState, useMenu } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -32,7 +32,6 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
-import { EmptyState } from "../empty-state";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
@@ -489,18 +488,13 @@ export function NeedsYouEmpty({
     <EmptyState
       icon={<InboxIcon />}
       title={NEEDS_YOU.NONE}
-      action={
-        <button
-          type="button"
-          className="toolbar-button"
-          onClick={() => {
-            onList();
-            needsYou.onWaitingOnly(false);
-          }}
-        >
-          {NEEDS_YOU_PRESS.ALL}
-        </button>
-      }
+      action={{
+        label: NEEDS_YOU_PRESS.ALL,
+        onClick: () => {
+          onList();
+          needsYou.onWaitingOnly(false);
+        },
+      }}
     >
       {NEEDS_YOU.ANSWERED}
     </EmptyState>
