@@ -29,6 +29,7 @@ import {
   channelNamed,
   channelOf,
   channelsOf,
+  chatHead,
   chatPast,
   ensureGeneral,
   ensureMember,
@@ -1157,6 +1158,29 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "the workspace's head is the last place handed out, which a post, an answer, a withdrawal, and a resolve each move, and an account not in it reads none",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const head = Effect.map(chatHead(room.owner, room.workspace), Option.getOrThrow);
+        assert.equal(yield* head, 0);
+        const posted = yield* ask(room, room.first, "invite-expiry", "Which expiry?");
+        assert.equal(yield* head, posted.message.seq);
+        const key = randomUUID();
+        Result.getOrThrow(yield* answer(room, room.ada, posted.message.seq, 1, key));
+        const answered = yield* head;
+        assert.ok(answered > posted.message.seq);
+        yield* withdrawAnswer(room.owner, room.workspace, room.ada.id, posted.message.seq, key);
+        const withdrawn = yield* head;
+        assert.ok(withdrawn > answered);
+        yield* resolveAsk(room.owner, room.workspace, room.first.id, "invite-expiry", "Settled.");
+        assert.ok((yield* head) > withdrawn);
+        assert.deepEqual(yield* chatHead(yield* openAccount(), room.workspace), Option.none());
+      }),
+  );
+
   it.effect(
     "two posts of one new ask racing land as one ask at the second revision, an ask stays where it was first posted, and a key a plain message holds is no ask's",
     () =>

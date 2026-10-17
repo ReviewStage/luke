@@ -332,8 +332,9 @@ test("Appearance draws every diff setting in a Diffs group of its own, under the
         "Diffs",
     ) ?? assert.fail("a Diffs group stands");
   assert.deepEqual(
-    [...group.querySelectorAll(".settings-copy strong")].map(
-      (name) => name.firstChild?.textContent,
+    [...group.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
+      // A pop-up's name ends with the value it names, which is not the row's.
+      (control) => control.getAttribute("aria-label")?.split(": ")[0],
     ),
     [
       "Line numbers",

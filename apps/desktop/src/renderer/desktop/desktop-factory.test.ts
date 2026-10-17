@@ -290,7 +290,7 @@ test("a plan list that could not be read says so, and Retry reads it again", () 
   });
   const alert = page.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
-  assert.equal(page.querySelector(".luke-empty-state"), null);
+  assert.doesNotMatch(page.textContent ?? "", /No agents at work/u);
   const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
     (each) => each.textContent === "Retry",
   );

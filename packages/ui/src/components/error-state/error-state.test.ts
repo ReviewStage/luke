@@ -1,7 +1,8 @@
 /**
  * error-state.test.ts -- a failure is one alert saying its sentence and its
  * Retry; Retry is a button the keyboard can stand on and a press of it
- * tries again; a failure with no Retry says its sentence alone.
+ * tries again; a failure with no Retry says its sentence alone; the glyph
+ * that marks it as a fault says nothing to a reader.
  */
 
 // @vitest-environment jsdom
@@ -73,3 +74,13 @@ test("a failure with no Retry says its sentence alone, and offers no button", ()
   expect(alert.textContent).toBe(LINE);
   expect(alert.querySelector("button")).toBeNull();
 });
+
+for (const placement of Object.values(ERROR_STATE_PLACEMENT)) {
+  test(`a ${placement} failure's glyph marks it without saying anything to a reader`, () => {
+    const alert = mountAlert(createElement(ErrorState, { placement, children: LINE }));
+    const glyphs = [...alert.querySelectorAll("svg")];
+    expect(glyphs).toHaveLength(1);
+    expect(glyphs.every((glyph) => glyph.closest("[aria-hidden='true']") !== null)).toBe(true);
+    expect(alert.textContent).toBe(LINE);
+  });
+}

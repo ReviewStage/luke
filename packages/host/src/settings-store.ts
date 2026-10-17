@@ -19,6 +19,7 @@ import {
 } from "@luke/wire";
 import { declareReader } from "@luke/wire/effect";
 import { Data, Effect, Result, Schema, Semaphore, type Types } from "effect";
+import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -78,8 +79,8 @@ const KEPT_API_KEY_PROVIDERS: ReadonlySet<string> = new Set(Object.values(KEPT_A
  */
 export interface SecretCipher {
   isAvailable(): boolean;
-  encrypt(plainText: string): Buffer;
-  decrypt(cipherText: Buffer): string;
+  encrypt(plainText: string): Uint8Array;
+  decrypt(cipherText: Uint8Array): string;
 }
 
 export interface SettingsStoreOptions {
@@ -704,15 +705,15 @@ export class SettingsStore {
         throw new Error("Encrypted credential storage is unavailable on this system.");
       }
       yield* this.#mutate((persisted) => {
-        const tokenCipher = this.#cipher
-          .encrypt(
+        const tokenCipher = Base64.encode(
+          this.#cipher.encrypt(
             JSON.stringify({
               accessToken: account.accessToken,
               refreshToken: account.refreshToken,
               ...(account.sessionToken ? { sessionToken: account.sessionToken } : undefined),
             }),
-          )
-          .toString("base64");
+          ),
+        );
         const next: PersistedSettings = {
           ...persisted,
           account: {
@@ -856,7 +857,9 @@ export class SettingsStore {
    * says to connect again.
    */
   #decryptTokens(cipherText: string): AccountTokens | undefined {
-    const plain = Result.try(() => this.#cipher.decrypt(Buffer.from(cipherText, "base64")));
+    const plain = Result.flatMap(Base64.decode(cipherText), (bytes) =>
+      Result.try(() => this.#cipher.decrypt(bytes)),
+    );
     if (Result.isFailure(plain)) return undefined;
     return Result.getOrUndefined(decodeAccountTokens(plain.success));
   }

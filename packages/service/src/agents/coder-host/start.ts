@@ -17,12 +17,17 @@ import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import {
   firstMessageText,
+  type NoteFiles,
   type Replay,
   START_NOTE_HEADING,
   type StartNoteHeading,
 } from "@luke/features/agent-replay";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
-import type { CodingAgentAttachment, CodingAgentStartFrom } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  type CodingAgentAttachment,
+  type CodingAgentStartFrom,
+} from "@luke/features/coding-agent-wire";
 import type { TaskLinearIssue } from "@luke/features/linear-wire";
 import { decodeMention, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
@@ -252,6 +257,7 @@ const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
   from: StartFrom | undefined,
+  noteFiles: NoteFiles | undefined,
 ): Effect.fn.Return<StartLanding, HostedRefusal, DatabaseServices> {
   if (place.taskId === null) {
     const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
@@ -290,16 +296,23 @@ const landingOf = Effect.fnUntraced(function* (
               replay,
               place.note,
               heading,
+              noteFiles,
             ),
             prompt: null,
           }
         : {
             taskId: place.taskId,
             planSnapshot: null,
-            prompt: firstMessageText(prompt, replay, place.note, heading),
+            prompt: firstMessageText(prompt, replay, place.note, heading, noteFiles),
           },
   };
 });
+
+/** How many of the note's files are text files, which eve is handed inlined, and how many images and PDFs. */
+function noteFilesOf(files: readonly CodingAgentAttachment[]): NoteFiles {
+  const text = files.filter((file) => file.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT).length;
+  return { text, other: files.length - text };
+}
 
 /** A prompt with the note after it, the words a Start from another agent reads mentions from; none where there is neither. */
 function wordsOf(prompt: string | undefined, note: string | undefined): string | undefined {
@@ -328,7 +341,9 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       : yield* startFromOf(userId, ask.taskId, ask.from, ask.attachments ?? [], ask.idempotencyKey);
   // An agent started from another runs on that agent's choice unless the Start names one.
   const choice = yield* acceptedAgentChoice(userId, ask.choice ?? from?.choice);
-  const landing = yield* landingOf(userId, ask, from);
+  // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
+  const noteFiles = from === undefined ? undefined : noteFilesOf(ask.attachments ?? []);
+  const landing = yield* landingOf(userId, ask, from, noteFiles);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note

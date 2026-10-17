@@ -179,7 +179,11 @@ it.effect(
         Result.isSuccess(read) && "webhookSecret" in read.success
           ? (read.success.webhookSecret ?? "")
           : "";
-      assert.ok(secret.length >= 40, "a secret of 32 random bytes is answered");
+      assert.match(
+        secret,
+        /^[A-Za-z0-9_-]{43}$/,
+        "a secret of 32 random bytes is answered as unpadded base64url",
+      );
       assert.deepEqual(made, { automation: SUMMARY, webhookSecret: secret });
       assert.deepEqual(asked, [
         [

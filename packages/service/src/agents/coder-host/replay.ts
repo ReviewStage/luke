@@ -6,8 +6,9 @@ import {
   listPublishedCodingAgentsById,
 } from "@luke/database/models/coding-agent-store";
 import {
+  listMessagesBefore,
   listMessagesPast,
-  type MessageCursor,
+  messageSeqOf,
   type StoredMessageRecord,
 } from "@luke/database/models/message-reads";
 import type { StoredStartedFrom } from "@luke/database/schemas/coding-agent";
@@ -32,7 +33,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { isFileUIPart, isTextUIPart } from "ai";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import {
   isRecord,
   isSettledToolPartState,
@@ -49,6 +50,7 @@ import {
 } from "../../http/http-effect.js";
 import { copySourceWork, type SnapshotOutcome, type SourceCopyServices } from "./snapshot.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
+import { CURSOR_START } from "./transcript.js";
 
 /**
  * replay.ts -- what an agent started from another agent of its plan is handed: that agent's brief, its transcript replayed, and where it left its work.
@@ -65,7 +67,8 @@ import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
  * plan as it stands now, or the source's prompt with the text files
  * attached to it, an automation run's prompt as it was handed, without the
  * replay or note the source's own first message carried. A note the source
- * was handed is its first step instead. A source that was itself started
+ * was handed behind its marker, or after a replay, is its first step
+ * instead. A source that was itself started
  * from another hands on the steps its own replay kept ahead of its own, so
  * a chain reads as one transcript, and the bound is applied once over the
  * whole of it: the oldest steps go first. Each line sent to the agent and
@@ -91,8 +94,8 @@ export const REPLAY_BOUNDS = {
   RESULT_CHARS: 1_500,
   /** The most characters of a summary line drawn from words. */
   SUMMARY_CHARS: 160,
-  /** The most pages of the source's transcript read, at the store's widest page each. */
-  MAX_PAGES: 50,
+  /** The most rows of the source's transcript read, the newest at or before where it is cut, besides its brief, and the most read after a fork's cut for the files it edited. */
+  MAX_ROWS: 10_000,
   /** The most files a fork's preamble names as edited after its message; the rest are counted. */
   EDITED_FILES: 50,
 } as const;
@@ -275,22 +278,18 @@ interface HandedBrief {
   readonly note: ReplayStep | undefined;
 }
 
-/** A source's own first message split as the format reads it, its note told apart by the heading's last place where no replay fixes where it starts. */
+/**
+ * A source's own first message split as the format reads it: its note is
+ * told apart only behind its marker, or after a replay, which fixes where
+ * it starts. Note that a source handed an unmarked note with no replay, as
+ * agents started before the marker were, keeps that note inside its brief,
+ * because a heading in prose cannot be told from one that opens a note,
+ * and the brief whole is what that agent was asked.
+ */
 function briefOf(handed: string): HandedBrief {
   const read = firstMessageParts(handed);
-  if (read.replay !== undefined) {
-    const note = read.note === undefined ? undefined : noteStep(read.note.heading, read.note.text);
-    return { brief: read.brief, carried: read.replay, note };
-  }
-  const found = Object.values(START_NOTE_HEADING)
-    .map((heading) => ({ heading, at: handed.lastIndexOf(`\n\n${heading}\n\n`) }))
-    .reduce((latest, each) => (each.at > latest.at ? each : latest));
-  if (found.at < 0) return { brief: handed, carried: undefined, note: undefined };
-  return {
-    brief: handed.slice(0, found.at),
-    carried: undefined,
-    note: noteStep(found.heading, handed.slice(found.at + found.heading.length + 4)),
-  };
+  const note = read.note === undefined ? undefined : noteStep(read.note.heading, read.note.text);
+  return { brief: read.brief, carried: read.replay, note };
 }
 
 /** The note a source was handed as the step it opens on. */
@@ -358,26 +357,59 @@ function filesOf(
   return { attachments, unkept };
 }
 
-/** Every row of the source's conversation, oldest first, each as it now stands, read under the member who started it; nothing where a page does not read, which the Start answers as unavailable. */
-const recordsOf = (source: CodingAgent) =>
+/** The source's rows a replay reads: its brief and the newest rows at or before the cut, oldest first, and the cut's sequence for a fork. */
+interface SourceRecords {
+  readonly records: readonly StoredMessageRecord[];
+  readonly cutSeq: number | undefined;
+}
+
+/**
+ * The source's brief and the newest rows of its conversation at or before
+ * the message a fork is cut at, at most `REPLAY_BOUNDS.MAX_ROWS` of them,
+ * oldest first, each as it now stands, read under the member who started
+ * it. Note that the rows are read back from the end, or from the fork's
+ * message, found by its id without reading the rows after it, because the
+ * replay keeps the newest steps and a long transcript read from its start
+ * would keep its oldest. A fork's message that is none of the source's own
+ * leaves the brief alone, which the Start refuses as invalid. Nothing where
+ * a page does not read, which the Start answers as unavailable, because a
+ * replay missing rows would pass for the whole.
+ */
+const recordsOf = (source: CodingAgent, messageId: string | undefined) =>
   Effect.gen(function* () {
-    const rows = new Map<string, StoredMessageRecord>();
-    let cursor: MessageCursor = { seq: 0, revision: 0 };
-    for (let page = 0; page < REPLAY_BOUNDS.MAX_PAGES; page += 1) {
-      const past = yield* listMessagesPast(
-        source.userId,
-        source.conversationId,
-        CODER_TOOL_SET,
-        cursor,
-        PAGE_ROWS,
-      );
-      // Note that a page that does not read answers nothing rather than less, because a replay missing rows would pass for the whole.
-      if (!past.read.ok) return undefined;
-      for (const record of past.read.value) rows.set(record.id, record);
-      if (past.read.value.length < PAGE_ROWS) break;
-      cursor = past.cursor;
+    const { userId, conversationId } = source;
+    const opening = yield* listMessagesPast(
+      userId,
+      conversationId,
+      CODER_TOOL_SET,
+      CURSOR_START,
+      1,
+    );
+    if (!opening.read.ok) return undefined;
+    const brief = opening.read.value[0];
+    let before = Number.MAX_SAFE_INTEGER;
+    let cutSeq: number | undefined;
+    if (messageId !== undefined) {
+      const cut = yield* messageSeqOf(userId, conversationId, messageId, MESSAGE_ROLE.ASSISTANT);
+      if (Option.isNone(cut)) {
+        return { records: brief === undefined ? [] : [brief], cutSeq } satisfies SourceRecords;
+      }
+      cutSeq = cut.value;
+      before = cut.value + 1;
     }
-    return [...rows.values()].sort((first, second) => first.seq - second.seq);
+    const newestFirst: StoredMessageRecord[] = [];
+    while (newestFirst.length < REPLAY_BOUNDS.MAX_ROWS) {
+      const room = Math.min(PAGE_ROWS, REPLAY_BOUNDS.MAX_ROWS - newestFirst.length);
+      const read = yield* listMessagesBefore(userId, conversationId, CODER_TOOL_SET, before, room);
+      if (!read.ok) return undefined;
+      newestFirst.push(...read.value.toReversed());
+      const oldest = read.value[0];
+      if (oldest === undefined || read.value.length < room) break;
+      before = oldest.seq;
+    }
+    const rows = newestFirst.toReversed();
+    const records = brief === undefined || rows[0]?.id === brief.id ? rows : [brief, ...rows];
+    return { records, cutSeq } satisfies SourceRecords;
   });
 
 /**
@@ -427,11 +459,14 @@ function whereOf(
   );
 }
 
-/** A fork's warning that the code may be ahead of its message, naming the files the source edited after it; nothing for a continue. */
-function forkCaveat(forked: boolean, edited: readonly string[]): string {
+/** A fork's warning that the code may be ahead of its message, naming the files the source edited after it, or saying they could not be read; nothing for a continue. */
+function forkCaveat(forked: boolean, edited: readonly string[] | undefined): string {
   if (!forked) return "";
   const lead =
     " That code is the source's work as it stands now, which may be ahead of the message you were forked at.";
+  if (edited === undefined) {
+    return `${lead} Which files it edited after that message could not all be read, so mind that its edits and the commands it ran may have changed files since.`;
+  }
   if (edited.length === 0) {
     return `${lead} Its file tools edited no file after that message, though a command it ran may have changed some.`;
   }
@@ -448,7 +483,7 @@ function preambleOf(
   source: CodingAgent,
   published: CodingAgentPullRequest | null,
   copy: SnapshotOutcome,
-  forked: { readonly at: boolean; readonly edited: readonly string[] },
+  forked: { readonly at: boolean; readonly edited: readonly string[] | undefined },
   counts: { readonly kept: number; readonly total: number },
   unkept: readonly string[],
 ): string {
@@ -498,21 +533,47 @@ function editedFiles(part: StoredToolPart): readonly string[] {
   return file === "" ? [] : [file];
 }
 
-/** The files the source's file tools edited after the message a fork is taken at, each once, in the order first edited. */
-function editedAfter(
-  records: readonly StoredMessageRecord[],
-  messageId: string,
-): readonly string[] {
-  const cut = records.findIndex((record) => record.id === messageId);
-  const files = new Set<string>();
-  for (const record of records.slice(cut + 1)) {
-    if (record.message.role !== MESSAGE_ROLE.ASSISTANT) continue;
-    for (const part of record.message.parts) {
-      if (isStoredToolPart(part)) for (const file of editedFiles(part)) files.add(file);
+/**
+ * The files the source's file tools edited after the message a fork is
+ * taken at, each once, in the order first edited, read forward from the
+ * cut's sequence up to `REPLAY_BOUNDS.MAX_ROWS` rows. Note that a page that
+ * does not read, or rows past the cap, answer nothing rather than refusing
+ * the fork or naming some of the files as all of them, because the fork
+ * replays none of those rows and only its caveat names them.
+ */
+const editedAfter = (source: CodingAgent, cutSeq: number) =>
+  Effect.gen(function* () {
+    const files = new Set<string>();
+    // A cursor past every revision reads the rows after the cut alone, never one amended before it.
+    let cursor = { seq: cutSeq, revision: Number.MAX_SAFE_INTEGER };
+    for (let read = 0; read < REPLAY_BOUNDS.MAX_ROWS; read += PAGE_ROWS) {
+      const past = yield* listMessagesPast(
+        source.userId,
+        source.conversationId,
+        CODER_TOOL_SET,
+        cursor,
+        PAGE_ROWS,
+      );
+      if (!past.read.ok) return undefined;
+      for (const record of past.read.value) {
+        if (record.message.role !== MESSAGE_ROLE.ASSISTANT) continue;
+        for (const part of record.message.parts) {
+          if (isStoredToolPart(part)) for (const file of editedFiles(part)) files.add(file);
+        }
+      }
+      if (past.read.value.length < PAGE_ROWS) return [...files];
+      cursor = { seq: past.cursor.seq, revision: Number.MAX_SAFE_INTEGER };
     }
-  }
-  return [...files];
-}
+    // Note that a row past the cap makes the files named some of them only, so one more is looked for.
+    const past = yield* listMessagesPast(
+      source.userId,
+      source.conversationId,
+      CODER_TOOL_SET,
+      cursor,
+      1,
+    );
+    return past.read.ok && past.read.value.length === 0 ? [...files] : undefined;
+  });
 
 /** The steps a source's transcript replays, cut after the message named: refused where that message is none of its journals. */
 function transcriptSteps(
@@ -555,8 +616,9 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
-  const records = yield* hostedStoreOrUnavailable(recordsOf(source));
-  if (records === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const read = yield* hostedStoreOrUnavailable(recordsOf(source, from.messageId));
+  if (read === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const { records, cutSeq } = read;
   const lines = records.filter((record) => record.message.role === MESSAGE_ROLE.USER);
   const senders = yield* hostedStoreOrUnavailable(
     lineSendersOf(
@@ -582,7 +644,8 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     copy,
     {
       at: forked,
-      edited: from.messageId === undefined ? [] : editedAfter(records, from.messageId),
+      edited:
+        cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq)),
     },
     { kept: steps.length, total: totalSteps },
     files.unkept,
