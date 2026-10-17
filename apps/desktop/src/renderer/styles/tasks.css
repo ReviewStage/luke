@@ -1547,13 +1547,12 @@ button.file-ref:hover .file-ref-path {
   user-select: text;
 }
 
-/* The tree's search field and its filter, in one row over the tree, as
-   tall as it stood when its well was a step shorter. */
+/* The tree's search field and its filter, in one row over the tree. */
 .file-tree-search {
   display: flex;
   align-items: center;
   gap: var(--luke-control-gap);
-  padding: var(--luke-space-2) var(--luke-space-6);
+  padding: var(--luke-space-4) var(--luke-space-6);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
