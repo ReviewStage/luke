@@ -1,6 +1,6 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { TaskCode, TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
-import { ArrowLeftIcon, ArrowRightIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import { ArrowLeftIcon, ArrowRightIcon, IconButton, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -106,23 +106,22 @@ function PlaceToggle({
   words: ToggleWords;
 }): React.JSX.Element {
   const label = open && !peeked ? words.open : words.closed;
+  // Note that the place is the box around the button, because the stylesheet
+  // shows one place by the panel's width and a barrel button wears no mark.
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button file-tree-toggle"
-        aria-label={label}
-        aria-expanded={open}
-        data-open={String(open)}
-        data-place={place}
-        onClick={onToggle}
-        onPointerEnter={float?.onPointerEnter}
-        onPointerLeave={float?.onPointerLeave}
-        onPointerDown={float?.onPointerDown}
-      >
-        <SidePanelIcon />
-      </button>
-    </Tooltip>
+    <span className="file-tree-toggle" data-place={place}>
+      <Tooltip label={label}>
+        <IconButton
+          icon={<SidePanelIcon />}
+          label={label}
+          aria-expanded={open}
+          onClick={onToggle}
+          onPointerEnter={float?.onPointerEnter}
+          onPointerLeave={float?.onPointerLeave}
+          onPointerDown={float?.onPointerDown}
+        />
+      </Tooltip>
+    </span>
   );
 }
 
@@ -320,26 +319,20 @@ function HistoryButtons({ history }: { history: FileHistory }): React.JSX.Elemen
   return (
     <div className="file-view-history">
       <Tooltip label="Back">
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Back"
+        <IconButton
+          icon={<ArrowLeftIcon />}
+          label="Back"
           disabled={!history.canGoBack}
           onClick={() => history.onStep(FILE_HISTORY_STEP.BACK)}
-        >
-          <ArrowLeftIcon />
-        </button>
+        />
       </Tooltip>
       <Tooltip label="Forward">
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Forward"
+        <IconButton
+          icon={<ArrowRightIcon />}
+          label="Forward"
           disabled={!history.canGoForward}
           onClick={() => history.onStep(FILE_HISTORY_STEP.FORWARD)}
-        >
-          <ArrowRightIcon />
-        </button>
+        />
       </Tooltip>
     </div>
   );
@@ -405,15 +398,12 @@ export function FileViewBar({
       {beside}
       <div className="file-view-actions">
         <Tooltip label="Open on GitHub">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Open on GitHub"
+          <IconButton
+            icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+            label="Open on GitHub"
             disabled={onGitHub === undefined}
             onClick={onGitHub}
-          >
-            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-          </button>
+          />
         </Tooltip>
         {menu}
         {tree === undefined ? null : <TreeToggle toggles={tree} />}

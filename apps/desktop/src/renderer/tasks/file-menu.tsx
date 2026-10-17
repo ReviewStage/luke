@@ -1,5 +1,5 @@
 import { ACT_KIND } from "@luke/host/acts";
-import { CopyIcon, DownloadIcon, EllipsisIcon, useMenu } from "@luke/ui";
+import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
 import { useAct } from "../act";
@@ -73,9 +73,7 @@ export function LinesMenu({
   return (
     <>
       <Tooltip label={label}>
-        <button type="button" className="icon-button" aria-label={label} {...menu.trigger()}>
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />

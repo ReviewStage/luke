@@ -1020,7 +1020,8 @@ button.file-ref:hover .file-ref-path {
 
 /* The bar: history, the path, then the file's actions and the tree's
    toggle at its end, in the window's toolbar buttons. It stands the one
-   height of a tab's bar whatever it holds, words alone or nothing yet. */
+   height of a tab's bar whatever it holds, words alone or nothing yet, its
+   words in the caption's type. */
 .file-view-bar {
   container: file-bar / inline-size;
   display: flex;
@@ -1028,11 +1029,12 @@ button.file-ref:hover .file-ref-path {
   min-height: var(--secondary-bar-height);
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  font-size: 12px;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-4) var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .file-view-history,
@@ -1040,16 +1042,11 @@ button.file-ref:hover .file-ref-path {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
 }
 
 .file-view-actions {
   margin-left: auto;
-}
-
-.file-view-actions .provider-mark {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
 }
 
 /* A plan with no repository names the file plainly, cut from its left, in
@@ -1057,7 +1054,7 @@ button.file-ref:hover .file-ref-path {
 .file-view-path {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   direction: rtl;
   text-align: left;
   text-overflow: ellipsis;
@@ -1067,8 +1064,8 @@ button.file-ref:hover .file-ref-path {
 /* The commit a pinned read is at, quiet beside the path. */
 .file-view-commit {
   flex: 0 0 auto;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
   white-space: nowrap;
 }
 
@@ -1173,12 +1170,12 @@ button.file-ref:hover .file-ref-path {
 
 .file-breadcrumb {
   min-width: 0;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--luke-space-2) var(--luke-space-4);
   overflow: hidden;
   border: 0;
   border-radius: 4px;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1189,18 +1186,18 @@ button.file-ref:hover .file-ref-path {
 
 .file-breadcrumb:hover,
 .file-breadcrumb[aria-expanded="true"] {
-  background: var(--selected);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-selected);
+  color: var(--luke-color-text);
 }
 
 .file-breadcrumb[aria-current="page"] {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .file-breadcrumb-separator {
   display: flex;
   align-items: center;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .file-breadcrumb-separator svg {
@@ -1223,20 +1220,21 @@ button.file-ref:hover .file-ref-path {
 }
 
 .file-crumb-tree .file-tree-host {
-  --trees-bg-override: var(--surface-popover);
+  --trees-bg-override: var(--luke-color-overlay);
 }
 
 .file-crumb-notice {
   margin: 0;
-  padding: var(--space-4) var(--space-8);
-  color: var(--text-secondary);
-  font-size: 12.5px;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
-/* The tree's toggle reads as on while the tree is shown, as the side
-   panel's own toggle does. */
-.file-tree-toggle[aria-expanded="true"] {
-  color: var(--text-primary);
+/* The box a pane's toggle stands in, which names the place it opens the
+   pane (file-view.tsx): one place is shown at a time, by the panel's width. */
+.file-tree-toggle {
+  display: flex;
 }
 
 /* The tree beside a File tab, its search level with the tab's heading. */
@@ -1321,7 +1319,7 @@ button.file-ref:hover .file-ref-path {
   }
 
   .file-tree-toggle[data-place="over"] {
-    display: inline-flex;
+    display: flex;
   }
 
   .file-view[data-pane-beside] > .file-tree-foot {
@@ -1360,7 +1358,7 @@ button.file-ref:hover .file-ref-path {
   }
 
   .terminal-tab .file-tree-toggle[data-place="over"] {
-    display: inline-flex;
+    display: flex;
   }
 }
 
@@ -2697,20 +2695,20 @@ button.pull-request-check:hover {
    stands in a diff. Lines unwrapped scroll sideways under it while it
    keeps to the tab's width in view. */
 .file-note {
-  margin: var(--space-6) var(--space-12);
+  margin: var(--luke-space-6) var(--luke-space-12);
   overflow: hidden;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 8px;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-  font-size: 12.5px;
-  line-height: 1.5;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-sans);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
 }
 
 .file-tab-lines[data-wrap="false"] > .file-note {
   position: sticky;
-  left: var(--space-12);
+  left: var(--luke-space-12);
 }
 
 /* The note's words select with the lines around it; its header is the card's controls. */
@@ -2718,9 +2716,10 @@ button.pull-request-check:hover {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-2);
-  font-size: 11.5px;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-2) var(--luke-space-8) var(--luke-space-2) var(--luke-space-2);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -2730,11 +2729,11 @@ button.pull-request-check:hover {
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-4);
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-4);
   overflow: hidden;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;
@@ -2742,7 +2741,7 @@ button.pull-request-check:hover {
 }
 
 .file-note-fold:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 /* The note's card clips what it holds, so its fold's ring is drawn inside. */
@@ -2754,7 +2753,7 @@ button.pull-request-check:hover {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   transition: transform var(--duration-quick) var(--motion-exit);
 }
 
@@ -2771,7 +2770,7 @@ button.pull-request-check:hover {
 .file-note-lines,
 .file-note-time {
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* The lines give way before the header's parts would stand on one another. */
@@ -2787,7 +2786,7 @@ button.pull-request-check:hover {
 .file-note-preview {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2799,7 +2798,7 @@ button.pull-request-check:hover {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font: inherit;
   white-space: nowrap;
 }
@@ -2824,12 +2823,12 @@ button.pull-request-check:hover {
 }
 
 .file-note-show:hover {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   text-decoration: underline;
 }
 
 .file-note-words {
-  padding: 0 var(--space-12) var(--space-8) 38px;
+  padding: 0 var(--luke-space-12) var(--luke-space-8) 38px;
   overflow-wrap: anywhere;
 }
 
