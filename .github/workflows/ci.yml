@@ -70,11 +70,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      # The Chromium @luke/ui's browser tests run in, at the build its pinned
-      # `playwright` names, with the system libraries the runner lacks. Only
-      # the fourth job runs that workspace's tests.
-      - if: matrix.shard == 4
-        run: pnpm --filter @luke/ui exec playwright install --with-deps chromium
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
@@ -91,9 +86,13 @@ jobs:
   # run against what it migrated: each file clones the `luke` database as a
   # template into one of its own (`@luke/database/testing`), so
   # `db:migrate` goes first. The job keeps its old name because the ruleset
-  # requires it. The image comes from whichever of three registries answers
-  # first, because each one rate-limits anonymous pulls; it starts before the
-  # checkout so it boots while the workspace installs.
+  # requires it. The store tests run through turbo, and turbo is asked first
+  # whether it would replay them: their hash covers the migrations and every
+  # workspace web imports, so a change that touches none of it replays the
+  # last pass and the job stands no Postgres at all. Note that the image is
+  # not in the hash, so moving it to a new major is a change to re-run by
+  # hand. The image comes from whichever of three registries answers first,
+  # because each one rate-limits anonymous pulls.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
@@ -102,7 +101,19 @@ jobs:
       DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
       LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+      - name: Ask turbo whether the store tests replay
+        id: store
+        run: |
+          status=$(node scripts/turbo.mjs run test:store --filter=@luke/web --dry=json | jq -r '.tasks[] | select(.taskId == "@luke/web#test:store") | .cache.status')
+          echo "Store tests: cache $status"
+          echo "replay=$([ "$status" = HIT ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       - name: Start Postgres
+        if: ${{ steps.store.outputs.replay != 'true' }}
         run: |
           for round in 1 2 3 4; do
             for image in \
@@ -128,9 +139,8 @@ jobs:
           done
           echo "::error::Every registry refused postgres:18"
           exit 1
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: ./.github/actions/setup
       - name: Wait for Postgres
+        if: ${{ steps.store.outputs.replay != 'true' }}
         run: |
           for _ in $(seq 90); do
             status=$(docker inspect --format '{{.State.Health.Status}}' postgres)
@@ -141,5 +151,9 @@ jobs:
           docker logs postgres
           echo "::error::Postgres did not become healthy"
           exit 1
-      - run: pnpm --filter @luke/web db:migrate
-      - run: pnpm --filter @luke/web test:store
+      - if: ${{ steps.store.outputs.replay != 'true' }}
+        run: pnpm --filter @luke/web db:migrate
+      - run: node scripts/turbo.mjs run test:store --filter=@luke/web
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

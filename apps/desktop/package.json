@@ -1,7 +1,7 @@
 {
   "name": "@luke/desktop",
   "productName": "Luke",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "description": "Luke desktop application",
   "main": "dist/main.js",
@@ -102,7 +102,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@sentry/electron": "7.18.0",
+    "@sentry/electron": "8.2.0",
     "electron-updater": "6.8.9"
   }
 }

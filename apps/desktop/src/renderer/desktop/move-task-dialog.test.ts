@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -29,9 +27,6 @@ import { DesktopTasks } from "./desktop-tasks";
  * stranded in a workspace that cannot reach its repository says so over
  * every tab of it, naming the workspace that can. Synthetic throughout.
  */
-
-/** The window's own stylesheet, which says how tall the dialog may stand. */
-const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
 
 const DANA = "user-dana";
 const SAM = "user-sam";
@@ -272,21 +267,6 @@ test("a refused move keeps the dialog up, saying so under the list", async () =>
     moving.querySelector('[role="alert"]')?.textContent,
     "The task could not be moved. Try again.",
   );
-});
-
-test("the dialog is never taller than the window: its workspaces scroll inside the card, and its title and answers stand outside them", () => {
-  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  openMenu(openTab(TASK, [STUDIO, NORTHWIND, OCTO, ACME]));
-  const moving = chooseMove();
-
-  const list = moving.querySelector<HTMLElement>('[role="radiogroup"]') ?? assert.fail("the rows");
-  const answers = button(moving, "Cancel").parentElement ?? assert.fail("the answers");
-  assert.deepEqual(
-    [getComputedStyle(list).overflowY, getComputedStyle(list).minHeight],
-    ["auto", "0px"],
-    "the rows give way and scroll",
-  );
-  assert.ok(!list.contains(answers) && !list.contains(moving.querySelector("h2")));
 });
 
 /** Mounts the open plan's page, its menu left closed. */

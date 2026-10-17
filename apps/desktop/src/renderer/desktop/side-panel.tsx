@@ -374,7 +374,7 @@ export function changesTabOf(
 
 /**
  * Opens an agent's Pull request tab, the one that stands for its pull
- * request (`changesTabOf`), on the view given: the overview its pull
+ * request (`changesTabOf`), on the view given: the conversation its pull
  * request's chip asks for, or the files its Changes chip does.
  */
 export function showPullRequest(
@@ -1348,7 +1348,7 @@ function TabContent({
         shown={shown}
         repository={repository}
         tree={fileTree}
-        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.OVERVIEW}
+        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
         onView={(view) => onPullRequestView(tab.changes, view)}
       />
     );

@@ -1,13 +1,8 @@
-import {
-  ISSUE_PRIORITY_WORDS,
-  ISSUE_STATUS_WORDS,
-  issueGroups,
-  issueIdentifier,
-} from "@luke/features/issue-list-model";
+import { ISSUE_STATUS_WORDS, issueGroups, issueIdentifier } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
 import { useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
-import { PRIORITY_GLYPH, StatusGlyph } from "./issue-pickers";
+import { PriorityMark, StatusGlyph } from "./issue-pickers";
 
 /**
  * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, each row its status, its identifier, its title, how much it matters, and when it last changed.
@@ -34,7 +29,6 @@ function IssueRow({
   focused: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const priority = PRIORITY_GLYPH[issue.priority];
   const row = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     if (focused) row.current?.focus();
@@ -50,16 +44,7 @@ function IssueRow({
             {issueIdentifier(workspaceName, issue.number)}
           </span>
           <span className="sidebar-task-name issue-row-title">{issue.title}</span>
-          {priority === null ? null : (
-            <span
-              className="issue-priority-mark"
-              data-priority={issue.priority}
-              title={ISSUE_PRIORITY_WORDS[issue.priority]}
-            >
-              {priority}
-              <span className="visually-hidden">{ISSUE_PRIORITY_WORDS[issue.priority]}</span>
-            </span>
-          )}
+          <PriorityMark priority={issue.priority} />
           <RelativeTime className="sidebar-task-time" at={issue.updatedAt} now={now} />
         </span>
       </button>

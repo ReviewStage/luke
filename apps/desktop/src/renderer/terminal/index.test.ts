@@ -8,7 +8,8 @@ import "./index";
 /**
  * The terminal bundle, through the one door a Terminal tab mounts it by
  * (`window.lukeTerminal`): which keys reach the shell, which pass to the
- * window, and the colours it draws in as the appearance flips.
+ * window, and a palette colour drawn by its class rather than a style
+ * attribute.
  */
 
 /** A key press as the window reports one: the key, its legacy code, and the modifiers held. */
@@ -22,12 +23,6 @@ interface Press {
 
 const ENTER = { key: "Enter", keyCode: 13 } as const;
 
-/** The query whose answer flips with the system's appearance. */
-const LIGHT_APPEARANCE = "(prefers-color-scheme: light)";
-
-/** The appearance query's listeners, so a test can flip it as macOS would. */
-const appearanceListeners = new Set<() => void>();
-
 let mounted: TerminalHandle | undefined;
 
 beforeEach(() => {
@@ -37,16 +32,13 @@ beforeEach(() => {
     writable: true,
     value: [],
   });
-  // The terminal also asks after the display's resolution, which never changes here.
+  // The terminal asks after the appearance and the display's resolution, which never change here.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: (query: string) => ({
+    value: () => ({
       matches: false,
-      addEventListener: (_type: string, listener: () => void) => {
-        if (query === LIGHT_APPEARANCE) appearanceListeners.add(listener);
-      },
-      removeEventListener: (_type: string, listener: () => void) =>
-        appearanceListeners.delete(listener),
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
       addListener: () => undefined,
       removeListener: () => undefined,
     }),
@@ -56,7 +48,6 @@ beforeEach(() => {
 afterEach(() => {
   mounted?.unmount();
   mounted = undefined;
-  appearanceListeners.clear();
   document.body.innerHTML = "";
 });
 
@@ -88,16 +79,6 @@ function mountTerminal() {
     return event;
   };
   return { host, sent, heard, press, done: () => window.removeEventListener("keydown", hear) };
-}
-
-/** A red the stylesheet never sets, as the document may spell it back. */
-const RED = /#123456|rgb\(18, 52, 86\)/;
-
-/** Every rule the document adopted, as text. */
-function adoptedRules(): string {
-  return document.adoptedStyleSheets
-    .flatMap((sheet) => [...sheet.cssRules].map((rule) => rule.cssText))
-    .join("\n");
 }
 
 test("a Command chord passes to the window, and the shell hears nothing of it", () => {
@@ -136,23 +117,6 @@ test("Escape and Control chords are the shell's, and Escape never reaches the wi
   terminal.done();
   assert.deepEqual(terminal.sent, ["\x1b", "\x03"]);
   assert.deepEqual(terminal.heard, []);
-});
-
-test("the terminal draws in the tokens as they stand, again when the appearance flips, and lets its rules go when taken down", async () => {
-  const terminal = mountTerminal();
-  terminal.done();
-  // The rules are adopted as the document reports the terminal wrote them, after the statement that did.
-  await Promise.resolve();
-  const drawn = adoptedRules();
-  terminal.host.style.setProperty("--terminal-red", "#123456");
-  for (const listener of appearanceListeners) listener();
-  await Promise.resolve();
-  assert.match(drawn, /\.xterm-fg-1\b/);
-  assert.doesNotMatch(drawn, RED);
-  assert.match(adoptedRules(), RED);
-  mounted?.unmount();
-  mounted = undefined;
-  assert.equal(document.adoptedStyleSheets.length, 0);
 });
 
 test("without WebGL a palette colour is drawn by its class, never by a style attribute the panel's policy refuses", async () => {

@@ -25,4 +25,6 @@ export const CRON_ENVIRONMENT = {
 export const MAINTENANCE_SWEEP = {
   /** The function duration the sweep's bundle declares. */
   MAX_DURATION_SECONDS: 60,
+  /** The schedule the root `vercel.json` calls the sweep on, which its Sentry monitor expects a check-in against. */
+  CRONTAB: "* * * * *",
 } as const;
