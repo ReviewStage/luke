@@ -1,3 +1,13 @@
+import {
+  BUTTON_VARIANT,
+  ButtonLink,
+  PUBLIC_PAGE_WIDTH,
+  PublicPage,
+  PublicSection,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import changelogMarkdown from "../../../CHANGELOG.md?raw";
 import {
   CHANGELOG_PATH,
@@ -9,7 +19,13 @@ import {
   parseReleases,
   type Release,
 } from "./changelog-releases";
-import { GitHubMark, REPOSITORY_URL, SITE_PAGE, SiteFooter, SiteHeader } from "./SiteChrome";
+import {
+  GitHubMark,
+  REPOSITORY_URL,
+  SITE_PAGE,
+  SiteFooterLinks,
+  SiteNavigation,
+} from "./SiteChrome";
 
 /**
  * The changelog's pages and its per-release pages, drawn from CHANGELOG.md
@@ -35,10 +51,35 @@ function formatReleaseDate(date: string): string {
 const NAV_LINK =
   "text-sm font-semibold text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none";
 
-/* The landing hero's secondary button, so the two GitHub doors read as the
-   same control. */
-const GITHUB_BUTTON =
-  "mt-6 inline-flex items-center gap-2 rounded-md border border-border px-[23px] py-[11px] text-sm font-semibold text-muted-foreground no-underline transition-colors duration-150 hover:border-muted-foreground hover:text-foreground motion-reduce:transition-none";
+/**
+ * What opens either view: an optional way back, the page's title, and its door
+ * to GitHub, which is the landing hero's secondary button, so the two GitHub
+ * doors read as the same control. The intro sets its own `h1` rather than
+ * PublicPage's title, because a release's way back stands above it.
+ */
+function ChangelogIntro({
+  back,
+  title,
+  github,
+}: {
+  readonly back?: React.ReactNode;
+  readonly title: React.ReactNode;
+  readonly github: { readonly href: string; readonly label: React.ReactNode };
+}): React.JSX.Element {
+  return (
+    <div className="pb-10">
+      {back === undefined ? null : <div className="mb-4">{back}</div>}
+      <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.H1}>
+        {title}
+      </Text>
+      <div className="mt-6">
+        <ButtonLink variant={BUTTON_VARIANT.OUTLINE} href={github.href} icon={<GitHubMark />}>
+          {github.label}
+        </ButtonLink>
+      </div>
+    </div>
+  );
+}
 
 function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Element {
   return (
@@ -64,7 +105,7 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
 
 /* The navs stand under the notes' column, not centred on the page, so they
    line up with what they page through; on one column there is no rail to clear. */
-const UNDER_NOTES = "ml-[calc(8.5rem+2.5rem)] pt-4 pb-12 max-[640px]:ml-0";
+const UNDER_NOTES = "ml-[calc(8.5rem+2.5rem)] pt-4 max-[640px]:ml-0";
 
 const PAGER_ITEM =
   "inline-flex h-7 min-w-7 items-center justify-center rounded-md px-2 font-mono text-xs text-muted-foreground no-underline transition-colors duration-150 hover:bg-muted hover:text-foreground motion-reduce:transition-none";
@@ -179,15 +220,10 @@ function PageOfReleases({
 }): React.JSX.Element {
   return (
     <>
-      <div className="pt-12 pb-10">
-        <h1 className="m-0 text-[2rem] leading-[1.15] font-semibold tracking-[-0.02em]">
-          Changelog
-        </h1>
-        <a className={GITHUB_BUTTON} href={`${REPOSITORY_URL}/releases`}>
-          <GitHubMark />
-          View releases on GitHub
-        </a>
-      </div>
+      <ChangelogIntro
+        title="Changelog"
+        github={{ href: `${REPOSITORY_URL}/releases`, label: "View releases on GitHub" }}
+      />
       <div className="divide-y divide-border border-t border-border">
         {view.releases.map((release) => (
           <ReleaseEntry key={release.version} release={release} />
@@ -206,18 +242,18 @@ function SingleRelease({
   const { release, newer, older } = view;
   return (
     <>
-      <div className="pt-12 pb-10">
-        <a className={NAV_LINK} href={CHANGELOG_PATH}>
-          ← Changelog
-        </a>
-        <h1 className="mt-4 mb-0 text-[2rem] leading-[1.15] font-semibold tracking-[-0.02em]">
-          Luke {release.version}
-        </h1>
-        <a className={GITHUB_BUTTON} href={`${REPOSITORY_URL}/releases/tag/v${release.version}`}>
-          <GitHubMark />
-          View v{release.version} on GitHub
-        </a>
-      </div>
+      <ChangelogIntro
+        back={
+          <a className={NAV_LINK} href={CHANGELOG_PATH}>
+            ← Changelog
+          </a>
+        }
+        title={`Luke ${release.version}`}
+        github={{
+          href: `${REPOSITORY_URL}/releases/tag/v${release.version}`,
+          label: `View v${release.version} on GitHub`,
+        }}
+      />
       <div className="border-t border-border">
         <ReleaseEntry release={release} />
       </div>
@@ -232,21 +268,21 @@ export function ChangelogPage({ view }: { readonly view: ChangelogView }): React
     page: SITE_PAGE.CHANGELOG,
     beneath: view.kind !== CHANGELOG_VIEW.PAGE || view.page !== 1,
   };
+  // Wide: the rail and its gutter sit beside the notes, which keep about
+  // the reading column's own measure.
   return (
-    <>
-      <SiteHeader current={place} />
-
-      {/* Wider than the shell: the rail and its gutter sit beside the body,
-          which keeps the shell's own document measure. */}
-      <main className="mx-auto w-full max-w-[860px] px-6">
+    <PublicPage
+      banner={<SiteNavigation current={place} />}
+      footer={<SiteFooterLinks current={place} />}
+      width={PUBLIC_PAGE_WIDTH.WIDE}
+    >
+      <PublicSection>
         {view.kind === CHANGELOG_VIEW.PAGE ? (
           <PageOfReleases view={view} />
         ) : (
           <SingleRelease view={view} />
         )}
-      </main>
-
-      <SiteFooter current={place} />
-    </>
+      </PublicSection>
+    </PublicPage>
   );
 }

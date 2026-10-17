@@ -1,5 +1,4 @@
 import { FACE_ART } from "@luke/brand";
-import { PublicBanner, PublicFooter } from "@luke/ui";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
@@ -142,18 +141,6 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
 }
 
 /**
- * The banner for a page that still draws its own main. The banner is the
- * design system's, so its wash, rule, and gutters are the public page's.
- */
-export function SiteHeader(props: ChromeProps): React.JSX.Element {
-  return (
-    <PublicBanner>
-      <SiteNavigation {...props} />
-    </PublicBanner>
-  );
-}
-
-/**
  * Shared between every page so the legal and license links never drift
  * apart: what PublicPage's `footer` holds under its rule.
  */
@@ -188,14 +175,5 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
             a row of links. */}
       <p className="mt-8 border-t border-border pt-6">© 2026 Stage Inc.</p>
     </div>
-  );
-}
-
-/** The footer for a page that still draws its own main. */
-export function SiteFooter(props: ChromeProps): React.JSX.Element {
-  return (
-    <PublicFooter>
-      <SiteFooterLinks {...props} />
-    </PublicFooter>
   );
 }

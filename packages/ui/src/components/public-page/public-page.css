@@ -40,6 +40,12 @@
     padding-inline: var(--luke-page-inset);
   }
 
+  /* Room for a rail beside the reading column: the rail, its gutter, and
+     the words at about the column's own measure. */
+  .luke-public-page-column[data-width="wide"] {
+    --luke-public-page-width: 860px;
+  }
+
   /* The banner owns its ground across the whole page, a wash of it over a
      blur with a rule under it, because words sliding beneath an unbounded
      banner read as a glitch; its contents keep to the column. */
