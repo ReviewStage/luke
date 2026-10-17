@@ -31,7 +31,8 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - Factory, `/factory`, and a page of Settings, `/settings[/<page>]`;
  * - a person's page in the workspace, `/person/<userId>`, a member or
- *   someone who left, by the account id the service names them by.
+ *   someone who left, by the account id the service names them by;
+ * - an issue's page, `/issue/<issueId>`, by the id the service minted it.
  *
  * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
  * is read as its task, since nothing of a picture is opened by its link.
@@ -65,6 +66,7 @@ export const LINK_PLACE = {
   FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
+  ISSUE: "issue",
 } as const;
 
 /** The steps of a link's path, each naming what the step after it is. */
@@ -87,6 +89,7 @@ const STEP = {
   FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
+  ISSUE: "issue",
 } as const;
 
 /** The steps a task is read under: the one written, and the name the unit of work is taking. */
@@ -190,6 +193,7 @@ const linkPlaceSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.FACTORY) }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.PERSON), userId: idSchema }),
+  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.ISSUE), issueId: idSchema }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.SETTINGS),
     page: EffectSchema.optionalKey(
@@ -318,6 +322,10 @@ function placeFields(steps: readonly string[]) {
       return id === undefined || rest.length > 0
         ? undefined
         : { kind: LINK_PLACE.PERSON, userId: id };
+    case STEP.ISSUE:
+      return id === undefined || rest.length > 0
+        ? undefined
+        : { kind: LINK_PLACE.ISSUE, issueId: id };
     case STEP.SETTINGS:
       if (rest.length > 0) return undefined;
       return id === undefined
@@ -390,6 +398,8 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.FACTORY];
     case LINK_PLACE.PERSON:
       return [STEP.PERSON, place.userId];
+    case LINK_PLACE.ISSUE:
+      return [STEP.ISSUE, place.issueId];
     case LINK_PLACE.SETTINGS:
       return place.page === undefined ? [STEP.SETTINGS] : [STEP.SETTINGS, place.page];
   }

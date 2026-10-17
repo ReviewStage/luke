@@ -73,6 +73,8 @@ let heldChanges: (() => void)[] | undefined;
 let heldCreates: (() => void)[] | undefined;
 /** Whether a change is refused. */
 let changeRefused = false;
+/** Every text copied, in order. */
+let copied: string[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
@@ -88,6 +90,7 @@ beforeEach(() => {
   heldChanges = undefined;
   heldCreates = undefined;
   changeRefused = false;
+  copied = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -157,6 +160,10 @@ beforeEach(() => {
           if (held === undefined) return Promise.resolve(done);
           return new Promise((resolve) => held.push(() => resolve(done)));
         }
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
+          copied.push(request.payload.words);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       },
     },
@@ -179,9 +186,15 @@ function Keymap(): null {
   return null;
 }
 
-/** The Issues pages over the workspace given, standing on the page each press opens. */
-function Pages({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  const [place, setPlace] = useState<IssuesPlace>({ kind: ISSUES_PAGE.LIST });
+/** The Issues pages over the workspace given, opened on `start`, standing on the page each press opens. */
+function Pages({
+  workspace,
+  start = { kind: ISSUES_PAGE.LIST },
+}: {
+  workspace: Workspace;
+  start?: IssuesPlace | undefined;
+}): React.JSX.Element {
+  const [place, setPlace] = useState<IssuesPlace>(start);
   const control = tasksControl({ workspace });
   const plans = tasksControl({
     workspace,
@@ -205,19 +218,19 @@ function Pages({ workspace }: { workspace: Workspace }): React.JSX.Element {
   );
 }
 
-/** The Issues page, standing in the plan's place over the workspace listed. */
-function mount(): HTMLElement {
+/** The Issues page, standing in the plan's place over the workspace listed, opened on `start` as a link opens it. */
+function mount(start?: IssuesPlace): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   registry = AtomRegistry.make();
-  list(WORKSPACE);
+  list(WORKSPACE, start);
   return container;
 }
 
 /** The pages drawn again in place, listing the workspace given. */
-function list(workspace: Workspace): void {
-  act(() => root?.render(onRegistry(registry, createElement(Pages, { workspace }))));
+function list(workspace: Workspace, start?: IssuesPlace): void {
+  act(() => root?.render(onRegistry(registry, createElement(Pages, { workspace, start }))));
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -610,6 +623,17 @@ test("Archive asks first, then sends the archive and goes back to a list without
   assert.deepEqual(groups(page), [["Backlog1", ["ACME-2 Issue 2"]]]);
 });
 
+test("an issue's ⋯ offers Copy link, copying its link under the listed workspace, and the issue's page stands", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = await openIssue(issue(1).id);
+
+  act(() => button("Issue actions").click());
+  await act(async () => menuItem("Copy link").click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/${WORKSPACE.id}/issue/${issue(1).id}`]);
+  assert.equal(titleOf(page), "Fix login");
+});
+
 test("a read that did not land is said with a retry, which asks again and draws the list", async () => {
   lists = [{ failure: ISSUE_CALL_FAILURE.UNANSWERED }];
   standing = [issue(1)];
@@ -651,6 +675,16 @@ test("an issue's page whose workspace is no longer the one listed says the issue
 
   assert.equal(page.querySelector("[aria-label='Issue title']"), null);
   assert.match(page.textContent ?? "", /not in this workspace/u);
+});
+
+test("an issue's page opened on an issue the service does not hand the reader, as a link to one opens it, says it is gone", async () => {
+  standing = [issue(1)];
+  const page = mount({ kind: ISSUES_PAGE.ISSUE, issueId: issue(9).id });
+  await settle();
+
+  assert.deepEqual(reads, [issue(9).id]);
+  assert.equal(page.querySelector("[aria-label='Issue title']"), null);
+  assert.match(page.textContent ?? "", /This issue is gone, or not in this workspace\./u);
 });
 
 test("two changes at once draw the newest's answer, though the older one is answered after it", async () => {

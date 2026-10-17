@@ -36,7 +36,7 @@ import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-a
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel";
 import { useTaskLooks } from "../tasks/use-task-looks";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
+import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { CommandPalette } from "./command-palette";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -1029,6 +1029,29 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
 
   assert.deepEqual(listed, ["Copy link to profile"]);
   assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
+});
+
+test("on an issue's page ⌘K offers Copy link to issue and ⌥⌘C copies its link in the listed workspace", async () => {
+  const copied = installClipboard();
+  const issueId = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+  openPalette(
+    tasksControl({
+      workspaces: ON_AGENT_TAB.workspaces,
+      workspace: ON_AGENT_TAB.workspaces[0],
+      issuesView: {
+        ...tasksControl().issuesView,
+        open: true,
+        place: { kind: ISSUES_PAGE.ISSUE, issueId },
+      },
+    }),
+  );
+  type("copy link");
+  const listed = rows().filter((row) => row.startsWith("Copy link to "));
+  act(() => runAppCommand(APP_COMMAND.COPY_LINK));
+  await act(async () => undefined);
+
+  assert.deepEqual(listed, ["Copy link to issue"]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/issue/${issueId}`]);
 });
 
 test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K lists no Copy link", () => {
