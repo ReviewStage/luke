@@ -188,18 +188,31 @@ function boundsOf(box: DOMRect): BrowserBounds {
 }
 
 /**
+ * A still of the page, and the size in CSS pixels the view stood at when it
+ * was caught. Note that the size is the view's rather than the image's,
+ * because the image is caught in the screen's own pixels, two to a CSS pixel
+ * on a Retina display and more at a zoom, and drawn at its own size it reads
+ * as the page zoomed in.
+ */
+interface Still {
+  readonly src: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
  * Lays the tab's view over `body` while it may stand there, and draws a
  * still in its place otherwise, as the pane's design says; answers the
- * still, none while the view stands. `wanted` is whether the view may stand
+ * still, none until one is caught. `wanted` is whether the view may stand
  * at all: a page opened that has not failed, its panel on screen.
  */
 function useViewPlacing(
   browserId: string,
   body: RefObject<HTMLDivElement | null>,
   wanted: boolean,
-): string | undefined {
+): Still | undefined {
   const { act, tell } = useAct();
-  const [still, setStill] = useState<string | undefined>(undefined);
+  const [still, setStill] = useState<Still | undefined>(undefined);
   useEffect(() => {
     if (!wanted) return;
     let frame = 0;
@@ -210,7 +223,8 @@ function useViewPlacing(
     let ended = false;
     let last: DOMRect | undefined;
     let settled = 0;
-    let live = false;
+    // Where the view stands while it is laid over the body, which a still of it is drawn at.
+    let placed: BrowserBounds | undefined;
     let leaving = false;
     const step = () => {
       frame = requestAnimationFrame(step);
@@ -222,20 +236,21 @@ function useViewPlacing(
       last = box;
       const free = !moving && box.width > 0 && box.height > 0 && !coveredAt(element, box);
       settled = free ? settled + 1 : 0;
-      if (settled === SETTLED_FRAMES && !live) {
-        live = true;
-        tell(ACT_KIND.BROWSER_PLACE, { browserId, bounds: boundsOf(box) });
+      if (settled === SETTLED_FRAMES && placed === undefined) {
+        placed = boundsOf(box);
+        tell(ACT_KIND.BROWSER_PLACE, { browserId, bounds: placed });
         return;
       }
-      if (free || !live) return;
+      if (free || placed === undefined) return;
       // The still is drawn under the view first, then the view goes, a frame after it is painted.
-      live = false;
+      const { width, height } = placed;
+      placed = undefined;
       leaving = true;
       void act(ACT_KIND.BROWSER_CAPTURE, { browserId })
         .catch(() => null)
         .then((caught) => {
           if (ended) return;
-          if (caught !== null) setStill(caught);
+          if (caught !== null) setStill({ src: caught, width, height });
           hiding = requestAnimationFrame(() => {
             hiding = requestAnimationFrame(() => {
               tell(ACT_KIND.BROWSER_PLACE, { browserId, bounds: null });
@@ -461,7 +476,12 @@ export function BrowserPane({
             />
           </div>
         ) : still === undefined ? null : (
-          <img className="browser-view-still" src={still} alt="" />
+          <img
+            className="browser-view-still"
+            src={still.src}
+            alt=""
+            style={{ width: still.width, height: still.height }}
+          />
         )}
       </div>
     </section>

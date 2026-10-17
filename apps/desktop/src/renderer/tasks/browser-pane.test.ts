@@ -310,7 +310,10 @@ test("the page is laid over the body once it settles, and gives way to a still w
     kind: ACT_KIND.BROWSER_PLACE,
     payload: { browserId: tab.browserId, bounds: null },
   });
-  assert.equal(tab.container.querySelector("img.browser-view-still")?.getAttribute("src"), STILL);
+  const still = tab.container.querySelector<HTMLImageElement>("img.browser-view-still");
+  assert.equal(still?.getAttribute("src"), STILL);
+  // Drawn at the size the page stood at, never at the image's own, which is in the screen's pixels.
+  assert.deepEqual([still?.style.width, still?.style.height], ["480px", "700px"]);
 
   // The menu gone, the page is laid over the body again.
   menu.remove();

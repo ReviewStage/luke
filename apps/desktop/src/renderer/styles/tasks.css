@@ -1493,15 +1493,14 @@ button.file-ref:hover .file-ref-path {
   overflow: clip;
 }
 
-/* The still stands where the page stood, at its own size and never
-   stretched, since the page it stands in for was drawn at the body's. */
+/* The still stands where the page stood, at the size the page was drawn
+   at (browser-pane.tsx sets it), never at the image's own, which is in the
+   screen's pixels, nor stretched to a body that has since moved. */
 .browser-view-still {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: none;
-  object-position: top left;
+  top: 0;
+  left: 0;
+  max-width: none;
 }
 
 .page-view-find {
