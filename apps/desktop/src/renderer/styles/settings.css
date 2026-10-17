@@ -643,6 +643,13 @@
   color: var(--luke-color-attention);
 }
 
+/* A state that stands on a line of its own under a row's description:
+   Settings › Notifications' word of what macOS last showed. */
+.settings-state-line {
+  display: flex;
+  width: fit-content;
+}
+
 /* A sign-in waiting on the browser wears the window's ring, at the line's size. */
 .settings-state .luke-spinner {
   width: 12px;
