@@ -238,8 +238,19 @@ function ChangesMenu({
 /** A pull request's review threads as Files changed draws them on their lines: the threads, and the door that draws one. */
 export interface ChangesThreads {
   readonly list: readonly ReviewThread[];
-  readonly draw: (thread: ReviewThread) => ReactNode;
+  /** Draws one, under its line or above the diff, where it names the lines it is on. */
+  readonly draw: (thread: ReviewThread, place: ThreadPlace) => ReactNode;
+  /** Reads the threads again, as Refresh changes reads the files again, so the two describe the same push. */
+  readonly refresh?: (() => void) | undefined;
 }
+
+/** Where a review thread is drawn in a file's diff: under the line it stands on, or above the diff, which draws no row for it. */
+export const THREAD_PLACE = {
+  ON_LINE: "on-line",
+  ABOVE: "above",
+} as const;
+
+export type ThreadPlace = (typeof THREAD_PLACE)[keyof typeof THREAD_PLACE];
 
 /** The chosen file: where it moved from, and its diff, or why there is none, in a File tab's place. */
 function FileDiff({
@@ -259,12 +270,12 @@ function FileDiff({
   const look = useDiffLook(roomy);
   // A file with no notice has a patch with hunks, headed as git writes one for Pierre to read.
   const patch = fileNotice(file) === undefined ? filePatch(file) : undefined;
-  const { placed, above } = threadsOn(threads?.list ?? [], file.path);
+  const { placed, above } = threadsOn(threads?.list ?? [], file);
   const notes = placed.map((each) => ({
     key: each.key,
     side: each.side,
     line: each.line,
-    content: threads?.draw(each.thread),
+    content: threads?.draw(each.thread, THREAD_PLACE.ON_LINE),
   }));
   return (
     <section className="file-tab" aria-label={`Diff of ${file.path}`}>
@@ -276,9 +287,9 @@ function FileDiff({
         </div>
       )}
       {above.length === 0 ? null : (
-        <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.OUTDATED_THREADS}>
+        <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.UNPLACED_THREADS}>
           {above.map((each) => (
-            <li key={each.key}>{threads?.draw(each.thread)}</li>
+            <li key={each.key}>{threads?.draw(each.thread, THREAD_PLACE.ABOVE)}</li>
           ))}
         </ol>
       )}
@@ -450,7 +461,15 @@ export function AgentChangesTab({
         menu={
           <>
             <DiffSettingsButton roomy={roomy} />
-            <ChangesMenu file={shownFile} reading={out} onRefresh={ask} roomy={roomy} />
+            <ChangesMenu
+              file={shownFile}
+              reading={out}
+              onRefresh={() => {
+                ask();
+                threads?.refresh?.();
+              }}
+              roomy={roomy}
+            />
           </>
         }
         tree={room.toggles}

@@ -207,9 +207,19 @@ function inDocumentTree(node: Node): Node {
   return at;
 }
 
+/** The node a node stands for where a shadow root draws it: the slot it is assigned to, or itself where it is slotted nowhere. */
+function inFlatTree(node: Node): Node {
+  for (let at: Node | null = node; at !== null; at = at.parentNode) {
+    if (at instanceof Element && at.assignedSlot !== null) return at.assignedSlot;
+  }
+  return node;
+}
+
 /**
  * Whether range `a` starts before range `b`. Note that two ranges in
  * different trees, one in a shadow root and one outside it, are ordered by
+ * where each is drawn: what a host slots into its shadow root where its
+ * slot stands there, as the words are read (`readNodes`), and otherwise
  * where each stands in the document's own tree, because a range compares
  * boundary points only within its own tree.
  */
@@ -217,8 +227,13 @@ function startsBefore(a: Range, b: Range): boolean {
   if (a.startContainer.getRootNode() === b.startContainer.getRootNode()) {
     return a.compareBoundaryPoints(Range.START_TO_START, b) < 0;
   }
-  const one = inDocumentTree(a.startContainer);
-  const other = inDocumentTree(b.startContainer);
+  const drawnOne = inFlatTree(a.startContainer);
+  const drawnOther = inFlatTree(b.startContainer);
+  if (drawnOne !== drawnOther && drawnOne.getRootNode() === drawnOther.getRootNode()) {
+    return (drawnOne.compareDocumentPosition(drawnOther) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  }
+  const one = inDocumentTree(drawnOne);
+  const other = inDocumentTree(drawnOther);
   return (
     one !== other && (one.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
   );

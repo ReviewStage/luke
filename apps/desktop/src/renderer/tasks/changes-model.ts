@@ -91,7 +91,7 @@ export const CHANGES_WORDS = {
   NO_HUNKS: "No changes to show in this file.",
   UNREADABLE: "This file's diff could not be read.",
   TOO_NARROW_TO_SPLIT: "Needs a wider panel",
-  OUTDATED_THREADS: "Comments on lines a later push changed",
+  UNPLACED_THREADS: "Comments on lines this diff does not show",
 } as const;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
@@ -304,7 +304,7 @@ interface PlacedThread {
   readonly line: number;
 }
 
-/** A file's review threads: those drawn on their lines, and the outdated drawn above its diff. */
+/** A file's review threads: those drawn on their lines, and those drawn above its diff, which it has no row for. */
 export interface FileThreads {
   readonly placed: readonly PlacedThread[];
   readonly above: readonly PlacedThread[];
@@ -316,23 +316,50 @@ const SELECTION_SIDE = {
   [DIFF_SIDE.RIGHT]: DIFF_SELECTION_SIDE.ADDITIONS,
 } as const satisfies Record<DiffSide, DiffSelection["side"]>;
 
+/** The lines a file's diff draws a row for, on each of GitHub's sides. */
+interface DrawnLines {
+  readonly [DIFF_SIDE.LEFT]: ReadonlySet<number>;
+  readonly [DIFF_SIDE.RIGHT]: ReadonlySet<number>;
+}
+
+/** The lines a file's diff draws a row for, on each of GitHub's sides; none where it draws no hunks. */
+function drawnLines(file: CodingAgentChangedFile): DrawnLines {
+  const patch = fileNotice(file) === undefined ? file.patch : null;
+  const rows = patch === null ? [] : (patchHunks(patch) ?? []).flatMap((hunk) => hunk.rows);
+  return {
+    [DIFF_SIDE.LEFT]: new Set(
+      rows.flatMap((row) => (row.oldLine === undefined ? [] : [row.oldLine])),
+    ),
+    [DIFF_SIDE.RIGHT]: new Set(
+      rows.flatMap((row) => (row.newLine === undefined ? [] : [row.newLine])),
+    ),
+  };
+}
+
 /**
  * A file's review threads as Files changed draws them, as GitHub's own
  * diff does: each on the line it stands on now, under that line on the
- * side it counts on, and those whose line a later push took away, outdated,
- * at the top of the file's diff, in the order the pull request holds them.
- * Each is keyed by its first comment's page, which no other thread shares;
- * one with no comment is drawn nowhere.
+ * side it counts on, where the file's diff draws a row for that line; and,
+ * at the top of the diff, in the order the pull request holds them, those
+ * it draws none for: a thread whose line a later push took away, outdated;
+ * one on a line no hunk shows; and every one on a file whose diff is not
+ * drawn, binary, too large, or empty. Each is keyed by its first comment's
+ * page, which no other thread shares; one with no comment is drawn nowhere.
  */
-export function threadsOn(threads: readonly ReviewThread[], path: string): FileThreads {
+export function threadsOn(
+  threads: readonly ReviewThread[],
+  file: CodingAgentChangedFile,
+): FileThreads {
+  const lines = drawnLines(file);
   const placed: PlacedThread[] = [];
   const above: PlacedThread[] = [];
   for (const thread of threads) {
     const key = thread.comments[0]?.url;
-    if (thread.path !== path || key === undefined) continue;
+    if (thread.path !== file.path || key === undefined) continue;
     const side = SELECTION_SIDE[thread.side];
-    if (thread.line === null) above.push({ thread, key, side, line: thread.originalLine ?? 0 });
-    else placed.push({ thread, key, side, line: thread.line });
+    const line = thread.line;
+    if (line !== null && lines[thread.side].has(line)) placed.push({ thread, key, side, line });
+    else above.push({ thread, key, side, line: line ?? thread.originalLine ?? 0 });
   }
   return { placed, above };
 }

@@ -370,7 +370,27 @@ test("a review thread is drawn under its line in the diff, and one a push outdat
   const note = props.renderAnnotation?.(`${PAGE}#why-42`) ?? assert.fail("the note has an element");
   assert.equal(note.textContent, "why-42");
   const above =
-    document.querySelector('[aria-label="Comments on lines a later push changed"]') ??
+    document.querySelector('[aria-label="Comments on lines this diff does not show"]') ??
     assert.fail("the outdated thread stands above the diff");
   assert.equal(above.textContent, "was-3");
+});
+
+test("Refresh changes reads the review threads again with the files, so the two describe the same push", async () => {
+  let threadReads = 0;
+  await drawTab({
+    list: [],
+    draw: () => null,
+    refresh: () => {
+      threadReads += 1;
+    },
+  });
+
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+
+  assert.equal(threadReads, 1);
 });
