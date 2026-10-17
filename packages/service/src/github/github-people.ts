@@ -27,6 +27,7 @@ import type {
   CodingAgentOverviewConversation,
   CodingAgentOverviewPullRequest,
   GitHubPerson,
+  ReactionGroup,
 } from "@luke/features/coding-agent-wire";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect, type Redacted, Schema } from "effect";
@@ -37,6 +38,7 @@ import {
   type GitHubAccount,
   type GitHubOverviewConversation,
   type GitHubOverviewPullRequest,
+  type GitHubReaction,
   type PullRequestPeople,
   pullRequestPeople,
 } from "./pull-requests.js";
@@ -220,11 +222,36 @@ export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOver
 function accountsOfConversation(read: GitHubOverviewConversation): readonly GitHubAccount[] {
   return [
     ...read.reviewers.map((reviewer) => reviewer.account),
+    ...accountsOfReactions(read.descriptionReactions),
     ...read.conversation.flatMap((entry) => [
       entry.account,
-      ...entry.threads.flatMap((thread) => thread.comments.map((comment) => comment.account)),
+      ...accountsOfReactions(entry.reactions),
+      ...entry.threads.flatMap((thread) =>
+        thread.comments.flatMap((comment) => [
+          comment.account,
+          ...accountsOfReactions(comment.reactions),
+        ]),
+      ),
     ]),
   ];
+}
+
+/** Everyone the reactions name. */
+function accountsOfReactions(reactions: readonly GitHubReaction[]): readonly GitHubAccount[] {
+  return reactions.flatMap((reaction) => reaction.accounts ?? []);
+}
+
+/** The reactions as the wire carries them, each who it names named; none where nothing was given. */
+function namedReactions(
+  reactions: readonly GitHubReaction[],
+  person: (held: GitHubAccount) => GitHubPerson,
+): readonly ReactionGroup[] | undefined {
+  if (reactions.length === 0) return undefined;
+  return reactions.map(({ content, count, accounts }) => ({
+    content,
+    count,
+    ...(accounts === undefined ? undefined : { by: accounts.map(person) }),
+  }));
 }
 
 /**
@@ -239,25 +266,36 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
     read: GitHubOverviewConversation,
   ): Effect.fn.Return<CodingAgentOverviewConversation, never, DatabaseServices> {
     const person = yield* overviewNamer(agent.organizationId, accountsOfConversation(read), number);
+    // Note that a reaction key stands only where something was given, so a read before reactions and one with none read alike.
+    const reacted = (given: readonly GitHubReaction[]) => {
+      const named = namedReactions(given, person);
+      return named === undefined ? undefined : { reactions: named };
+    };
+    const description = namedReactions(read.descriptionReactions, person);
     return {
       earlier: read.earlier,
       reviewers: read.reviewers.map(({ account: held, state }) => ({ by: person(held), state })),
-      conversation: read.conversation.map(({ account: held, state, threads, ...entry }) => ({
-        ...entry,
-        by: person(held),
-        ...(state === undefined ? undefined : { state }),
-        ...(threads.length === 0
-          ? undefined
-          : {
-              threads: threads.map(({ reviewId: _review, comments, ...thread }) => ({
-                ...thread,
-                comments: comments.map(({ account: author, ...comment }) => ({
-                  ...comment,
-                  by: person(author),
+      conversation: read.conversation.map(
+        ({ account: held, state, threads, reactions, ...entry }) => ({
+          ...entry,
+          by: person(held),
+          ...(state === undefined ? undefined : { state }),
+          ...(threads.length === 0
+            ? undefined
+            : {
+                threads: threads.map(({ reviewId: _review, comments, ...thread }) => ({
+                  ...thread,
+                  comments: comments.map(({ account: author, reactions: given, ...comment }) => ({
+                    ...comment,
+                    by: person(author),
+                    ...reacted(given),
+                  })),
                 })),
-              })),
-            }),
-      })),
+              }),
+          ...reacted(reactions),
+        }),
+      ),
+      ...(description === undefined ? undefined : { descriptionReactions: description }),
     };
   },
 );
