@@ -585,6 +585,11 @@ export function agentGitHubImagePath(agentId: string, src: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
 }
 
+/** One change to an agent's pull request (POST), made on GitHub as the member who asks; `pull-request-write-wire.ts` declares the request and the answer. */
+export function agentPullRequestActionPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/pull-request/action`;
+}
+
 /** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
 export function agentTerminalsPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/terminals`;

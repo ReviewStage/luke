@@ -23,6 +23,12 @@ import {
   REVIEW_STATE,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
+import {
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_OUTCOME,
+  type PullRequestActionRequest,
+  type PullRequestWriteAnswer,
+} from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { Effect } from "effect";
@@ -34,6 +40,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
 import type { DiffViewProps } from "../diff-view/contract";
+import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect";
 import { MemberDirectory } from "../member-directory";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -170,6 +177,10 @@ let opened: string[] = [];
 let images: string[] = [];
 /** What each review thread's preview handed the diff bundle, in the order drawn. */
 let previews: DiffViewProps[] = [];
+/** Every change to the pull request the tab asked for, by agent, in order. */
+let changes: (readonly [string, PullRequestActionRequest])[] = [];
+/** How the service answers the next change asked for. */
+let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -177,6 +188,8 @@ beforeEach(() => {
   opened = [];
   images = [];
   previews = [];
+  changes = [];
+  changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
   // The diff bundle, a script of its own the panel loads, stood in for at its global.
   window.lukeDiffView = {
     mount: (_host, props) => {
@@ -190,6 +203,10 @@ beforeEach(() => {
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
         if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
+        if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+          changes.push([request.payload.agentId, request.payload.request]);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: changeAnswer });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
           images.push(request.payload.src);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
@@ -287,10 +304,18 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Draws the agent's tab inside the workspace's member directory, its reads landed. */
+/** Nothing connected, and presses that do nothing, as outside the window. */
+const NO_GITHUB: GitHubConnectControl = {
+  connection: undefined,
+  connect: () => Promise.resolve(false),
+  disconnect: () => Promise.resolve(false),
+};
+
+/** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed. */
 async function draw(
   control: CodingAgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
+  github: GitHubConnectControl = NO_GITHUB,
 ) {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -298,10 +323,13 @@ async function draw(
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(MemberDirectory, {
-          workspace: { id: "workspace-acme", memberCount: 2 },
-          readerId: "user-dana",
-          children: createElement(Switching, { control, first }),
+        createElement(GitHubConnectProvider, {
+          value: github,
+          children: createElement(MemberDirectory, {
+            workspace: { id: "workspace-acme", memberCount: 2 },
+            readerId: "user-dana",
+            children: createElement(Switching, { control, first }),
+          }),
         }),
       ),
     ),
@@ -903,4 +931,129 @@ test("the bar wears what was published of the checks only for the pull request t
     /checks failing/u,
     "#42's failing checks are not #43's",
   );
+});
+
+/** The bar's pill, as a press. */
+function pill(tab: HTMLElement): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>("button.pull-request-state") ??
+    assert.fail("the pill is a press that opens what may be done")
+  );
+}
+
+/** Opens the pill's menu and presses its item of the words given. */
+async function pressAction(tab: HTMLElement, label: string): Promise<void> {
+  act(() => pill(tab).click());
+  const item =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the pill's menu offers ${label}`);
+  act(() => item.click());
+  await settle();
+}
+
+/** The labels the pill's menu offers, opened and closed again. */
+function offered(tab: HTMLElement): string[] {
+  act(() => pill(tab).click());
+  const labels = words(document.body, '[role="menuitem"]');
+  act(() => pill(tab).click());
+  return labels;
+}
+
+test("a draft's pill offers Ready for review, which is asked of the service for the agent, and the tab reads the pull request again, its pill then saying it is open and offering Convert to draft", async () => {
+  let reads = 0;
+  const tab = await draw(
+    controlAnswering(
+      {
+        pullRequest: () => {
+          reads += 1;
+          return Promise.resolve({
+            pullRequest: {
+              ...PULL_REQUEST,
+              state: reads === 1 ? PULL_REQUEST_STATE.DRAFT : PULL_REQUEST_STATE.OPEN,
+            },
+          });
+        },
+      },
+      PULL_REQUEST_STATE.DRAFT,
+    ),
+  );
+  assert.equal(pill(tab).textContent, "Draft");
+  assert.deepEqual(offered(tab), ["Ready for review"]);
+
+  await pressAction(tab, "Ready for review");
+
+  assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW }]]);
+  assert.equal(reads, 2, "the pull request is read again once GitHub took the change");
+  assert.equal(pill(tab).textContent, "Open");
+  assert.deepEqual(offered(tab), ["Convert to draft"]);
+  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+});
+
+test("a member GitHub would not take as signed in is offered to sign in with GitHub again, and a merged pull request's pill offers nothing", async () => {
+  let connects = 0;
+  changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
+  const tab = await draw(controlAnswering(), PULL_REQUEST_VIEW.CONVERSATION, {
+    ...NO_GITHUB,
+    connect: () => {
+      connects += 1;
+      return Promise.resolve(true);
+    },
+  });
+
+  await pressAction(tab, "Convert to draft");
+
+  const note =
+    tab.querySelector<HTMLElement>(".pull-request-write-note") ??
+    assert.fail("the tab says why the change was not made");
+  assert.match(note.textContent ?? "", /Sign in with GitHub to make this change as you\./u);
+  const signIn =
+    [...note.querySelectorAll("button")].find(
+      (button) => button.textContent === "Sign in with GitHub",
+    ) ?? assert.fail("the line offers to sign in with GitHub");
+  act(() => signIn.click());
+  assert.equal(connects, 1);
+  act(() => root?.unmount());
+  root = undefined;
+
+  const merged = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
+    }),
+  );
+  assert.equal(merged.querySelector("button.pull-request-state"), null);
+  assert.equal(merged.querySelector(".pull-request-state")?.textContent, "Merged");
+});
+
+test("a change GitHub refused says so in GitHub's own words until dismissed, and the pull request is read again in case it moved", async () => {
+  let reads = 0;
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Pull request is in the merge queue.",
+  };
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () => {
+        reads += 1;
+        return Promise.resolve({ pullRequest: PULL_REQUEST });
+      },
+    }),
+  );
+
+  await pressAction(tab, "Convert to draft");
+
+  const note =
+    tab.querySelector<HTMLElement>(".pull-request-write-note") ??
+    assert.fail("the tab says GitHub refused");
+  assert.equal(
+    note.querySelector(".failure-note-words")?.textContent,
+    "GitHub said: Pull request is in the merge queue.",
+  );
+  assert.equal(reads, 2);
+  const dismiss =
+    note.querySelector<HTMLButtonElement>('[aria-label="Dismiss"]') ??
+    assert.fail("the line may be dismissed");
+  act(() => dismiss.click());
+  assert.equal(tab.querySelector(".pull-request-write-note"), null);
 });

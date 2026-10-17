@@ -52,8 +52,13 @@ import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { PierreDiff, useDiffLook } from "./file-diff";
-import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
+import {
+  PullRequestStateMenu,
+  PullRequestWriteNote,
+  type PullRequestWrites,
+  usePullRequestWrites,
+} from "./pull-request-writes";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
 import {
@@ -181,14 +186,6 @@ function partOf<A>(read: PartRead<A>): Part<A> {
 function landed<A>(part: Part<A>): A | undefined {
   return part.kind === PART.LANDED ? part.value : undefined;
 }
-
-/** The word for where the pull request stands, which its bar's pill says. */
-const STATE_WORDS = {
-  [PULL_REQUEST_STATE.OPEN]: "Open",
-  [PULL_REQUEST_STATE.DRAFT]: "Draft",
-  [PULL_REQUEST_STATE.MERGED]: "Merged",
-  [PULL_REQUEST_STATE.CLOSED]: "Closed",
-} as const;
 
 /** How a merge's standing reads: whether it is good news, a wait, or something to fix. */
 const MERGE_TONE = {
@@ -352,15 +349,18 @@ function reviewersOf(
 /**
  * The bar across the top of the fixed header: the pill saying where the
  * pull request stands, in its colour, as last read of what the agent
- * published until the header's own read lands, and GitHub's page and the ⋯
- * at its end.
+ * published until the header's own read lands, which opens the changes
+ * that may be made from there (`pull-request-writes.tsx`), and GitHub's
+ * page and the ⋯ at its end.
  */
 function PullRequestBar({
   published,
+  writes,
   reading,
   onRefresh,
 }: {
   published: BarPullRequest | undefined;
+  writes: PullRequestWrites;
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
@@ -370,10 +370,7 @@ function PullRequestBar({
     <div className="file-view-bar pull-request-bar">
       {published === undefined ? null : (
         <>
-          <span className="pull-request-state" data-pull-request-state={published.state}>
-            <PullRequestMark pullRequest={published} />
-            {STATE_WORDS[published.state]}
-          </span>
+          <PullRequestStateMenu pullRequest={published} writes={writes} />
           <div className="file-view-actions">
             <Tooltip label="Open on GitHub">
               <button
@@ -1194,9 +1191,15 @@ export function AgentPullRequestTab({
   );
   const title = landed(parts.pullRequest) ?? published;
   const now = useMinute();
+  // A change is read back both ways: the tab, and what the agent published, which the plan's own marks draw.
+  const writes = usePullRequestWrites(agentId, () => {
+    refresh();
+    void control.readPullRequest(agentId).catch(() => undefined);
+  });
   return (
     <div className="file-view pull-request-tab ph-no-capture">
-      <PullRequestBar published={bar} reading={reading} onRefresh={refresh} />
+      <PullRequestBar published={bar} writes={writes} reading={reading} onRefresh={refresh} />
+      <PullRequestWriteNote writes={writes} />
       {none ? (
         <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
       ) : (

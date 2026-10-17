@@ -147,6 +147,7 @@ import {
   openGithubUser,
   type RepositoryScript,
   type SentToGitHub,
+  standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
@@ -506,11 +507,13 @@ const openTask = (
     readonly github?: RepositoryScript;
     /** Whether the deployment holds the Anthropic key workers' titles are generated on. */
     readonly titles?: boolean;
+    /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
+    readonly otherToken?: string | null;
   } = {},
 ) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
-    const other = yield* openGithubUser();
+    const other = yield* otherAccount(options.otherToken);
     const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
@@ -529,6 +532,22 @@ const openTask = (
     const eve = options.eve ?? fakeEve();
     const { ask, fetch } = yield* standing(bearers, github, eve, options.titles ?? false);
     return { owner, other, task, installation, eve, github, ask, fetch };
+  });
+
+/** An account beside the owner: signed in with GitHub on the token given, the standing row's when unsaid, or with no GitHub sign-in at all. */
+const otherAccount = (token: string | null | undefined) =>
+  Effect.gen(function* () {
+    if (token === undefined) return yield* openGithubUser();
+    if (token !== null) {
+      return yield* openGithubUser({
+        ...standingGithubRow(yield* Clock.currentTimeMillis),
+        accessToken: token,
+      });
+    }
+    const db = yield* Database;
+    const userId = `user-${randomUUID()}`;
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    return userId;
   });
 
 /** The pull request an agent published from its branch, as GitHub holds it. */
@@ -1144,6 +1163,197 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         yield* TestClock.adjust(Duration.hours(1));
         assert.deepEqual(yield* overview(), cold);
         assert.equal(reachRequests(github.sent.slice(later), installation.id).repositoryMints, 1);
+      }),
+  );
+});
+
+const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
+
+/** The GraphQL id GitHub gives the published pull request. */
+const PULL_REQUEST_NODE_ID = "PR_kwDOfixture12";
+
+/** One GraphQL call as GitHub saw it: the bearer it came under, and its document's words. */
+interface GraphqlCall {
+  readonly authorization: string | null;
+  readonly query: string;
+  readonly variables: Readonly<Record<string, string | number>>;
+}
+
+/**
+ * The repository answering the published pull request's reads as
+ * `publishedPullRequest` does, and GitHub's GraphQL endpoint answering each
+ * call as `answer` says, every call written down: by default the pull
+ * request's id for its read and an empty answer for any mutation.
+ */
+function graphqlAnswering(
+  calls: GraphqlCall[],
+  answer: (call: GraphqlCall) => Response = (call) =>
+    Response.json({
+      data: call.query.includes("mutation")
+        ? {}
+        : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+    }),
+): RepositoryScript {
+  return (sent) => {
+    if (new URL(sent.url).pathname !== "/graphql") return publishedPullRequest(sent);
+    const { query, variables } = JSON.parse(sent.body);
+    const call = { authorization: sent.headers.get("authorization"), query, variables };
+    calls.push(call);
+    return answer(call);
+  };
+}
+
+/** A change to the agent's pull request as the bearer given. */
+function actionAs(bearer: string, agentId: string, action: string): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, {
+    method: "POST",
+    id: agentId,
+    body: { action },
+  });
+}
+
+it.layer(getTestDB())("changing an agent's pull request", (it) => {
+  /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
+  const published = (options: {
+    readonly answer?: (call: GraphqlCall) => Response;
+    readonly otherToken?: string | null;
+    readonly otherJoins?: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const calls: GraphqlCall[] = [];
+      const opened = yield* openTask({
+        github: graphqlAnswering(calls, options.answer),
+        ...(options.otherToken === undefined ? undefined : { otherToken: options.otherToken }),
+      });
+      if (options.otherJoins ?? true) yield* joinWorkspace(opened.task.workspaceId, opened.other);
+      const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
+      return { ...opened, agent, calls };
+    });
+
+  it.effect(
+    "a teammate marks the owner's agent's draft ready for review and turns it back into a draft, each on the teammate's own GitHub token and never the App's",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: "ghu_teammate" });
+
+        const ready = yield* ask(actionAs(other, agent.id, "ready-for-review"));
+        const draft = yield* ask(actionAs(other, agent.id, "convert-to-draft"));
+
+        assert.deepEqual(ready, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(draft, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(
+          calls.map((call) => call.authorization),
+          Array.from({ length: 4 }, () => "Bearer ghu_teammate"),
+        );
+        const mutations = calls.filter((call) => call.query.includes("mutation"));
+        assert.deepEqual(
+          mutations.map((call) => [
+            call.query.includes("markPullRequestReadyForReview")
+              ? "ready"
+              : call.query.includes("convertPullRequestToDraft")
+                ? "draft"
+                : "other",
+            call.variables.id,
+          ]),
+          [
+            ["ready", PULL_REQUEST_NODE_ID],
+            ["draft", PULL_REQUEST_NODE_ID],
+          ],
+        );
+        assert.deepEqual(calls[0]?.variables, {
+          owner: RELAY.owner,
+          name: RELAY.name,
+          number: PUBLISHED.number,
+        });
+      }),
+  );
+
+  it.effect(
+    "a member with no GitHub sign-in is asked to sign in with GitHub, and nothing is sent to GitHub as anyone else",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: null });
+
+        const answered = yield* ask(actionAs(other, agent.id, "ready-for-review"));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "sign-in-required" },
+        });
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "a token GitHub refuses asks the member to sign in with GitHub again, and nothing is tried on the App's token",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_revoked",
+          answer: () => Response.json({ message: "Bad credentials" }, { status: 401 }),
+        });
+
+        const answered = yield* ask(actionAs(other, agent.id, "convert-to-draft"));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "sign-in-required" },
+        });
+        assert.deepEqual(
+          calls.map((call) => call.authorization),
+          ["Bearer ghu_revoked"],
+        );
+      }),
+  );
+
+  it.effect(
+    "a change GitHub refuses is answered in GitHub's own words, whether as GraphQL errors or a refusal status",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, ask } = yield* published({
+          answer: (call) =>
+            !call.query.includes("mutation")
+              ? Response.json({
+                  data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+                })
+              : call.query.includes("convertPullRequestToDraft")
+                ? Response.json(
+                    { message: "Resource not accessible by integration" },
+                    { status: 403 },
+                  )
+                : Response.json({
+                    data: null,
+                    errors: [{ type: "FORBIDDEN", message: "Pull request is not a draft." }],
+                  }),
+        });
+
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "ready-for-review")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Pull request is not a draft." },
+        });
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "convert-to-draft")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Resource not accessible by integration" },
+        });
+      }),
+  );
+
+  it.effect(
+    "an account outside the agent's workspace is answered as if the agent were none, and a change the wire does not name is refused, neither reaching GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, agent, calls, ask } = yield* published({ otherJoins: false });
+
+        assert.deepEqual(
+          yield* ask(actionAs(other, agent.id, "ready-for-review")),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(actionAs(owner, agent.id, "merge-it-all")),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(calls, []);
       }),
   );
 });

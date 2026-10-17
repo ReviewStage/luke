@@ -60,6 +60,7 @@
     "./plan-template": "./src/plan-template.js",
     "./task-wire": "./src/task-wire.js",
     "./tasks-view": "./src/tasks-view.js",
+    "./pull-request-write-wire": "./src/pull-request-write-wire.js",
     "./provider-key-wire": "./src/provider-key-wire.js",
     "./repository-reach-wire": "./src/repository-reach-wire.js",
     "./terminal-view": "./src/terminal-view.js",

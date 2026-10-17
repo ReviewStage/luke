@@ -17,6 +17,7 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   codingAgentAccountInboxParamsSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -32,6 +33,7 @@ import {
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
   codingAgentPinParamsSchema,
+  codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
@@ -103,6 +105,7 @@ export type CodingAgentClient = Pick<
   | "overviewChecks"
   | "overviewConversation"
   | "githubImage"
+  | "pullRequestAction"
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
@@ -421,6 +424,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.overviewConversation(agentId));
         return carried<CodingAgentOverviewConversationAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, request } = yield* read(
+          codingAgentPullRequestActionParamsSchema,
+          params,
+          "changing an agent's pull request names the agent and the change",
+        );
+        const answer = yield* asked(client.pullRequestAction(agentId, request));
+        return carried<CodingAgentPullRequestWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE]: (params) =>
       Effect.gen(function* () {

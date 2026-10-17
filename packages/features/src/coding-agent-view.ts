@@ -38,6 +38,10 @@ import {
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
+import {
+  pullRequestActionRequestSchema,
+  pullRequestWriteAnswerSchema,
+} from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 import { planRevisionSeqSchema } from "./task-wire.js";
 
@@ -365,6 +369,24 @@ export const codingAgentOverviewConversationAnswerViewSchema = EffectSchema.Unio
 
 export type CodingAgentOverviewConversationAnswerView =
   typeof codingAgentOverviewConversationAnswerViewSchema.Type;
+
+/** One change to an agent's pull request, as the window asks it made: the agent, and the change (`pull-request-write-wire.ts`). */
+export const codingAgentPullRequestActionParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  request: pullRequestActionRequestSchema,
+});
+
+export type CodingAgentPullRequestActionParams =
+  typeof codingAgentPullRequestActionParamsSchema.Type;
+
+/** How GitHub took a change to an agent's pull request, as the window hears it: made, the member to sign in with GitHub again, GitHub's refusal in its words, or why there is no answer. */
+export const codingAgentPullRequestWriteAnswerViewSchema = EffectSchema.Union([
+  pullRequestWriteAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentPullRequestWriteAnswerView =
+  typeof codingAgentPullRequestWriteAnswerViewSchema.Type;
 
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;

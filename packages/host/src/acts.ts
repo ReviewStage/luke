@@ -32,6 +32,7 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -60,8 +61,10 @@ import {
   codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
   codingAgentPinParamsSchema,
+  codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
@@ -449,6 +452,8 @@ export const ACT_KIND = {
   CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
   /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
   /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -1269,6 +1274,13 @@ export const ACT = {
     payload: actSchema(codingAgentGitHubImageParamsSchema),
     result: wireResult<CodingAgentGitHubImageView>(isReadable(codingAgentGitHubImageViewSchema)),
     refusal: "Could not read the pull request's image on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: {
+    payload: actSchema(codingAgentPullRequestActionParamsSchema),
+    result: wireResult<CodingAgentPullRequestWriteAnswerView>(
+      isReadable(codingAgentPullRequestWriteAnswerViewSchema),
+    ),
+    refusal: "Could not change the pull request on this system.",
   },
   [ACT_KIND.AUTOMATIONS_LIST]: {
     payload: actSchema(automationListParamsSchema),

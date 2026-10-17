@@ -35,6 +35,7 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -101,6 +102,11 @@ import {
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
+import {
+  type PullRequestActionRequest,
+  pullRequestActionRequestSchema,
+  pullRequestWriteAnswerSchema,
+} from "./pull-request-write-wire.js";
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
@@ -112,6 +118,7 @@ import {
   agentOverviewPullRequestPath,
   agentPath,
   agentPicturePath,
+  agentPullRequestActionPath,
   agentPullRequestPath,
   agentStopPath,
   agentSubagentMessagesPath,
@@ -775,6 +782,27 @@ export class HostedCodingAgentClient {
         }
         return readImage(answer.response);
       },
+    );
+  }
+
+  /**
+   * One change to an agent's pull request, made on GitHub by the service as
+   * the account, on its own GitHub sign-in: how GitHub took it; a change the
+   * service would refuse by shape is refused here without traveling.
+   */
+  pullRequestAction(
+    agentId: string,
+    request: PullRequestActionRequest,
+  ): Effect.Effect<CodingAgentPullRequestWriteAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(pullRequestActionRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: agentPullRequestActionPath(agentId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, pullRequestWriteAnswerSchema, ROW_REFUSALS),
     );
   }
 

@@ -1737,6 +1737,50 @@ button.file-ref:hover .file-ref-path {
   font-weight: 600;
 }
 
+/* The pill as the press that opens what may be done from where the pull
+   request stands (`pull-request-writes.tsx`): its tone deepens under the
+   pointer, and a chevron says it opens. */
+.pull-request-state-button {
+  font: inherit;
+  font-weight: 600;
+  cursor: default;
+}
+
+.pull-request-state-button:not(:disabled):hover,
+.pull-request-state-button[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--pull-request-tone) 20%, transparent);
+}
+
+.pull-request-state-button:disabled {
+  opacity: 0.7;
+}
+
+.pull-request-state-chevron {
+  width: 12px;
+  height: 12px;
+  margin-inline-start: calc(-1 * var(--space-2));
+}
+
+/* Where GitHub did not take the last change: a line under the bar, at the
+   content inset, its dismissal at the row's end. */
+.pull-request-write-note {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pull-request-write-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pull-request-write-dismiss {
+  margin-inline-start: auto;
+}
+
 /* The branches it merges, quiet in the code face under the title. */
 .pull-request-branches {
   margin: var(--space-2) 0 0;

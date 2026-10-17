@@ -50,8 +50,10 @@ import {
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
   type CodingAgentPinParams,
+  type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
@@ -73,6 +75,7 @@ import {
   codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
+  codingAgentPullRequestWriteAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -532,6 +535,10 @@ export interface HostOperator {
   codingAgentGitHubImage(
     params: CodingAgentGitHubImageParams,
   ): Effect.Effect<CodingAgentGitHubImageView>;
+  /** One change to an agent's pull request, made on GitHub as the account on its own GitHub sign-in; how GitHub took it, or why there is no answer. */
+  codingAgentPullRequestAction(
+    params: CodingAgentPullRequestActionParams,
+  ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
   codingAgentOverviewPullRequest(
     params: CodingAgentPullRequestParams,
@@ -1529,6 +1536,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, params),
         codingAgentAnswer(codingAgentGitHubImageViewSchema),
+      ),
+    codingAgentPullRequestAction: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
+          agentId: params.agentId,
+          request: params.request,
+        }),
+        codingAgentAnswer(codingAgentPullRequestWriteAnswerViewSchema),
       ),
     codingAgentOverviewPullRequest: (params) =>
       Effect.map(
