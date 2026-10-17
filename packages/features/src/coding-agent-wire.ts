@@ -618,14 +618,16 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   ),
   /**
    * The agents started from this one, oldest first, archived ones among
-   * them: each by its id, whether it forked this one at a message rather
-   * than continuing it, and that message where it did; absent where none
-   * was, and from a service before it.
+   * them: each by its id and its title, null where it has none yet, whether
+   * it forked this one at a message rather than continuing it, and that
+   * message where it did; absent where none was, and from a service before
+   * it.
    */
   continuedBy: EffectSchema.optionalKey(
     EffectSchema.Array(
       EffectSchema.Struct({
         agentId: wireUuidSchema,
+        title: EffectSchema.NullOr(EffectSchema.String),
         forked: EffectSchema.Boolean,
         messageId: EffectSchema.optionalKey(wireUuidSchema),
       }),

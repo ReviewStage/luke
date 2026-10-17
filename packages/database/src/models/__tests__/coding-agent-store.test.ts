@@ -47,6 +47,7 @@ import {
   recordCodingAgentAuthor,
   recordCodingAgentPublished,
   recordTurnFastRefused,
+  renameCodingAgent,
   settleCodingAgentAuthor,
   turnUsagesOf,
   unarchiveCodingAgentFrom,
@@ -1058,9 +1059,16 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const again = yield* startOn(starter, "2026-10-17T10:03:00Z", { agentId: continued });
         yield* archiveCodingAgent(starter, continued, true);
 
+        yield* renameCodingAgent(teammate, fork, "Bill by seat");
         const expected = new Map([
-          [source, [{ agentId: continued }, { agentId: fork, messageId }]],
-          [continued, [{ agentId: again }]],
+          [
+            source,
+            [
+              { agentId: continued, title: null },
+              { agentId: fork, title: "Bill by seat", messageId },
+            ],
+          ],
+          [continued, [{ agentId: again, title: null }]],
         ]);
         const asked = [source, continued, again];
         assert.deepEqual(yield* continuationsOf(starter, asked), expected);

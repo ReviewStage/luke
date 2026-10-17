@@ -215,6 +215,16 @@
                     "minLength": 1,
                     "maxLength": 36
                   },
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "forked": {
                     "type": "boolean"
                   },
@@ -226,6 +236,7 @@
                 },
                 "required": [
                   "agentId",
+                  "title",
                   "forked"
                 ],
                 "additionalProperties": false

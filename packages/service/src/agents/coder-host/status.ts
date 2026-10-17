@@ -294,6 +294,7 @@ function summaryFields(
       : {
           continuedBy: continuedBy.map((each) => ({
             agentId: each.agentId,
+            title: each.title,
             forked: each.messageId !== undefined,
             ...(each.messageId === undefined ? undefined : { messageId: each.messageId }),
           })),

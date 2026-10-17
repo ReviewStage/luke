@@ -933,11 +933,19 @@ const findStartedFrom = SqlSchema.findAll({
     agentIds: Schema.Array(Schema.String),
     limit: Schema.Number,
   }),
-  Result: Schema.Struct({ id: Schema.String, startedFrom: StartedFromColumnSchema }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    title: Schema.NullOr(Schema.String),
+    startedFrom: StartedFromColumnSchema,
+  }),
   execute: ({ userId, agentIds, limit }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id, startedFrom: codingAgent.startedFrom })
+        .select({
+          id: codingAgent.id,
+          title: codingAgent.title,
+          startedFrom: codingAgent.startedFrom,
+        })
         .from(codingAgent)
         .where(
           and(
@@ -1288,9 +1296,10 @@ export function listPublishedCodingAgentsById(
 /** How many agents started from one agent its summary names, the oldest first. */
 const CONTINUATIONS_PER_AGENT = 20;
 
-/** One agent started from another: its id, and the message it forked the other at where it was forked rather than continued. */
+/** One agent started from another: its id, its title, null before it has one, and the message it forked the other at where it was forked rather than continued. */
 export interface CodingAgentStartedFromIt {
   readonly agentId: string;
+  readonly title: string | null;
   readonly messageId?: string;
 }
 
@@ -1308,14 +1317,14 @@ export function continuationsOf(
   const limit = agentIds.length * CONTINUATIONS_PER_AGENT;
   return Effect.map(findStartedFrom({ userId, agentIds, limit }), (rows) => {
     const bySource = new Map<string, CodingAgentStartedFromIt[]>();
-    for (const { id, startedFrom } of rows) {
+    for (const { id, title, startedFrom } of rows) {
       if (startedFrom === null) continue;
       const each = bySource.get(startedFrom.agentId) ?? [];
       if (each.length === CONTINUATIONS_PER_AGENT) continue;
       each.push(
         startedFrom.messageId === undefined
-          ? { agentId: id }
-          : { agentId: id, messageId: startedFrom.messageId },
+          ? { agentId: id, title }
+          : { agentId: id, title, messageId: startedFrom.messageId },
       );
       bySource.set(startedFrom.agentId, each);
     }

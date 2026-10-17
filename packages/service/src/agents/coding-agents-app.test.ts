@@ -4763,11 +4763,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const continued = yield* startFrom({ agentId: source.id });
         const forked = yield* startFrom({ agentId: source.id, messageId: firstTurn });
         // Note that the two start within one instant here, so they are compared in the order of their ids.
-        const byId = (named: readonly { readonly agentId: string }[] | undefined) =>
-          [...(named ?? [])].sort((a, b) => a.agentId.localeCompare(b.agentId));
+        const byId = <Named extends { readonly agentId: string }>(
+          named: readonly Named[] | undefined,
+        ) => [...(named ?? [])].sort((a, b) => a.agentId.localeCompare(b.agentId));
         const expected = byId([
-          { agentId: continued.id, forked: false },
-          { agentId: forked.id, forked: true, messageId: firstTurn },
+          { agentId: continued.id, title: null, forked: false },
+          { agentId: forked.id, title: null, forked: true, messageId: firstTurn },
         ]);
 
         const listed = readAnswer(
