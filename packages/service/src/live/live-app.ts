@@ -1,10 +1,15 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { childConversationId } from "@luke/database/models/ids";
 import { readTask } from "@luke/database/models/task-store";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { Effect, Layer, Option } from "effect";
+import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
+import { readEither } from "@luke/wire/effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { reachedAgent, resolvedUserId, uuidOf } from "../agents/agent-reach.js";
+import { transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
+import { unparsedWire } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -41,13 +46,21 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * one plan's inbox, or one agent's, the same way: its open items and its
  * latest settled ones as one statement, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
+ *
+ * `GET /api/live/agent-transcript?id=` answers what one agent's transcript
+ * is read from, or one of its workers' with `&call=` naming the delegation
+ * call (`transcript-live.ts`), sealed after the agent is read as the
+ * account, so the desktop reads a page once they move rather than having
+ * the service look on a clock. A worker's delegation may not be recorded
+ * yet, as a tab opened on its call is read before it is, so its statements
+ * name the conversation the call will open rather than wait for it.
  * Nothing else here reads a row: the store is read by Realtime.
  */
 
 const HTTP_METHOD = { GET: "GET" } as const;
 
-/** The query a scope's endpoint names its plan or agent under. */
-const LIVE_QUERY = { ID: "id" } as const;
+/** The query a scope's endpoint names its plan or agent under, and a transcript's its worker's delegation call. */
+const LIVE_QUERY = { ID: "id", CALL: "call" } as const;
 
 export interface LiveAppSeams {
   resolveUserId: UserIdResolver;
@@ -141,6 +154,46 @@ const agentInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxLiveEndp
   return yield* sealedScope(yield* LiveSealing, memberAgentInboxLiveStatements(userId, agent.id));
 });
 
+const agentTranscriptLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentTranscriptLiveEndpoint")(
+  function* (
+    seams: LiveAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | DatabaseServices
+  > {
+    const request = yield* getRequest;
+    const call = new URL(request.url).searchParams.get(LIVE_QUERY.CALL);
+    const callId =
+      call === null ? undefined : readEither(codingAgentCallIdSchema)(unparsedWire(call));
+    if (callId !== undefined && Result.isFailure(callId)) {
+      return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    }
+    const { target } = yield* reachedAgent(seams, request);
+    const read =
+      callId === undefined
+        ? target
+        : {
+            userId: target.userId,
+            conversationId: childConversationId(target.conversationId, callId.success),
+          };
+    const statements = transcriptLiveStatements(read, target.conversationId);
+    const sealing = yield* LiveSealing;
+    if (Option.isNone(sealing) || Option.isNone(statements)) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    const { seal, url } = sealing.value;
+    const queries = yield* Effect.all({
+      messages: seal(statements.value.messages),
+      turns: seal(statements.value.turns),
+      conversation: seal(statements.value.conversation),
+      agent: seal(statements.value.agent),
+      workers: seal(statements.value.workers),
+    }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
+  },
+);
+
 /** The group: each live read's path, and the hosted vocabulary's own refusal for any other. */
 export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
@@ -158,6 +211,11 @@ export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
       ANY_METHOD,
       HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX,
       hostedRefusing(agentInboxLiveEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT,
+      hostedRefusing(agentTranscriptLiveEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );
