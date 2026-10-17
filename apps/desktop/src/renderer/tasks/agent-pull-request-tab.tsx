@@ -15,10 +15,13 @@ import {
   type CodingAgentOverviewPullRequest,
   type CodingAgentPullRequest,
   type ConversationEntry,
+  DEPLOYMENT_STATE,
+  type DeploymentState,
   MERGE_STATE,
   type MergeState,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
+  type PullRequestDeployment,
   type PullRequestReviewer,
   REVIEW_STATE,
   type ReviewThread,
@@ -35,6 +38,7 @@ import {
   CircleDotIcon,
   CircleSlashIcon,
   EllipsisIcon,
+  ExternalLinkIcon,
   FileDiffIcon,
   GitPullRequestIcon,
   MessagesSquareIcon,
@@ -110,9 +114,10 @@ import { useWorkingNow, workingTime } from "./working-time";
  * through the transcript's own markdown drawing (`GitHubWords`), with an
  * image GitHub serves read through the service on the App's token
  * (`GitHubPicture`) and any other drawn as its link, as ReviewStage/stage
- * draws them; Checks, every check on its head, those that failed first,
- * then those still running, each opening its page, counted in the colour
- * of how they went; and Files changed (`AgentChangesTab`), its own bar and
+ * draws them; Checks, its head's deployments, the newest of each
+ * environment, each opening the address it serves, over every check on its
+ * head, those that failed first, then those still running, each opening
+ * its page, counted in the colour of how they went; and Files changed (`AgentChangesTab`), its own bar and
  * tree, counted by the lines it adds and removes. A review carries the
  * threads on lines it started, each headed by its file and lines over the
  * end of the hunk it was made on, drawn as Files changed draws a diff with
@@ -266,6 +271,22 @@ const CHECK_WORDS = {
   [CHECK_STATE.PASSED]: "passed",
   [CHECK_STATE.SKIPPED]: "skipped",
 } as const satisfies Record<CheckState, string>;
+
+/** The tone and glyph a deployment wears, as a check's: ready as passed, deploying as running, failed as failed, and no longer serving as skipped. */
+const DEPLOYMENT_TONE = {
+  [DEPLOYMENT_STATE.READY]: CHECK_STATE.PASSED,
+  [DEPLOYMENT_STATE.PENDING]: CHECK_STATE.PENDING,
+  [DEPLOYMENT_STATE.FAILED]: CHECK_STATE.FAILED,
+  [DEPLOYMENT_STATE.INACTIVE]: CHECK_STATE.SKIPPED,
+} as const satisfies Record<DeploymentState, CheckState>;
+
+/** Where a deployment stands, in the words its row says beside its environment. */
+const DEPLOYMENT_WORDS = {
+  [DEPLOYMENT_STATE.READY]: "Deployed",
+  [DEPLOYMENT_STATE.PENDING]: "Deploying",
+  [DEPLOYMENT_STATE.FAILED]: "Failed",
+  [DEPLOYMENT_STATE.INACTIVE]: "Inactive",
+} as const satisfies Record<DeploymentState, string>;
 
 /** The order the checks' counts are said in, by where each stands: what asks for a look first, as the service lists the checks themselves. */
 const CHECK_ORDER: readonly CheckState[] = [
@@ -881,6 +902,71 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
   );
 }
 
+/** One deployment: its glyph for where it stands, its App's avatar, its environment and where it stands in words; a press opens the address it serves, where it names one. */
+function DeploymentRow({
+  agentId,
+  deployment,
+}: {
+  agentId: string;
+  deployment: PullRequestDeployment;
+}): React.JSX.Element {
+  const openLink = useOpenLink();
+  const { url, avatarUrl, state } = deployment;
+  const inner = (
+    <>
+      <span
+        className="pull-request-check-glyph"
+        data-check-state={DEPLOYMENT_TONE[state]}
+        role="img"
+        aria-label={DEPLOYMENT_WORDS[state]}
+      >
+        {CHECK_GLYPHS[DEPLOYMENT_TONE[state]]}
+      </span>
+      {avatarUrl === undefined ? null : <CheckAvatar agentId={agentId} src={avatarUrl} />}
+      <span className="pull-request-check-name">{deployment.environment}</span>
+      <span className="pull-request-quiet">{DEPLOYMENT_WORDS[state]}</span>
+      {url === null ? null : (
+        <span className="pull-request-quiet pull-request-check-time pull-request-deployment-open">
+          <ExternalLinkIcon aria-hidden="true" />
+        </span>
+      )}
+    </>
+  );
+  return (
+    <li>
+      {url === null ? (
+        <span className="pull-request-check">{inner}</span>
+      ) : (
+        <button type="button" className="pull-request-check" onClick={() => openLink(url)}>
+          {inner}
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** The head's deployments, such as its Vercel Previews, the newest of each environment first, each opening the address it serves; nothing where it has none. */
+function Deployments({
+  agentId,
+  deployments,
+}: {
+  agentId: string;
+  deployments: readonly PullRequestDeployment[];
+}): React.JSX.Element | null {
+  if (deployments.length === 0) return null;
+  return (
+    <Section title="Deployments" count={deployments.length.toLocaleString()}>
+      <div className="pull-request-checks">
+        <ul className="pull-request-check-list">
+          {deployments.map((deployment) => (
+            <DeploymentRow key={deployment.environment} agentId={agentId} deployment={deployment} />
+          ))}
+        </ul>
+      </div>
+    </Section>
+  );
+}
+
 /** The checks section as its read stands: every check once landed, its running counts moving while the tab is shown (`live`), a skeleton of rows while out, its failure with Retry. */
 function ChecksPart({
   agentId,
@@ -893,7 +979,12 @@ function ChecksPart({
 }): React.JSX.Element {
   const part = parts.checks;
   if (part.kind === PART.LANDED) {
-    return <Checks agentId={agentId} checks={part.value.checks} live={live} />;
+    return (
+      <>
+        <Deployments agentId={agentId} deployments={part.value.deployments ?? []} />
+        <Checks agentId={agentId} checks={part.value.checks} live={live} />
+      </>
+    );
   }
   return (
     <Section title="Checks">

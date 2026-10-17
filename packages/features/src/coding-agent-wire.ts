@@ -862,6 +862,16 @@ export const CHECK_STATE = {
 
 export type CheckState = (typeof CHECK_STATE)[keyof typeof CHECK_STATE];
 
+/** Where one deployment of a pull request's head stands, by its newest status: ready, still deploying, failed, or no longer serving (inactive, destroyed, or abandoned). */
+export const DEPLOYMENT_STATE = {
+  READY: "ready",
+  PENDING: "pending",
+  FAILED: "failed",
+  INACTIVE: "inactive",
+} as const;
+
+export type DeploymentState = (typeof DEPLOYMENT_STATE)[keyof typeof DEPLOYMENT_STATE];
+
 /** What one entry of a pull request's conversation is: a comment on it, or a review. */
 export const CONVERSATION_ENTRY = {
   COMMENT: "comment",
@@ -871,6 +881,8 @@ export const CONVERSATION_ENTRY = {
 export const OVERVIEW_BOUNDS = {
   /** The most checks one read lists; a head with more lists its first. */
   MAX_CHECKS: 100,
+  /** The most deployments one read lists, one per environment, the newest of each kept. */
+  MAX_DEPLOYMENTS: 10,
   /** The most entries of the conversation one read carries, the newest kept, the rest counted. */
   MAX_ENTRIES: 100,
   /** The most characters of a check's or a branch's name a read carries. */
@@ -914,6 +926,22 @@ const pullRequestCheckSchema = EffectSchema.Struct({
 });
 
 export type PullRequestCheck = typeof pullRequestCheckSchema.Type;
+
+/**
+ * One deployment of a pull request's head, the newest of its environment:
+ * the environment it deployed to, such as a Vercel Preview; where it stands
+ * by its newest status; the address it serves, an https one GitHub's
+ * status names, null where it names none; and the avatar of the App that
+ * deployed it on GitHub's avatar host, absent where GitHub names none.
+ */
+const pullRequestDeploymentSchema = EffectSchema.Struct({
+  environment: overviewName,
+  state: EffectSchema.Literals(Object.values(DEPLOYMENT_STATE)),
+  url: EffectSchema.NullOr(EffectSchema.String),
+  avatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type PullRequestDeployment = typeof pullRequestDeploymentSchema.Type;
 
 /**
  * One comment of a review thread: who; their words whole, as GitHub renders
@@ -1025,13 +1053,20 @@ export type CodingAgentOverviewPullRequest = NonNullable<
 /**
  * Every check on an agent's pull request's head, as its overview draws them
  * (GET): those that failed first, then those still running, up to the
- * bound. Null where the agent has opened no pull request yet.
+ * bound; and its head's deployments, the newest of each environment first,
+ * up to theirs, absent from a service before them. Null where the agent has
+ * opened no pull request yet.
  */
 export const codingAgentOverviewChecksAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       checks: EffectSchema.Array(pullRequestCheckSchema).check(
         EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_CHECKS),
+      ),
+      deployments: EffectSchema.optionalKey(
+        EffectSchema.Array(pullRequestDeploymentSchema).check(
+          EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_DEPLOYMENTS),
+        ),
       ),
     }),
   ),
