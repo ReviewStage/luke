@@ -32,6 +32,7 @@ import {
   BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
+  CircleDotIcon,
   CircleIcon,
   CircleStopIcon,
   CodeXmlIcon,
@@ -759,9 +760,10 @@ export function TranscriptOpeningCall({
  * How a to-do of each status is drawn: its glyph and the glyph's ink, how
  * its words are set, and what the glyph says aloud. Pending is an empty
  * circle, done a check in the muted ink with its words muted beside it, as
- * Linear and Things mark a finished item, and in progress wears the
- * working mark an agent at work wears (`state-glyph.tsx`), in the full ink,
- * so the one item the list is at is the one that stands out. Note that a
+ * Linear and Things mark a finished item, and in progress a dotted circle
+ * in the full ink, so the one item the list is at is the one that stands
+ * out; while the agent is at it, the working mark an agent at work wears
+ * (`state-glyph.tsx`) takes the dot's place (`TodoItems`). Note that a
  * done item is not struck through, because a rule through two or three
  * wrapped lines reads as noise over words the muted ink already quiets.
  */
@@ -773,7 +775,7 @@ const TODO_LOOK = {
     label: "Pending",
   },
   [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: {
-    Icon: undefined,
+    Icon: CircleDotIcon,
     mark: "text-foreground",
     words: "",
     label: "In progress",
@@ -786,13 +788,15 @@ const TODO_LOOK = {
   },
 } as const satisfies Record<
   CodingAgentTodoStatus,
-  { Icon: LucideIcon | undefined; mark: string; words: string; label: string }
+  { Icon: LucideIcon; mark: string; words: string; label: string }
 >;
 
 export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     todos: CodingAgentTodos["todos"];
     errorText: string | undefined;
+    /** Whether this is the list the agent is at now: its newest while it works. */
+    live: boolean;
   };
 
 /**
@@ -801,13 +805,18 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
  * gap after it, so a list set at a row's text column, or at its card's
  * icon, keeps its words on that row's words. The glyph is centred on its
  * item's first line, which at a 20px line centres it on the capitals, and
- * a wrapped line hangs under the words rather than the glyph.
+ * a wrapped line hangs under the words rather than the glyph. The item in
+ * progress wears the moving working mark only on a `live` list, because a
+ * list the agent wrote over or stopped at is a record, and a mark frozen
+ * mid-lap there reads as a spinner that broke.
  */
 function TodoItems({
   todos,
+  live,
   className,
 }: {
   todos: CodingAgentTodos["todos"];
+  live: boolean;
   className?: string;
 }): ReactNode {
   return (
@@ -819,6 +828,7 @@ function TodoItems({
     >
       {todos.map((todo, index) => {
         const look = TODO_LOOK[todo.status];
+        const working = live && todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS;
         return (
           <li key={index} className="flex items-start gap-2" data-todo-status={todo.status}>
             <span
@@ -826,7 +836,7 @@ function TodoItems({
               role="img"
               aria-label={look.label}
             >
-              {look.Icon === undefined ? (
+              {working ? (
                 <StateGlyph state={GLYPH_STATE.WORKING} />
               ) : (
                 <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
@@ -848,15 +858,15 @@ function TodoItems({
  * column as Claude Code and Codex hang theirs under the call, since it is
  * words rather than the code a call's card holds, and selectable as a
  * call's body is; a failure is said under it as a subagent's is. Whether it starts open is the caller's, since only
- * the newest list is worth reading unasked. Its working mark holds still
- * (planning.css), since a row's list is a record of one write, and the
- * list the agent is at is docked above the composer while it works.
+ * the newest list is worth reading unasked, and so is whether it is `live`,
+ * the list the agent is at, whose item in progress wears the moving mark.
  */
 export function TranscriptTodos({
   state,
   subject,
   todos,
   errorText,
+  live,
   ...props
 }: TranscriptTodosProps): ReactNode {
   const words = CALL_WORDS[CALL_KIND.TODOS];
@@ -870,7 +880,7 @@ export function TranscriptTodos({
         subjectIsCode={words.code}
       />
       <FoldBody className="mt-0.5 mb-1 ml-7 select-text">
-        <TodoItems todos={todos} />
+        <TodoItems todos={todos} live={live} />
         {errorText === undefined ? null : (
           <p
             className="m-0 mt-1 text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
@@ -918,7 +928,7 @@ export function TranscriptTodosDock({
         <FoldChevron className="ml-auto" />
       </FoldSummary>
       <FoldBody className="border-t border-border">
-        <TodoItems todos={todos} className="px-3 py-2" />
+        <TodoItems todos={todos} live className="px-3 py-2" />
       </FoldBody>
     </Fold>
   );

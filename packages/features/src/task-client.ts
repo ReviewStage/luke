@@ -70,6 +70,12 @@ import {
   readServiceAnswer,
 } from "./service-wire.js";
 import {
+  type TaskSections,
+  type TaskSectionWrite,
+  taskSectionsAnswerSchema,
+  taskSectionWriteSchema,
+} from "./task-section-wire.js";
+import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   planRevisionAnswerSchema,
@@ -743,6 +749,34 @@ export class HostedTaskClient {
         repositoryPinsAnswerSchema,
       ),
       (answer) => answer?.pins,
+    );
+  }
+
+  /** The sections the account made in its sidebars and the tasks in them; nothing where the service did not answer. */
+  taskSections(): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.TASK_SECTIONS },
+      taskSectionsAnswerSchema,
+    );
+  }
+
+  /**
+   * Writes one change to the account's sections, answering them all as they
+   * then stand; nothing where the service refused or did not answer. A
+   * write the wire would refuse by shape never travels.
+   */
+  writeTaskSection(
+    write: TaskSectionWrite,
+  ): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
+    const asked = Result.getOrUndefined(readEither(taskSectionWriteSchema)(write));
+    if (asked === undefined) return Effect.succeed(undefined);
+    return this.#call.ask(
+      {
+        method: HTTP_METHOD.PUT,
+        path: HOSTED_SERVICE_PATH.TASK_SECTIONS,
+        body: JSON.stringify(asked),
+      },
+      taskSectionsAnswerSchema,
     );
   }
 

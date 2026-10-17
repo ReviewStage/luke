@@ -226,6 +226,14 @@ service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
+**Sidebar sections.** When you make a section in the sidebar, our service
+stores its title, its icon, its place among your sections, and the workspace
+it is in under your account, and, for each task you put in it, which task and
+when, so your sections follow you to every Mac you sign in on. They are yours
+alone: no teammate sees them. Deleting a section deletes those records and none
+of its tasks; they are not read while you are not a member of the workspace,
+and deleting your account or the workspace removes them all.
+
 **A task's inbox.** When a coding agent on a task needs a decision from you,
 or something only you can do such as changing a GitHub setting, it posts an
 item to the task's inbox on our service: a title, context in Markdown, links,
@@ -662,7 +670,10 @@ place of a member's own, so what they change in Linear shows as made by the
 person who connected it. Starting a plan from an issue copies the issue's
 key, title, address, and description onto the plan, where it stays with the
 plan, is shown to the planning model on every turn of its call, and is
-deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
+deleted with the plan. Once you pause typing in New task's name field, what
+you typed is sent to Linear through this connection as a search, or, where it
+is an issue's key or a link to one, as a read of that one issue; neither what
+was sent nor what Linear answered is kept. Where a plan, a reply, or an Inbox item shows a link
 to a Linear issue, the app asks our service for that issue's key, title,
 state, and assignee's name, which it reads through this connection as you
 look and keeps nowhere; the app shows them on the link, and they go no

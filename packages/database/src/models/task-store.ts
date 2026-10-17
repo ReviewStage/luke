@@ -24,6 +24,7 @@ import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
+import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
@@ -894,6 +895,18 @@ const followingAutomations = SqlSchema.void({
  * no row of the task's stays tied to the workspace it left, whose deletion
  * would otherwise take them with it.
  */
+/**
+ * Every member's entries for the plan taken out of their sections, as it
+ * moves to another workspace: a section is one workspace's, so a plan that
+ * leaves it leaves every section there, and one moved back later stands
+ * under Tasks rather than where it once was kept.
+ */
+const leaveSections = SqlSchema.void({
+  Request: Schema.String,
+  execute: (taskId) =>
+    Database.use((db) => db.delete(taskSectionEntry).where(eq(taskSectionEntry.taskId, taskId))),
+});
+
 const followingAgentsAndInbox = Effect.fnUntraced(function* (
   taskId: string,
   organizationId: string,
@@ -968,6 +981,7 @@ export function updateTask<E = never, R = never>(
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId);
           yield* movePlanChat(taskId, row.organizationId);
+          if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
         if (changes.archived !== undefined) yield* followPlanArchive(taskId, row.archivedAt);
         return Option.some(yield* taskOf(userId, row));

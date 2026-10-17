@@ -3,16 +3,17 @@ import {
   type CodingAgentInboxParams,
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
+import { EmptyState } from "@luke/ui";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
 import { AutomationDirectory } from "../automation-directory";
 import { LinkWorkspaceProvider } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { ReadFailure } from "../read-failure";
@@ -27,6 +28,7 @@ import {
   type InboxHolder,
   type InboxListed,
   inboxList,
+  itemWorkspaceId,
   listedItems,
   NEEDS_YOU,
   type PlanlessAgent,
@@ -35,8 +37,14 @@ import {
 } from "../tasks/inbox-model";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane";
+import {
+  type PlanlessPlace,
+  planlessMentions,
+  useMentionAgentsReader,
+} from "../tasks/plan-mentions";
+import { SkillFiles } from "../tasks/skill-chip";
 import { useMinute } from "../tasks/task-time";
-import { useCodingAgents } from "../tasks/use-coding-agents";
+import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents";
 import { useInboxItems } from "../tasks/use-inbox-items";
 import { useOpenLink } from "../tasks/use-open-link";
 import { useTaskInbox } from "../tasks/use-task-inbox";
@@ -65,7 +73,7 @@ import { taskCardOf } from "./task-card";
  * that waits stands chosen, else the first listed. The pane's crumbs open
  * the task or the agent's tab, and a code block's Open its file, each
  * leaving the Inbox. With nothing listed, it says so under the Inbox's
- * glyph (`empty-state.tsx`); with Needs you leaving out every item, the list
+ * glyph (`@luke/ui`'s `EmptyState`); with Needs you leaving out every item, the list
  * says so and offers Show all, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
@@ -74,7 +82,10 @@ import { taskCardOf } from "./task-card";
  * on a row there the item again. K and J, and the pager where the
  * item stands alone, step through the list (`inbox-pager.tsx`). Everything in it that names a
  * person, an answer and an agent's starter, reads them against the listed
- * workspace's members (`member-directory.tsx`).
+ * workspace's members (`member-directory.tsx`). The chosen item's box
+ * mentions what its repository and workspace hold (`answerPlace`), and
+ * its skills are read through its holder and drawn as chips that open
+ * their `SKILL.md` on GitHub, since no File tab stands here.
  */
 
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
@@ -134,7 +145,7 @@ const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
 /** The window's Inbox, in the task's place: every task's items and every automation's, and the chosen one read beside them. */
 export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const view = tasks.inboxView;
-  const { act } = useAct();
+  const { act, tell } = useAct();
   const openLink = useOpenLink();
   const now = useMinute();
   const choices = useInboxViewChoices();
@@ -326,6 +337,18 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     taken.current = asked;
     openColumn(asked.itemId);
   }, [opensItem, asked, openColumn]);
+  // Where the chosen item's words are read: its plan's workspace and repository, or, with no plan, its agent's own.
+  const place = chosen === undefined ? undefined : answerPlace(chosen, agents, tasks);
+  // What the chosen item's box offers an `@`, read under that workspace and repository.
+  const mentionTasks = useMemo(
+    () => [...tasks.tasks, ...tasks.archived],
+    [tasks.tasks, tasks.archived],
+  );
+  const readMentionAgents = useMentionAgentsReader(place?.workspaceId, mentionTasks, named.models);
+  const mentions =
+    place === undefined
+      ? undefined
+      : planlessMentions(place, tasks.onShowMention, readMentionAgents);
   const onRetry = () => {
     read.onRetry();
     taskless.onRetry();
@@ -381,11 +404,9 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                   <NotFound
                     thing={NOT_FOUND_THING.INBOX_ITEM}
                     action={
-                      columns.onBack === undefined ? undefined : (
-                        <button type="button" className="toolbar-button" onClick={columns.onBack}>
-                          {BACK_TO_INBOX}
-                        </button>
-                      )
+                      columns.onBack === undefined
+                        ? undefined
+                        : { label: BACK_TO_INBOX, onClick: columns.onBack }
                     }
                   />
                 ) : reading || filteredOut ? null : (
@@ -394,23 +415,63 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                 )}
               </section>
             ) : (
-              <InboxPane
-                holder={chosen.holder}
-                item={chosen.item}
-                control={live}
-                agents={named}
-                hidden={columns.shown === INBOX_COLUMNS.LIST}
-                onBack={columns.onBack}
-                pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-                next={next}
-                doors={paneDoors(tasks, chosen.holder, { act, openLink, now, automationsOn })}
-              />
+              <SkillFiles
+                source={agents.readSkills}
+                onOpen={(skill) => {
+                  // Note that no File tab stands in the Inbox, so a skill's file opens on GitHub, as off any plan's page.
+                  if (place === undefined) return;
+                  const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
+                  tell(ACT_KIND.GITHUB_OPEN, { url });
+                }}
+              >
+                <InboxPane
+                  holder={chosen.holder}
+                  item={chosen.item}
+                  control={live}
+                  agents={named}
+                  hidden={columns.shown === INBOX_COLUMNS.LIST}
+                  onBack={columns.onBack}
+                  pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+                  next={next}
+                  mentions={mentions}
+                  doors={paneDoors(tasks, chosen.holder, { act, openLink, now, automationsOn })}
+                />
+              </SkillFiles>
             )}
           </div>
         </AutomationDirectory>
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
+}
+
+/**
+ * Where the chosen item's words are read in the window's Inbox, which
+ * stands on no plan's page: its plan's workspace, by its slug, and
+ * repository, or, for an agent with no plan, the agent's own as its read
+ * names them, never its group's, which agents of other repositories share
+ * and which an agent a link reached stands under with none. Its box
+ * mentions what that repository and workspace hold, as the page of an
+ * agent no plan holds does (`planlessMentions`), and its skills' files
+ * open there. None until both are known.
+ */
+function answerPlace(
+  chosen: InboxListed,
+  agents: CodingAgentsControl,
+  tasks: TasksControl,
+): PlanlessPlace | undefined {
+  const { holder, item } = chosen;
+  const workspaceId =
+    holder.kind === INBOX_HOLDER.TASK
+      ? holder.task.workspaceId
+      : (agents.workspaceId ?? itemWorkspaceId(holder, item.agentId));
+  const repository =
+    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : agents.agentRepository;
+  if (workspaceId === undefined || repository === undefined || repository === null) {
+    return undefined;
+  }
+  const workspace = tasks.workspaces.find((each) => each.id === workspaceId)?.slug ?? workspaceId;
+  return { workspace, workspaceId, repository };
 }
 
 /**

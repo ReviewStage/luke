@@ -18,6 +18,7 @@ import {
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
+import { CHAT_TOOLS } from "./chat.js";
 import { DELEGATE_TOOL } from "./delegation.js";
 import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
 import { INBOX_TOOLS } from "./inbox.js";
@@ -137,6 +138,18 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.POST_CHAT]: {
+    description: CHAT_TOOLS.POST.description,
+    inputSchema: emitJsonSchema(CHAT_TOOLS.POST.inputSchema),
+  },
+  [CODER_TOOL.READ_CHAT]: {
+    description: CHAT_TOOLS.READ.description,
+    inputSchema: emitJsonSchema(CHAT_TOOLS.READ.inputSchema),
+  },
+  [CODER_TOOL.RESOLVE_ASK]: {
+    description: CHAT_TOOLS.RESOLVE.description,
+    inputSchema: emitJsonSchema(CHAT_TOOLS.RESOLVE.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {

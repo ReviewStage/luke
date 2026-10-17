@@ -1,12 +1,7 @@
 import { WORKSPACE_BOUNDS } from "@luke/features/workspace-wire";
+import { ConfirmDialog, DIALOG_TONE, type DialogConfirm, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
-import {
-  ConfirmDialog,
-  DIALOG_TONE,
-  type DialogConfirm,
-  useConfirmDialog,
-} from "../settings/confirm-dialog";
 
 /**
  * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a name, Cancel, and Create workspace.

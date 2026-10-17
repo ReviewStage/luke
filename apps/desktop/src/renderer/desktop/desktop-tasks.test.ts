@@ -201,8 +201,9 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   );
   assert.match(shown.map((column) => column.textContent).join(""), /Nothing needs you/u);
   assert.equal(
-    shown.find((column) => column.classList.contains("inbox-tasks"))?.querySelector(".empty-state")
-      ?.textContent,
+    shown
+      .find((column) => column.classList.contains("inbox-tasks"))
+      ?.querySelector(".luke-empty-state")?.textContent,
     "Nothing needs you",
     "the list standing alone stands the Inbox's empty state",
   );
@@ -310,7 +311,7 @@ async function narrowTaskInbox(
       [...tab.querySelectorAll(".inbox-tasks .sidebar-task-name")].map((row) => row.textContent),
     /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
     filteredOut: () => {
-      const empty = tab.querySelector(".inbox-tasks:not([hidden]) .empty-state");
+      const empty = tab.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
       if (empty === null) return null;
       return [
         empty.querySelector("h3")?.textContent,
@@ -319,7 +320,9 @@ async function narrowTaskInbox(
       ];
     },
     showAll: () =>
-      act(() => tab.querySelector<HTMLButtonElement>(".inbox-tasks .empty-state button")?.click()),
+      act(() =>
+        tab.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button")?.click(),
+      ),
     pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
     /** What the list says of a read that did not land, and whether it offers Retry. */
     failure: () => {

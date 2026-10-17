@@ -38,3 +38,11 @@ export const planNotesTaken = defineState<NotesTaken>(
   "luke.coder.plan-notes",
   () => NO_NOTES_TAKEN,
 );
+
+/**
+ * How many chat posts the turn under way has made, in eve's durable session
+ * state, counted as the plan's notes are and held to the chat's bound
+ * (`packages/service/src/agents/coder-host/chat.ts`): the tool reads it before posting and
+ * counts the post once it lands.
+ */
+export const chatPostsMade = defineState<NotesTaken>("luke.coder.chat-posts", () => NO_NOTES_TAKEN);

@@ -8,7 +8,7 @@ import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wi
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { ResetIcon } from "@luke/ui";
+import { ConfirmDialog, type DialogQuestion, ResetIcon, useConfirmDialog } from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
@@ -21,7 +21,6 @@ import { PlanBody } from "../tasks/plan-body";
 import type { PlanEditDoor } from "../tasks/use-plan-editing";
 import { TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.

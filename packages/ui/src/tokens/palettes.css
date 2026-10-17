@@ -103,6 +103,16 @@
   --luke-shadow-switch-thumb:
     0 1px 2px light-dark(rgba(0, 0, 0, 0.25), transparent),
     0 0 0 0.5px light-dark(rgba(0, 0, 0, 0.08), transparent);
+
+  /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
+     holding its white letter at AA on either ground. */
+  --luke-color-identity-1: #4f63b8;
+  --luke-color-identity-2: #2b7f78;
+  --luke-color-identity-3: #9a6a1e;
+  --luke-color-identity-4: #a24a63;
+  --luke-color-identity-5: #6c55b3;
+  --luke-color-identity-6: #477a3a;
+  --luke-color-on-identity: #fff;
 }
 
 /* The site's light ground is shadcn/ui's stock light theme warmed off pure
@@ -166,6 +176,16 @@
   --luke-color-shadow: rgba(0, 0, 0, 0.12);
   --luke-color-shadow-deep: rgba(0, 0, 0, 0.2);
   --luke-shadow-switch-thumb: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+
+  /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
+     holding its white letter at AA on either ground. */
+  --luke-color-identity-1: #4f63b8;
+  --luke-color-identity-2: #2b7f78;
+  --luke-color-identity-3: #9a6a1e;
+  --luke-color-identity-4: #a24a63;
+  --luke-color-identity-5: #6c55b3;
+  --luke-color-identity-6: #477a3a;
+  --luke-color-on-identity: #fff;
 }
 
 /* The admin dashboard's and the OAuth cards' dark ground, the product's state
@@ -223,4 +243,14 @@
   --luke-color-shadow: rgba(0, 0, 0, 0.5);
   --luke-color-shadow-deep: rgba(0, 0, 0, 0.6);
   --luke-shadow-switch-thumb: none;
+
+  /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
+     holding its white letter at AA on either ground. */
+  --luke-color-identity-1: #4f63b8;
+  --luke-color-identity-2: #2b7f78;
+  --luke-color-identity-3: #9a6a1e;
+  --luke-color-identity-4: #a24a63;
+  --luke-color-identity-5: #6c55b3;
+  --luke-color-identity-6: #477a3a;
+  --luke-color-on-identity: #fff;
 }

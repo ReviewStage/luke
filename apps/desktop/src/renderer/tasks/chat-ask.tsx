@@ -263,7 +263,7 @@ function Answer({
       ) : null}
       {ask.needsReply ? null : <p className="chat-ask-quiet">{QUIET}</p>}
       <form
-        className="chat-ask-note"
+        className="chat-ask-note field-well"
         onSubmit={(event) => {
           event.preventDefault();
           if (!byPress) send();

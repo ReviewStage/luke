@@ -1,14 +1,24 @@
+import { useAtom } from "@effect/atom-react";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ComposeIcon, ProviderMark } from "@luke/ui";
 import { searchTokens } from "@luke/ui/search-tokens";
-import { matchingIssues, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
+import {
+  type LinearIssuesAsk,
+  linearIssuesAskOf,
+  offeredIssues,
+  taskNameOfIssue,
+  workspaceReaches,
+} from "@luke/ui/tasks-model";
+import { Duration, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { WorkspaceTile } from "../desktop/workspace-tile";
 import { ModalShell } from "../modal-shell";
+import { rendererRuntime } from "../renderer-runtime";
 import { Highlighted } from "../search-field";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { Shortcut } from "../shortcut";
@@ -53,10 +63,14 @@ import type { TasksControl } from "./use-tasks-tab";
  *
  * Where the workspace the task starts in has Linear connected, the name
  * field is also the search over its issues, read as the card opens and
- * again on a switch of workspace: as soon as anything is typed, the issues
- * whose title or key holds every word stand under the field, nearest first,
- * the top one highlighted, and the arrows move the highlight on through
- * them to the last row, which creates the task under the name as typed.
+ * again on a switch of workspace. As soon as anything is typed, the issues
+ * whose title or key holds every word stand under the field, and once the
+ * typing rests Linear itself is searched for the words, so an issue older
+ * than those read is found too;
+ * a key typed whole or a link to an issue pasted asks Linear for that one
+ * issue instead. They stand nearest first, the top one highlighted, and the
+ * arrows move the highlight on through them to the last row, which creates
+ * the task under the name as typed.
  * Return, or Create, does what the highlight says: an issue starts its task
  * at once, named by its title, on the repository, in the workspace, and with
  * the planning the card shows, and Luke is handed the issue to research.
@@ -83,6 +97,9 @@ const PLANNING_NOTE = {
   ON: "Starts from your plan template and opens a call with Luke.",
   OFF: "Starts with an empty plan and no call.",
 } as const;
+
+/** How long the typing rests before Linear is searched for the name as typed. */
+const SEARCH_PAUSE = Duration.millis(250);
 
 /** What the workspace picker's menu says where no workspace matches; its list is short enough to read whole, so it is never searched. */
 const NO_WORKSPACE_MATCH = "No workspaces match";
@@ -158,6 +175,60 @@ function useLinearIssues(
   return issues;
 }
 
+/** One search of a workspace's Linear for the name as typed, and the read that asks it. */
+interface IssueSearch {
+  readonly workspaceId: string | undefined;
+  readonly typed: string;
+  readonly ask: LinearIssuesAsk;
+  readonly read: (ask: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>;
+}
+
+/** What one search found, and the workspace and the name it was for. */
+interface IssueSearchAnswer {
+  readonly workspaceId: string | undefined;
+  readonly typed: string;
+  readonly issues: readonly LinearIssueSummary[];
+}
+
+/**
+ * A search once the typing has rested, as an atom whose work is the wait and
+ * then the read: setting it again starts the wait over and lets go of the
+ * read still out, so only the newest name is answered. A refused read
+ * finds nothing.
+ */
+const issueSearchAtom = () =>
+  rendererRuntime.fn((search: IssueSearch) =>
+    Effect.gen(function* () {
+      yield* Effect.sleep(SEARCH_PAUSE);
+      const issues = yield* Effect.tryPromise(() => search.read(search.ask)).pipe(
+        Effect.orElseSucceed((): readonly LinearIssueSummary[] => []),
+      );
+      return { workspaceId: search.workspaceId, typed: search.typed, issues };
+    }),
+  );
+
+/**
+ * Linear searched for the name as typed in the workspace given, once the
+ * typing rests: the last answer, whichever name and workspace it was for,
+ * and the search to ask as the name or the workspace changes.
+ */
+function useLinearSearch(
+  readIn: TasksControl["newTask"]["linearIssuesIn"],
+): readonly [
+  IssueSearchAnswer | undefined,
+  (typed: string, workspaceId: string | undefined) => void,
+] {
+  const [atom] = useState(issueSearchAtom);
+  const [answer, search] = useAtom(atom);
+  const ask = (typed: string, workspaceId: string | undefined) => {
+    const read = readIn(workspaceId);
+    const asked = linearIssuesAskOf(typed);
+    if (read === undefined || asked === undefined) return;
+    search({ workspaceId, typed: typed.trim(), ask: asked, read });
+  };
+  return [AsyncResult.isSuccess(answer) ? answer.value : undefined, ask];
+}
+
 /** One issue under the name field: Linear's mark, its title with the words typed marked, then its key and state. */
 function IssueOption({
   id,
@@ -226,10 +297,18 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const [note, setNote] = useState<string | undefined>(undefined);
   const searchesLinear = newTask.linearIssuesIn(startsIn) !== undefined;
   const issues = useLinearIssues(newTask.linearIssuesIn, startsIn);
+  const [searched, searchLinear] = useLinearSearch(newTask.linearIssuesIn);
+  // What Linear found for the name as it now stands is offered whatever it
+  // holds; what it found for an earlier name stands with the issues read,
+  // offered only where it holds the words, until the newer search answers.
+  const answered = searched?.workspaceId === startsIn ? searched : undefined;
+  const current = answered !== undefined && answered.typed === name.trim();
+  const found = current ? answered.issues : [];
+  const known = current || answered === undefined ? issues : [...issues, ...answered.issues];
   // The row the arrows stand on among the issues and, after them, the name as typed; and whether Escape put the issues away until the next keystroke.
   const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState(false);
-  const matches = dismissed ? [] : matchingIssues(issues, name);
+  const matches = dismissed ? [] : offeredIssues(known, name, found);
   const matching = matches.length > 0;
   const at = Math.min(highlight, matches.length);
   const picked = matching ? matches[at] : undefined;
@@ -314,6 +393,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
               setWorkspaceId(chosenId);
               setHighlight(0);
               setDismissed(false);
+              searchLinear(name, chosenId);
             }}
           />
         </div>
@@ -354,9 +434,11 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
           value={name}
           disabled={starting}
           onChange={(event) => {
-            setName(event.currentTarget.value);
+            const typed = event.currentTarget.value;
+            setName(typed);
             setHighlight(0);
             setDismissed(false);
+            searchLinear(typed, startsIn);
           }}
           onKeyDown={fieldKey}
         />
