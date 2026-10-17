@@ -5036,14 +5036,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
-  /** A source whose stopped sandbox holds a change it never committed, over a checkout and remote on disk, and a continue of it. */
-  const copyScenario = (t: TestContext) =>
+  /** A source whose stopped sandbox holds a change it never committed, over a checkout and remote on disk, and a continue of it; GitHub answers its pull request's reads as `pull` does, where given. */
+  const copyScenario = (t: TestContext, pull?: RepositoryScript) =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureOidcToken());
       const checkout = sourceCheckout(yield* Effect.promise(() => temporaryDirectory(t, "copy-")));
       writeFileSync(join(checkout.checkout, "invites.ts"), "export const ttl = 7;\n");
       const sandbox = sourceSandbox(checkout, "stopped");
-      const opened = yield* sourceAgentOn(sandbox.answer);
+      const opened = yield* sourceAgentOn(
+        pull === undefined ? sandbox.answer : (sent) => sandbox.answer(sent) ?? pull(sent),
+      );
       yield* claimRuntimeSession(opened.stored, "wrun_source", new Date());
       const continued = Effect.gen(function* () {
         const started = readAnswer(
@@ -5113,7 +5115,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a continue of a source whose pull request is still open is told to carry the copy onto that pull request's branch and open no second one, and the words it is handed bring the branch to the copy",
     (t) =>
       Effect.gen(function* () {
-        const { checkout, continued } = yield* copyScenario(t);
+        const { checkout, continued } = yield* copyScenario(t, publishedPullRequest);
         // The source worked on its pull request's branch, pushed, with its change still uncommitted.
         checkout.sh(checkout.checkout, "git", "switch", "--quiet", "-c", PUBLISHED.branch);
         checkout.sh(checkout.checkout, "git", "push", "--quiet", "origin", PUBLISHED.branch);
@@ -5135,6 +5137,33 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           checkout.sh(fresh, "git", "rev-parse", copied),
         );
         assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+      }),
+  );
+
+  it.effect(
+    "a continue of a source whose pull request its row still reads open, but GitHub says merged since, opens its own from the copy",
+    (t) =>
+      Effect.gen(function* () {
+        const merged: RepositoryScript = async (sent) => {
+          const answered = await publishedPullRequest(sent);
+          const pathname = new URL(sent.url).pathname;
+          if (answered === undefined || !pathname.endsWith(`/pulls/${PUBLISHED.number}`)) {
+            return answered;
+          }
+          const pull = await answered.json();
+          return Response.json({
+            ...pull,
+            state: "closed",
+            merged: true,
+            merged_at: "2026-10-16T09:00:00Z",
+          });
+        };
+        const { continued } = yield* copyScenario(t, merged);
+
+        const { preamble } = yield* continued;
+
+        assert.ok(preamble.includes("open your pull request from it as usual"), preamble);
+        assert.ok(!preamble.includes("open no new pull request"), preamble);
       }),
   );
 
@@ -6028,7 +6057,8 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     "a continue of an agent that never ran a turn is sent to the branch and pull request of the agent that one took up, not the default branch, unless that branch is in a repository the task moved from",
     () =>
       Effect.gen(function* () {
-        const { owner, task, ask, eve, source } = yield* sourceAgent;
+        // GitHub holds the source's pull request open, as its row says, when the first continue reads it again.
+        const { owner, task, ask, eve, source } = yield* sourceAgentOn(publishedPullRequest);
         const continueFrom = (agentId: string) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } })),
