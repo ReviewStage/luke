@@ -7,11 +7,16 @@ import { cssCustomProperties } from "../../css.js";
  * are one placeholder.
  */
 
-/** The shapes a placeholder stands in: a line of words, a control, or a person's circle. */
+/**
+ * The shapes a placeholder stands in: a line of words, a control, a person's
+ * circle, or a block that fills the box its container gives it, a plot's or
+ * a card's, so the container sets its size.
+ */
 export const SKELETON_SHAPE = {
   LINE: "line",
   CONTROL: "control",
   CIRCLE: "circle",
+  BLOCK: "block",
 } as const;
 
 export type SkeletonShape = (typeof SKELETON_SHAPE)[keyof typeof SKELETON_SHAPE];
@@ -19,7 +24,7 @@ export type SkeletonShape = (typeof SKELETON_SHAPE)[keyof typeof SKELETON_SHAPE]
 /** A block's shape and width, the width a share of its line or a length. */
 export interface SkeletonFrameProps {
   shape?: SkeletonShape | undefined;
-  /** How wide it stands, as a share of its line ("60%") or a length; the whole line where none is given. */
+  /** How wide it stands, as a share of its line ("60%") or a length; the whole line where none is given. A block takes its container's width instead. */
   width?: string | undefined;
   className?: string | undefined;
 }

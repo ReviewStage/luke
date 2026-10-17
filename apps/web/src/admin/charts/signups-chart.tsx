@@ -17,7 +17,7 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
-import { ChartHeading } from "./chart-heading";
+import { ChartFrame, ChartTrend } from "./chart-frame";
 
 const SIGNUPS_CHART = {
   count: { label: "New accounts", color: "var(--chart-1)" },
@@ -39,19 +39,17 @@ export function SignupsChart({
 }): React.JSX.Element {
   if (seriesHasNoData(daily.map((point) => point.count))) {
     return (
-      <div className="rounded-lg border border-border bg-card p-5">
-        <ChartHeading label="New accounts per day" trend={trend} />
+      <ChartFrame title="New accounts per day" aside={<ChartTrend trend={trend} />}>
         <p className="m-0 py-6 text-center text-sm text-muted-foreground">
           No accounts created in this window yet.
         </p>
-      </div>
+      </ChartFrame>
     );
   }
 
   const partialDay = partialDayKey(daily, generatedAt);
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <ChartHeading label="New accounts per day" trend={trend} />
+    <ChartFrame title="New accounts per day" aside={<ChartTrend trend={trend} />}>
       <ChartContainer config={SIGNUPS_CHART} className="aspect-auto h-40 w-full">
         <BarChart data={[...daily]}>
           <CartesianGrid vertical={false} />
@@ -81,7 +79,7 @@ export function SignupsChart({
           </Bar>
         </BarChart>
       </ChartContainer>
-    </div>
+    </ChartFrame>
   );
 }
 
@@ -121,18 +119,16 @@ export function SignInMethodsChart({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card p-5">
-        <div className="mb-4 text-xs text-muted-foreground">Linked sign-in methods</div>
+      <ChartFrame title="Linked sign-in methods">
         <p className="m-0 py-6 text-center text-sm text-muted-foreground">
           No linked sign-in methods recorded yet.
         </p>
-      </div>
+      </ChartFrame>
     );
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 text-xs text-muted-foreground">Linked sign-in methods</div>
+    <ChartFrame title="Linked sign-in methods">
       <ChartContainer
         config={SIGN_IN_METHODS_CHART}
         className="aspect-auto w-full"
@@ -153,6 +149,6 @@ export function SignInMethodsChart({
           </Bar>
         </BarChart>
       </ChartContainer>
-    </div>
+    </ChartFrame>
   );
 }
