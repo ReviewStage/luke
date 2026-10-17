@@ -34,10 +34,9 @@ import { SpinnerRing } from "../spinner";
  * its glyph in the surface's own colour while it takes a press, and dimmed
  * to the raised ground with a muted glyph while it does not. Both are the
  * tokens above, never an opacity over the filled one, so the glyph stays
- * a colour apart from its disc in either state. Note that the colours are
- * utilities on a `button`, which base.css resets in its `base` layer under
- * them, because a reset outside every layer would outrank them and draw
- * the arrow in the disc's own colour.
+ * a colour apart from its disc in either state. The card, its foot, and
+ * the submit wear their own classes (`.prompt-input*`, tasks.css) on luke
+ * tokens, and an owner's class beside them places the card in its surface.
  */
 
 export type PromptInputProps = Omit<HTMLAttributes<HTMLFormElement>, "onSubmit"> & {
@@ -55,14 +54,7 @@ export function PromptInput({
     onSubmit();
   };
   return (
-    <form
-      className={cn(
-        "field-well flex w-full flex-col rounded-xl border border-border bg-card",
-        className,
-      )}
-      onSubmit={handleSubmit}
-      {...props}
-    >
+    <form className={cn("prompt-input field-well", className)} onSubmit={handleSubmit} {...props}>
       {children}
     </form>
   );
@@ -80,19 +72,14 @@ export type PromptInputFooterProps = ComponentProps<"div">;
 
 /** The row under the field: what the owner puts at its left and at its right. */
 export function PromptInputFooter({ className, ...props }: PromptInputFooterProps): ReactNode {
-  return (
-    <div
-      className={cn("flex items-center justify-between gap-3 px-3 pb-3", className)}
-      {...props}
-    />
-  );
+  return <div className={cn("prompt-input-footer", className)} {...props} />;
 }
 
 export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>;
 
 /** The footer's left: the owner's controls, or nothing, which still holds the submit at the right. */
 export function PromptInputTools({ className, ...props }: PromptInputToolsProps): ReactNode {
-  return <div className={cn("flex min-w-0 items-center gap-1", className)} {...props} />;
+  return <div className={cn("prompt-input-tools", className)} {...props} />;
 }
 
 /** Where the exchange stands, which decides the submit's icon: the registry's `ChatStatus` words. */
@@ -116,26 +103,23 @@ export function PromptInputSubmit({
   children,
   ...props
 }: PromptInputSubmitProps): ReactNode {
-  let icon = <ArrowUpIcon className="size-[15px]" />;
+  let icon = <ArrowUpIcon />;
   if (status === PROMPT_INPUT_STATUS.SUBMITTED) {
     icon = (
-      <span className="size-[15px]">
+      <span className="prompt-input-submit-ring">
         <SpinnerRing />
       </span>
     );
   } else if (status === PROMPT_INPUT_STATUS.STREAMING) {
     // Filled, as every chat draws its Stop; the registry's outline reads as a checkbox at this size.
-    icon = <SquareIcon className="size-3.5 fill-current" />;
+    icon = <SquareIcon className="prompt-input-submit-stop" />;
   }
   return (
     <button
       type="submit"
       aria-label="Send"
       aria-disabled={disabled === true ? true : undefined}
-      className={cn(
-        "flex size-[30px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors disabled:bg-secondary disabled:text-muted-foreground",
-        className,
-      )}
+      className={cn("prompt-input-submit", className)}
       disabled={disabled}
       {...props}
     >

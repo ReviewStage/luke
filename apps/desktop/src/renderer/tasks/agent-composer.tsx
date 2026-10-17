@@ -11,7 +11,15 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon, riseAboveEnd, useMenu } from "@luke/ui";
+import {
+  EllipsisIcon,
+  IconButton,
+  McpIcon,
+  MicrophoneIcon,
+  PlusIcon,
+  riseAboveEnd,
+  useMenu,
+} from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
@@ -228,20 +236,19 @@ function ComposerMore({
   const actions = offers.filter((offer) => taken.includes(offer.press)).map((each) => each.action);
   return (
     <>
-      <Tooltip label={BUTTON.MORE}>
-        <button
-          type="button"
-          className="icon-button agent-composer-more"
-          aria-label={BUTTON.MORE}
-          {...trigger}
-          onClick={(event) => {
-            setTaken(hiddenPresses(foot.current));
-            trigger.onClick(event);
-          }}
-        >
-          <EllipsisIcon />
-        </button>
-      </Tooltip>
+      <span className="agent-composer-more">
+        <Tooltip label={BUTTON.MORE}>
+          <IconButton
+            icon={<EllipsisIcon />}
+            label={BUTTON.MORE}
+            {...trigger}
+            onClick={(event) => {
+              setTaken(hiddenPresses(foot.current));
+              trigger.onClick(event);
+            }}
+          />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={BUTTON.MORE} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
       )}
@@ -454,11 +461,12 @@ export function AgentComposer({
   // hidden press can hold no keyboard; with the press drawn, the ⋯ is not.
   const handBack = (set: (open: boolean) => void) => (open: boolean) => {
     const more = foot.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
+    const press = more?.querySelector<HTMLElement>("button") ?? null;
     const returning =
       !open && (document.activeElement?.closest(".luke-anchored-popover") ?? null) !== null;
     set(open);
-    if (returning && more !== null && getComputedStyle(more).display !== "none") {
-      queueMicrotask(() => more.focus());
+    if (returning && more !== null && press !== null && getComputedStyle(more).display !== "none") {
+      queueMicrotask(() => press.focus());
     }
   };
 
@@ -598,17 +606,16 @@ export function AgentComposer({
           ) : (
             <>
               <PromptInputTools>
-                <Tooltip label={BUTTON.ATTACH}>
-                  <button
-                    type="button"
-                    className="icon-button agent-composer-attach"
-                    aria-label={BUTTON.ATTACH}
-                    disabled={held}
-                    onClick={() => picker.current?.click()}
-                  >
-                    <PlusIcon />
-                  </button>
-                </Tooltip>
+                <span className="agent-composer-attach">
+                  <Tooltip label={BUTTON.ATTACH}>
+                    <IconButton
+                      icon={<PlusIcon />}
+                      label={BUTTON.ATTACH}
+                      disabled={held}
+                      onClick={() => picker.current?.click()}
+                    />
+                  </Tooltip>
+                </span>
                 <input
                   ref={picker}
                   type="file"

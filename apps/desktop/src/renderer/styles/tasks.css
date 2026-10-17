@@ -3272,6 +3272,70 @@ button.draft-fork-quote:hover {
   }
 }
 
+/* The shared composer card (../ai-elements/prompt-input.tsx): one card on
+   the sidebar's ground inside a hairline, ringed while its field holds the
+   caret (`.field-well`, base.css); under its field, the foot with the
+   owner's controls at its left and the round submit at its right. */
+.prompt-input {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border);
+  border-radius: 12px;
+  background: var(--desktop-sidebar);
+}
+
+.prompt-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-12);
+  padding: 0 var(--luke-space-12) var(--luke-space-12);
+}
+
+.prompt-input-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* The submit: a disc at the control's height that never changes size or
+   place, filled in ink while it takes a press and on the strong fill with a
+   muted glyph while it does not. */
+.prompt-input-submit {
+  display: flex;
+  width: var(--luke-control-height);
+  height: var(--luke-control-height);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-text);
+  color: var(--luke-color-ground);
+  cursor: default;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.prompt-input-submit:disabled {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text-muted);
+}
+
+.prompt-input-submit > svg,
+.prompt-input-submit-ring {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.prompt-input-submit > .prompt-input-submit-stop {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
    default type, and a note under it, on the transcript's own inset so the
    card and the column line up. What stands here is the room around the
@@ -3446,8 +3510,13 @@ button.skill-chip:hover,
   flex: none;
 }
 
-/* Note that the ⋯ is named under the foot, because desktop.css's
-   `.icon-button` comes later and would otherwise draw it. */
+/* The + and the ⋯ each stand in a box of their own, which the queries
+   below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯ stands only
+   once the card is too narrow for every press. */
+.agent-composer-attach {
+  display: flex;
+}
+
 .agent-composer-actions .agent-composer-more,
 .agent-model-chip .harness-mark {
   display: none;
