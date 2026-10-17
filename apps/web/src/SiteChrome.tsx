@@ -76,6 +76,9 @@ export type SitePage = (typeof SITE_PAGE)[keyof typeof SITE_PAGE];
  */
 export type SitePlace = { readonly page: SitePage; readonly beneath?: boolean };
 
+/** What the chrome is told of the page it is drawn on: where the reader is. */
+type ChromeProps = { readonly current?: SitePlace };
+
 /** The chrome's quiet link: muted until hovered, and in the text's own ink where the reader is. */
 const QUIET_LINK =
   "no-underline transition-colors duration-150 hover:text-foreground [&[aria-current]]:text-foreground motion-reduce:transition-none";
@@ -92,87 +95,107 @@ function currentProps(page: SitePage, place: SitePlace | undefined) {
 }
 
 /**
- * Shared between every page so navigation and branding never drift apart.
- * The banner is the design system's, so its wash, rule, and gutters are the
- * public page's; `current` marks where the reader is.
+ * Shared between every page so navigation and branding never drift apart:
+ * the wordmark and the links the banner holds, handed to PublicPage's
+ * `banner`; `current` marks where the reader is. Every link stands the
+ * web's 44px tall inside the 64px banner, so its hit target is the contract's
+ * without moving a word.
  */
-export function SiteHeader({ current }: { readonly current?: SitePlace }): React.JSX.Element {
+export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
   return (
-    <PublicBanner>
-      {/* Every link stands the web's 44px tall inside the 64px banner, so its
-          hit target is the contract's without moving a word. */}
-      <nav aria-label="Site" className="flex items-center justify-between">
+    <nav aria-label="Site" className="flex items-center justify-between">
+      <a
+        className="inline-flex min-h-11 items-center gap-2 font-brand text-base font-bold tracking-[-0.01em] no-underline"
+        {...currentProps(SITE_PAGE.HOME, current)}
+      >
+        <LukeMark />
+        Luke
+      </a>
+      <div className="flex items-center gap-4">
         <a
-          className="inline-flex min-h-11 items-center gap-2 font-brand text-base font-bold tracking-[-0.01em] no-underline"
-          {...currentProps(SITE_PAGE.HOME, current)}
+          className={`inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground ${QUIET_LINK}`}
+          {...currentProps(SITE_PAGE.ABOUT, current)}
         >
-          <LukeMark />
-          Luke
+          About
         </a>
-        <div className="flex items-center gap-4">
-          <a
-            className={`inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground ${QUIET_LINK}`}
-            {...currentProps(SITE_PAGE.ABOUT, current)}
-          >
-            About
-          </a>
-          <a
-            className={`inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground ${QUIET_LINK}`}
-            {...currentProps(SITE_PAGE.CHANGELOG, current)}
-          >
-            Changelog
-          </a>
-          {/* Icon-only, so the padding buys the web's 44px hit target and a
+        <a
+          className={`inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground ${QUIET_LINK}`}
+          {...currentProps(SITE_PAGE.CHANGELOG, current)}
+        >
+          Changelog
+        </a>
+        {/* Icon-only, so the padding buys the web's 44px hit target and a
               focus ring with room around the mark. The matching negative
               margins keep the mark where it stood: 22px from the last link,
               and optically aligned with the column's edge rather than inset
               from it. */}
-          <a
-            className={`-mr-[13px] -ml-[7px] inline-flex items-center rounded-md p-[13px] text-muted-foreground ${QUIET_LINK}`}
-            href={REPOSITORY_URL}
-            aria-label="Luke on GitHub"
-          >
-            <GitHubMark className="block size-[18px]" />
-          </a>
-        </div>
-      </nav>
+        <a
+          className={`-mr-[13px] -ml-[7px] inline-flex items-center rounded-md p-[13px] text-muted-foreground ${QUIET_LINK}`}
+          href={REPOSITORY_URL}
+          aria-label="Luke on GitHub"
+        >
+          <GitHubMark className="block size-[18px]" />
+        </a>
+      </div>
+    </nav>
+  );
+}
+
+/**
+ * The banner for a page that still draws its own main. The banner is the
+ * design system's, so its wash, rule, and gutters are the public page's.
+ */
+export function SiteHeader(props: ChromeProps): React.JSX.Element {
+  return (
+    <PublicBanner>
+      <SiteNavigation {...props} />
     </PublicBanner>
   );
 }
 
-/** Shared between every page so the legal and license links never drift apart. */
-export function SiteFooter({ current }: { readonly current?: SitePlace }): React.JSX.Element {
+/**
+ * Shared between every page so the legal and license links never drift
+ * apart: what PublicPage's `footer` holds under its rule.
+ */
+export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
   return (
-    <PublicFooter>
-      <div className="font-mono text-xs text-muted-foreground">
-        {/* The separator belongs to the gap between items rather than to any
+    <div className="font-mono text-xs text-muted-foreground">
+      {/* The separator belongs to the gap between items rather than to any
             item, so adding or reordering a link never leaves a stray dot. */}
-        <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
-          <span>Apache-2.0</span>
-          <span>macOS 14+</span>
-          <a className={QUIET_LINK} {...currentProps(SITE_PAGE.ABOUT, current)}>
-            About
-          </a>
-          <a className={QUIET_LINK} {...currentProps(SITE_PAGE.CHANGELOG, current)}>
-            Changelog
-          </a>
-          {/* The changelog's feed, as quiet as the rest of the footer: a reader
+      <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
+        <span>Apache-2.0</span>
+        <span>macOS 14+</span>
+        <a className={QUIET_LINK} {...currentProps(SITE_PAGE.ABOUT, current)}>
+          About
+        </a>
+        <a className={QUIET_LINK} {...currentProps(SITE_PAGE.CHANGELOG, current)}>
+          Changelog
+        </a>
+        {/* The changelog's feed, as quiet as the rest of the footer: a reader
               subscribes once, so it needs a way in, not a call to action. */}
-          <a className={QUIET_LINK} href="/changelog/rss.xml">
-            RSS
-          </a>
-          <a className={QUIET_LINK} {...currentProps(SITE_PAGE.PRIVACY, current)}>
-            Privacy
-          </a>
-          <a className={QUIET_LINK} href="mailto:founders@stagereview.app">
-            Contact
-          </a>
-        </div>
-        {/* The notice sits under its own rule at the foot of the column, the
+        <a className={QUIET_LINK} href="/changelog/rss.xml">
+          RSS
+        </a>
+        <a className={QUIET_LINK} {...currentProps(SITE_PAGE.PRIVACY, current)}>
+          Privacy
+        </a>
+        <a className={QUIET_LINK} href="mailto:founders@stagereview.app">
+          Contact
+        </a>
+      </div>
+      {/* The notice sits under its own rule at the foot of the column, the
             way stagereview.app closes its footer, so the link row above stays
             a row of links. */}
-        <p className="mt-8 border-t border-border pt-6">© 2026 Stage Inc.</p>
-      </div>
+      <p className="mt-8 border-t border-border pt-6">© 2026 Stage Inc.</p>
+    </div>
+  );
+}
+
+/** The footer for a page that still draws its own main. */
+export function SiteFooter(props: ChromeProps): React.JSX.Element {
+  return (
+    <PublicFooter>
+      <SiteFooterLinks {...props} />
     </PublicFooter>
   );
 }
