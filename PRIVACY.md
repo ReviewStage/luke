@@ -678,6 +678,18 @@ Disconnecting stops every read through it at once,
 removes the connection's record, and asks Vercel Connect to revoke the grant;
 what plans already copied of an issue stays with them.
 
+**Luke as a Linear agent, a trial on one deployment only.** A deployment
+configured for the trial has a Linear app of its own, installed in one Linear
+workspace. When someone there delegates an issue to it, or @mentions it,
+Linear sends our service that issue, and our service starts a plan in the one
+Luke workspace the deployment names, owned by the one member it names, copying
+the issue's key, title, address, and description onto the plan as starting a
+plan from an issue does. It then tells Linear the plan's address, which Linear
+shows on the issue as made by the app. The app's token is asked of Linear for
+each delivery and kept nowhere; nothing else of what Linear sent is kept or
+logged. A deployment not configured for the trial, production among them,
+reads nothing Linear sends it.
+
 **Notion, if you connect it.** Connecting Notion in Settings › Integrations
 signs you in to Notion in your browser through Vercel Connect, which stores
 Notion's token for your account, encrypted, and renews it. Our service
