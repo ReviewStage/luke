@@ -9,7 +9,7 @@ import { MessageAction } from "../ai-elements/message";
 import { Tooltip } from "../tooltip";
 import type { TranscriptCards } from "./agent-tab";
 import { agentActor, agentTabLabel } from "./coding-agent-model";
-import { type AgentFork, FORK_WORDS, forksOf, messageOpening } from "./fork-model";
+import { type AgentFork, FORK_WORDS, type ForkCut, forksOf, messageOpening } from "./fork-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenPlace } from "./use-open-link";
@@ -30,7 +30,9 @@ import { useOpenPlace } from "./use-open-link";
 
 /** What an agent's tab hands its messages: the press that forks one, none where forking is not offered, the chips of the agents each was forked to, and the press that opens the agent's continue as a draft, none where no draft opens. */
 interface ForkDoors {
-  readonly onFork: ((messageId: string, words: string) => void) | undefined;
+  readonly onFork:
+    | ((messageId: string, words: string, cut: ForkCut | undefined) => void)
+    | undefined;
   readonly forkedTo: (messageId: string) => readonly ReactNode[];
   readonly onContinue?: ContinueDoor | undefined;
 }
@@ -106,8 +108,8 @@ export function agentForkDoors(input: {
       : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
   return {
     onFork: forkable
-      ? (messageId, words) =>
-          onFork({ agentId: agent.id, messageId, opening: messageOpening(words) })
+      ? (messageId, words, cut) =>
+          onFork({ agentId: agent.id, messageId, opening: messageOpening(words), ...cut })
       : undefined,
     onContinue:
       onContinue !== undefined && drafts
@@ -128,13 +130,21 @@ export function agentForkDoors(input: {
   };
 }
 
+/** Whether the tab a message is drawn in offers to fork it. */
+export function useForkOffered(): boolean {
+  return useContext(ForkContext)?.onFork !== undefined;
+}
+
 /** A message's Fork to new agent, after its Copy and Copy link; nothing where its tab offers no fork. */
 export function ForkMessageAction({
   messageId,
   words,
+  cut,
 }: {
   messageId: string;
   words: string;
+  /** Where the fork cuts the message, where it is a reply still being written (`forkCutOf`); none for a settled one, kept whole. */
+  cut?: ForkCut | undefined;
 }): ReactNode {
   const onFork = useContext(ForkContext)?.onFork;
   if (onFork === undefined) return null;
@@ -144,7 +154,7 @@ export function ForkMessageAction({
       tooltip={FORK_WORDS.ACTION}
       className="[&_svg]:size-4"
       data-fork-action=""
-      onClick={() => onFork(messageId, words)}
+      onClick={() => onFork(messageId, words, cut)}
     >
       <SplitIcon />
     </MessageAction>

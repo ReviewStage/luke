@@ -181,6 +181,14 @@
           "minLength": 1,
           "maxLength": 36
         },
+        "messageSteps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "messageStepParts": {
+          "type": "number",
+          "minimum": 0
+        },
         "steps": {
           "type": "number",
           "minimum": 0

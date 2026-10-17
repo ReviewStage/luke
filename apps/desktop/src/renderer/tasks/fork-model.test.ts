@@ -76,6 +76,17 @@ test("a forked draft's send is from the source at its message, under the draft's
     attachments: [notes],
     disabledServers: [],
   });
+  // A fork of a reply still being written names where it was cut, so the cut does not grow after the press.
+  assert.deepEqual(
+    forkStart({
+      ...base,
+      fork: { ...fork, messageSteps: 3, messageStepParts: 1 },
+      words: "",
+      attachments: [],
+      choice: undefined,
+    }).from,
+    { ...from, messageSteps: 3, messageStepParts: 1 },
+  );
 });
 
 test("where each of an agent's messages was forked to is read off the task's agents in the order started, archived ones among them, a continue and another source's forks left out", () => {

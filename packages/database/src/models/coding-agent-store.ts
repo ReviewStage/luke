@@ -307,6 +307,8 @@ const StartedFromColumnSchema = Schema.NullOr(
   Schema.Struct({
     agentId: Schema.String,
     messageId: Schema.optionalKey(Schema.String),
+    messageSteps: Schema.optionalKey(Schema.Number),
+    messageStepParts: Schema.optionalKey(Schema.Number),
     steps: Schema.Number,
     totalSteps: Schema.Number,
     branch: Schema.optionalKey(Schema.String),

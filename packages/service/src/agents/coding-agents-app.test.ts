@@ -5245,6 +5245,147 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a continue of a source whose turn failed part way replays the words that turn formed before it failed",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        const target = { userId: owner, conversationId: stored.conversationId };
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        const turn = { conversationId: sessionKey(target.conversationId), turnId };
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_1",
+        });
+        const bodies = [
+          {
+            kind: BRAIN_RUN_EVENT.TURN_STARTED,
+            origin: BRAIN_TURN_ORIGIN.TYPED,
+            trigger: BRAIN_TURN_TRIGGER.ASK,
+            at: 0,
+          },
+          { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 },
+          { kind: BRAIN_RUN_EVENT.TEXT_DRAFTED, step: 1, text: "Halfway through the mailer." },
+          {
+            kind: BRAIN_RUN_EVENT.TURN_ENDED,
+            status: BRAIN_REQUEST_STATUS.FAILED,
+            responseIds: [],
+            at: 1,
+          },
+        ] as const;
+        for (const [index, body] of bodies.entries()) {
+          yield* writer.consume(target, { ...turn, ...body, sequence: index + 1 });
+        }
+
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: source.id },
+            }),
+          ),
+        );
+
+        assert.equal(
+          openedParts(eve).parts.replay?.steps.at(-1)?.summary,
+          "Said: Halfway through the mailer.",
+        );
+      }),
+  );
+
+  it.effect(
+    "a fork of a reply still being written keeps the steps, and the words and calls of the last of them, seen as Fork was pressed, nothing written after, and names the files the rest of that reply edited; a fork naming no steps keeps the reply whole",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        const write = (callId: string, filePath: string) => ({
+          type: "tool-write_file",
+          toolCallId: callId,
+          state: "output-available",
+          input: { filePath, content: "x" },
+          output: "ok",
+        });
+        const writing = yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [
+          { type: "step-start" },
+          text("Writing the expiry first."),
+          write("call-7", "src/expiry.ts"),
+          { type: "step-start" },
+          text("Now the mailer."),
+          write("call-8", "src/mailer.ts"),
+        ]);
+        const fork = (messageSteps: number | undefined, messageStepParts?: number) =>
+          Effect.gen(function* () {
+            const started = readAnswer(
+              codingAgentAnswerSchema,
+              HOSTED_HTTP_STATUS.CREATED,
+              yield* ask(
+                startAs(owner, task.id, {
+                  idempotencyKey: randomUUID(),
+                  from: {
+                    agentId: source.id,
+                    messageId: writing,
+                    ...(messageSteps === undefined ? undefined : { messageSteps }),
+                    ...(messageStepParts === undefined ? undefined : { messageStepParts }),
+                  },
+                }),
+              ),
+            ).agent;
+            return { started, replay: openedParts(eve).parts.replay };
+          });
+
+        const pinned = yield* fork(1);
+        assert.equal(pinned.started.from?.messageSteps, 1);
+        assert.deepEqual(
+          pinned.replay?.steps.slice(-2).map((step) => step.summary),
+          ["Said: Writing the expiry first.", "Wrote: src/expiry.ts"],
+        );
+        assert.match(
+          pinned.replay?.preamble ?? "",
+          /After that message it edited `src\/mailer\.ts`; undo/u,
+        );
+
+        // A press that saw the step's words and not yet its call keeps the words alone.
+        const within = yield* fork(1, 1);
+        assert.equal(within.started.from?.messageStepParts, 1);
+        assert.equal(within.replay?.steps.at(-1)?.summary, "Said: Writing the expiry first.");
+        assert.match(
+          within.replay?.preamble ?? "",
+          /After that message it edited `src\/expiry\.ts`, `src\/mailer\.ts`; undo/u,
+        );
+
+        const whole = yield* fork(undefined);
+        assert.equal(whole.started.from?.messageSteps, undefined);
+        assert.deepEqual(
+          whole.replay?.steps.slice(-2).map((step) => step.summary),
+          ["Said: Now the mailer.", "Wrote: src/mailer.ts"],
+        );
+        assert.match(whole.replay?.preamble ?? "", /edited no file after that message/u);
+
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: source.id, messageSteps: 1 },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: source.id, messageId: writing, messageStepParts: 1 },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
     "a source on another plan, or one the account does not reach, is refused as naming nothing, and a prompt beside a source as invalid",
     () =>
       Effect.gen(function* () {
