@@ -98,6 +98,9 @@ const QUIET_LINE = {
 /** What the box's Send is called. */
 const SEND = "Send to agent";
 
+/** What the box says of files read for an item its agent changed before they landed. */
+const ITEM_CHANGED = "The agent changed this item while your files were read. Attach them again.";
+
 /** What the box's + is called, which is its tooltip too. */
 const ATTACH = "Attach files";
 
@@ -206,10 +209,10 @@ function AnswerCard({
   const [reading, setReading] = useState(0);
   const draft = control.draftOf(item);
   const sending = control.sending.has(item.id);
-  // Note that files are read through a ref, because reading them takes a
-  // while and the draft they land in is whichever render is current by then.
-  const latest = useRef({ draft, onDraft: control.onDraft });
-  latest.current = { draft, onDraft: control.onDraft };
+  // Note that the item is read through a ref, because reading files takes a
+  // while and the item they land on is whichever revision is current by then.
+  const latest = useRef(item);
+  latest.current = item;
   const byPress = pressesOf(item.response) !== undefined;
   const placeholder = placeholderOf(item.response);
   const bundle = useAtomValue(editorBundleAtom);
@@ -246,15 +249,25 @@ function AnswerCard({
   };
   const attach = (files: readonly File[]) => {
     if (files.length === 0 || sending) return;
+    const { revision } = item;
     setReading((count) => count + 1);
     readFiles(files)
       .then((read) => {
-        // Taken after whatever the card holds as the read lands, so neither a
+        // Files read for an item its agent changed meanwhile land nowhere, as its words were let go.
+        const now = latest.current;
+        if (now.revision !== revision) {
+          setRefusal(ITEM_CHANGED);
+          return;
+        }
+        // Taken after whatever the card holds as the write lands, so neither a
         // read that landed first nor a chip taken off meanwhile is undone.
-        const now = latest.current.draft;
-        const taken = withFiles(now.attachments, read);
-        setRefusal(taken.refusal);
-        latest.current.onDraft(item, { ...now, attachments: taken.attachments });
+        let refusal = read.refusal;
+        control.onAttachments(now, (was) => {
+          const taken = withFiles(was, read);
+          refusal = taken.refusal;
+          return taken.attachments;
+        });
+        setRefusal(refusal);
       })
       .finally(() => setReading((count) => count - 1));
   };
@@ -295,10 +308,7 @@ function AnswerCard({
                 ? undefined
                 : (index) => {
                     setRefusal(undefined);
-                    control.onDraft(item, {
-                      ...draft,
-                      attachments: draft.attachments.filter((_, at) => at !== index),
-                    });
+                    control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
                   }
             }
           />

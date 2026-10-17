@@ -7,6 +7,7 @@ import {
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxParams,
 } from "@luke/features/coding-agent-view";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
@@ -108,6 +109,11 @@ export interface TaskInboxControl {
   readonly draftOf: (item: InboxItem) => InboxDraft;
   /** Keeps what the developer has put on the item's card, at its revision. */
   readonly onDraft: (item: InboxItem, draft: InboxDraft) => void;
+  /** Moves the files on the item's card on from what they are as the write lands, so two reads landing in one render both stand. */
+  readonly onAttachments: (
+    item: InboxItem,
+    next: (was: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => void;
   /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
@@ -437,10 +443,29 @@ export function useTaskInbox(input: {
     [writer, draftsOn],
   );
 
+  const onAttachments = useCallback(
+    (
+      item: InboxItem,
+      next: (was: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+    ) =>
+      writer.update(
+        {
+          kind: DRAFT_PLACE.INBOX,
+          planId: draftsOn,
+          agentId: item.agentId,
+          itemId: item.id,
+          revision: item.revision,
+        },
+        (was) => ({ ...was, attachments: next(was.attachments) }),
+      ),
+    [writer, draftsOn],
+  );
+
   return {
     board,
     draftOf,
     onDraft,
+    onAttachments,
     reading: active && !held.read,
     read: held.read,
     failed: held.failed,

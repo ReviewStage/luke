@@ -1591,6 +1591,115 @@ test("files picked or dropped in an item's box are drawn as chips and go with it
   );
 });
 
+/** A text file whose bytes are read only once the test opens its gate, as a slow disk would hand them over. */
+function gatedFile(name: string, words: string): { file: File; open: () => void } {
+  const file = new File([words], name, { type: "text/plain" });
+  let open: () => void = () => undefined;
+  const gate = new Promise<ArrayBuffer>((resolve) => {
+    open = () => resolve(new TextEncoder().encode(words).buffer);
+  });
+  Object.defineProperty(file, "arrayBuffer", { value: () => gate });
+  return { file, open };
+}
+
+test("files whose reads land together both stand in the box", async () => {
+  const { page } = mount();
+  await settle();
+  const first = gatedFile("a.txt", "a\n");
+  const second = gatedFile("b.txt", "b\n");
+  await handFiles(page, [first.file], "pick");
+  await handFiles(page, [second.file], "drop");
+  await act(async () => {
+    first.open();
+    second.open();
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  await settle();
+  assert.deepEqual(
+    [...itemPane(page).querySelectorAll(".attached-file-name")].map((name) => name.textContent),
+    ["a.txt", "b.txt"],
+  );
+});
+
+test("files read for an item its agent changed meanwhile land nowhere, and the box says to attach them again", async () => {
+  let deliver: (outcome: ReadOutcome) => void = () => undefined;
+  heldRead = () =>
+    new Promise((resolve) => {
+      deliver = resolve;
+    });
+  const { page } = mount();
+  await settle();
+  const slow = gatedFile("trace.txt", "boom\n");
+  await handFiles(page, [slow.file], "pick");
+  const revised = { ...THRESHOLD, revision: 2, title: "Alert at 85%?" };
+  act(() =>
+    deliver({
+      status: ACT_OUTCOME_STATUS.DONE,
+      value: { items: [revised, RETRY], cursor: "2" },
+    }),
+  );
+  await settle();
+  assert.equal(readTitle(page), "Alert at 85%?");
+  await act(async () => {
+    slow.open();
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(pane.querySelector(".attached-file"), null, "the file lands on no revision");
+  assert.match(pane.querySelector('[role="alert"]')?.textContent ?? "", /Attach them again/u);
+});
+
+test("an answer file whose read failed says so under the files, and Retry reads it again", async () => {
+  const answered: InboxItem = {
+    ...THRESHOLD,
+    response: { type: INBOX_RESPONSE.TEXT },
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: READER,
+    answer: { reply: INBOX_REPLY.ANSWERED, note: "See the spec." },
+    answerFiles: [
+      {
+        attachmentId: "a1b2c3d4-0000-4000-8000-0000000000f2",
+        name: "spec.pdf",
+        mediaType: "application/pdf",
+      },
+    ],
+  };
+  inboxes = new Map([[BILLING.id, [answered]]]);
+  let failing = true;
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) => {
+        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: failing
+            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+            : { contentType: "application/pdf", base64: "JVBERg==" },
+        });
+      },
+    },
+  });
+  const { page } = mount();
+  await settle();
+  const comment = () =>
+    itemPane(page).querySelector('[data-inbox-comment="answered"]') ??
+    assert.fail("the answer is drawn");
+  const failed = comment().querySelector("[data-inbox-files-failed]");
+  assert.ok(failed, "the failed read is said");
+  failing = false;
+  const retry = [...failed.querySelectorAll("button")].find((each) =>
+    /retry/iu.test(each.textContent ?? ""),
+  );
+  act(() => retry?.click());
+  await settle();
+  assert.equal(comment().querySelector("[data-inbox-files-failed]"), null);
+  assert.ok(comment().querySelector('button[aria-label="Open spec.pdf"]'), "the file opens now");
+});
+
 test("an item that needs no reply says a file attached in its box will be sent to the agent", async () => {
   inboxes = new Map([
     [BILLING.id, [{ ...THRESHOLD, response: { type: INBOX_RESPONSE.TODO }, needsReply: false }]],
