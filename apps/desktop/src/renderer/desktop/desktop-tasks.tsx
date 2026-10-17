@@ -523,9 +523,9 @@ function PlanDocument({
   // tab, in the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its files.
   const openChanges = (agentId: string) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.FILES);
-  // Its pull request's chip opens the same tab on the pull request's overview.
+  // Its pull request's chip opens the same tab on the pull request's conversation.
   const openPullRequest = (agentId: string) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.OVERVIEW);
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION);
   // Run opens the agent's terminal of this Mac in the side panel at once;
   // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
   const { repository } = task;

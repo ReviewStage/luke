@@ -72,6 +72,11 @@ const workingClock: Stream.Stream<number> = Stream.fromEffectSchedule(
 /** The clock as the window reads it, running for as long as a count is mounted to read it. */
 const workingNowAtom = rendererRuntime.atom(workingClock);
 
+/** The time now, moved on each second while a count reads it; none until the clock's first reading lands. */
+export function useWorkingNow(): number | undefined {
+  return Option.getOrUndefined(AsyncResult.value(useAtomValue(workingNowAtom)));
+}
+
 /**
  * How long a run has gone since it began, said after its working word and
  * moving each second. Note that it is a timer to a reader rather than a
@@ -85,15 +90,15 @@ export function WorkingTime({
   /** Where it stands off the word before it: a word's breadth after a working word, unless said otherwise. */
   className?: string;
 }): ReactNode {
-  const now = AsyncResult.value(useAtomValue(workingNowAtom));
-  if (Option.isNone(now)) return null;
+  const now = useWorkingNow();
+  if (now === undefined) return null;
   return (
     <span
       className={cn("text-muted-foreground tabular-nums", className)}
       role="timer"
       aria-live="off"
     >
-      {workingTime(now.value - startedAt)}
+      {workingTime(now - startedAt)}
     </span>
   );
 }

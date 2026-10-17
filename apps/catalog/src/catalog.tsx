@@ -71,8 +71,8 @@ function ViewLink({
   );
 }
 
-/** One example under its heading, as the page draws it and the visual comparison captures it. */
-export function ExampleFrame({ example }: { example: Example }): React.JSX.Element {
+/** One example under its heading, as the page draws it. */
+function ExampleFrame({ example }: { example: Example }): React.JSX.Element {
   return (
     <main className="catalog-example">
       <h1>{example.title}</h1>

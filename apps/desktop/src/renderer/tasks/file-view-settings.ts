@@ -35,7 +35,7 @@ const DEFAULT_SETTINGS = {
 } as const;
 
 /** A kept setting read on its own: as kept where it reads, its default where it is missing or does not. */
-function keptOr<S extends Schema.Codec<unknown, unknown>>(
+export function keptOr<S extends Schema.Codec<unknown, unknown>>(
   schema: S,
   fallback: S["Type"] & S["Encoded"],
 ) {

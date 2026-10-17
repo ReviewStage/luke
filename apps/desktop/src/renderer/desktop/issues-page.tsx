@@ -120,10 +120,12 @@ function ListPage({
           </button>
         </div>
       </header>
-      {/* The board scrolls in Factory's own scroller, whose width stacks its columns on a narrow window. */}
+      {/* The board scrolls sideways in its own scroller, each column scrolling its cards; a failure is said in the list's. */}
       <div
         className={
-          onBoard ? "factory-scroll scroll-fade-top" : "automations-scroll scroll-fade-top"
+          onBoard && read !== undefined && "issues" in read
+            ? "issue-board-scroll"
+            : "automations-scroll scroll-fade-top"
         }
       >
         {read === undefined ? null : "failure" in read ? (
