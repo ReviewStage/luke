@@ -1,5 +1,5 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { AUTH_STATUS_TONE, AuthPage } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -28,30 +28,26 @@ function Consent(): React.JSX.Element {
       captureSiteEvent(SITE_EVENT.SIGN_IN_COMPLETE);
     });
   }, []);
+  // The full mark, not a pair of dots: the card is the one thing on the
+  // page, so it carries the same face the product and the landing page wear.
+  // One word says where things stand, in the state palette the product uses.
   return (
-    <main className={AUTH_SHELL}>
-      <section className={AUTH_CARD}>
-        {/* The full mark, not a pair of dots: the card is the one thing on the
-            page, so it carries the same face the product and the landing page
-            wear. */}
-        <div className="inline-flex w-13" aria-hidden="true">
+    <AuthPage
+      mark={
+        <span className="inline-flex w-13">
           <LukeMark className="h-auto w-full" />
-        </div>
-        <div>
-          {/* One word saying where things stand, in the state palette the
-              product uses. */}
-          <span className={AUTH_PILL} data-tone={failure ? "attention" : "settled"}>
-            {failure ? "Not completed" : "Confirming"}
-          </span>
-        </div>
-        <h1 className={AUTH_TITLE}>
-          {failure ? "Luke could not continue" : "Continuing to Luke…"}
-        </h1>
-        <p className="m-0 text-muted-foreground">
-          {failure ? "Return to Luke and start sign-in again." : "This window will close soon."}
-        </p>
-      </section>
-    </main>
+        </span>
+      }
+      status={
+        failure
+          ? { tone: AUTH_STATUS_TONE.ATTENTION, label: "Not completed" }
+          : { tone: AUTH_STATUS_TONE.SETTLED, label: "Confirming" }
+      }
+      title={failure ? "Luke could not continue" : "Continuing to Luke…"}
+      description={
+        failure ? "Return to Luke and start sign-in again." : "This window will close soon."
+      }
+    />
   );
 }
 
