@@ -4902,7 +4902,8 @@ button.integration-tool-head:hover,
   margin-inline: auto;
 }
 
-.automation-suggestions-head {
+.automation-suggestions-head,
+.automation-runs-head {
   padding: 0 var(--space-2);
 }
 

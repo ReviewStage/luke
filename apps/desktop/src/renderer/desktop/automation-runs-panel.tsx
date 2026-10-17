@@ -12,7 +12,17 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, ProviderMark, useMenu } from "@luke/ui";
+import {
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  ProviderMark,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item";
@@ -219,7 +229,11 @@ export function AutomationRunsPanel({
     >
       <div className="side-panel-resize" {...edge} />
       <aside className="automation-runs scroll-fade-top" aria-label="Runs">
-        <h2 className="settings-group-title">Runs</h2>
+        <div className="automation-runs-head">
+          <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
+            Runs
+          </Text>
+        </div>
         {!created ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : runs === undefined ? null : "failed" in runs ? (
