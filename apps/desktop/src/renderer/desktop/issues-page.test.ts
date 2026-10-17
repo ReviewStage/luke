@@ -1343,3 +1343,122 @@ test("a card moved once the developer has gone on to New issue takes no keyboard
   assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
   assert.equal(document.activeElement, composerField());
 });
+
+/**
+ * The board laid out for a drag: each column 300px wide and 600px tall, side
+ * by side from the window's left, each card 40px tall, 50px apart, from
+ * 40px down its column. jsdom lays nothing out and captures no pointer, so
+ * this answers the geometry and the capture the browser would.
+ */
+function layCardsOut(page: HTMLElement): void {
+  const COLUMN = 300;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const columns = [...document.querySelectorAll("[data-issue-column]")];
+    if (this.matches(".issue-board")) return new DOMRect(0, 0, columns.length * COLUMN, 600);
+    const at = columns.indexOf(this);
+    if (at >= 0) return new DOMRect(at * COLUMN, 0, COLUMN, 600);
+    const column = columns.indexOf(this.closest("[data-issue-column]") ?? this);
+    if (!this.matches("li[data-issue-id]") || column < 0) return new DOMRect();
+    const row = [...(this.parentElement?.children ?? [])].indexOf(this);
+    return new DOMRect(column * COLUMN + 8, 40 + row * 50, COLUMN - 16, 40);
+  });
+  for (const list of page.querySelectorAll(".issue-column-cards")) {
+    Object.assign(list, { setPointerCapture: () => undefined });
+  }
+}
+
+/** A pointer event at a point in the window, as the primary button makes one. */
+function pointer(type: string, x: number, y: number): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
+}
+
+/**
+ * Presses a card, drags it to a point, and lets it go there, answering
+ * what the board showed with the pointer held there: the column marked as
+ * the one it would land in, and whether a copy of the card was carried.
+ */
+function dragCard(
+  page: HTMLElement,
+  issueId: string,
+  to: { x: number; y: number },
+): { marked: string | undefined; carried: boolean } {
+  const card = cardOf(page, issueId);
+  const box = card.closest("li")?.getBoundingClientRect() ?? assert.fail("the card stands");
+  const from = { x: box.x + 20, y: box.y + 20 };
+  let held = { marked: undefined as string | undefined, carried: false };
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", from.x, from.y));
+    window.dispatchEvent(pointer("pointermove", from.x + 10, from.y));
+    window.dispatchEvent(pointer("pointermove", to.x, to.y));
+    held = {
+      marked:
+        page.querySelector<HTMLElement>("[data-drop-target='true']")?.dataset.issueColumn ??
+        undefined,
+      carried: page.querySelector(".issue-board > [data-carried]") !== null,
+    };
+    window.dispatchEvent(pointer("pointerup", to.x, to.y));
+  });
+  return held;
+}
+
+test("a Todo card dragged onto Done is carried there, Done marked as where it lands, and it is sent done and lands in Done", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const held = dragCard(page, issue(1).id, { x: 1000, y: 120 });
+  await settle();
+
+  assert.deepEqual(held, { marked: ISSUE_STATUS.DONE, carried: true });
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page), [
+    ["Backlog", []],
+    ["Todo1", ["ACME-2"]],
+    ["In progress", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled", []],
+  ]);
+  assert.equal(
+    page.querySelectorAll("[data-carried], [data-dragging], [data-drop-target]").length,
+    0,
+  );
+  assert.deepEqual(opened, [], "the drop opens nothing");
+});
+
+test("a card let go over its own column sends nothing, and a press that does not move still opens it", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const held = dragCard(page, issue(1).id, { x: 450, y: 400 });
+  await settle();
+  const card = cardOf(page, issue(1).id);
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", 350, 60));
+    window.dispatchEvent(pointer("pointerup", 350, 60));
+    card.click();
+  });
+  await settle();
+
+  assert.deepEqual(held, { marked: undefined, carried: true });
+  assert.deepEqual(changes, []);
+  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
+});
+
+test("a card dragged onto Done whose change the service refused stays in Todo and says so", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO })];
+  changeRefused = true;
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  dragCard(page, issue(1).id, { x: 1000, y: 120 });
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[1], ["Todo1", ["ACME-1"]]);
+  assert.deepEqual(columns(page)[3], ["Done", []]);
+  assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
+});
