@@ -2695,7 +2695,23 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         });
         assert.deepEqual(
           (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
-          // An agent's notice names it by its handle, and by its member's agent and the model that agent runs on.
+          // An agent's notice names it by its handle, and by its member's agent and the model that agent posted under.
+          {
+            kind: MESSAGE_SENDER.AGENT,
+            name: "agent-1",
+            model: chat.first.agent.model,
+            agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
+          },
+        );
+        // The notice keeps the model its agent posted under, whatever the agent runs on since.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ model: "openai/gpt-6.1-sol" })
+            .where(eq(codingAgent.id, chat.first.agent.id)),
+        );
+        assert.deepEqual(
+          (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
           {
             kind: MESSAGE_SENDER.AGENT,
             name: "agent-1",

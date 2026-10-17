@@ -185,7 +185,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           name: "Invite expiry",
           model: "anthropic/claude-opus-5.5",
         });
-        // A line that kept the agent but no model, as a chat notice does, names the model the agent runs on now.
+        // A line that kept the agent but no model names none, never the model the agent runs on now.
         const byChatAgent = yield* line("chat-agent", {
           kind: MESSAGE_SENDER.AGENT,
           agentId: sender.agentId,
@@ -240,7 +240,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             {
               kind: MESSAGE_SENDER.AGENT,
               name: "agent-1",
-              model: "anthropic/claude-opus-5.5",
+              model: undefined,
               agent: { id: sender.agentId, taskId: undefined },
             },
             {

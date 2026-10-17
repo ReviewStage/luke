@@ -1804,9 +1804,11 @@ export function delegationStartsOf(
  * their account is gone; Luke; an automation by the name its run kept; or
  * GitHub by the login the line kept; or another coding agent by the name
  * its send kept, and the model it ran on then, which its harness is read
- * off, where the line kept one, else the model it runs on now, and the
- * agent itself, by its id and the task it works on, where the line kept it
- * and it still stands.
+ * off, where the line kept one, and the agent itself, by its id and the
+ * task it works on, where the line kept it and it still stands. Note that
+ * the model is only ever the one the line kept, never the agent's now,
+ * because a byline names who sent it as it was, whatever the agent runs on
+ * since.
  */
 export type LineSent =
   | {
@@ -1839,7 +1841,6 @@ const LineSenderRowSchema = Schema.Struct({
   senderModel: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
   agentTaskId: Schema.NullOr(Schema.String),
-  agentModel: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -1861,7 +1862,6 @@ const findLineSenders = SqlSchema.findAll({
           senderModel: messages.senderModel,
           agentId: codingAgent.id,
           agentTaskId: codingAgent.taskId,
-          agentModel: codingAgent.model,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
@@ -1904,8 +1904,7 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
         : {
             kind: MESSAGE_SENDER.AGENT,
             name: row.senderName,
-            // Note that the model the line kept stands over the agent's now, because a byline names who sent it as it was.
-            model: row.senderModel ?? row.agentModel ?? undefined,
+            model: row.senderModel ?? undefined,
             agent:
               row.agentId === null
                 ? undefined
