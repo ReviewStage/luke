@@ -35,6 +35,7 @@ export const AGENT_TOOL = {
   START_AGENT: "start_agent",
   ARCHIVE_AGENT: "archive_agent",
   UNARCHIVE_AGENT: "unarchive_agent",
+  STOP_AGENT: "stop_agent",
   LIST_TASKS: "list_tasks",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",

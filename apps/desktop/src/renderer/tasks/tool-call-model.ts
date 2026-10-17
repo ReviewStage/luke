@@ -690,6 +690,8 @@ function tasksToolView(
       return answeredAgentCall(CALL_KIND.UNARCHIVE_AGENT, input, output);
     case AGENT_TOOL.LIST_MODELS:
       return namedCall(CALL_KIND.LIST_MODELS, input, output, undefined);
+    case AGENT_TOOL.STOP_AGENT:
+      return answeredAgentCall(CALL_KIND.STOP_AGENT, input, output);
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:
@@ -895,6 +897,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
   [AGENT_TOOL.START_AGENT, startedAgent],
   [AGENT_TOOL.UNARCHIVE_AGENT, namedAgent],
+  [AGENT_TOOL.STOP_AGENT, namedAgent],
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
@@ -937,6 +940,7 @@ const AGENT_CALL_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.START_AGENT,
   AGENT_TOOL.ARCHIVE_AGENT,
   AGENT_TOOL.UNARCHIVE_AGENT,
+  AGENT_TOOL.STOP_AGENT,
   RETIRED_TOOL.READ_CODING_AGENT,
   RETIRED_TOOL.MESSAGE_CODING_AGENT,
   RETIRED_TOOL.START_CODING_AGENT,

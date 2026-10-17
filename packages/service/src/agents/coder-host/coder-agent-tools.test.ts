@@ -75,6 +75,7 @@ import {
   LIST_MODELS_REFUSAL,
   READ_PAGE_REFUSAL,
   START_CODING_AGENT_REFUSAL,
+  STOP_AGENT_REFUSAL,
 } from "../coding-agent-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
@@ -97,8 +98,11 @@ import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
  * idle agent of the workspace, a teammate's among them, for the caller's
  * starter, recording the caller and its reason, once, and an unarchive
  * brings it back; a working agent, the caller itself, and an agent of
- * another workspace are not archived. Synthetic accounts, plans, and words
- * throughout.
+ * another workspace are not archived. A stop takes a teammate's running
+ * agent's turn by the Stop button's own cancel, once, and the list then reads
+ * it cancelled; an idle agent is answered as idle, and the caller itself, an
+ * archived agent, and an agent of another workspace are not stopped.
+ * Synthetic accounts, plans, and words throughout.
  */
 
 const NOW = 1_800_000_000_000;
@@ -224,12 +228,14 @@ async function claimed(
 /**
  * eve's coding-agent service as a script beside the fake GitHub, whose
  * installation reaching the repository is connected to the workspace:
- * every message to a session answered taken, and each written down.
+ * every message to a session answered taken, every cancel answered as
+ * `cancelStatus` says, and each written down.
  */
 async function fakeCoderEve(
   workspaceId: string,
   branches: readonly string[] = [],
   beforeGitHub?: () => Promise<void>,
+  cancelStatus = "accepted",
 ) {
   installations += 1;
   const installation: InstallationFixture = {
@@ -257,6 +263,7 @@ async function fakeCoderEve(
     if (pathname === "/eve/coder/v1/session") {
       return Response.json({ sessionId: sessionId() }, { status: 202 });
     }
+    if (pathname.endsWith("/cancel")) return Response.json({ status: cancelStatus });
     return Response.json(
       { sessionId: pathname.slice("/eve/coder/v1/session/".length), deliveryId: "delivery-1" },
       { status: 202 },
@@ -286,8 +293,8 @@ async function peerCaller(
     );
 }
 
-/** A turn of the agent's, begun as eve begins one and ended where `ended` says, so the agent reads as working or as idle. */
-async function turnOn(agent: StartedAgent, ended: boolean): Promise<void> {
+/** A turn of the agent's, begun as eve begins one and ended where `ended` says, so the agent reads as working or as idle; answers the turn's id. */
+async function turnOn(agent: StartedAgent, ended: boolean): Promise<string> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const turnId = randomUUID();
   const turn = { conversationId: sessionKey(target.conversationId), turnId };
@@ -311,6 +318,23 @@ async function turnOn(agent: StartedAgent, ended: boolean): Promise<void> {
         responseIds: [],
         at: NOW,
       });
+    }),
+  );
+  return turnId;
+}
+
+/** The agent's turn ended as eve ends one it cancelled. */
+async function cancelledTurnEnds(agent: StartedAgent, turnId: string): Promise<void> {
+  const target = { userId: agent.userId, conversationId: agent.conversationId };
+  await database.run(
+    writer.consume(target, {
+      conversationId: sessionKey(target.conversationId),
+      turnId,
+      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      sequence: 2,
+      status: BRAIN_REQUEST_STATUS.CANCELLED,
+      responseIds: [],
+      at: NOW,
     }),
   );
 }
@@ -1346,6 +1370,150 @@ test("an agent whose starter has left the workspace archives no agent of it", as
   });
   const read = await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id));
   assert.equal(Option.getOrThrow(read).archivedAt, null);
+});
+
+test("stop_agent stops a teammate's running agent on another task by eve's cancel of its turn, which the list then reads as cancelled, and answers a call run again as stopped with no second cancel", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  await turnOn(agents.teammates, false);
+  const stopped = {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    agent: {
+      id: agents.teammates.id,
+      title: OPUS,
+      task: { id: plans.billing, name: "Billing", archived: false },
+      onYourTask: false,
+      status: CODING_AGENT_STATUS.CANCELLED,
+    },
+    stopped: true,
+  };
+  const cancels = () => eve.sent.filter((sent) => sent.path.endsWith("/cancel"));
+
+  assert.deepEqual(await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }), stopped);
+  assert.deepEqual(
+    cancels().map((sent) => [sent.path, JSON.parse(sent.body)]),
+    [[`/eve/coder/v1/session/${agents.teammates.sessionId}/cancel`, { turnId: "turn_0" }]],
+  );
+  const listed = await call(CODER_TOOL.LIST_AGENTS, { taskId: plans.billing });
+  const agentsListed = Array.isArray(listed.agents) ? listed.agents : [];
+  assert.deepEqual(
+    agentsListed.map((agent) => (isRecord(agent) ? [agent.id, agent.status] : [])),
+    [[agents.teammates.id, CODING_AGENT_STATUS.CANCELLED]],
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-2"),
+    stopped,
+  );
+  assert.equal(cancels().length, 1, "a stop already standing sends eve no second cancel");
+});
+
+test("stop_agent answers an idle agent as idle and changes nothing, refuses one still starting, and stops neither the caller itself, an archived agent, an agent of another workspace its starter is also in, nor a stranger's", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const stop = (agentId: string) => call(CODER_TOOL.STOP_AGENT, { agentId });
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+  await turnOn(agents.teammates, true);
+
+  assert.deepEqual(await stop(agents.teammates.id), {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    agent: {
+      id: agents.teammates.id,
+      title: OPUS,
+      task: { id: plans.billing, name: "Billing", archived: false },
+      onYourTask: false,
+      status: CODING_AGENT_STATUS.COMPLETED,
+    },
+    stopped: false,
+  });
+  const starting = await agentOn(agents.teammates.userId, plans.billing);
+  assert.deepEqual(await stop(starting.id), rejected(STOP_AGENT_REFUSAL.NOT_READY));
+  assert.deepEqual(await stop(agents.caller.id), rejected(STOP_AGENT_REFUSAL.SELF));
+  await turnOn(agents.archived, false);
+  assert.deepEqual(await stop(agents.archived.id), rejected(STOP_AGENT_REFUSAL.ARCHIVED));
+  for (const agent of [agents.otherWorkspaces, agents.strangers]) {
+    await turnOn(agent, false);
+    assert.deepEqual(await stop(agent.id), rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT), agent.id);
+  }
+  assert.deepEqual(
+    await call(CODER_TOOL.STOP_AGENT, { agentId: "not-an-id" }),
+    rejected(STOP_AGENT_REFUSAL.UNREADABLE),
+  );
+  assert.deepEqual(
+    eve.sent.filter((sent) => sent.path.endsWith("/cancel")),
+    [],
+    "nothing was cancelled",
+  );
+});
+
+test("stop_agent run again under its key after the turn it stopped ended answers as stopped and cancels nothing, so a turn a message began since runs on", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const cancels = () => eve.sent.filter((sent) => sent.path.endsWith("/cancel"));
+  const first = await turnOn(agents.teammates, false);
+
+  const stopped = await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-1");
+  assert.equal(stopped.stopped, true, JSON.stringify(stopped));
+  await cancelledTurnEnds(agents.teammates, first);
+  await turnOn(agents.teammates, false);
+
+  const again = await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-1");
+  assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(again));
+  assert.equal(again.stopped, true);
+  assert.equal(cancels().length, 1, "the call run again sends eve no cancel");
+  const listed = await call(CODER_TOOL.LIST_AGENTS, { taskId: plans.billing }, "call-2");
+  const agentsListed = Array.isArray(listed.agents) ? listed.agents : [];
+  assert.deepEqual(
+    agentsListed.map((agent) => (isRecord(agent) ? [agent.id, agent.status] : [])),
+    [[agents.teammates.id, CODING_AGENT_STATUS.RUNNING]],
+    "the turn begun since runs on",
+  );
+});
+
+test("stop_agent answers a turn eve says ended before its cancel as not stopped by it, and so again when the call is run again once the turn settled", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId, [], undefined, "no_active_turn");
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const turnId = await turnOn(agents.teammates, false);
+
+  const answer = await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-1");
+  assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(answer));
+  assert.equal(answer.stopped, false);
+  await database.run(
+    writer.consume(
+      { userId: agents.teammates.userId, conversationId: agents.teammates.conversationId },
+      {
+        conversationId: sessionKey(agents.teammates.conversationId),
+        turnId,
+        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        sequence: 2,
+        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        responseIds: [],
+        at: NOW,
+      },
+    ),
+  );
+  const again = await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-1");
+  assert.equal(again.stopped, false, JSON.stringify(again));
+});
+
+test("a deployment that names no eve still answers an idle agent as idle, and refuses to stop a running one as having no service", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(false), agents.caller, eve.services);
+  await turnOn(agents.teammates, true);
+  const running = await agentOn(agents.teammates.userId, plans.billing);
+  await turnOn(running, false);
+
+  const idle = await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id });
+  assert.deepEqual([idle.status, idle.stopped], [ACTION_RESULT_STATUS.ACCEPTED, false]);
+  assert.deepEqual(await call(CODER_TOOL.STOP_AGENT, { agentId: running.id }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: STOP_AGENT_REFUSAL.NO_SERVICE,
+  });
+  assert.equal(eve.sent.length, 0);
 });
 
 test("read_page reads a page a teammate showed on another task of the caller's workspace, its newest version or one named, its HTML cut on a line to the bound, and nothing of another workspace's or a version never written", async () => {

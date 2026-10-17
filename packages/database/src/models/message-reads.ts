@@ -856,6 +856,31 @@ export function latestTurnsOfReached(
   return latestTurnsRead(null, conversationIds);
 }
 
+const findTurnStoppedUnder = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, key: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ conversationId, key }) =>
+    Database.use((db) =>
+      db
+        .select({ id: turns.id })
+        .from(turns)
+        .where(and(eq(turns.conversationId, conversationId), eq(turns.cancelRequestKey, key)))
+        .limit(1),
+    ),
+});
+
+/**
+ * Whether a Stop made under the key stands on a turn of the conversation
+ * named, whoever owns it: what a tool call run again reads to find the turn
+ * it stopped. Only for an id a gate already read, as `latestTurnsOfReached`.
+ */
+export function turnStoppedUnderReached(
+  conversationId: string,
+  key: string,
+): Effect.Effect<boolean, MessageReadFailure, DatabaseServices> {
+  return Effect.map(findTurnStoppedUnder({ conversationId, key }), (rows) => rows.length > 0);
+}
+
 const AwaitingLinesRowSchema = Schema.Struct({
   conversationId: Schema.String,
   newestAt: InstantColumnSchema,

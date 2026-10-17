@@ -14,6 +14,7 @@ import {
   MESSAGE_AGENT_TOOL,
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
+  STOP_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
@@ -139,6 +140,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.UNARCHIVE_AGENT]: {
     description: UNARCHIVE_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(UNARCHIVE_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.STOP_AGENT]: {
+    description: STOP_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(STOP_AGENT_TOOL.inputSchema),
   },
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,

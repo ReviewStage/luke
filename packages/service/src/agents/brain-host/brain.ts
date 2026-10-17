@@ -60,8 +60,10 @@ import {
   runReadAgent,
   runReadPage,
   runStartAgent,
+  runStopAgent,
   runUnarchiveAgent,
   START_AGENT_TOOL,
+  STOP_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
@@ -241,6 +243,8 @@ On a request for a new agent, start it when the developer clearly asks for one (
 
 On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), archive_agent archives each idle one the developer means, with a short reason such as its pull request having merged, and unarchive_agent brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
 
+On a request to stop an agent ("stop the agent", "it's going the wrong way, stop it"), stop_agent stops the turn under way of the one the developer means, as their Stop button would: the agent stays, with its transcript and branch, and a message to it later starts a new turn. Stop only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent already idle is answered as idle and nothing changes. Then say in your return which agent you stopped.
+
 ### The plan's chat
 
 The plan's workspace has a chat, where its coding agents, the developer's team, and you talk; you speak there as @luke, and the plan has a channel of its own, where its agents post. What was said there since your last turn is handed to you under [chat since the last planning call], and is read by then. When the developer asks you to tell the team or the plan's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat, in the plan's channel unless they name another channel or a member, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the plan's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
@@ -267,6 +271,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - read_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_agent sends one agent a message, as the developer would type it to the agent, a file, a pull request, or an issue in it written as a link to its page, as in a note.
 - start_agent starts a new coding agent on this task, or on another task of the workspace by its taskId, handed the plan itself or a prompt in its place, and a note of anything else the developer said for it, as the developer's Start button would, all in its one first message.
+- stop_agent stops the turn under way of a coding agent of the workspace by its id, as the developer's Stop button would, leaving the agent available for a later message.
 - archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, and who started it, so an agent can be started on another task by its taskId.
 - post_chat posts a message in the workspace's chat as @luke, in the plan's channel unless it names another place.
@@ -589,6 +594,10 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...UNARCHIVE_AGENT_TOOL,
     run: (call, input) => runUnarchiveAgent(call.agents, input),
+  },
+  {
+    ...STOP_AGENT_TOOL,
+    run: (call, input) => runStopAgent(call.agents, input),
   },
   {
     ...LIST_TASKS_TOOL,

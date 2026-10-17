@@ -539,6 +539,24 @@ test("a list of the models reads as one, not as a tool this build does not know,
   assert.equal(toolTarget(call), undefined);
 });
 
+test("a stop names the agent its answer titles and opens that agent's tab, which stays; a refused stop opens nothing", () => {
+  const asked = { tool: "stop_agent", callId: "call-1", input: { agentId: "agent-2" } };
+  const stopped = {
+    ...asked,
+    output: {
+      status: "accepted",
+      agent: { id: "agent-2", title: "Bill by seat", onYourTask: true, status: "cancelled" },
+      stopped: true,
+    },
+  };
+
+  const view = toolCallView(stopped);
+  assert.deepEqual([view.kind, view.subject], [CALL_KIND.STOP_AGENT, "Bill by seat"]);
+  assert.deepEqual(toolTarget(stopped), { kind: TOOL_TARGET.AGENT, agent: "agent-2" });
+  const refused = { ...asked, output: { status: "rejected", reason: "Not stopped." } };
+  assert.equal(toolTarget(refused), undefined);
+});
+
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {
   const call = (isYourTask: boolean) => ({
     tool: "read_page",

@@ -41,7 +41,9 @@ import {
  * A Stop pressed on the agent, its archive, and the delete of the task it
  * works on all stop it here, reaching eve as the developer over the
  * request's own authorization; a continue of the agent stops it here too,
- * over the eve its Start reached (`start.ts`). The cancel names the turn the row was
+ * over the eve its Start reached (`start.ts`), and an agent's `stop_agent`
+ * stops one as the deployment acting for the member the caller acts for
+ * (`../coding-agent-tools.ts`). The cancel names the turn the row was
  * written for, so a turn that ended meanwhile is not followed by a newer
  * one stopped in its place, and an eve that refuses leaves the row as it
  * stood and the caller unavailable. An agent stopped for good, as an
@@ -153,25 +155,31 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
-  return yield* cancelledTurn(eveFor(reach, request), writer, agent);
+  yield* cancelledTurn(eveFor(reach, request), writer, agent);
 });
 
 /**
  * eve's cancel of the agent's turn under way, over the eve given, then the
- * row's stamp; nothing where no turn runs that a Stop has to stop, a turn
- * already stamped among them, so a second Stop asks eve nothing. eve is
- * composed only once there is a turn to cancel.
+ * row's stamp, and whether eve took the cancel; nothing, and false, where no
+ * turn runs that a Stop has to stop, a turn already stamped among them, so a
+ * second Stop asks eve nothing. A turn eve says ended meanwhile is stamped
+ * all the same but answered false, since this Stop stopped nothing. eve is
+ * composed only once there is a turn to cancel. A tool call's Stop names its
+ * key, written beside the stamp where eve took the cancel, so the call run
+ * again finds the turn it stopped, and one that stopped nothing is run
+ * again as it first ran.
  */
 export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   eveOf: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
-): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  key?: string,
+): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
-  if (!stoppable(turn)) return;
+  if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
-  if (sessionId === undefined) return;
+  if (sessionId === undefined) return false;
   // The cancel names the turn the row was written for, never the session's turn under way, so a
   // turn that ended between the read above and eve's answer is answered `no_active_turn` and
   // nothing newer is stopped in its place.
@@ -191,11 +199,19 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
+  const accepted = cancelled.outcome === EVE_CANCEL_OUTCOME.ACCEPTED;
   const at = yield* DateTime.nowAsDate;
   const stamped = yield* hostedStoreOrUnavailable(
-    Effect.flatMap(writer, (write) => write.requestTurnCancel(target, { turnId: turn.id, at })),
+    Effect.flatMap(writer, (write) =>
+      write.requestTurnCancel(target, {
+        turnId: turn.id,
+        at,
+        ...(key === undefined || !accepted ? undefined : { key }),
+      }),
+    ),
   );
   if (Result.isFailure(stamped)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return accepted;
 });
 
 /**

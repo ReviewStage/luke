@@ -70,6 +70,7 @@ import {
   runReadAgent,
   runReadPage,
   runStartAgent,
+  runStopAgent,
   runUnarchiveAgent,
 } from "../coding-agent-tools.js";
 import {
@@ -428,6 +429,7 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.START_AGENT
     | typeof CODER_TOOL.ARCHIVE_AGENT
     | typeof CODER_TOOL.UNARCHIVE_AGENT
+    | typeof CODER_TOOL.STOP_AGENT
     | typeof CODER_TOOL.READ_PAGE
     | typeof CODER_TOOL.LIST_TASKS
     | typeof CODER_TOOL.LIST_MODELS;
@@ -443,6 +445,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.START_AGENT]: runStartAgent,
   [CODER_TOOL.ARCHIVE_AGENT]: runArchiveAgent,
   [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
+  [CODER_TOOL.STOP_AGENT]: runStopAgent,
   [CODER_TOOL.READ_PAGE]: runReadPage,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
   [CODER_TOOL.LIST_MODELS]: runListModels,
