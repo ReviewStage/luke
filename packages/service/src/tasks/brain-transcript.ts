@@ -31,10 +31,11 @@ import {
 import { TASK_WORK_BOUNDS, TASK_WORK_STATE, type TaskWorkTurn } from "@luke/features/tasks-view";
 import { and, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
+import { Clock, Duration, Effect, Option, type Schema } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
 import type { TitleAwaited } from "../agents/coder-host/transcript.js";
 import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "../core.js";
+import { lookedUntil } from "../http/held-read.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { taskWorkOf, workerSessionCallsOf } from "./task-work.js";
 import {
@@ -324,11 +325,14 @@ const pageOfLook = (
  * first look inside the hold that finds one or finds a worker started or
  * ended since the hold began, so a worker that ends beside one still
  * running is heard at once; or the empty page and the cursor to read on
- * from once the hold is out.
+ * from once the hold is out. Between looks it waits on the `live`
+ * statements where Neon Realtime watches them (the conversation's mark,
+ * `planConversationLiveStatements`), and on `BRAIN_POLL` where nothing does.
  */
 export function brainPagePast(
   target: ConversationTarget,
   after: MessageCursor,
+  live: readonly LiveStatement[] = [],
 ): BrainEffect<BrainPage> {
   return Effect.gen(function* () {
     const began = yield* runningChildTurns(target.userId, target.conversationId);
@@ -341,11 +345,7 @@ export function brainPagePast(
         ? Option.none()
         : Option.some(look);
     });
-    const held = yield* once.pipe(
-      Effect.repeat({ schedule: Schedule.spaced(BRAIN_POLL), until: Option.isSome }),
-      Effect.timeoutOption(CODER.MESSAGES_HOLD),
-    );
-    const read = Option.flatten(held);
+    const read = yield* lookedUntil(once, BRAIN_POLL, CODER.MESSAGES_HOLD, live);
     return yield* pageOfLook(
       target,
       Option.isSome(read) ? read.value : yield* pagePast(target, after),
