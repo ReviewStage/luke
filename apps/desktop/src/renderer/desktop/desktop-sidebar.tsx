@@ -662,7 +662,7 @@ function RepositorySection({
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
             <span className="sidebar-repository-pinned">
               <PinIcon />
-              <span className="visually-hidden">(pinned)</span>
+              <span className="luke-visually-hidden">(pinned)</span>
             </span>
           ) : null
         }
@@ -965,7 +965,7 @@ function SidebarInboxRow({
       {waiting === 0 ? null : (
         <span className="sidebar-inbox-waiting">
           {waiting}
-          <span className="visually-hidden">
+          <span className="luke-visually-hidden">
             {" "}
             {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
           </span>
@@ -1009,7 +1009,7 @@ function SidebarChatRow({
       {waiting === 0 ? null : (
         <span className="sidebar-inbox-waiting">
           {waiting}
-          <span className="visually-hidden"> waiting on you</span>
+          <span className="luke-visually-hidden"> waiting on you</span>
         </span>
       )}
     </button>
@@ -1182,14 +1182,7 @@ function sectionedTasks(
 function NewSectionButton({ onNew }: { onNew: () => void }): React.JSX.Element {
   return (
     <Tooltip label="New section">
-      <button
-        type="button"
-        className="icon-button sidebar-view-options"
-        aria-label="New section"
-        onClick={onNew}
-      >
-        <FolderPlusIcon className="icon-button-glyph" />
-      </button>
+      <IconButton icon={<FolderPlusIcon />} label="New section" onClick={onNew} />
     </Tooltip>
   );
 }

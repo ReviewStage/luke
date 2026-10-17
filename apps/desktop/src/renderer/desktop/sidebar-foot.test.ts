@@ -68,6 +68,8 @@ function mount(
     ran?: string[];
     openPerson?: (userId: string) => void;
     update?: UpdateSnapshot;
+    settingsOpen?: boolean;
+    onSettings?: () => void;
   } = {},
 ): HTMLButtonElement {
   const container = document.createElement("div");
@@ -99,8 +101,8 @@ function mount(
                 onOpenLatest: () => undefined,
               },
               shown: true,
-              settingsOpen: false,
-              onSettings: () => undefined,
+              settingsOpen: options.settingsOpen ?? false,
+              onSettings: options.onSettings ?? (() => undefined),
               onSignOut: options.onSignOut ?? (() => Promise.resolve()),
             }),
             createElement(HelpOffers, { ran: options.ran ?? [] }),
@@ -330,4 +332,20 @@ test("in the window, the account's menu opens with the reader's own profile, onc
   assert.equal(accountMenuLines()[2], "Your profile");
   act(() => accountItem("Your profile").click());
   assert.deepEqual(opened, ["user-dean"]);
+});
+
+test("the gear goes to Settings, and marks itself the page while Settings shows", () => {
+  let opened = 0;
+  mount(DEAN, { onSettings: () => opened++ });
+  const gear = (): HTMLButtonElement =>
+    document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]') ??
+    assert.fail("the foot draws the gear");
+  assert.equal(gear().getAttribute("aria-current"), null);
+  act(() => gear().click());
+  assert.equal(opened, 1);
+
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  mount(DEAN, { settingsOpen: true });
+  assert.equal(gear().getAttribute("aria-current"), "page");
 });
