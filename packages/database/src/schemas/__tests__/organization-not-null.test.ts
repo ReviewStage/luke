@@ -18,7 +18,9 @@ import { createTask } from "../../models/task-store.js";
 import {
   getTestDB,
   migrationStatements,
+  PLAN_TASK_COMPAT,
   RENAME_PLAN_TO_TASK,
+  undoneCompat,
   undoneRename,
 } from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
@@ -102,6 +104,8 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
         yield* sql`UPDATE coding_agent SET organization_id = NULL WHERE id = ${started.agent.id}`;
 
         // Note that the migration names the plan's row by the names it held then, so the later rename is walked back around it.
+        const compat = yield* migrationStatements(PLAN_TASK_COMPAT);
+        for (const statement of [...compat].reverse()) yield* sql.unsafe(undoneCompat(statement));
         const renames = yield* migrationStatements(RENAME_PLAN_TO_TASK);
         for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));
         for (const statement of yield* statements) yield* sql.unsafe(statement);
