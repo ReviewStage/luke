@@ -1,24 +1,22 @@
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
+import { BUTTON_VARIANT, Button, TEXT_TONE, Text } from "@luke/ui";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { ArrowRightIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { BANNER_LOOK, Banner } from "../banner";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref";
-import {
-  CONTINUE_LABEL,
-  CONTINUE_TRAIL,
-  CONTINUED_IN,
-  continuationsOf,
-  continueTrail,
-} from "./coding-agent-model";
+import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model";
 import { useContinueDoor } from "./fork-action";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
- * continue-agent.tsx -- where an agent may be continued in a new one: the press that starts it on the agent's whole transcript, or the agents that already continued it.
+ * continue-agent.tsx -- where an agent may be continued in a new one: the press that starts it on the agent's whole transcript, and, once it was, the agents that continued it.
  *
- * It ends a failed turn's end line, and the note of a box closed because
- * the agent's session has ended, whose words and files the press carries
+ * The press ends a failed turn's end line, and the note of a box closed
+ * because the agent's session has ended, whose words and files it carries
  * on, so nothing typed is lost. Where the agent's tab opens drafts
  * (`useContinueDoor`), the press opens the task's draft as a continue of
  * the agent, the words and files laid in its box, and lets the closed box's
@@ -27,12 +25,24 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * once with them as its note, and lets them go once it landed, unless they
  * were changed meanwhile, in another window, when the newer words stay;
  * that press is held busy while it is out, and says beside itself why it
- * did not start. Once any agent of the task continues this
- * one (`continuationsOf`), each is named in its place by its chip, which
- * opens its tab, so one agent is not continued twice. Nothing stands where
- * no Start could run and none continued it: on an archived task, or an
- * agent on none.
+ * did not start. Nothing offers it where no Start could run: on an
+ * archived task, or an agent on none.
+ *
+ * Once any agent continues this one (`continuedByIds`), the press is gone
+ * and the agents are named in one place, each by its chip, which opens its
+ * tab: the note that takes the box's place (`ContinuedComposerNote`), with
+ * Stop while a turn still runs and Archive, since a continued agent is done
+ * with; or, where the box is taken by an archived task's note, the row at
+ * the transcript's end (`ContinuedTrail`). A fork is no continuation, so a
+ * source with only forks keeps its box.
  */
+
+/** What the continued box's note offers, worded once. */
+const CONTINUED_COPY = {
+  ARCHIVE: "Archive",
+  STOP: "Stop",
+  STOPPING: "Stopping",
+} as const;
 
 /** What a closed box hands the press: its words and the files attached to them, and the agent's task, under which they are kept. */
 export interface ContinueCarry {
@@ -53,32 +63,21 @@ function holdsCarried(draft: Draft, carry: ContinueCarry): boolean {
 export function ContinueAgent({
   agentId,
   control,
-  onOpenAgent,
   carry,
   offers = true,
 }: {
   agentId: string;
-  control: Pick<
-    CodingAgentsControl,
-    "agents" | "archived" | "models" | "me" | "pullRequests" | "chatOn" | "continueAgent"
-  >;
-  /** Opens an agent's tab; none where nothing opens one, when a chip hangs its card alone. */
-  onOpenAgent: ((agentId: string) => void) | undefined;
+  control: Pick<CodingAgentsControl, "continueAgent">;
   /** The closed box's words and files, which the press carries; none for a press that carries nothing. */
   carry?: ContinueCarry | undefined;
-  /** Whether the press may stand here, where no other place offers it; the agents that continued it are named all the same. */
+  /** Whether the press may stand here, where no other place offers it. */
   offers?: boolean;
 }): React.JSX.Element | null {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
   const writer = useDraftWriter();
-  const continuations = useMemo(
-    () => continuationsOf(agentId, control.agents, control.archived),
-    [agentId, control.agents, control.archived],
-  );
   const { continueAgent } = control;
   const opensDraft = useContinueDoor();
-  const trail = continueTrail(continuations, offers && continueAgent !== undefined);
 
   const press = () => {
     if (continueAgent === undefined || busy) return;
@@ -109,42 +108,128 @@ export function ContinueAgent({
     );
   };
 
-  switch (trail.kind) {
-    case CONTINUE_TRAIL.NONE:
-      return null;
-    case CONTINUE_TRAIL.OFFER:
-      return (
-        <span className="agent-continue">
-          <button
-            type="button"
-            className="toolbar-button bordered-button failure-note-remedy"
-            disabled={busy}
-            aria-busy={busy}
-            onClick={press}
-          >
-            <ArrowRightIcon aria-hidden="true" />
-            {CONTINUE_LABEL}
-          </button>
-          {note === undefined ? null : (
-            <span className="agent-continue-note" role="alert">
-              {note.text}
-            </span>
-          )}
+  if (!offers || continueAgent === undefined) return null;
+  return (
+    <span className="agent-continue">
+      <button
+        type="button"
+        className="toolbar-button bordered-button failure-note-remedy"
+        disabled={busy}
+        aria-busy={busy}
+        onClick={press}
+      >
+        <ArrowRightIcon aria-hidden="true" />
+        {CONTINUE_LABEL}
+      </button>
+      {note === undefined ? null : (
+        <span className="agent-continue-note" role="alert">
+          {note.text}
         </span>
-      );
-    case CONTINUE_TRAIL.CONTINUED:
-      return (
-        <span className="agent-continue" data-continued="">
-          {CONTINUED_IN}
-          {trail.agents.map((agent) => (
-            <AgentActorRef
-              key={agent.id}
-              subject={agentSubject(control, agent.id, NOTHING_HELD, false)}
-              models={control.models}
-              onOpen={() => onOpenAgent?.(agent.id)}
-            />
-          ))}
+      )}
+    </span>
+  );
+}
+
+/** What names the agents that continued another: the control their chips are read from, and the door that opens one's tab. */
+interface ContinuedDoors {
+  readonly agentIds: readonly string[];
+  readonly control: Pick<
+    CodingAgentsControl,
+    "agents" | "archived" | "models" | "me" | "pullRequests" | "chatOn"
+  >;
+  /** Opens an agent's tab; none where nothing opens one, when a chip hangs its card alone. */
+  readonly onOpenAgent: ((agentId: string) => void) | undefined;
+}
+
+/** Continued in, then each continuing agent's chip, a comma held after each but the last so no gap opens before it. */
+function ContinuedIn({ agentIds, control, onOpenAgent }: ContinuedDoors): React.JSX.Element {
+  return (
+    <span className="agent-continued-in" data-continued="">
+      <span>{CONTINUED_IN}</span>
+      {agentIds.map((agentId, index) => (
+        <span key={agentId} className="agent-continued-item">
+          <AgentActorRef
+            subject={agentSubject(control, agentId, NOTHING_HELD, false)}
+            models={control.models}
+            onOpen={() => onOpenAgent?.(agentId)}
+          />
+          {index === agentIds.length - 1 ? null : <span aria-hidden="true">,</span>}
         </span>
-      );
-  }
+      ))}
+    </span>
+  );
+}
+
+/** The row at a transcript's end naming the agents that continued it, led by an arrow as Forked to is by its split. */
+export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
+  return (
+    <p className="agent-continued" data-continued-trail="">
+      <ArrowRightIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      <ContinuedIn {...doors} />
+    </p>
+  );
+}
+
+/**
+ * The quiet note in a continued agent's box: Continued in and the agents'
+ * chips, then Stop while a turn still runs, and Archive, which toasts with
+ * Undo once it took and says why where it did not. An agent already
+ * archived is offered no Archive.
+ */
+export function ContinuedComposerNote({
+  agent,
+  doors,
+  stop,
+  onArchive,
+}: {
+  agent: CodingAgentSummary;
+  doors: ContinuedDoors;
+  /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
+  stop?: (() => Promise<void>) | undefined;
+  onArchive: CodingAgentsControl["onArchive"];
+}): React.JSX.Element {
+  const [stopping, setStopping] = useState(false);
+  const toast = useToast();
+  const pressStop = (run: () => Promise<void>) => {
+    setStopping(true);
+    run().finally(() => setStopping(false));
+  };
+  const archive = () => {
+    void onArchive(agent.id, true).then((result) => {
+      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      }
+    });
+  };
+  return (
+    <Banner
+      look={BANNER_LOOK.COMPOSER}
+      className="continued-composer"
+      glyph={<ArrowRightIcon aria-hidden="true" />}
+      actions={
+        stop === undefined && agent.archivedAt !== undefined ? undefined : (
+          <>
+            {stop === undefined ? null : (
+              <Button
+                busy={stopping}
+                busyLabel={CONTINUED_COPY.STOPPING}
+                onClick={() => pressStop(stop)}
+              >
+                {CONTINUED_COPY.STOP}
+              </Button>
+            )}
+            {agent.archivedAt !== undefined ? null : (
+              <Button variant={BUTTON_VARIANT.PRIMARY} onClick={archive}>
+                {CONTINUED_COPY.ARCHIVE}
+              </Button>
+            )}
+          </>
+        )
+      }
+    >
+      <Text tone={TEXT_TONE.MUTED}>
+        <ContinuedIn {...doors} />
+      </Text>
+    </Banner>
+  );
 }
