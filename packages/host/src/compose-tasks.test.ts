@@ -2440,6 +2440,10 @@ it.effect(
         [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
         [1, [CODING_AGENT_STATUS.STARTING]],
       );
+      assert.deepEqual(
+        last()?.planAgents?.map((each) => [each.planId, each.status, each.turnId]),
+        [[INVITES, CODING_AGENT_STATUS.STARTING, null]],
+      );
 
       const listedBefore = service.reads.filter((read) => read === "list").length;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
@@ -2471,9 +2475,11 @@ it.effect(
       realtime.deliver("agents", []);
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
+      assert.deepEqual(last()?.planAgents, []);
 
       realtime.fail("plans");
       yield* realtime.settled;
+      assert.equal(last()?.planAgents, undefined, "a list no longer live carries no agents");
       service.liveList = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED };
       const listedBefore = service.reads.filter((read) => read === "list").length;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);

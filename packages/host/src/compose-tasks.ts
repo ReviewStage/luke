@@ -537,13 +537,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
     openLive: dependencies.openLive ?? openRealtimeClient,
     now: kernel.now,
+    // The agents on plans are carried only while the list stands live, which is how main knows it does.
     standing: (live) => {
       listLive = live;
+      if (live || view.planAgents === undefined) return;
+      const { planAgents: _planAgents, ...rest } = view;
+      view = rest;
+      publish();
     },
-    publish: (listed) =>
+    publish: ({ list, planAgents }) =>
       write({
-        tasks: listed.plans,
-        tasklessAgents: listed.planlessAgents ?? [],
+        tasks: list.plans,
+        tasklessAgents: list.planlessAgents ?? [],
+        planAgents,
         listStatus: TASKS_READ.READY,
       }),
   });

@@ -6,10 +6,12 @@ import { Database } from "@luke/database/core/query";
 import {
   archiveCodingAgent,
   createCodingAgent,
+  listCodingAgents,
   pinCodingAgent,
   recordCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
 import { listTasks, updateTask } from "@luke/database/models/task-store";
+import { readAccountNames } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { messages, turns } from "@luke/database/schemas/storage";
@@ -20,11 +22,17 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { taskListLiveRowsSchema, taskListOfLiveRows } from "@luke/features/task-list-live";
+import {
+  planAgentsOfLiveRows,
+  taskListLiveRowsSchema,
+  taskListOfLiveRows,
+} from "@luke/features/task-list-live";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
+import { codingAgentSummary, summaryAccounts } from "../agents/coder-host/status.js";
+import { standingsOf } from "../agents/coder-host/stop.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { taskListLiveStatements } from "./task-list-live.js";
 
@@ -126,15 +134,29 @@ const lineOf = (
 const runLive = (statement: LiveStatement) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe(statement.sql, [...statement.params]));
 
-/** The list as the desktop builds it from the live rows, at `now`. */
-const liveListOf = (userId: string, now: number) =>
+/** The rows the live statements deliver to the account, decoded as the desktop decodes them. */
+const liveRowsOf = (userId: string) =>
   Effect.gen(function* () {
     const statements = Option.getOrThrow(taskListLiveStatements(userId));
-    const rows = yield* Schema.decodeUnknownEffect(taskListLiveRowsSchema)({
+    return yield* Schema.decodeUnknownEffect(taskListLiveRowsSchema)({
       plans: yield* runLive(statements.plans),
       agents: yield* runLive(statements.agents),
     });
-    return taskListOfLiveRows(rows, now);
+  });
+
+/** The list as the desktop builds it from the live rows, at `now`. */
+const liveListOf = (userId: string, now: number) =>
+  Effect.map(liveRowsOf(userId), (rows) => taskListOfLiveRows(rows, now));
+
+/** A plan's agents as its own list answers them at `now`, as the service's endpoint builds them. */
+const heldPlanAgentsOf = (userId: string, taskId: string, now: number) =>
+  Effect.gen(function* () {
+    const agents = yield* listCodingAgents(userId, taskId);
+    const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
+    const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
+    return agents.map((agent) =>
+      codingAgentSummary(agent, standing(agent.conversationId), now, names),
+    );
   });
 
 /**
@@ -223,6 +245,14 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
 
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
+        }
+        // Every plan's agents, as each plan's own list names them, for the desktop's ledger.
+        for (const reader of [owner, teammate]) {
+          const planAgents = planAgentsOfLiveRows(yield* liveRowsOf(reader), NOW);
+          assert.deepEqual(planAgents, [
+            ...(yield* heldPlanAgentsOf(reader, plan.id, NOW)),
+            ...(yield* heldPlanAgentsOf(reader, shelved.id, NOW)),
+          ]);
         }
         const read = yield* liveListOf(owner, NOW);
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;

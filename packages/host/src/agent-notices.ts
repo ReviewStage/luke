@@ -24,7 +24,6 @@ import { linkLabels } from "@luke/features/mention-link";
 import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TasksView } from "@luke/features/tasks-view";
-import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 
@@ -41,7 +40,11 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * automation started with no plan is held from the plan list, which carries
  * the account's own beside the plans, and from any answer naming it, and
  * while it works it is read again by itself on the same clock, as its page
- * reads it, having no plan to be listed with. The ledger
+ * reads it, having no plan to be listed with. Where the plan list is
+ * followed live over Neon Realtime, none of that is read on a clock: the
+ * list carries every agent on a plan and every one with no plan as each
+ * moves, the ledger is fed from it, and the watch stands only while it is
+ * not. The ledger
  * keys an agent's run by the turn its status is read from (`turnId`): a
  * status that moves from still writing to ended under one turn is that
  * turn's end, announced once, and as the agent's unseen dot, until its tab
@@ -79,8 +82,8 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * agent's unseen dot is set as the end is seen, ahead of the read.
  *
  * The sidebar's plan rows say which plans have an agent at work and which
- * a pull request, from the plan list, which is read on no clock. So the
- * ledger asks for the list again whenever it sees an agent start or end,
+ * a pull request, from the plan list, which is read on no clock. So, where
+ * the list is not followed live, the ledger asks for the list again whenever it sees an agent start or end,
  * and whenever a read of what an agent published, the panel's or the
  * notice's own, finds a pull request other than the one it last saw for
  * that agent, since that read is what the service keeps for the list.
@@ -253,6 +256,14 @@ export interface AgentNoticesDependencies {
     /** The workspace whose list holds the item, which the window lists first; absent from a service before it. */
     readonly workspaceId?: string;
   }) => void;
+  /**
+   * Whether the plan list stands followed over Neon Realtime, from where the
+   * launch stands and at each change: while it does, every agent on a plan
+   * arrives through `observeFollowed` and the list moves by itself, so the
+   * watch lists nothing and no read of the list is asked for. Never, where
+   * none is handed in.
+   */
+  listFollowed?: Stream.Stream<boolean>;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -274,6 +285,8 @@ export interface AgentNotices {
   observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void;
   /** A plan the host no longer holds: its agents are forgotten. */
   observeTaskGone(taskId: string): void;
+  /** Every agent on a plan as the list followed live carries them, and the plans it holds: an agent of any other plan is forgotten. */
+  observeFollowed(agents: readonly CodingAgentSummary[], taskIds: readonly string[]): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
   /** The panel said which plan's Inbox tab it shows, or none. */
@@ -538,6 +551,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const ends = yield* Queue.unbounded<TurnEnd>();
     const interval = dependencies.watchInterval ?? WATCH_INTERVAL;
     let models: readonly CatalogModel[] | undefined;
+    /** Whether the plan list stands followed live, which then moves by itself. */
+    let followed = false;
     let shownAgent: string | null = null;
     let focused = false;
     /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
@@ -549,6 +564,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** The highest revision any answer for the account held of each item, so one back unchanged is known. */
     const seenRevision = new Map<string, number>();
     let shownInbox: string | null = null;
+
+    /** The list asked to be read again, so its rows say what moved; a list followed live already says it. */
+    function listMoved(): void {
+      if (!followed) dependencies.onTaskAgentsMoved();
+    }
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -572,7 +592,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void {
       const was = published.get(agentId) ?? null;
       published.set(agentId, pullRequest);
-      if (!samePublished(was, pullRequest)) dependencies.onTaskAgentsMoved();
+      if (!samePublished(was, pullRequest)) listMoved();
     }
 
     /** The pull request a completed turn opened, where the read finds one; nothing for any other end, or a read that did not answer. */
@@ -814,7 +834,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was === undefined) {
         if (ledger.size === 0) holder = dependencies.signedInAs();
         ledger.set(agentId, next);
-        if (stillWriting(next.status)) dependencies.onTaskAgentsMoved();
+        if (stillWriting(next.status)) listMoved();
         return;
       }
       // The reads overlap, so a list can land after a newer read moved the
@@ -829,7 +849,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         ledger.set(agentId, { ...next, pastTurns: was.pastTurns });
         if (stillWriting(next.status)) return;
         ended(agentId, next);
-        dependencies.onTaskAgentsMoved();
+        listMoved();
         return;
       }
       // A new turn: the one before it is left behind, and its own end is the next notice.
@@ -837,7 +857,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was.turnId !== null) pastTurns.add(was.turnId);
       ledger.set(agentId, { ...next, pastTurns });
       if (!stillWriting(next.status)) ended(agentId, next);
-      dependencies.onTaskAgentsMoved();
+      listMoved();
     }
 
     /** Lets go of every agent `keep` refuses, their dots with them, as a plan or an agent deleted or an account left has no tab to clear one. */
@@ -945,7 +965,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         if (held !== undefined && !stillWriting(held.status) && !held.awaiting) {
           ledger.set(agent.id, { ...held, awaiting: true });
           // The service reads the agent running from the message on, so the list is read again now.
-          dependencies.onTaskAgentsMoved();
+          listMoved();
         }
       },
       observeStatus: (agentId, status) => {
@@ -961,6 +981,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       },
       observePublished,
       observeTaskGone: (taskId) => forget((agent) => agent.taskId !== taskId),
+      observeFollowed: (agents, taskIds) => {
+        const held = new Set(taskIds);
+        forget((agent) => agent.taskId === null || held.has(agent.taskId));
+        notices.observeAgents(agents);
+      },
       shown: (agentId) => {
         shownAgent = agentId;
         seen(agentId);
@@ -1007,10 +1032,25 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       }),
     );
     // The watch never fires at the fork itself: nothing is in the ledger at
-    // launch, so the first tick is one interval on, and each after it.
-    yield* scheduleOnce(
-      Duration.toMillis(interval),
+    // launch, so the first tick is one interval on, and each after it. It
+    // stands only while the plan list is not followed live, which says
+    // every agent's standing as it moves.
+    const watching = Effect.andThen(
+      Effect.sleep(interval),
       Effect.repeat(watch, Schedule.spaced(interval)),
+    );
+    yield* Effect.forkScoped(
+      Stream.runDrain(
+        Stream.switchMap(
+          Stream.changes(
+            Stream.concat(dependencies.listFollowed ?? Stream.succeed(false), Stream.never),
+          ),
+          (live) => {
+            followed = live;
+            return live ? Stream.empty : Stream.fromEffect(watching);
+          },
+        ),
+      ),
     );
     // Each account's inbox read in turn, the read held for the last one
     // ended as the next is signed in, so nothing of one is read for another.

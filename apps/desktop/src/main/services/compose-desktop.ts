@@ -289,6 +289,10 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showFailedRun(place);
         },
+        listFollowed: Stream.map(
+          state.changes,
+          (document) => document.tasks.planAgents !== undefined,
+        ),
         automationsOn: () =>
           experimentOn(
             state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
@@ -309,6 +313,28 @@ export function composeDesktop(
                 Effect.sync(() =>
                   config.report(
                     `the agents with no plan could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
+                  ),
+                ),
+            ),
+        ),
+      );
+      // Every agent on a plan, while the list is followed live, is the
+      // notices' to hold in place of the watch's own reads, and a plan the
+      // list no longer holds takes its agents with it.
+      yield* Effect.forkScoped(
+        Stream.runForEach(
+          Stream.changes(Stream.map(state.changes, (document) => document.tasks.planAgents)),
+          (agents) =>
+            Effect.catchDefect(
+              Effect.sync(() => {
+                if (agents === undefined) return;
+                const taskIds = state.snapshot().tasks.tasks.map((each) => each.id);
+                notices.observeFollowed(agents, taskIds);
+              }),
+              (defect) =>
+                Effect.sync(() =>
+                  config.report(
+                    `the agents on plans could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
                   ),
                 ),
             ),
