@@ -9,9 +9,9 @@ import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
+import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 import type { TerminalHandle } from "../terminal/contract";
 import { onMacTerminalPort } from "./mac-terminal-port";
-import { TERMINAL_LOAD_FAILED, terminalModuleAtom } from "./terminal-bundle";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -51,7 +51,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   const [branch, setBranch] = useState(known?.asked === asked ? known.branch : undefined);
   const { act } = useAct();
   const openLink = useOpenLink();
-  const loaded = useAtomValue(terminalModuleAtom);
+  const loaded = useAtomValue(useSideBundles().terminal);
   const module = Option.getOrUndefined(AsyncResult.value(loaded));
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const port = useRef<MessagePort | undefined>(undefined);

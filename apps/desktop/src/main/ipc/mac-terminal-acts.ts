@@ -23,6 +23,7 @@ import {
   type MacTerminalPortOutbound,
   macTerminalPortInboundSchema,
 } from "@luke/features/mac-terminal-wire";
+import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
 import { ACT, ACT_KIND } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
 import {
@@ -36,7 +37,6 @@ import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
 import type { WebContents } from "electron";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 type MacTerminalActKind =
   | typeof ACT_KIND.MAC_REPOSITORIES
@@ -95,7 +95,7 @@ function refuseUnlessPanel(kind: MacTerminalActKind, sender: ActSender): void {
 
 export function macTerminalActRows(
   dependencies: MacTerminalActsDependencies,
-): Pick<ActRows, MacTerminalActKind> {
+): Pick<ActRows<WebContents>, MacTerminalActKind> {
   const { host, stateRoot, ports, start } = dependencies;
   /**
    * Each panel's terminals, by the agent whose branch each opened, and the

@@ -2,8 +2,8 @@ import { useAtomValue } from "@effect/atom-react";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DIFF_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 import type { DiffLook, DiffSelection, DiffViewHandle } from "../diff-view/contract";
-import { DIFF_LOAD_FAILED, diffViewModuleAtom } from "./diff-view-bundle";
 import { useFileViewSettings } from "./file-view-settings";
 
 /**
@@ -100,7 +100,7 @@ export function PierreDiff({
   /** Handed the box the diff is drawn in, which the view measures for a split's room; a door that stays the same, as a state's setter does. */
   boxRef?: (element: HTMLDivElement | null) => void;
 }): React.JSX.Element {
-  const loaded = useAtomValue(diffViewModuleAtom);
+  const loaded = useAtomValue(useSideBundles().diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<DiffViewHandle | undefined>(undefined);

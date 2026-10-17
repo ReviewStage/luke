@@ -16,6 +16,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppPlatform } from "#testing/app-platform";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { conversationOf, worker, workerCall, workTurn } from "#testing/task-work";
@@ -114,19 +116,29 @@ const READER = worker("w", "Read the invite emails.", {
 
 const roots: Root[] = [];
 
-beforeEach(installScrollIntoView);
+beforeEach(() => {
+  installScrollIntoView();
+  handCapabilities(DESKTOP_CAPABILITIES);
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
 
+/** Waits out the few microtasks the window's document takes to arrive after the first draw. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
 /**
  * The task open on its own tab, a working agent's tab and a draft's beside
  * it, and the side panel open with a working subagent's tab, the done
  * agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
-function mount(): HTMLElement {
+async function mount(): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -188,6 +200,7 @@ function mount(): HTMLElement {
       ),
     ),
   );
+  await settle();
   return container;
 }
 
@@ -220,8 +233,8 @@ function rowLooks(column: Element): Map<string, Look> {
   return new Map(rows);
 }
 
-test("the column's + offers a working agent and the draft in the look their tabs wear: the agent's mark wearing where it stands, and the draft named New coding agent", () => {
-  const column = mount().querySelector(".main-tabs");
+test("the column's + offers a working agent and the draft in the look their tabs wear: the agent's mark wearing where it stands, and the draft named New coding agent", async () => {
+  const column = (await mount()).querySelector(".main-tabs");
   assert.ok(column, "the plan's column's strip");
   const tabs = tabLooks(column);
   const rows = rowLooks(column);
@@ -232,8 +245,8 @@ test("the column's + offers a working agent and the draft in the look their tabs
   assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
 });
 
-test("the plan's own tab closes beside the agents', and the column's + offers the plan to open it again in the look its tab wears", () => {
-  const column = mount().querySelector(".main-tabs");
+test("the plan's own tab closes beside the agents', and the column's + offers the plan to open it again in the look its tab wears", async () => {
+  const column = (await mount()).querySelector(".main-tabs");
   assert.ok(column, "the plan's column's strip");
   const pill = column.querySelector('.tab[data-anchored="true"]');
   assert.equal(pill?.getAttribute("data-closable"), "true");
@@ -243,8 +256,8 @@ test("the plan's own tab closes beside the agents', and the column's + offers th
   assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name));
 });
 
-test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear, the Pull request named by its number and title rather than its agent's name", () => {
-  const panel = mount().querySelector(".side-panel-tabs");
+test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear, the Pull request named by its number and title rather than its agent's name", async () => {
+  const panel = (await mount()).querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
   const tabs = tabLooks(panel);
   const rows = rowLooks(panel);
@@ -260,8 +273,8 @@ test("the side panel's + offers a working subagent and an agent's Pull request i
   );
 });
 
-test("the plan's own tab hangs the plan's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", () => {
-  const column = mount().querySelector(".main-tabs");
+test("the plan's own tab hangs the plan's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", async () => {
+  const column = (await mount()).querySelector(".main-tabs");
   const tab = column?.querySelector<HTMLElement>('[role="tab"]');
   assert.equal(tab?.textContent, TASK.name);
   act(() => {
@@ -275,8 +288,8 @@ test("the plan's own tab hangs the plan's card, as its sidebar row does, its age
   assert.equal(card.querySelector("[data-task-card-agent]")?.textContent, "Invite flow");
 });
 
-test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", () => {
-  const panel = mount().querySelector(".side-panel-tabs");
+test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
+  const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
     (each) => each.querySelector(".tab-label")?.firstChild?.textContent === "Terminal",
   );
@@ -296,8 +309,9 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   );
 });
 
-test("a page's tab hangs the page's card: its title and version over its newest version drawn small, in a frame that runs its scripts alone, takes no pointer or focus, and is left out of the recording", () => {
-  const panel = mount().querySelector(".side-panel-tabs");
+test("a page's tab hangs the page's card: its title and version over its newest version drawn small, in a frame that runs its scripts alone, takes no pointer or focus, and is left out of the recording", async () => {
+  fakeAppPlatform({ pageFrameUrl });
+  const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
     (each) => each.querySelector(".tab-label")?.textContent === FUNNEL.title,
   );

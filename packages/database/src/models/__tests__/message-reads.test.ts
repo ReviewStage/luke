@@ -16,17 +16,21 @@ import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  awaitingLinesOf,
   listMessagesBefore,
   listMessagesPast,
   listTurnOpeners,
   messageCursorNow,
   messageSeqOf,
   runningChildTurns,
+  turnStoppedUnderReached,
 } from "../message-reads.js";
+import { storeWriter } from "../writer.js";
 
 /**
  * Where a reader of a conversation stands once it has every row, and whether
- * a subagent's session under a conversation still runs, over a real dialect.
+ * a subagent's session under a conversation still runs, and which turn a
+ * tool call's Stop stands on by its key, over a real dialect.
  *
  * Synthetic accounts, conversations, and rows throughout.
  */
@@ -51,7 +55,17 @@ const openConversation = (userId: string, parentConversationId?: string) =>
     return id;
   });
 
-const writeLine = (userId: string, conversationId: string, seq: number) =>
+/** A coding agent's conversation of the account's, whose turnless lines await their turn. */
+const openAgentConversation = (userId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const id = randomUUID();
+    yield* db.insert(conversations).values({ id, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+    return id;
+  });
+
+/** A developer's line no turn owns, written at `at` where given. */
+const writeLine = (userId: string, conversationId: string, seq: number, at = new Date()) =>
   Database.use((db) =>
     db.insert(messages).values({
       userId,
@@ -61,8 +75,8 @@ const writeLine = (userId: string, conversationId: string, seq: number) =>
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: `Line ${seq}` }],
       metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
-      createdAt: new Date(),
-      placedAt: new Date(),
+      createdAt: at,
+      placedAt: at,
     }),
   );
 
@@ -224,6 +238,49 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
         assert.deepEqual(yield* runningChildTurns(owner, parent), [running]);
         assert.deepEqual(yield* runningChildTurns(other, parent), []);
         assert.deepEqual(yield* runningChildTurns(owner, child), []);
+      }),
+  );
+
+  it.effect(
+    "a coding agent's lines awaiting a turn are read by when the newest was written, a line a turn owns and a task's spoken line are not, and another account reads none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const agent = yield* openAgentConversation(owner);
+        const idle = yield* openAgentConversation(owner);
+        const task = yield* openConversation(owner);
+        const taken = yield* openTurn(owner, idle, TURN_STATUS.SETTLED);
+        yield* writeLine(owner, agent, 1, new Date(1_000));
+        yield* writeLine(owner, agent, 2, new Date(5_000));
+        yield* writeTurnRow(owner, idle, 1, taken, MESSAGE_ROLE.USER);
+        yield* writeLine(owner, task, 1, new Date(3_000));
+
+        assert.deepEqual(
+          [...(yield* awaitingLinesOf(owner, [agent, idle, task])).entries()],
+          [[agent, new Date(5_000)]],
+        );
+        assert.deepEqual([...(yield* awaitingLinesOf(other, [agent]))], []);
+      }),
+  );
+
+  it.effect(
+    "a Stop made under a key is found by that key in its conversation alone, and a second Stop under another key keeps the first",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const conversation = yield* openConversation(owner);
+        const elsewhere = yield* openConversation(owner);
+        const writer = yield* storeWriter({ tools: {} });
+        const target = { userId: owner, conversationId: conversation };
+        const turnId = yield* openTurn(owner, conversation, TURN_STATUS.RUNNING);
+        assert.equal(yield* turnStoppedUnderReached(conversation, "call-1"), false);
+
+        yield* writer.requestTurnCancel(target, { turnId, at: new Date(), key: "call-1" });
+        yield* writer.requestTurnCancel(target, { turnId, at: new Date(), key: "call-2" });
+        assert.equal(yield* turnStoppedUnderReached(conversation, "call-1"), true);
+        assert.equal(yield* turnStoppedUnderReached(conversation, "call-2"), false);
+        assert.equal(yield* turnStoppedUnderReached(elsewhere, "call-1"), false);
       }),
   );
 });
