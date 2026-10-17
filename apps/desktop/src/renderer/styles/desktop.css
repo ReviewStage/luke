@@ -8097,8 +8097,8 @@ button.automation-run:hover {
   color: var(--luke-color-text-subtle);
 }
 
-/* The filters under the field, one pill each, the chosen one filled as a
-   filter chip is everywhere in the window. */
+/* The filters under the field, one shared filter chip each, in a row that
+   wraps under the field. */
 .command-palette-filters {
   display: flex;
   flex: 0 0 auto;
@@ -8109,29 +8109,6 @@ button.automation-run:hover {
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 0;
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.command-palette-filter {
-  height: 24px;
-  padding: 0 var(--luke-space-8);
-  border: 1px solid transparent;
-  border-radius: var(--luke-radius-full);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.command-palette-filter:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.command-palette-filter[aria-pressed="true"] {
-  border-color: var(--luke-color-border-selected);
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
 }
 
 .command-palette-list {

@@ -16,6 +16,10 @@ import { ChipFrame, type ChipFrameProps } from "./chip-frame.js";
  * - a field, a settings row's value, wears an outlined button's hairline,
  *   its words leading, so a picker and the buttons beside it read as one
  *   column.
+ * - a filter, one of a row of pills that narrow a list to one kind (⌘K's
+ *   All, Plans, Files), is a quiet capsule until it stands pressed
+ *   (`aria-pressed`), when it fills inside the selection's hairline; its
+ *   caller holds which one is pressed.
  *
  * A chip that opens a menu of values ends in the menu's small, muted
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
