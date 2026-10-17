@@ -15,7 +15,7 @@ import { PlanBody } from "./plan-body";
 import { RelativeTime } from "./relative-time";
 
 /**
- * relative-time.test.ts -- a save's age reads the same on the plan's own
+ * relative-time.test.ts -- a save's age reads the same on the task's own
  * "Edited" line as on its sidebar row, and a time hangs its full moment in
  * the window's tooltip.
  */
@@ -44,7 +44,7 @@ function mount(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** What the sidebar row and the plan's "Edited" line say of a plan the developer last saved at `at`. */
+/** What the sidebar row and the task's "Edited" line say of a task the developer last saved at `at`. */
 function saidOf(at: number) {
   const task: Task = {
     ...DOCUMENT_TASK,
@@ -71,7 +71,7 @@ function saidOf(at: number) {
 }
 
 test("a plan's Edited line says its age as its sidebar row does, a month old as a date", () => {
-  // Note that only the date is fixed, so the plan's minute reads `NOW` and nothing waits on a timer.
+  // Note that only the date is fixed, so the task's minute reads `NOW` and nothing waits on a timer.
   vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
 
   assert.deepEqual(saidOf(NOW - 10 * SECOND), { row: "now", edited: "Edited by you · now" });

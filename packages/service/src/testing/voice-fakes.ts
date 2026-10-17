@@ -236,7 +236,7 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
   rows: Map<string, FakeSessionRow>;
   /** The store id the fake minted for each live session's row, by live session id, as `register` answered it. */
   voiceSessionIds: Map<string, string>;
-  /** The plans the fake holds, by the account that holds each. */
+  /** The tasks the fake holds, by the account that holds each. */
   tasks: Array<{ userId: string; task: Task }>;
   /** Every usage snapshot, in order. */
   usage: Array<{ sessionId: string; seconds: number }>;

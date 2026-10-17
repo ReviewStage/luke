@@ -120,10 +120,13 @@
   --luke-color-ground: #fbfbfa;
   --luke-color-surface: oklch(1 0 0);
   --luke-color-overlay: oklch(1 0 0);
+  /* The site had one fill, its muted ground; a control's states need a
+     step each past it, the desktop's light steps, so a chosen segment or a
+     pressed button reads apart from one merely hovered. */
   --luke-color-fill-hover: oklch(0.97 0 0);
-  --luke-color-fill-strong: oklch(0.97 0 0);
-  --luke-color-fill-selected: oklch(0.97 0 0);
-  --luke-color-fill-pressed: oklch(0.97 0 0);
+  --luke-color-fill-strong: rgba(0, 0, 0, 0.06);
+  --luke-color-fill-selected: rgba(0, 0, 0, 0.07);
+  --luke-color-fill-pressed: rgba(0, 0, 0, 0.11);
   --luke-color-border: oklch(0.922 0 0);
   --luke-color-border-strong: oklch(0.922 0 0);
   --luke-color-border-selected: oklch(0.145 0 0);
@@ -180,9 +183,9 @@
   --luke-color-surface: #101114;
   --luke-color-overlay: #101114;
   --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
-  --luke-color-fill-strong: rgba(255, 255, 255, 0.05);
-  --luke-color-fill-selected: rgba(255, 255, 255, 0.05);
-  --luke-color-fill-pressed: rgba(255, 255, 255, 0.05);
+  --luke-color-fill-strong: rgba(255, 255, 255, 0.09);
+  --luke-color-fill-selected: rgba(255, 255, 255, 0.2);
+  --luke-color-fill-pressed: rgba(255, 255, 255, 0.26);
   --luke-color-border: rgba(255, 255, 255, 0.08);
   --luke-color-border-strong: rgba(255, 255, 255, 0.08);
   --luke-color-border-selected: rgba(255, 255, 255, 0.92);

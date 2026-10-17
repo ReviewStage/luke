@@ -1,12 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
+import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  DIFF_LAYOUT,
-  type DiffLook,
-  type DiffSelection,
-  type DiffViewHandle,
-} from "../diff-view/contract";
+import type { DiffLook, DiffSelection, DiffViewHandle } from "../diff-view/contract";
 import { DIFF_LOAD_FAILED, diffViewModuleAtom } from "./diff-view-bundle";
 import { useFileViewSettings } from "./file-view-settings";
 
@@ -38,24 +34,39 @@ export function useSplitRoom(element: HTMLElement | null): boolean {
   return roomy;
 }
 
-/** How the File tabs' settings draw a diff, unified where a split has no room. */
+/** How the diff settings draw a diff (`file-view-settings.ts`), unified where a split has no room. */
 export function useDiffLook(roomy: boolean): DiffLook {
   const { settings } = useFileViewSettings();
   return {
     layout: roomy ? settings.diffLayout : DIFF_LAYOUT.UNIFIED,
-    changedWords: settings.changedWords,
+    indicators: settings.diffIndicators,
+    inlineDiff: settings.inlineDiff,
+    backgrounds: settings.diffBackgrounds,
     lineNumbers: settings.lineNumbers,
     wrap: settings.wordWrap,
+    themes: { dark: settings.diffDarkTheme, light: settings.diffLightTheme },
+    font: settings.diffFont,
+    fontSize: settings.diffFontSize,
+    lineHeight: settings.diffLineHeight,
+    ligatures: settings.diffLigatures,
   };
 }
 
-/** Whether two looks draw a diff alike. */
+/** Whether two looks draw a diff alike: every setting the same, each appearance's theme among them. */
 function sameLook(a: DiffLook, b: DiffLook): boolean {
   return (
     a.layout === b.layout &&
-    a.changedWords === b.changedWords &&
+    a.indicators === b.indicators &&
+    a.inlineDiff === b.inlineDiff &&
+    a.backgrounds === b.backgrounds &&
     a.lineNumbers === b.lineNumbers &&
-    a.wrap === b.wrap
+    a.wrap === b.wrap &&
+    a.themes.dark === b.themes.dark &&
+    a.themes.light === b.themes.light &&
+    a.font === b.font &&
+    a.fontSize === b.fontSize &&
+    a.lineHeight === b.lineHeight &&
+    a.ligatures === b.ligatures
   );
 }
 
@@ -120,7 +131,12 @@ export function PierreDiff({
   useEffect(() => {
     if (handle.current === undefined) return;
     const was = drawn.current;
-    if (was.patch === patch && sameLook(was.look, look) && sameSelection(was.selected, selected)) {
+    if (
+      was.patch === patch &&
+      sameLook(was.look, look) &&
+      sameSelection(was.selected, selected) &&
+      was.excerpt === excerpt
+    ) {
       return;
     }
     drawn.current = { patch, look, selected, excerpt };

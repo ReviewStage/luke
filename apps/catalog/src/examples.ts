@@ -1,8 +1,15 @@
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
+import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { SEGMENTED_EXAMPLE } from "./examples/segmented";
+import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
+import { SKELETONS_EXAMPLE } from "./examples/skeletons";
+import { SPINNERS_EXAMPLE } from "./examples/spinners";
+import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
@@ -29,4 +36,11 @@ export const EXAMPLES: readonly Example[] = [
   CHIPS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
+  CHECKBOXES_EXAMPLE,
+  SWITCHES_EXAMPLE,
+  SEGMENTED_EXAMPLE,
+  SPINNERS_EXAMPLE,
+  SKELETONS_EXAMPLE,
+  SETTINGS_ROW_EXAMPLE,
+  AUTH_PAGE_EXAMPLE,
 ];

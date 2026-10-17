@@ -18,6 +18,10 @@ import {
 } from "@luke/features/inbox-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import {
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_OUTCOME,
+} from "@luke/features/pull-request-write-wire";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
@@ -217,6 +221,11 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
         Effect.sync(() => {
           asked.push(`overview-conversation:${agentId}`);
           return { pullRequest: null };
+        }),
+      codingAgentPullRequestAction: ({ agentId, request }) =>
+        Effect.sync(() => {
+          asked.push(`pull-request-action:${agentId}:${request.action}`);
+          return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE } as const;
         }),
       codingAgentGitHubImage: ({ agentId }) =>
         Effect.sync(() => {
@@ -431,6 +440,33 @@ it.effect(
       });
       assert.deepEqual(listed, { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
       assert.deepEqual(asked, ["workspace agents workspace-1"]);
+    }),
+);
+
+it.effect(
+  "a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const act = {
+        kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION,
+        payload: { agentId: AGENT_ID, request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT } },
+      } as const;
+
+      const refused = yield* router.performAct(act, VOICE);
+      const changed = yield* router.performAct(act, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION].refusal,
+      });
+      assert.deepEqual(changed, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
+      });
+      assert.deepEqual(asked, [
+        `pull-request-action:${AGENT_ID}:${PULL_REQUEST_ACTION.CONVERT_TO_DRAFT}`,
+      ]);
     }),
 );
 

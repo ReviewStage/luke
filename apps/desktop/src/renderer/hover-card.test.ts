@@ -24,7 +24,7 @@ import type { SkillSource } from "./tasks/skill-picker";
 import { TurnCard } from "./tasks/turn-card";
 
 /**
- * hover-card.test.ts -- every hover card heads itself alike: a plan's, a
+ * hover-card.test.ts -- every hover card heads itself alike: a task's, a
  * skill's, an agent tab's, a Changes tab's, a turn's, and a call's each
  * name their subject in the one head, with the line under the name and the
  * corner in the same places, and a call's card is a turn's card.

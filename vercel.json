@@ -153,6 +153,10 @@
           "dest": "/api/default.js?route=agents/pull-request&id=$1"
         },
         {
+          "src": "/api/agents/([^/]+)/pull-request/action",
+          "dest": "/api/default.js?route=agents/pull-request-action&id=$1"
+        },
+        {
           "src": "/api/agents/([^/]+)/changes",
           "dest": "/api/default.js?route=agents/changes&id=$1"
         },
@@ -465,7 +469,7 @@
           "dest": "/admin.html"
         },
         {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|issue)(?:/[^/]+)*/?",
           "dest": "/open.html"
         }
       ]

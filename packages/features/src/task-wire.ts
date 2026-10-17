@@ -11,36 +11,36 @@ import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
- * task-wire.ts -- a named feature plan and its one saved document, as the Plans tab and the service read them.
+ * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
  *
- * A plan is its owner's name for it and one current document: one free
+ * A task is its owner's name for it and one current document: one free
  * Markdown text (`plan-document.ts`, `docs/TASKS.md`), answered as the
  * document's `body` with no title line, since the name is its own, and an
  * empty `assumptions` list, since its assumptions are a section of the text;
  * the list stays on the wire because a desktop through v0.11.0 requires it.
- * The text is written by the plan's notetaker and its coding agents through
+ * The text is written by the task's notetaker and its coding agents through
  * notes, and by the developer whole. The service keeps every save as a
- * revision of the plan under the writer who made it, and a plan carries its
+ * revision of the plan under the writer who made it, and a task carries its
  * newest as `lastEdit`, which is what the window's "Edited by" line reads,
  * and who last changed each section as `sectionEdits`, by heading.
- * A plan may name the GitHub repository it is about, `owner/name` as
+ * A task may name the GitHub repository it is about, `owner/name` as
  * `github-repositories-wire.ts` spells it, which the service confirms the
  * account reaches through the Luke GitHub App before it keeps it; null is a
- * plan with no repository yet, and every plan from before repositories.
- * A plan may be pinned, which the sidebar lists first, and archived, which
+ * task with no repository yet, and every task from before repositories.
+ * A task may be pinned, which the sidebar lists first, and archived, which
  * the list leaves out unless asked for it (`TASK_LIST_QUERY`), so a build
- * that knows nothing of archiving never sees an archived plan. Both are the
+ * that knows nothing of archiving never sees an archived task. Both are the
  * account's, so they follow it to every Mac it signs in on.
- * A row of the list also says, in brief, what the plan's coding agents are
+ * A row of the list also says, in brief, what the task's coding agents are
  * doing and what they published (`taskAgentsSummarySchema`), so the sidebar
- * can mark a plan at work or with a pull request without a read per row.
- * A plan belongs to one workspace, which its summary names; a start names
+ * can mark a task at work or with a pull request without a read per row.
+ * A task belongs to one workspace, which its summary names; a start names
  * the workspace it starts in, or none for the account's first one.
- * The starting account and the conversation a plan resumes in are the
+ * The starting account and the conversation a task resumes in are the
  * service's own and never travel here.
  *
  * Every request refuses a key it does not name, as every request frame on
- * this wire does, so a body cannot smuggle an account or a plan id past the
+ * this wire does, so a body cannot smuggle an account or a task id past the
  * bearer and the path that name them. Declared directly with Effect's
  * `Schema.Struct` and exported under its own name.
  *
@@ -50,7 +50,7 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
  */
 
 export const TASK_BOUNDS = {
-  /** The most characters a plan's name may spell. */
+  /** The most characters a task's name may spell. */
   MAX_NAME_CHARS: 200,
   /** A document body past this is not a plan a coding agent can take in one prompt. */
   MAX_BODY_CHARS: 200_000,
@@ -103,7 +103,7 @@ export const PLAN_FIELD = {
 
 export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
 
-/** The one saved document of a plan, replaced whole by every save. */
+/** The one saved document of a task, replaced whole by every save. */
 export const planDocumentSchema = EffectSchema.Struct({
   /** The plan's whole text, as written. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
@@ -114,7 +114,7 @@ export const planDocumentSchema = EffectSchema.Struct({
 
 export type PlanDocument = typeof planDocumentSchema.Type;
 
-/** A plan's repository as a request names it: a full name, or null for none. */
+/** A task's repository as a request names it: a full name, or null for none. */
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
@@ -140,7 +140,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 
-/** Renaming a plan (PATCH): its new name, under the same rules as the name it started with. */
+/** Renaming a task (PATCH): its new name, under the same rules as the name it started with. */
 export const taskRenameRequestSchema = EffectSchema.Struct({
   name: trimmedText(TASK_BOUNDS.MAX_NAME_CHARS),
 });
@@ -165,14 +165,14 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
 }
 
 /**
- * Changing a plan (PATCH): its name, its repository, whether it is pinned,
+ * Changing a task (PATCH): its name, its repository, whether it is pinned,
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
  * which comes only with `pinned: true` and pins a plan not yet pinned,
  * whether it is archived, the workspace it moves to, or any of them at once.
  * A rename is one of these; a repository is confirmed reachable by the
- * workspace before it is kept, and null clears it. A move is the plan's
+ * workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
- * the plan's repository.
+ * the task's repository.
  */
 export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
@@ -187,9 +187,9 @@ export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
 /**
  * A repository the account pinned in the sidebar, and the instant it was
- * pinned: a pinned repository's group of plans stands above the others,
+ * pinned: a pinned repository's group of tasks stands above the others,
  * newest pinned first. A pin is the account's, so it follows it to every
- * Mac it signs in on, as a plan's pin does, and it names the repository and
+ * Mac it signs in on, as a task's pin does, and it names the repository and
  * nothing more, so pinning one asks GitHub nothing.
  */
 export const repositoryPinSchema = EffectSchema.Struct({
@@ -216,7 +216,7 @@ export const repositoryPinRequestSchema = EffectSchema.Struct({
 });
 
 /**
- * The plan list's query (GET): `archived=include` lists the archived plans
+ * The task list's query (GET): `archived=include` lists the archived tasks
  * among the rest, each carrying its `archivedAt`. Without it they are left
  * out, which is what a build from before archiving asks.
  */
@@ -231,14 +231,14 @@ export const TASK_LIST_ARCHIVED = {
 
 const taskSummaryFields = {
   id: wireUuidSchema,
-  /** The workspace the plan belongs to. */
+  /** The workspace the task belongs to. */
   workspaceId: workspaceIdSchema,
   name: trimmedText(TASK_BOUNDS.MAX_NAME_CHARS),
-  /** Epoch milliseconds the plan was started. */
+  /** Epoch milliseconds the task was started. */
   createdAt: countedNumber,
   /** Epoch milliseconds the document was last saved; the start, before any save. */
   updatedAt: countedNumber,
-  /** The GitHub repository the plan is about, `owner/name`; null before one is chosen. */
+  /** The GitHub repository the task is about, `owner/name`; null before one is chosen. */
   repository: repositoryChoiceSchema,
   /**
    * The start again, answered only for a desktop through v0.7.1, which
@@ -248,26 +248,26 @@ const taskSummaryFields = {
    * longer supported.
    */
   openedAt: EffectSchema.optionalKey(countedNumber),
-  /** Epoch milliseconds the plan was pinned; absent while it is not, and from a service before pinning. */
+  /** Epoch milliseconds the task was pinned; absent while it is not, and from a service before pinning. */
   pinnedAt: EffectSchema.optionalKey(countedNumber),
   /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
   pinPosition: EffectSchema.optionalKey(EffectSchema.String),
-  /** Epoch milliseconds the plan was archived; absent while it is not, and from a service before archiving. */
+  /** Epoch milliseconds the task was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
   /**
-   * The account that started the plan, its owner, which alone may move it to
+   * The account that started the task, its owner, which alone may move it to
    * another workspace; absent from a service before it was sent.
    */
   ownerId: EffectSchema.optionalKey(EffectSchema.String),
   /**
-   * The owner by id and the name their account holds now, as the plan's ⋯
+   * The owner by id and the name their account holds now, as the task's ⋯
    * menu says who created it; absent once their account is gone, and from a
    * service before it was sent.
    */
   createdBy: EffectSchema.optionalKey(memberRefSchema),
 };
 
-/** How much of a plan's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
+/** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
 export const TASK_AGENTS_BOUNDS = {
   /** The most agents a row names: those at work first, then the newest started. */
   MAX_AGENTS: 3,
@@ -275,7 +275,7 @@ export const TASK_AGENTS_BOUNDS = {
   MAX_PULL_REQUESTS: 3,
 } as const;
 
-/** One of a plan's coding agents as its row names it: what it is called and runs on, where it stands, since when, and who started it. */
+/** One of a task's coding agents as its row names it: what it is called and runs on, where it stands, since when, and who started it. */
 export const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
@@ -301,7 +301,7 @@ export const taskAgentLineSchema = EffectSchema.Struct({
 
 export type TaskAgentLine = typeof taskAgentLineSchema.Type;
 
-/** A pull request one of a plan's agents opened, as GitHub last answered the service: where it stands and its size. */
+/** A pull request one of a task's agents opened, as GitHub last answered the service: where it stands and its size. */
 export const taskPullRequestLineSchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
@@ -316,7 +316,7 @@ export const taskPullRequestLineSchema = EffectSchema.Struct({
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;
 
 /**
- * What a plan's coding agents are doing and what they published, in brief:
+ * What a task's coding agents are doing and what they published, in brief:
  * how many agents it has and how many of them are at work, the few the row
  * names, and the pull requests they opened, each counted once by its
  * number. A pull request is as the service last read it from GitHub, so
@@ -345,8 +345,8 @@ export const taskAgentsSummarySchema = EffectSchema.Struct({
 export type TaskAgentsSummary = typeof taskAgentsSummarySchema.Type;
 
 /**
- * One row of the plan list: everything but the document, and what its
- * coding agents are doing, which only the list answers, and only for a plan
+ * One row of the task list: everything but the document, and what its
+ * coding agents are doing, which only the list answers, and only for a task
  * with an agent.
  */
 export const taskSummarySchema = EffectSchema.Struct({
@@ -356,10 +356,10 @@ export const taskSummarySchema = EffectSchema.Struct({
 
 export type TaskSummary = typeof taskSummarySchema.Type;
 
-/** The most saves by coding agents a plan answers, newest last; the same bound the service keeps. */
+/** The most saves by coding agents a task answers, newest last; the same bound the service keeps. */
 const MAX_AGENT_EDITS = 50;
 
-/** One save a coding agent made on the plan, as the window reads it: the agent, how it is named now, and when. */
+/** One save a coding agent made on the task, as the window reads it: the agent, how it is named now, and when. */
 export const agentEditLineSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   /** The agent as its row names it now: its title where it has one, else its model. */
@@ -400,11 +400,11 @@ export const planLastEditSchema = EffectSchema.Struct({
   by: EffectSchema.optionalKey(planEditorSchema),
   /** The coding agent as its row names it now; present only where a coding agent wrote it. */
   label: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
-  /** The coding agent that wrote it, which the window finds among the plan's agents; absent for any other writer and from a service before it. */
+  /** The coding agent that wrote it, which the window finds among the task's agents; absent for any other writer and from a service before it. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** Epoch milliseconds of the revision's latest save. */
   at: countedNumber,
-  /** Whether the revision was written on one of the plan's calls. */
+  /** Whether the revision was written on one of the task's calls. */
   duringCall: EffectSchema.Boolean,
 });
 
@@ -433,15 +433,15 @@ export const planSectionEditSchema = EffectSchema.Struct({
 
 export type PlanSectionEdit = typeof planSectionEditSchema.Type;
 
-/** One plan with its saved document, its newest revision, who last changed each section, and the saves coding agents made on it, oldest first. */
+/** One task with its saved document, its newest revision, who last changed each section, and the saves coding agents made on it, oldest first. */
 export const taskSchema = EffectSchema.Struct({
   ...taskSummaryFields,
   document: planDocumentSchema,
-  /** Optional on the wire so a plan from a service without the journal still reads; none is no edits. */
+  /** Optional on the wire so a task from a service without the journal still reads; none is no edits. */
   agentEdits: EffectSchema.optionalKey(
     EffectSchema.Array(agentEditLineSchema).check(EffectSchema.isMaxLength(MAX_AGENT_EDITS)),
   ),
-  /** Absent for a plan nobody has written since history began, and from a service before it. */
+  /** Absent for a task nobody has written since history began, and from a service before it. */
   lastEdit: EffectSchema.optionalKey(planLastEditSchema),
   /** The save that last changed each section, for the sections a save has changed; absent from a service before documents. */
   sectionEdits: EffectSchema.optionalKey(
@@ -466,12 +466,12 @@ export const taskListAnswerSchema = EffectSchema.Struct({
 
 export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 
-/** A started, opened, or changed plan (POST, GET, PATCH), with its document as saved. */
+/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved. */
 export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
 
 export type TaskAnswer = typeof taskAnswerSchema.Type;
 
-/** A deleted plan (DELETE): its row, its document, and its association are gone. */
+/** A deleted task (DELETE): its row, its document, and its association are gone. */
 export const taskDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
 
 /** How a plan's history is read: the newest revisions first, a page at a time. */
@@ -508,7 +508,7 @@ export const planRevisionLineSchema = EffectSchema.Struct({
 export type PlanRevisionLine = typeof planRevisionLineSchema.Type;
 
 /**
- * A page of a plan's history (GET `/api/tasks/{id}/revisions`), the newest
+ * A page of a plan's history (GET `/api/plans/{id}/revisions`), the newest
  * first, before the revision the `before` query names where it names one;
  * `earlier` is what the next older page is read before, absent on the oldest.
  */
@@ -522,9 +522,9 @@ export const planRevisionsAnswerSchema = EffectSchema.Struct({
 export type PlanRevisionsAnswer = typeof planRevisionsAnswerSchema.Type;
 
 /**
- * One revision's content (GET `/api/tasks/{id}/revisions/{seq}`): the plan
+ * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the plan
  * as it stood after the revision and as it stood before it, null for the
- * first, each formatted under the plan's name as it stands now, so a rename
+ * first, each formatted under the task's name as it stands now, so a rename
  * since is no difference between them.
  */
 export const planRevisionAnswerSchema = EffectSchema.Struct({
@@ -566,9 +566,9 @@ function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boo
 }
 
 /**
- * A place in the plan's repository: a file, named relative to the checkout
+ * A place in the task's repository: a file, named relative to the checkout
  * root, and the lines pointed at, or the file whole with none. Luke names one
- * through the planning model's `show_code`.
+ * through the brain's `show_code`.
  */
 export const codeRefSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
@@ -597,11 +597,11 @@ export const codeNoteSchema = EffectSchema.String.check(
 );
 
 /**
- * Code on screen during a planning call, with its lines: the place named,
+ * Code on screen during a task call, with its lines: the place named,
  * the repository the service read it from, the window of the file it
  * holds around the lines pointed at, and Luke's note on why he showed it,
  * which code shown before notes were asked for does not carry. The service reads the lines from the
- * planning session's checkout of the repository as `show_code` runs, and
+ * brain session's checkout of the repository as `show_code` runs, and
  * they travel in the call's own journal and on the `task.code` frame; the Mac
  * reads nothing of its own.
  */
@@ -654,10 +654,10 @@ export const TASK_FILE_BOUNDS = {
 } as const;
 
 /**
- * Why a file of the plan's repository was not read for the File tab, or a
+ * Why a file of the task's repository was not read for the File tab, or a
  * folder not listed for its tree: a secret file, no regular file (or no
  * folder) at the path, a file too large or not text,
- * a plan with no repository, a repository the Luke GitHub App does not
+ * a task with no repository, a repository the Luke GitHub App does not
  * reach for the account, or GitHub not answering just now.
  */
 export const TASK_FILE_REFUSAL = {
@@ -680,8 +680,8 @@ function fileWindowIsReadable(window: { firstLine: number; lastLine: number }): 
 }
 
 /**
- * One window of a file of the plan's repository, as the File tab asks it
- * (GET `/api/tasks/{id}/file`): the path, and its first and last line; or,
+ * One window of a file of the task's repository, as the File tab asks it
+ * (GET `/api/plans/{id}/file`): the path, and its first and last line; or,
  * with `raw`, the file's whole text, its lines uncut, as a copy or a
  * download of the file asks it, the window then standing for nothing. With
  * `ref`, the file is read as it stood at that commit, as an inbox item's
@@ -701,7 +701,7 @@ export const taskFileRequestSchema = EffectSchema.Struct({
 export type TaskFileRequest = typeof taskFileRequestSchema.Type;
 
 /**
- * A window of a file of the plan's repository as it stands now on its
+ * A window of a file of the task's repository as it stands now on its
  * default branch, or at the commit the request pinned, read through the
  * Luke GitHub App: the path, the repository and the branch or commit read,
  * the commit the lines were read at where GitHub named one, the line the first carried line is, how
@@ -724,7 +724,7 @@ export type TaskFileWindow = typeof taskFileWindowSchema.Type;
 
 /**
  * Why the File tab's file is not shown, and, where GitHub found nothing at
- * the path, the branch it was read on: the snippet came from the planning
+ * the path, the branch it was read on: the snippet came from the brain
  * session's checkout, which may hold a file that branch does not.
  */
 export const taskFileRefusalSchema = EffectSchema.Struct({
@@ -732,7 +732,7 @@ export const taskFileRefusalSchema = EffectSchema.Struct({
   branch: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/** A file of the plan's repository read raw: the path, the repository and the branch read, and the whole text as the file holds it. */
+/** A file of the task's repository read raw: the path, the repository and the branch read, and the whole text as the file holds it. */
 export const taskFileTextSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
@@ -749,7 +749,7 @@ export const taskFileAnswerSchema = EffectSchema.Union([
 
 export type TaskFileAnswer = typeof taskFileAnswerSchema.Type;
 
-/** What an entry of a folder of the plan's repository is, as the File tab's tree draws it: a folder opens into its own entries, and anything else is a file, read as a File tab reads one. */
+/** What an entry of a folder of the task's repository is, as the File tab's tree draws it: a folder opens into its own entries, and anything else is a file, read as a File tab reads one. */
 export const TASK_TREE_ENTRY = {
   FILE: "file",
   FOLDER: "folder",
@@ -763,8 +763,8 @@ export const TASK_TREE_BOUNDS = {
 } as const;
 
 /**
- * One folder of the plan's repository, as the File tab's tree asks it (GET
- * `/api/tasks/{id}/tree`): its path from the repository's root, empty for
+ * One folder of the task's repository, as the File tab's tree asks it (GET
+ * `/api/plans/{id}/tree`): its path from the repository's root, empty for
  * the root itself, and whether everything under it is asked, every entry
  * then named by its path from the folder, as the tree's search reads the
  * whole repository in one listing.
@@ -788,7 +788,7 @@ export const taskTreeEntrySchema = EffectSchema.Struct({
 export type TaskTreeEntry = typeof taskTreeEntrySchema.Type;
 
 /**
- * A folder of the plan's repository as it stands now on the branch the
+ * A folder of the task's repository as it stands now on the branch the
  * File tab reads its files on, through the Luke GitHub App: the path, the
  * repository and the branch read, its entries in GitHub's order, and
  * whether there were more than one listing carries. A secret file is
@@ -822,7 +822,7 @@ export const TASK_SKILL_BOUNDS = {
   MAX_DESCRIPTION_CHARS: 1024,
 } as const;
 
-/** One skill of the plan's repository a developer may choose by name: the name its folder carries, the description a model routes on, and its `SKILL.md`, named from the repository's root, which the File tab opens. */
+/** One skill of the task's repository a developer may choose by name: the name its folder carries, the description a model routes on, and its `SKILL.md`, named from the repository's root, which the File tab opens. */
 export const taskSkillSchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -838,9 +838,9 @@ export const taskSkillSchema = EffectSchema.Struct({
 });
 
 /**
- * The skills a developer may choose of the plan's repository as it stands
+ * The skills a developer may choose of the task's repository as it stands
  * now on its default branch, read through the Luke GitHub App (GET
- * `/api/tasks/{id}/skills`): the repository and the branch read, and the
+ * `/api/plans/{id}/skills`): the repository and the branch read, and the
  * skills in name order. A skill its `SKILL.md` says the model alone loads
  * is not one of them.
  */

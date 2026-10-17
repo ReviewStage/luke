@@ -1,0 +1,77 @@
+/* spinner.css -- the ring, its two sizes, a region holding one at its
+   centre, and a control's words sharing one cell with it, so the ring stands
+   over the words' own room rather than taking a width of its own. */
+
+@layer components {
+  .luke-spinner-ring {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    border: var(--luke-spinner-stroke, 1.5px) solid
+      color-mix(in srgb, currentColor 22%, transparent);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    /* An endless loop with no end to wait for, so its duration is a literal;
+       it holds still on --loop-motion with every other. */
+    animation: luke-spinner-turn 900ms linear infinite;
+    animation-play-state: var(--loop-motion, running);
+  }
+
+  @keyframes luke-spinner-turn {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* A wait: 16px beside words or inside a control, 22px alone in a region,
+     in the muted ink a wait is said in. */
+  .luke-spinner {
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-spinner[data-size="region"] {
+    --luke-spinner-stroke: 2px;
+    width: 22px;
+    height: 22px;
+  }
+
+  .luke-spinner-region {
+    display: flex;
+    flex: 1;
+    align-self: stretch;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    padding: var(--luke-space-24);
+  }
+
+  .luke-busy-label {
+    display: inline-grid;
+    align-items: center;
+    justify-items: center;
+    gap: inherit;
+  }
+
+  .luke-busy-label > :not(.luke-visually-hidden) {
+    grid-area: 1 / 1;
+  }
+
+  .luke-busy-label-words {
+    display: inline-flex;
+    align-items: center;
+    gap: inherit;
+  }
+
+  .luke-busy-label[data-shown="true"] > .luke-busy-label-words {
+    visibility: hidden;
+  }
+
+  .luke-busy-label > .luke-spinner {
+    color: inherit;
+  }
+}

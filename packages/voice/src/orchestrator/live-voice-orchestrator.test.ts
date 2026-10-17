@@ -216,7 +216,7 @@ it.effect(
       // A release with no press behind it does nothing.
       yield* f.endTalk();
       assert.equal(call.mutes, 1);
-      // The next hold against the standing session, naming no plan: no second session, one more unmute, one more mute.
+      // The next hold against the standing session, naming no task: no second session, one more unmute, one more mute.
       yield* f.beginTalk();
       assert.equal(f.calls.length, 1);
       assert.equal(call.unmutes, 2);

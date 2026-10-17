@@ -3,7 +3,7 @@ import { defineDynamic } from "eve/skills";
 import { seams, sessionSkills } from "../host.js";
 
 /**
- * The skills the plan's repository keeps, offered to the planning session as
+ * The skills the task's repository keeps, offered to the brain's session as
  * it starts and standing for its life (`packages/service/src/agents/agent-runtime/skills.ts`),
  * each under its own name, which `load_skill` loads when the developer names
  * one or the work matches it. The session starts on the call's opening ask,

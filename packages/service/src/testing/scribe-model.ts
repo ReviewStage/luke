@@ -1,4 +1,4 @@
-// scribe-model.ts -- a scripted stand-in for the model a planning call's notetaker streams its answer from.
+// scribe-model.ts -- a scripted stand-in for the model a task call's notetaker streams its answer from.
 import type { PlanNote } from "@luke/features/plan-template";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";

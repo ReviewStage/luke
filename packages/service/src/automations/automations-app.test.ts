@@ -67,14 +67,14 @@ import { automationsApp } from "./automations-app.js";
 
 /**
  * The automation routes, answered by the group the way a function answers
- * them, over a real dialect: an automation is made on the account's plan
+ * them, over a real dialect: an automation is made on the account's task
  * with its schedule's first due instant, refused where its schedule, model,
- * or plan will not do, read and changed by its own account alone, paused
+ * or task will not do, read and changed by its own account alone, paused
  * and resumed with its due instant cleared and computed again, a webhook's
  * secret answered once and kept only as its hash, and a "Run now" one run
  * per key that starts its agent. eve is a fake at the client's boundary,
  * GitHub a script, the catalog fixed, and the store PGlite. Synthetic
- * accounts, bearers, plans, and words throughout.
+ * accounts, bearers, tasks, and words throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -183,7 +183,7 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
   return read.success;
 }
 
-/** An owner with a plan on the repository of its workspace's installation, another account beside them, and the group. */
+/** An owner with a task on the repository of its workspace's installation, another account beside them, and the group. */
 const openAccounts = Effect.gen(function* () {
   const owner = yield* openGithubUser();
   const other = yield* openGithubUser();
@@ -224,7 +224,7 @@ const pausedByAnOlderBuild = (id: string) =>
       .where(eq(automationTable.id, id)),
   );
 
-/** The weekday triage made on a workspace with the repositories named, no plan between. */
+/** The weekday triage made on a workspace with the repositories named, no task between. */
 const onWorkspace = (workspaceId: string, repositories: readonly string[]) => {
   const { planId: _taskId, ...rest } = weekdays("");
   return { ...rest, workspaceId, repositories };
@@ -307,7 +307,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           ...onWorkspace(task.workspaceId, [relay]),
           trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
         });
-        // One standing on a plan takes the plan's repository and no other.
+        // One standing on a task takes the task's repository and no other.
         const onTask = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,

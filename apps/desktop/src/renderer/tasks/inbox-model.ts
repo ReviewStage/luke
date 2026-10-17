@@ -36,12 +36,12 @@ import { refusalLine, refusalPasses } from "./file-tab-model";
  * item chosen, while a teammate's open item stands in the list as waiting
  * on them. A settled item keeps everything its agent offered,
  * the developer's pick marked, and says who settled it and what they
- * wrote. A plan's board, which counts what waits, holds what waits the
+ * wrote. A task's board, which counts what waits, holds what waits the
  * oldest posted first, since it has held its agent longest, and what is
  * settled, answered or taken back by its agent, the latest changed first.
- * Every item the plan's inbox holds is
+ * Every item the task's inbox holds is
  * drawn, whether or not the window's list of agents has caught up with the
- * agent that posted it, since the service reads the inbox by plan and an
+ * agent that posted it, since the service reads the inbox by task and an
  * agent's items go with it. A card's answer is held to the same rule the
  * service holds it to (`inbox-wire.ts`'s `inboxReplyRefusal`), so a press
  * the service would refuse is never offered; an item asking a response
@@ -65,7 +65,7 @@ export interface InboxBoardView {
   readonly settled: readonly InboxItem[];
 }
 
-/** The plan's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
 export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
   return {
     open: items
@@ -294,7 +294,7 @@ export const NEEDS_YOU = {
   ANSWERED: "You've answered everything",
 } as const;
 
-/** What an item is listed under: the plan its agent works on, or, for an agent with no plan, the automation that started it. */
+/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */
 export const INBOX_HOLDER = {
   TASK: "plan",
   AUTOMATION: "automation",
@@ -307,8 +307,8 @@ type InboxAgentLine = Pick<
 >;
 
 /**
- * The plan holding an item, or the automation holding an item of an agent
- * with no plan, named as its group's header names it, and its agents as
+ * The task holding an item, or the automation holding an item of an agent
+ * with no task, named as its group's header names it, and its agents as
  * main's read names them, by id; none for the agents no automation the
  * reader may read started.
  */
@@ -334,13 +334,13 @@ export type PlanlessAgent = Pick<
   | "workspaceId"
 >;
 
-/** The key a holder's group is folded and drawn by: the plan's id, the automation's, or one key for the agents no automation names. */
+/** The key a holder's group is folded and drawn by: the task's id, the automation's, or one key for the agents no automation names. */
 export function holderKey(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.id;
   return holder.automationId ?? NO_AUTOMATION_KEY;
 }
 
-/** A plan as the holder of its items. */
+/** A task as the holder of its items. */
 export function taskHolder(task: TaskSummary): InboxHolder {
   return { kind: INBOX_HOLDER.TASK, task };
 }
@@ -356,7 +356,7 @@ export function itemWorkspaceId(holder: InboxHolder, agentId: string): string | 
     : holder.agents.get(agentId)?.workspaceId;
 }
 
-/** A holder's name as its header and a row's context say it: the plan's, or the automation's. */
+/** A holder's name as its header and a row's context say it: the task's, or the automation's. */
 export function holderName(holder: InboxHolder): string {
   return holder.kind === INBOX_HOLDER.TASK ? holder.task.name : holder.name;
 }
@@ -368,10 +368,10 @@ const NO_AUTOMATION_KEY = "no-automation";
 const NO_AUTOMATION_NAME = "Other agents";
 
 /**
- * Whether a waiting item of an agent with no plan is listed in the workspace
+ * Whether a waiting item of an agent with no task is listed in the workspace
  * given: one of that workspace's agents', or one whose workspace the service
  * does not name. Note that with no workspace listed every agent's items
- * stand, as every plan's do.
+ * stand, as every task's do.
  */
 export function listedIn(
   entry: Pick<AppInboxTasklessItem, "workspaceId">,
@@ -385,7 +385,7 @@ export function listedIn(
 }
 
 /**
- * The groups the items of agents with no plan stand in: one per automation
+ * The groups the items of agents with no task stand in: one per automation
  * that started them, by its name, and one for the agents no automation the
  * reader may read names, each holding every item its agents' reads hold,
  * settled ones too; only the listed workspace's agents, where the service
@@ -423,7 +423,7 @@ export function tasklessGroups(
   }));
 }
 
-/** How the window's Inbox lists its items: under each plan, or in one list. */
+/** How the window's Inbox lists its items: under each task, or in one list. */
 export const INBOX_GROUPING = {
   TASK: "plan",
   NEWEST: "newest",
@@ -432,7 +432,7 @@ export const INBOX_GROUPING = {
 
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
 
-/** One holder, a plan or an automation, and every item it holds, as the list is handed them. */
+/** One holder, a task or an automation, and every item it holds, as the list is handed them. */
 export interface InboxGroup {
   readonly holder: InboxHolder;
   readonly items: readonly InboxItem[];
@@ -456,7 +456,7 @@ export interface InboxPersonGroup {
 }
 
 /**
- * The list as it is drawn: a group for each plan holding an item it shows,
+ * The list as it is drawn: a group for each task holding an item it shows,
  * one for each person whose agents ask one, or every item in one run; and
  * the reader it was drawn for, whose items alone need them.
  */
@@ -519,9 +519,9 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
 }
 
 /**
- * The list from every plan's items: each item the latest changed first,
+ * The list from every task's items: each item the latest changed first,
  * under its plan, under the person whose agent asks it, or in one run, the
- * plans in the order their latest item changed and the people as
+ * tasks in the order their latest item changed and the people as
  * `personGroups` orders them. Needs you lists only what needs the reader,
  * and the item chosen where one is given. Note that the rows a list draws are given none,
  * so a settled item leaves a list filtered to exclude it, while the steps
@@ -557,7 +557,7 @@ export function inboxList(
   return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
 }
 
-/** Whether any plan's item needs the reader, listed or filtered out. */
+/** Whether any task's item needs the reader, listed or filtered out. */
 export function anyNeedsYou(tasks: readonly InboxGroup[], readerId: string | undefined): boolean {
   return tasks.some(({ items }) => items.some((item) => needsReader(item, readerId)));
 }
@@ -671,8 +671,8 @@ export function codeWindow(block: InboxCodeBlock): TaskFileRequest {
 
 /**
  * Why a code block's lines are not read at all, or nothing where they are
- * read: the plan reads its own repository alone, which the agent's
- * repository was when it started but may not be once the plan names
+ * read: the task reads its own repository alone, which the agent's
+ * repository was when it started but may not be once the task names
  * another, and lines that run backwards or past the bound are no window
  * the File tab's read takes. Note that GitHub spells a repository's name in
  * any case.

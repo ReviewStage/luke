@@ -27,7 +27,7 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
- * grouped under the workspace the plans' sidebar lists, Account, and This
+ * grouped under the workspace the tasks' sidebar lists, Account, and This
  * Mac, opening on Profile, and every option moved by the one-home layout is
  * drawn on its new page and on no other, as the search finds it there too.
  * The Workspace page is titled with the listed workspace and follows the
@@ -70,7 +70,7 @@ const PERSONAL: Workspace = {
   github: null,
 };
 
-/** The Workspace page's control with `listed` the workspace the plans' sidebar lists. */
+/** The Workspace page's control with `listed` the workspace the tasks' sidebar lists. */
 function listing(listed: Workspace): WorkspaceSettingsControl {
   return {
     workspaces: [PERSONAL, ACME],
@@ -91,6 +91,8 @@ const HOMES = [
   { words: "Let agents run commands on this Mac", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
   { words: "Changelog", page: "About" },
+  { words: "Minimize inline comments", page: "Appearance" },
+  { words: "Dark theme", page: "Appearance" },
 ];
 
 const ACCOUNT: SettingsPanelProps["account"] = {
@@ -148,7 +150,7 @@ function settingsProps(view: SettingsView, onViewChange: (view: SettingsView) =>
   } satisfies SettingsPanelProps;
 }
 
-/** Settings holding its own page, as the app holds it, opened on Profile, over the workspaces the plans' sidebar lists where it is handed them. */
+/** Settings holding its own page, as the app holds it, opened on Profile, over the workspaces the tasks' sidebar lists where it is handed them. */
 function SettingsHarness({
   workspace,
   opensOn = SETTINGS_VIEW.ACCOUNT,
@@ -319,6 +321,36 @@ test("the Settings search finds each moved option under its new page", () => {
       `${words} is found under ${home}`,
     );
   }
+});
+
+test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
+  const group =
+    [...page.querySelectorAll("section[aria-labelledby]")].find(
+      (each) =>
+        document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent ===
+        "Diffs",
+    ) ?? assert.fail("a Diffs group stands");
+  assert.deepEqual(
+    [...group.querySelectorAll(".settings-copy strong")].map(
+      (name) => name.firstChild?.textContent,
+    ),
+    [
+      "Line numbers",
+      "Word wrap",
+      "Layout",
+      "Indicators",
+      "Inline diffs",
+      "Backgrounds",
+      "Dark theme",
+      "Light theme",
+      "Font",
+      "Font size",
+      "Line height",
+      "Ligatures",
+      "Minimize inline comments",
+    ],
+  );
 });
 
 test("a page turned to opens at its top, not where the last page was scrolled", () => {

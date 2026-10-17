@@ -27,7 +27,7 @@ import { observedSideband } from "./live-sideband.js";
 
 /**
  * The live session service composed for the hosted tier, for one account's
- * one planning call, in the plan's conversation whichever member of its
+ * one task call, in the task's conversation whichever member of its
  * workspace opened it: the brain answered in process through the ask door under
  * the eve client the caller composed for the account, and the record over the
  * voice writer with the sideband observed so the writer sees each event once
@@ -54,10 +54,10 @@ export interface HostedLiveExchangeOptions {
   /** The account the session was opened for, resolved at the handshake: it owns the voice row, is metered, and the deployment acts for it at eve's door. */
   readonly accountId: string;
   readonly liveSessionId: string;
-  /** The conversation the spoken asks and the record land in: the plan's, under the member who opened it, whoever is calling. */
+  /** The conversation the spoken asks and the record land in: the task's, under the member who opened it, whoever is calling. */
   readonly conversation: ConversationTarget;
   /**
-   * The notetaker the call writes its plan through: the plan the session is
+   * The notetaker the call writes its plan through: the task the session is
    * bound to and the model the scribe runs on. Absent on a deployment with no
    * model key, which then writes nothing.
    */
@@ -79,11 +79,11 @@ export interface HostedLiveExchangeOptions {
   readonly report: (message: string) => void;
   /** What the voice, the brain, and the notetaker are doing, told whole on each change; the device is shown it. */
   readonly onActivity?: (activity: TaskActivity) => void;
-  /** Code Luke is about to talk about, with its lines, told as he starts to speak; a planning call's device is shown it. */
+  /** Code Luke is about to talk about, with its lines, told as he starts to speak; a task call's device is shown it. */
   readonly onCode?: (shown: TaskShownCode) => void;
-  /** Each planning turn's work, told whole on each change; a planning call's device is shown it. */
+  /** Each brain turn's work, told whole on each change; a task call's device is shown it. */
   readonly onWork?: (work: TaskWorkTurn) => void;
-  /** The developer said they are done and Luke is saying goodbye; a planning call's device hangs up once it has played. */
+  /** The developer said they are done and Luke is saying goodbye; a task call's device hangs up once it has played. */
   readonly onCallEnding?: () => void;
   /** Each hand-off the session traces, ids and words left out; the service writes it to its log. */
   readonly onTrace?: (entry: LiveSessionTrace) => void;
@@ -93,7 +93,7 @@ export interface HostedLiveExchangeOptions {
 export interface AttachedSession {
   readonly accountId: string;
   readonly sessionId: string;
-  /** The plan the call is bound to, which its asks and its record land in. */
+  /** The task the call is bound to, which its asks and its record land in. */
   readonly taskId: string;
   /** The socket the service attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
@@ -105,7 +105,7 @@ export interface AttachedSession {
   readonly onActivity?: ((activity: TaskActivity) => void) | undefined;
   /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
   readonly onCode?: ((shown: TaskShownCode) => void) | undefined;
-  /** The device's door for each planning turn's work on the call; absent where the route sends it nothing of its own. */
+  /** The device's door for each brain turn's work on the call; absent where the route sends it nothing of its own. */
   readonly onWork?: ((work: TaskWorkTurn) => void) | undefined;
   /** The device's door for Luke ending the call; absent where the route sends it nothing of its own. */
   readonly onCallEnding?: (() => void) | undefined;

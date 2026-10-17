@@ -28,7 +28,7 @@ import { DesktopTasks } from "./desktop-tasks";
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
  * glyph and the name its tab wears in either strip are the ones its row in
- * that strip's "+" menu wears, the plan's own tab hangs the plan's card, and
+ * that strip's "+" menu wears, the task's own tab hangs the task's card, and
  * a page's tab hangs a card previewing the page.
  */
 
@@ -66,7 +66,7 @@ const SUMMARY: TaskSummary = {
   },
 };
 
-/** An agent on the plan, standing where `status` says. */
+/** An agent on the task, standing where `status` says. */
 function agent(
   id: string,
   title: string,
@@ -105,7 +105,7 @@ const FUNNEL: PageLine = {
   at: 1_800_000_000_000,
 };
 
-/** A planning worker still at work, on a model whose harness Luke knows. */
+/** A brain's worker still at work, on a model whose harness Luke knows. */
 const READER = worker("w", "Read the invite emails.", {
   state: TASK_WORK_STATE.RUNNING,
   model: "anthropic/claude-sonnet-5",
@@ -122,7 +122,7 @@ afterEach(() => {
 });
 
 /**
- * The plan open on its own tab, a working agent's tab and a draft's beside
+ * The task open on its own tab, a working agent's tab and a draft's beside
  * it, and the side panel open with a working subagent's tab, the done
  * agent's Changes tab, the working agent's Terminal tab, and a page's tab.
  */
@@ -271,7 +271,7 @@ test("the plan's own tab hangs the plan's card, as its sidebar row does, its age
   assert.ok(card, "the plan's card is hung");
   assert.equal(card.querySelector(".card-name")?.textContent, TASK.name);
   assert.match(card.textContent ?? "", /acme\/relay/u);
-  // The card is the plan as the list names it, its agents among it.
+  // The card is the task as the list names it, its agents among it.
   assert.equal(card.querySelector("[data-task-card-agent]")?.textContent, "Invite flow");
 });
 

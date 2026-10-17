@@ -1,0 +1,47 @@
+/* switch.css -- the switch: a track that takes the accent while on and a
+   thumb that slides across it, by transform alone, on the spring small
+   elements ride. Its state is keyed on its own `data-checked`, so the drawing
+   inside a row that carries `aria-checked` takes this one rule too. */
+
+@layer components {
+  .luke-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    box-sizing: content-box;
+    width: 30px;
+    margin: 0;
+    padding: 2px;
+    border: 0;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-switch-track);
+    cursor: pointer;
+    transition: background-color var(--duration-hover, 0s) ease;
+  }
+
+  [data-luke-profile="desktop"] .luke-switch {
+    cursor: default;
+  }
+
+  .luke-switch[data-checked="true"] {
+    background: var(--luke-color-switch-on);
+  }
+
+  .luke-switch:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .luke-switch-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--luke-color-switch-thumb);
+    box-shadow: var(--luke-shadow-switch-thumb);
+    transition: transform var(--duration-fast, 0s) var(--spring-fast, ease);
+  }
+
+  .luke-switch[data-checked="true"] .luke-switch-thumb {
+    transform: translateX(14px);
+  }
+}

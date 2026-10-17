@@ -33,6 +33,10 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import {
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_OUTCOME,
+} from "@luke/features/pull-request-write-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
@@ -61,7 +65,7 @@ const AGENT: CodingAgentSummary = {
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
-/** The agent as its own page reads it, with no plan, as an automation's run leaves one. */
+/** The agent as its own page reads it, with no task, as an automation's run leaves one. */
 const PAGE: CodingAgentPage = {
   ...AGENT,
   planId: null,
@@ -299,6 +303,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`overview-conversation:${agentId}`);
         return OVERVIEW.conversation;
+      }),
+    pullRequestAction: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`pull-request-action:${agentId}:${request.action}`);
+        return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
       }),
     githubImage: (agentId, src) =>
       Effect.sync(() => {
@@ -555,6 +564,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { contentType: GITHUB_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
+        agentId: AGENT_ID,
+        request: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
+      }),
+      { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
         taskId: TASK_ID,
         after: INBOX_CURSOR_START,
@@ -625,6 +641,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `overview-checks:${AGENT_ID}`,
       `overview-conversation:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
+      `pull-request-action:${AGENT_ID}:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
       `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,

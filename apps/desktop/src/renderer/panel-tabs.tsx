@@ -1,7 +1,7 @@
 import { APP_PANEL_TAB, type AppPanelTab } from "@luke/wire/app-settings";
 
 /**
- * The window's two places, Plans and Settings, aliased from the core's set
+ * The window's two places, Tasks and Settings, aliased from the core's set
  * rather than declared here: a counted tab change names a tab in the same
  * words the window does, and the two must not drift into separate
  * vocabularies. Every way into a place — a press, a key, a composer's return —

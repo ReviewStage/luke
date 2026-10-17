@@ -4,7 +4,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 import { planEditorSchema } from "./task-wire.js";
 
 /**
- * transcript-wire.ts -- what was said on a plan's voice calls with Luke, as the service keeps it and the Plans tab reads it.
+ * transcript-wire.ts -- what was said on a task's voice calls with Luke, as the service keeps it and the Tasks tab reads it.
  *
  * The service keeps a call's words as timed fragments
  * (`voice_transcript_segments`) and answers them grouped the way the live
@@ -52,8 +52,8 @@ export const transcriptTextPartSchema = EffectSchema.Struct({
  * part. The id is the line's place on its call, counted from zero, and the
  * metadata says where on the call the line began and ended, which places a
  * turn no line asked for among the lines by time, and names the line's rows
- * in the plan's conversation, by the ids the
- * live call names its lines by and a planning turn names its ask by, where
+ * in the task's conversation, by the ids the
+ * live call names its lines by and a brain turn names its ask by, where
  * the record holds them: one as a rule, and more where a call that
  * reattached wrote one utterance as two rows the line reads as one. Note that the parts are a mutable array, as the
  * SDK's type spells them, so a message read here is one of its messages
@@ -79,7 +79,7 @@ export const transcriptMessageSchema = EffectSchema.Struct({
 export type TranscriptMessage = typeof transcriptMessageSchema.Type;
 
 /**
- * One call about the plan: the store's id for its session, when it started,
+ * One call about the task: the store's id for its session, when it started,
  * its messages in the order they opened, and what its record says of the
  * call where it says it.
  */
@@ -106,7 +106,7 @@ export const transcriptCallSchema = EffectSchema.Struct({
    * The member whose call it was, by their account's id and the name it
    * holds now, a member who has since left the workspace among them; absent
    * once their account is gone, and from a service before it. A shared
-   * plan's transcript holds every member's calls, and the window names a
+   * task's transcript holds every member's calls, and the window names a
    * teammate's while drawing the reader's own as theirs.
    */
   by: EffectSchema.optionalKey(planEditorSchema),
@@ -114,7 +114,7 @@ export const transcriptCallSchema = EffectSchema.Struct({
 
 export type TranscriptCall = typeof transcriptCallSchema.Type;
 
-/** A plan's transcript: its calls oldest first, and whether older words were left out of the read. */
+/** A task's transcript: its calls oldest first, and whether older words were left out of the read. */
 export const taskTranscriptSchema = EffectSchema.Struct({
   calls: EffectSchema.Array(transcriptCallSchema),
   earlierOmitted: EffectSchema.Boolean,
@@ -125,5 +125,5 @@ export type TaskTranscript = typeof taskTranscriptSchema.Type;
 /** A transcript read (GET). */
 export const taskTranscriptAnswerSchema = EffectSchema.Struct({ transcript: taskTranscriptSchema });
 
-/** The transcript of a plan no call has been made about. */
+/** The transcript of a task no call has been made about. */
 export const EMPTY_TRANSCRIPT: TaskTranscript = { calls: [], earlierOmitted: false };

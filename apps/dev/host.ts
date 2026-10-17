@@ -54,7 +54,7 @@ import { runAgent } from "./runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the
- * deployment's seams, on the same terms as the planning brain's
+ * deployment's seams, on the same terms as the brain's
  * (`apps/luke/host.ts`): the seams are composed here, once, over the same
  * `HostedEnvironment` layer the web runtime builds, and run synchronously
  * because eve loads the authored files as modules and the environment read

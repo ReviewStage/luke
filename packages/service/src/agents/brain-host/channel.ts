@@ -21,8 +21,8 @@ export const BRAIN_HOST_TURN_POLICY = {
 } as const satisfies Record<string, TurnPolicy>;
 
 /**
- * The policy the planning channel runs under. Note that it is `steer`,
- * because a planning turn that handed work to the worker stays open until
+ * The policy the brain channel runs under. Note that it is `steer`,
+ * because a brain turn that handed work to the worker stays open until
  * the worker's result reaches the model inside it (eve runs every subagent
  * call as a task the turn waits on), and a spoken follow-up under `queue`
  * would wait out that research, minutes of it, before Luke read it; under

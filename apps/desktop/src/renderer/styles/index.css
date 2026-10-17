@@ -22,7 +22,6 @@
    out-specifying the chord itself. */
 @import "./shortcut.css";
 @import "./tooltip.css";
-@import "./skeleton.css";
 @import "./sign-in.css";
 @import "./tasks.css";
 /* The AI Elements components' utilities, over the tokens above; compiled by
