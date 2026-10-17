@@ -156,9 +156,11 @@ function ConnectGitHub(): React.JSX.Element {
   return (
     <main className={AUTH_SHELL}>
       <section className={AUTH_CARD} aria-labelledby="connect-title">
-        <ConnectionGraphic
-          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
-        />
+        <div className="mb-5">
+          <ConnectionGraphic
+            mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
+          />
+        </div>
         <h1 id="connect-title" className={AUTH_TITLE}>
           {view.kind !== VIEW.WORKING ? view.title : "Connecting GitHub…"}
         </h1>

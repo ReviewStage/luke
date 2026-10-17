@@ -75,7 +75,7 @@ function ViewLink({
 function ExampleFrame({ example }: { example: Example }): React.JSX.Element {
   return (
     <main className="catalog-example">
-      <h1>{example.title}</h1>
+      <h1 className="catalog-example-title">{example.title}</h1>
       <example.Render />
     </main>
   );
