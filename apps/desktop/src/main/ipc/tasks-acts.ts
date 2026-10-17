@@ -63,6 +63,7 @@ import {
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceTransferParams,
+  type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
 import {
   ACT,
@@ -94,6 +95,7 @@ export interface TasksActsDependencies {
     tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
     tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
     tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
+    tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
     tasksArchive(params: TasksArchiveParams): Effect.Effect<boolean>;
     tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
     tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
@@ -178,6 +180,7 @@ type TasksActKind =
   | typeof ACT_KIND.TASKS_RENAME
   | typeof ACT_KIND.TASKS_PIN
   | typeof ACT_KIND.TASKS_PIN_REPOSITORY
+  | typeof ACT_KIND.TASKS_WRITE_SECTION
   | typeof ACT_KIND.TASKS_ARCHIVE
   | typeof ACT_KIND.TASKS_REPOSITORIES
   | typeof ACT_KIND.TASKS_SET_REPOSITORY
@@ -359,6 +362,10 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
     [ACT_KIND.TASKS_PIN_REPOSITORY]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_PIN_REPOSITORY, sender);
       return host.tasksPinRepository(params);
+    },
+    [ACT_KIND.TASKS_WRITE_SECTION]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_WRITE_SECTION, sender);
+      return host.tasksWriteSection(params);
     },
     [ACT_KIND.TASKS_ARCHIVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_ARCHIVE, sender);

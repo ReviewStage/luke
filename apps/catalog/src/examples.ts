@@ -6,10 +6,12 @@ import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
+import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
+import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
@@ -48,10 +50,12 @@ export const EXAMPLES: readonly Example[] = [
   BADGES_EXAMPLE,
   BUTTONS_EXAMPLE,
   CHIPS_EXAMPLE,
+  COLLECTION_PAGE_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
   DIALOGS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   FORM_FIELD_EXAMPLE,
+  FORM_SECTION_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,

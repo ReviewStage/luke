@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "sectionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "position": {
+      "type": "string"
+    },
+    "addedAt": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "taskId",
+    "sectionId",
+    "addedAt"
+  ],
+  "additionalProperties": false
+}

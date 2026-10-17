@@ -13,7 +13,8 @@ import { INBOX_GROUPING, type InboxGrouping } from "../tasks/inbox-model";
  * later comes back folded as it was left. Pinned is kept under a key of
  * its own, since it is no repository, and so are the creators' groups, each
  * by its creator's account id and the tasks nobody is named for by null,
- * so a repository's fold stands through a while grouped by creator. A fixture run starts with every group open
+ * so a repository's fold stands through a while grouped by creator, and the
+ * account's own sections, each by its id. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's task groups are kept on the same terms, each by its task's id,
  * and so are its two view choices, Needs you and how it groups, and its
@@ -29,6 +30,7 @@ const STORAGE_KEY = {
   GROUPS: "luke.sidebarFoldedGroups",
   CREATORS: "luke.sidebarFoldedCreators",
   PINNED: "luke.sidebarPinnedFolded",
+  SECTIONS: "luke.sidebarFoldedSections",
   INBOX_TASKS: "luke.inboxFoldedTasks",
   /** Where the Inbox's task groups were kept before tasks had their name. */
   INBOX_TASKS_EARLIER: "luke.inboxFoldedPlans",
@@ -84,9 +86,11 @@ interface Folds {
   readonly groups: readonly (string | null)[];
   readonly creators: readonly (string | null)[];
   readonly pinned: boolean;
+  /** The account's own sections folded, by id. */
+  readonly sections: readonly string[];
 }
 
-const OPEN: Folds = { groups: [], creators: [], pinned: false };
+const OPEN: Folds = { groups: [], creators: [], pinned: false, sections: [] };
 
 /**
  * A kept value, or `fallback` where none was kept, it no longer reads, or
@@ -127,6 +131,7 @@ function readFolds(): Folds {
     groups: readKept(STORAGE_KEY.GROUPS, storedFolds, OPEN.groups),
     creators: readKept(STORAGE_KEY.CREATORS, storedFolds, OPEN.creators),
     pinned: readKept(STORAGE_KEY.PINNED, storedFlag, OPEN.pinned),
+    sections: readKept(STORAGE_KEY.SECTIONS, storedTasks, OPEN.sections),
   };
 }
 
@@ -135,6 +140,7 @@ function writeFolds(folds: Folds): void {
   writeKept(STORAGE_KEY.GROUPS, storedFolds, folds.groups);
   writeKept(STORAGE_KEY.CREATORS, storedFolds, folds.creators);
   writeKept(STORAGE_KEY.PINNED, storedFlag, folds.pinned);
+  writeKept(STORAGE_KEY.SECTIONS, storedTasks, folds.sections);
 }
 
 /** Whether each group is folded, and the presses that fold or unfold one. */
@@ -146,6 +152,9 @@ export interface FoldedGroups {
   toggleCreator: (creatorId: string | undefined) => void;
   pinnedFolded: boolean;
   togglePinned: () => void;
+  /** Whether one of the account's sections is folded, by its id. */
+  sectionFolded: (sectionId: string) => boolean;
+  toggleSection: (sectionId: string) => void;
 }
 
 /** The sidebar's folds, each kept as it is pressed, unless the run is `staged`. */
@@ -184,6 +193,14 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
     toggleCreator,
     pinnedFolded: folds.pinned,
     togglePinned: () => fold({ ...folds, pinned: !folds.pinned }),
+    sectionFolded: (sectionId) => folds.sections.includes(sectionId),
+    toggleSection: (sectionId) =>
+      fold({
+        ...folds,
+        sections: folds.sections.includes(sectionId)
+          ? folds.sections.filter((held) => held !== sectionId)
+          : [...folds.sections, sectionId],
+      }),
   };
 }
 
