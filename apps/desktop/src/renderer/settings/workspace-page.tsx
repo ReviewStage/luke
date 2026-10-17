@@ -128,7 +128,7 @@ const OWNER_INVITES_ADMINS = "Only the owner invites admins";
 const INVITATIONS_EMPTY =
   "No invitations. Luke sends no email, so copy each invitation's link and send it yourself.";
 
-/** What a list's line says where its read did not land, in `read-failure.tsx`'s words. */
+/** What a list's line says where its read did not land, in `ErrorState`'s words. */
 const READ_FAILED = {
   MEMBERS: "The members could not be read.",
   INVITATIONS: "The invitations could not be read.",

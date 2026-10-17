@@ -603,8 +603,9 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   /**
    * The agent this one was started from, on the same plan, and the message
    * of its it was forked at where it was forked rather than continued, with
-   * how many of that agent's steps its replay kept of how many there were;
-   * absent for an agent started afresh, and from a service before it.
+   * how many of that agent's steps its replay kept of how many there were,
+   * and the branch that agent's work was copied to for this one where it
+   * could be; absent for an agent started afresh, and from a service before it.
    */
   from: EffectSchema.optionalKey(
     EffectSchema.Struct({
@@ -612,6 +613,7 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
       messageId: EffectSchema.optionalKey(wireUuidSchema),
       steps: countedNumber,
       totalSteps: countedNumber,
+      branch: EffectSchema.optionalKey(EffectSchema.String),
     }),
   ),
 });

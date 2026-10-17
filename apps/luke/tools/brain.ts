@@ -37,9 +37,9 @@ export function hostedTools(
             if (!turn) return null;
             const { target } = admitted.success;
             const binding: HostedToolBinding = { target, turn };
-            const declarations = host
-              .toolDeclarations()
-              .filter((declared) => offered.has(declared.name));
+            const declarations = (yield* host.toolDeclarationsFor(admitted.success)).filter(
+              (declared) => offered.has(declared.name),
+            );
             return Object.fromEntries(
               declarations.map((declared) => {
                 const name = declared.name;

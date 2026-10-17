@@ -19,7 +19,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { BackIcon, ChevronRightIcon } from "@luke/ui";
+import { BackIcon, ChevronRightIcon, ErrorState } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { useClipped } from "@luke/ui/use-clipped";
@@ -33,7 +33,6 @@ import { useAutomation } from "../automation-directory";
 import { TaskRef } from "../desktop/task-card";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
-import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
@@ -257,7 +256,7 @@ function CodeBlock({
       ) : (
         <div className="file-tab-notice border-b-0">
           {shown.again ? (
-            <ReadFailure line={shown.line} onRetry={() => setAsked((was) => was + 1)} />
+            <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
           ) : (
             <p className="m-0" role="alert">
               {shown.line}
@@ -303,7 +302,9 @@ function ImageBlock({
   if ("failed" in image) {
     return (
       <div data-inbox-image-failed="">
-        <ReadFailure line={IMAGE_FAILED_LINE} onRetry={() => onRetryImage(block.attachmentId)} />
+        <ErrorState onRetry={() => onRetryImage(block.attachmentId)}>
+          {IMAGE_FAILED_LINE}
+        </ErrorState>
       </div>
     );
   }
@@ -644,7 +645,10 @@ function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
 /** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
 function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
   // Note that an answered item the wire carries without its answer was heard where it asked to be.
-  const heard = item.answer === undefined ? item.needsReply : inboxAnswerHeard(item, item.answer);
+  const heard =
+    item.answer === undefined
+      ? item.needsReply
+      : inboxAnswerHeard(item, item.answer, item.answerFiles);
   if (!heard) return <>Saved for the agent to read</>;
   return (
     <ActorLine>
@@ -1222,7 +1226,7 @@ export function InboxPane({
             </ol>
           </WordsWorkspace>
           {control.failed ? (
-            <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
+            <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
           ) : null}
         </div>
         {open ? (

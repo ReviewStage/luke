@@ -250,7 +250,12 @@ picture goes when the item stops naming it. Your answer, and any note, is
 stored with the item under the account of whichever member gave it, which
 every member of the task's workspace sees by name beside the answer, and,
 where the agent asked to hear back, handed to it as one of your messages,
-kept in its transcript. While you are signed in, Luke
+kept in its transcript. You can attach files to an answer as you can to a
+message, on the same terms and bounds (see "Files you attach to a coding
+agent"): an answer carrying one is always handed to the agent, and our
+service also keeps each file, with its name, in our database beside the item,
+where every member of the task's workspace can open it, until the answer is
+taken back or the agent posts the item again. While you are signed in, Luke
 on your Mac keeps a read open to our service for every item waiting in your
 workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on
@@ -280,6 +285,10 @@ operators, like an agent's transcript. Every person in the workspace can
 read every channel and every direct message, one between two other people
 included; a coding agent and Luke read the channels and only their own
 direct messages, and only a direct message's two members post in it.
+Luke's planning model posts as its plan's Luke where you ask it to, and at
+the start of each of its turns reads what was said in the chat since it last
+read, up to 20 messages, sent to the model provider with the rest of the
+turn.
 Deleting a plan deletes its channel with its messages, deleting your account
 deletes your messages (others' replies to them stay), and deleting the
 workspace deletes its chat.

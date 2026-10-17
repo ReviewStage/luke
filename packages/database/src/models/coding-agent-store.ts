@@ -303,6 +303,7 @@ const StartedFromColumnSchema = Schema.NullOr(
     messageId: Schema.optionalKey(Schema.String),
     steps: Schema.Number,
     totalSteps: Schema.Number,
+    branch: Schema.optionalKey(Schema.String),
   }),
 );
 /** The `archived_by` column as a row holds it. */

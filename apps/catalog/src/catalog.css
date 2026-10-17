@@ -282,6 +282,16 @@ body {
   width: 200px;
 }
 
+/* A region a failed read would have filled, its failure centred in it. */
+.catalog-error-region {
+  align-items: center;
+  justify-content: center;
+}
+
+.catalog-error-narrow {
+  width: 200px;
+}
+
 /* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
   padding: var(--luke-space-8);

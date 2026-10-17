@@ -12,11 +12,10 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { EmptyState, ProviderMark, useMenu } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, ProviderMark, useMenu } from "@luke/ui";
 import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";
 import { momentText, sinceText, useMinute } from "../tasks/task-time";
@@ -224,11 +223,9 @@ export function AutomationRunsPanel({
         {!created ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : runs === undefined ? null : "failed" in runs ? (
-          <ReadFailure
-            line="Its runs could not be read."
-            onRetry={onRetry}
-            place={READ_FAILURE_PLACE.INLINE}
-          />
+          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.INLINE}>
+            Its runs could not be read.
+          </ErrorState>
         ) : runs.runs.length === 0 ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (

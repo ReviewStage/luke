@@ -8,14 +8,20 @@ import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wi
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { ConfirmDialog, type DialogQuestion, ResetIcon, useConfirmDialog } from "@luke/ui";
+import {
+  ConfirmDialog,
+  type DialogQuestion,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  ResetIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { BANNER_LOOK, Banner } from "../banner";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import type { TaskReader } from "../tasks/edit-ref";
 import { PlanBody } from "../tasks/plan-body";
 import type { PlanEditDoor } from "../tasks/use-plan-editing";
@@ -398,11 +404,9 @@ function TemplateState({
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
       <div className="desktop-empty">
-        <ReadFailure
-          line={PAGE_LINE.READ_FAILED}
-          onRetry={template.retry}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
+        <ErrorState onRetry={template.retry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {PAGE_LINE.READ_FAILED}
+        </ErrorState>
       </div>
     );
   }
