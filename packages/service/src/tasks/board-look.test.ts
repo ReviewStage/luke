@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { writeDrawing, writeScene } from "@luke/database/models/board-store";
+import {
+  boardImageLiveStatement,
+  writeDrawing,
+  writeScene,
+} from "@luke/database/models/board-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { unparsedWire } from "@luke/wire";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
+import { SqlClient } from "effect/sql";
 import { driven, forkClockDriven } from "../testing/clock-driven.js";
 import { BOARD_LOOK_WAIT, LOOK_AT_BOARD_STATUS, runLookAtBoard } from "./board-look.js";
 
@@ -51,5 +56,28 @@ it.layer(getTestDB())("look_at_board", (it) => {
 
       assert.equal(answered.status, LOOK_AT_BOARD_STATUS.NOT_LOOKED);
     }),
+  );
+  it.effect(
+    "the statement Realtime wakes a look on moves as Luke draws and the Mac saves the scene, carries no image, and reads nothing of another account's plan",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const { userId, taskId } = yield* openTask;
+        const stranger = (yield* openTask).userId;
+        const rows = (reader: string) => {
+          const statement = Option.getOrThrow(boardImageLiveStatement(reader, taskId));
+          return sql.unsafe(statement.sql, [...statement.params]);
+        };
+        const before = yield* rows(userId);
+        yield* writeDrawing(userId, taskId, BOX);
+        const drawn = yield* rows(userId);
+        yield* writeScene(userId, taskId, SCENE, 1, IMAGE);
+        const saved = yield* rows(userId);
+
+        assert.notDeepEqual(drawn, before);
+        assert.notDeepEqual(saved, drawn);
+        assert.ok(!JSON.stringify(saved).includes(IMAGE));
+        assert.deepEqual(yield* rows(stranger), []);
+      }),
   );
 });

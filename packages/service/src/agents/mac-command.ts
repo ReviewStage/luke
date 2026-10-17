@@ -3,6 +3,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   claimMacCommands,
   macCommandResult,
+  macCommandSettledLiveStatement,
   macCommandsWaiting,
   macListeningSince,
   markMacListening,
@@ -19,6 +20,7 @@ import {
 import type { UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";
+import { lookedUntil } from "../http/held-read.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
@@ -153,13 +155,11 @@ function awaitedResult(
     Duration.seconds(queued.timeoutSeconds),
     MAC_COMMAND_SERVICE.ANSWER_GRACE,
   );
-  return macCommandResult(userId, queued.id).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced(MAC_COMMAND_SERVICE.POLL),
-      until: Option.isSome,
-    }),
-    Effect.timeoutOption(deadline),
-    Effect.map(Option.flatten),
+  return lookedUntil(
+    macCommandResult(userId, queued.id),
+    MAC_COMMAND_SERVICE.POLL,
+    deadline,
+    Option.toArray(macCommandSettledLiveStatement(userId, queued.id)),
   );
 }
 

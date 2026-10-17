@@ -23,7 +23,8 @@ import { planSections } from "@luke/features/plan-document";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { task } from "../schemas/task.js";
@@ -222,6 +223,33 @@ const findStamps = SqlSchema.findAll({
         .where(and(eq(planCommentThread.taskId, taskId), taskReachableBy(userId))),
     ),
 });
+
+/**
+ * Where each of the plan's threads stands, as `planCommentStamps` reads it,
+ * written for Neon Realtime to wake a held read on. None where it names a
+ * value Realtime cannot carry.
+ */
+export function planCommentStampsLiveStatement(
+  userId: string,
+  taskId: string,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: planCommentThread.id,
+            revision: planCommentThread.revision,
+            status: planCommentThread.status,
+          },
+          { updatedAt: planCommentThread.updatedAt },
+        ),
+      )
+      .from(planCommentThread)
+      .innerJoin(task, eq(task.id, planCommentThread.taskId))
+      .where(and(eq(planCommentThread.taskId, taskId), taskReachableBy(userId))),
+  );
+}
 
 const countThreads = SqlSchema.findOne({
   Request: Schema.Struct({ taskId: Schema.String }),

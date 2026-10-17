@@ -4,6 +4,7 @@ import {
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
   planCommentStamps,
+  planCommentStampsLiveStatement,
   readPlanCommentThreads,
   startPlanCommentThread,
   withdrawPlanCommentAsk,
@@ -159,6 +160,7 @@ function planCommentsPast(
     after,
     CODER.MESSAGES_POLL,
     CODER.MESSAGES_HOLD,
+    Option.toArray(planCommentStampsLiveStatement(userId, taskId)),
   ).pipe(
     Effect.andThen(readPlanCommentThreads(userId, taskId)),
     Effect.map(Option.map((threads) => ({ threads, cursor: cursorOf(threads) }))),

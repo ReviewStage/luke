@@ -1,12 +1,17 @@
-import { ownFailedAutomationRuns } from "@luke/database/models/automation-store";
+import type { LiveStatement } from "@luke/database/core/live-statement";
+import {
+  ownFailedAutomationRuns,
+  ownFailedRunsLiveStatement,
+} from "@luke/database/models/automation-store";
 import type { AccountFailedRun, AccountInboxAnswer } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import type { InboxAnswer } from "@luke/features/inbox-wire";
 import { FAILED_RUN_WINDOW_MILLIS } from "@luke/features/live-wire";
-import { Clock, Duration, Effect } from "effect";
+import { Clock, Duration, Effect, Option } from "effect";
 import { cursorOf, heldUntilMoved as heldOpen } from "../../http/held-read.js";
 import {
   accountInboxAutomations,
+  accountInboxLiveStatements,
   accountInboxTasks,
   accountTasklessItems,
   accountWaitingItems,
@@ -14,8 +19,10 @@ import {
   type InboxStamp,
   type InboxStoreEffect,
   memberAgentInboxItems,
+  memberAgentInboxLiveStatements,
   memberAgentInboxStamps,
   taskInboxItems,
+  taskInboxLiveStatements,
   taskInboxStamps,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
@@ -27,7 +34,8 @@ import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
  * The cursor is a digest of where every item stands (`http/held-read.ts`),
  * so a post, a close, an answer, and a new item each move it, and a reader
  * that holds it hears the next change once. A read whose cursor is
- * still the inbox's is held, looked at again every `MESSAGES_POLL`, each
+ * still the inbox's is held, looked at again as Realtime says its rows
+ * changed (`http/held-read.ts`), or every `MESSAGES_POLL` without it, each
  * look reading where the items stand and none of their words, and let
  * go at `MESSAGES_HOLD` as a transcript read is (`transcript.ts`), so the
  * Inbox tab hears an item the moment it lands without asking on a clock of
@@ -69,8 +77,15 @@ function heldUntilMoved(
   stamps: InboxStoreEffect<readonly InboxCursorStamp[]>,
   after: string,
   poll: Duration.Duration,
+  live: Option.Option<readonly LiveStatement[]>,
 ): InboxStoreEffect<void> {
-  return heldOpen(stamps, after, poll, CODER.MESSAGES_HOLD);
+  return heldOpen(
+    stamps,
+    after,
+    poll,
+    CODER.MESSAGES_HOLD,
+    Option.getOrElse(live, () => []),
+  );
 }
 
 /** The newest run of each of the account's own automations that failed to start in the window, as its owner is told of it. */
@@ -99,7 +114,12 @@ export function agentInboxPast(
   agentId: string,
   after: string,
 ): InboxStoreEffect<InboxAnswer> {
-  return heldUntilMoved(memberAgentInboxStamps(userId, agentId), after, CODER.MESSAGES_POLL).pipe(
+  return heldUntilMoved(
+    memberAgentInboxStamps(userId, agentId),
+    after,
+    CODER.MESSAGES_POLL,
+    Option.map(memberAgentInboxLiveStatements(userId, agentId), ({ items }) => [items]),
+  ).pipe(
     Effect.andThen(memberAgentInboxItems(userId, agentId)),
     Effect.map((items) => ({ items, cursor: cursorOf(items) })),
   );
@@ -111,7 +131,12 @@ export function taskInboxPast(
   taskId: string,
   after: string,
 ): InboxStoreEffect<InboxAnswer> {
-  return heldUntilMoved(taskInboxStamps(userId, taskId), after, CODER.MESSAGES_POLL).pipe(
+  return heldUntilMoved(
+    taskInboxStamps(userId, taskId),
+    after,
+    CODER.MESSAGES_POLL,
+    Option.map(taskInboxLiveStatements(userId, taskId), ({ items }) => [items]),
+  ).pipe(
     Effect.andThen(taskInboxItems(userId, taskId)),
     Effect.map((items) => ({ items, cursor: cursorOf(items) })),
   );
@@ -161,7 +186,20 @@ export function accountInboxPast(
       readAt,
     };
   });
-  return heldUntilMoved(accountStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
+  const live = Option.zipWith(
+    accountInboxLiveStatements(userId),
+    ownFailedRunsLiveStatement(userId),
+    (parts, failedRuns) => [
+      parts.items,
+      parts.planless,
+      parts.plans,
+      parts.automations,
+      failedRuns,
+      parts.chatAsks,
+      parts.chatNotices,
+    ],
+  );
+  return heldUntilMoved(accountStamps(userId), after, CODER.ACCOUNT_INBOX_POLL, live).pipe(
     Effect.andThen(read),
   );
 }
