@@ -23,9 +23,8 @@ import {
 import { taskListLiveRowsSchema, taskListOfLiveRows } from "@luke/features/task-list-live";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { TestClock } from "effect/testing";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { taskListLiveStatements } from "./task-list-live.js";
 
@@ -138,8 +137,33 @@ const liveListOf = (userId: string, now: number) =>
     return taskListOfLiveRows(rows, now);
   });
 
-/** The list as the service's collection answers it to the desktop, archived plans and agents among them. */
-const heldListOf = (userId: string) =>
+/**
+ * A clock reading `now` for the held read alone, sleeping as the test's own
+ * does. Note that the test's clock is not moved there, because a store test
+ * on Postgres shares its connection pool with that clock.
+ */
+const clockAt = (now: number) =>
+  Effect.map(
+    Clock.Clock,
+    (running): Clock.Clock => ({
+      currentTimeMillisUnsafe: () => now,
+      currentTimeMillis: Effect.succeed(now),
+      currentTimeNanosUnsafe: () => BigInt(now) * 1_000_000n,
+      currentTimeNanos: Effect.succeed(BigInt(now) * 1_000_000n),
+      monotonicTimeNanosUnsafe: () => running.monotonicTimeNanosUnsafe(),
+      monotonicTimeNanos: running.monotonicTimeNanos,
+      sleep: (duration) => running.sleep(duration),
+    }),
+  );
+
+/** The list as the service's collection answers it to the desktop at `now`, archived plans and agents among them. */
+const heldListOf = (userId: string, now: number) =>
+  Effect.gen(function* () {
+    const clock = yield* clockAt(now);
+    return yield* Effect.provideService(heldList(userId), Clock.Clock, clock);
+  });
+
+const heldList = (userId: string) =>
   Effect.gen(function* () {
     const tasks = yield* listTasks(userId, { includeArchived: true });
     return {
@@ -164,7 +188,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
     "deliver the rows the held list is built from, every status, pin, archive, and pull request alike, to every member and to no one else",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(NOW);
         const owner = yield* openUser;
         const teammate = yield* openUser;
         const outsider = yield* openUser;
@@ -199,7 +222,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* archiveCodingAgent(owner, gone.id, true);
 
         for (const reader of [owner, teammate, outsider]) {
-          assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader));
+          assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
         }
         const read = yield* liveListOf(owner, NOW);
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
@@ -223,16 +246,14 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
     "an agent with no turn reads failed once its grace ends, as the held read reads it then",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(NOW);
         const owner = yield* openUser;
         const plan = yield* startTask(owner, { name: "Teammate invitations" });
         yield* openAgent(owner, { taskId: plan.id }, 0);
         const later = NOW + STARTING_GRACE_MILLIS + 1;
-        yield* TestClock.setTime(later);
 
         const read = yield* liveListOf(owner, later);
 
-        assert.deepEqual(read, yield* heldListOf(owner));
+        assert.deepEqual(read, yield* heldListOf(owner, later));
         assert.deepEqual(
           read.plans[0]?.agents?.agents.map((line) => line.status),
           [CODING_AGENT_STATUS.FAILED],
