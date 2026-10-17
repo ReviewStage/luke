@@ -26,11 +26,11 @@ import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "../act";
+import { useSideBundles } from "../bundle-loader";
 import { rendererRuntime } from "../renderer-runtime";
 import type { TerminalFind, TerminalHandle } from "../terminal/contract";
 import { onTerminalPort } from "../terminal/terminal-port";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { terminalModuleAtom } from "./terminal-bundle";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -257,7 +257,7 @@ export function useTerminalSession(
   const { act } = useAct();
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
-  const loaded = useAtomValue(terminalModuleAtom);
+  const loaded = useAtomValue(useSideBundles().terminal);
   const module = Option.getOrUndefined(AsyncResult.value(loaded));
   const [state, setState] = useState<TerminalState>({ kind: TERMINAL_STATE.CONNECTING });
   const [element, setElement] = useState<HTMLDivElement | null>(null);

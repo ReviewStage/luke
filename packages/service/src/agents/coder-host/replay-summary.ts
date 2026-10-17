@@ -148,29 +148,38 @@ function stepWords(step: ReplayStep): string {
   return `${step.summary}\n${step.words}`;
 }
 
-/** The recap and the steps in runs of at most `chunkBytes` each, oldest first; a part larger than a run is cut to fit one alone, since only the summary reads it. */
-function chunksOf(
-  recap: readonly string[],
-  steps: readonly ReplayStep[],
-  chunkBytes: number,
-): string[][] {
-  const chunks: string[][] = [];
-  let current: string[] = [];
+/** One part a summary call reads, the recap or a step, and how many of the source's steps it stands for. */
+interface SummaryPart {
+  readonly words: string;
+  readonly steps: number;
+}
+
+/** The parts in runs of at most `chunkBytes` each, oldest first; a part larger than a run is cut to fit one alone, since only the summary reads it. */
+function chunksOf(parts: readonly SummaryPart[], chunkBytes: number): SummaryPart[][] {
+  const chunks: SummaryPart[][] = [];
+  let current: SummaryPart[] = [];
   let used = 0;
-  for (const words of [...recap, ...steps.map(stepWords)]) {
-    const size = new TextEncoder().encode(words).byteLength;
+  for (const part of parts) {
+    const size = new TextEncoder().encode(part.words).byteLength;
     if (used + size > chunkBytes && current.length > 0) {
       chunks.push(current);
       current = [];
       used = 0;
     }
     current.push(
-      size > chunkBytes ? words.slice(0, Math.floor(chunkBytes / BYTES_PER_TOKEN)) : words,
+      size > chunkBytes
+        ? { ...part, words: part.words.slice(0, Math.floor(chunkBytes / BYTES_PER_TOKEN)) }
+        : part,
     );
     used += Math.min(size, chunkBytes);
   }
   if (current.length > 0) chunks.push(current);
   return chunks;
+}
+
+/** How many of the source's steps the chunks stand for. */
+function chunkSteps(chunks: readonly (readonly SummaryPart[])[]): number {
+  return chunks.flat().reduce((sum, part) => sum + part.steps, 0);
 }
 
 /** One summary call: the instructions and the words, bounded in what it writes, the use counted first; a call that fails or writes nothing fails. */
@@ -197,8 +206,10 @@ function summaryCall(model: SummaryModel, system: string, prompt: string, maxOut
  * before them read first, written on the model in chunks sized to its
  * window, a few at a time, then combined into one; each chunk's summary is
  * held to its share of the combining call's room, and the oldest chunks
- * past `REPLAY_FIT.MAX_CHUNKS` are left out, which the summary says.
- * Nothing where a call failed or the whole ran past the timeout.
+ * past `REPLAY_FIT.MAX_CHUNKS` are left out, which the summary says. The
+ * summary stands for the steps of the chunks it read alone, so the steps
+ * left out count as left out rather than as summarized. Nothing where a
+ * call failed or the whole ran past the timeout.
  */
 export function summarizeSteps(
   model: SummaryModel,
@@ -211,12 +222,14 @@ export function summarizeSteps(
     1,
     threshold - REPLAY_FIT.SUMMARY_OUTPUT_TOKENS - REPLAY_FIT.SUMMARY_PROMPT_TOKENS,
   );
-  const recap = earlier === undefined ? [] : [`Recap of the earlier steps:\n${earlier.text}`];
-  const all = chunksOf(recap, steps, room * BYTES_PER_TOKEN);
+  const recap: SummaryPart[] =
+    earlier === undefined
+      ? []
+      : [{ words: `Recap of the earlier steps:\n${earlier.text}`, steps: earlier.steps }];
+  const read = [...recap, ...steps.map((step) => ({ words: stepWords(step), steps: 1 }))];
+  const all = chunksOf(read, room * BYTES_PER_TOKEN);
   const kept = all.slice(-REPLAY_FIT.MAX_CHUNKS);
-  const leftOut = all
-    .slice(0, all.length - kept.length)
-    .reduce((sum, chunk) => sum + chunk.length, 0);
+  const leftOut = chunkSteps(all.slice(0, all.length - kept.length));
   const chunkOutput = Math.min(
     REPLAY_FIT.SUMMARY_OUTPUT_TOKENS,
     Math.max(REPLAY_FIT.MIN_CHUNK_OUTPUT_TOKENS, Math.floor(room / Math.max(1, kept.length))),
@@ -224,7 +237,13 @@ export function summarizeSteps(
   const written = Effect.gen(function* () {
     const parts = yield* Effect.forEach(
       kept,
-      (chunk) => summaryCall(model, CHUNK_INSTRUCTIONS, chunk.join("\n\n"), chunkOutput),
+      (chunk) =>
+        summaryCall(
+          model,
+          CHUNK_INSTRUCTIONS,
+          chunk.map((part) => part.words).join("\n\n"),
+          chunkOutput,
+        ),
       { concurrency: REPLAY_FIT.CONCURRENCY },
     );
     const combined =
@@ -240,7 +259,7 @@ export function summarizeSteps(
       leftOut === 0
         ? ""
         : `(The oldest ${leftOut} steps were too many to summarize and are left out.)\n\n`;
-    return { text: `${lead}${combined}`, steps: (earlier?.steps ?? 0) + steps.length };
+    return { text: `${lead}${combined}`, steps: chunkSteps(kept) };
   });
   return written.pipe(
     Effect.timeoutOption(REPLAY_FIT.TIMEOUT),

@@ -11,6 +11,7 @@ import type { Act, ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { SignInGate } from "./sign-in-gate";
 
 const ignore = () => undefined;
@@ -30,14 +31,11 @@ const mounted: Root[] = [];
 beforeEach(() => {
   held = [];
   window.localStorage.clear();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act) =>
-        new Promise<ActOutcome>((answer) => {
-          held.push({ request, answer });
-        }),
-    },
+  fakeAppBridge({
+    act: (request: Act) =>
+      new Promise<ActOutcome>((answer) => {
+        held.push({ request, answer });
+      }),
   });
 });
 
