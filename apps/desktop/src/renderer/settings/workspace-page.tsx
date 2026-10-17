@@ -16,7 +16,16 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { ConfirmDialog, ProviderMark, TrashIcon, useConfirmDialog, useMenu } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ConfirmDialog,
+  ProviderMark,
+  SettingsSection,
+  TrashIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -1309,6 +1318,8 @@ function identityLine(workspace: Workspace): string {
  * square; Remove photo, where one is set, asks first. The new name or photo
  * arrives with the workspaces the host reads again after it; a refusal, or a
  * file that cannot be a photo, is said under the row until the next try.
+ * The row is `@luke/ui`'s `SettingsRow` led by the tile, through `MenuRow`,
+ * and Rename its outline `Button`.
  */
 function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
@@ -1389,12 +1400,42 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           : [],
       ]
     : [];
+  const rename =
+    renamable && !editing ? (
+      <Button
+        ref={button}
+        variant={BUTTON_VARIANT.OUTLINE}
+        disabled={renaming}
+        onClick={() => {
+          setRefusal(undefined);
+          setEditing(true);
+        }}
+      >
+        Rename
+      </Button>
+    ) : null;
+  const photoPicker = manages ? (
+    <input
+      ref={picker}
+      type="file"
+      accept={PHOTO_ACCEPT}
+      hidden
+      onChange={(event) => {
+        const [picked] = Array.from(event.currentTarget.files ?? []);
+        // Cleared so the same file can be picked again after it was refused.
+        event.currentTarget.value = "";
+        if (picked !== undefined) upload(picked);
+      }}
+    />
+  ) : null;
   return (
-    <>
-      <MenuRow label="Workspace actions" actions={actions}>
-        <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
-        <span className="settings-copy">
-          {editing ? (
+    <div className="workspace-identity">
+      <MenuRow
+        label="Workspace actions"
+        actions={actions}
+        row={{
+          leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
+          label: editing ? (
             <TaskNameField
               name={workspace.name}
               className="settings-input workspace-name-input"
@@ -1403,39 +1444,17 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
               onEnd={end}
             />
           ) : (
-            <strong>{workspace.name}</strong>
-          )}
-          <small>{identityLine(workspace)}</small>
-        </span>
-        {renamable && !editing ? (
-          <button
-            ref={button}
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={renaming}
-            onClick={() => {
-              setRefusal(undefined);
-              setEditing(true);
-            }}
-          >
-            Rename
-          </button>
-        ) : null}
-        {manages ? (
-          <input
-            ref={picker}
-            type="file"
-            accept={PHOTO_ACCEPT}
-            hidden
-            onChange={(event) => {
-              const [picked] = Array.from(event.currentTarget.files ?? []);
-              // Cleared so the same file can be picked again after it was refused.
-              event.currentTarget.value = "";
-              if (picked !== undefined) upload(picked);
-            }}
-          />
-        ) : null}
-      </MenuRow>
+            workspace.name
+          ),
+          description: identityLine(workspace),
+          control: (
+            <>
+              {rename}
+              {photoPicker}
+            </>
+          ),
+        }}
+      />
       {refusal === undefined ? null : (
         <p className="error-message" role="alert">
           {refusal}
@@ -1449,7 +1468,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           running: "Removing",
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -1506,9 +1525,9 @@ function ShownWorkspace({
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
   return (
     <>
-      <SettingsGroup>
+      <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
-      </SettingsGroup>
+      </SettingsSection>
       <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
         <TeamMembers
           workspace={workspace}
