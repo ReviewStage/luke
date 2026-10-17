@@ -665,12 +665,19 @@ test("where an archive took the box, the transcript's end names the agents that 
     status: CODING_AGENT_STATUS.COMPLETED,
     continues: false,
     onUnarchive: () => undefined,
-    source: { continuedBy: [{ agentId: NEXT, forked: false }] },
+    source: { continuedBy: [{ agentId: NEXT, title: "Fix the tile (2)", forked: false }] },
   });
   assert.equal(
     completed.continuedIn().length,
     1,
     "a completed agent has no end line, yet is named",
+  );
+  assert.deepEqual(
+    [...(completed.continuedIn()[0]?.querySelectorAll("button.actor-ref") ?? [])].map(
+      (chip) => chip.textContent,
+    ),
+    ["Fix the tile (2)"],
+    "by the title the summary gives it, though the list does not hold it",
   );
 });
 

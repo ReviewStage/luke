@@ -1,12 +1,13 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { Button, TEXT_TONE, Text } from "@luke/ui";
+import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
 import { BANNER_LOOK, Banner } from "../banner";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
 import { useAgentArchive } from "../desktop/agent-archive";
-import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref";
+import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model";
 import { useContinueDoor } from "./fork-action";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -132,6 +133,8 @@ export function ContinueAgent({
 /** What names the agents that continued another: the control their chips are read from, and the door that opens one's tab. */
 interface ContinuedDoors {
   readonly agentIds: readonly string[];
+  /** The titles the source's summary gives them (`continuedByTitles`), which name a chip the list does not hold. */
+  readonly titles: ReadonlyMap<string, string>;
   readonly control: Pick<
     CodingAgentsControl,
     "agents" | "archived" | "models" | "me" | "pullRequests" | "chatOn"
@@ -140,15 +143,30 @@ interface ContinuedDoors {
   readonly onOpenAgent: ((agentId: string) => void) | undefined;
 }
 
+/** An agent the list does not hold, named by the title the source's summary gives it where it gives one. */
+function titledSubject(subject: AgentSubject, title: string | undefined): AgentSubject {
+  if (subject.agent !== undefined || title === undefined) return subject;
+  if (subject.tile.kind !== ACTOR_KIND.AGENT) return subject;
+  return { ...subject, name: title, tile: { ...subject.tile, name: title } };
+}
+
 /** Continued in, then each continuing agent's chip, a comma held after each but the last so no gap opens before it. */
-function ContinuedIn({ agentIds, control, onOpenAgent }: ContinuedDoors): React.JSX.Element {
+function ContinuedIn({
+  agentIds,
+  titles,
+  control,
+  onOpenAgent,
+}: ContinuedDoors): React.JSX.Element {
   return (
     <span className="agent-continued-in" data-continued="">
       <span>{CONTINUED_IN}</span>
       {agentIds.map((agentId, index) => (
         <span key={agentId} className="agent-continued-item">
           <AgentActorRef
-            subject={agentSubject(control, agentId, NOTHING_HELD, false)}
+            subject={titledSubject(
+              agentSubject(control, agentId, NOTHING_HELD, false),
+              titles.get(agentId),
+            )}
             models={control.models}
             onOpen={() => onOpenAgent?.(agentId)}
           />

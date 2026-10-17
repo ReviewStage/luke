@@ -80,6 +80,7 @@ import {
   archivedByReading,
   chatNoticeOf,
   continuedByIds,
+  continuedByTitles,
   delegates,
   dockedTodos,
   type EndLineParts,
@@ -1762,7 +1763,12 @@ export function AgentTab({
       : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
   // The agents that continued this one, as its summary or the task's list names them: a fork is none.
   const continued = continuedByIds(agent, control.agents, control.archived);
-  const continuedDoors = { agentIds: continued, control, onOpenAgent: openAgent };
+  const continuedDoors = {
+    agentIds: continued,
+    titles: continuedByTitles(agent),
+    control,
+    onOpenAgent: openAgent,
+  };
   return (
     <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
       <AgentTabView
