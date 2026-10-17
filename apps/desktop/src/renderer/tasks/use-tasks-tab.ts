@@ -21,8 +21,7 @@ import {
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
-import type { ChatShown } from "@luke/host/agent-notices";
+import { ACT_KIND, type ChatShown } from "@luke/host/acts";
 import {
   type AppInboxTask,
   type AppInboxTaskHolding,

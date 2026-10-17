@@ -30,6 +30,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
+import type { ChatShown } from "./acts.js";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 
 /**
@@ -312,15 +313,6 @@ export interface AgentNotices {
   shownInbox(taskId: string | null): void;
   /** The panel said which Chat it has on screen, or none. */
   shownChat(shown: ChatShown | null): void;
-}
-
-/**
- * The Chat the panel has on screen: a workspace's whole Chat, where the
- * plan is none, or one task's Chat tab, which shows only its plan's channel.
- */
-export interface ChatShown {
-  readonly workspaceId: string;
-  readonly planId: string | null;
 }
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */

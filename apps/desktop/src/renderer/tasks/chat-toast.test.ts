@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { ChatShown } from "@luke/host/agent-notices";
+import type { ChatShown } from "@luke/host/acts";
 import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";

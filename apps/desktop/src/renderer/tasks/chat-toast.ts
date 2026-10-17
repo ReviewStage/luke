@@ -14,13 +14,22 @@
  * earlier one.
  */
 
-import type { ChatShown } from "@luke/host/agent-notices";
+import type { ChatShown } from "@luke/host/acts";
 import { useEffect, useRef } from "react";
 import { appBridge } from "../app-bridge";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 
 /** What a waiting message's toast offers, to open Chat. */
 const VIEW_LABEL = "View";
+
+/**
+ * How many told messages are kept to withdraw. Note that the oldest is let
+ * go past it, because a toast leaves by itself and the stack says nothing
+ * when, so a long-lived window would otherwise keep every message it was
+ * ever told; one let go long ago has left, and one that has not, three
+ * standing and the rest waiting their turn, still leaves on its own hold.
+ */
+const TOLD_BOUND = 100;
 
 /** Where a message waits: its workspace, and its plan where it waits in a plan's channel. */
 interface WaitsIn {
@@ -42,6 +51,8 @@ export function useChatToasts(view: (workspaceId: string) => void, shown: ChatSh
     () =>
       appBridge().onChatMessageWaiting(({ messageId, workspaceId, planId, words, detail }) => {
         told.current.set(messageId, { workspaceId, planId });
+        const oldest = told.current.keys().next().value;
+        if (told.current.size > TOLD_BOUND && oldest !== undefined) told.current.delete(oldest);
         toast({
           words,
           detail,
