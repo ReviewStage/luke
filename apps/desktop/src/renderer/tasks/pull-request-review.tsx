@@ -92,7 +92,7 @@ interface ReviewDraft {
  * The panel: its head, the words with their preview, what the review says,
  * GitHub's answer where it did not take the last one, and Cancel and
  * Submit. Escape closes it, ⌘↩ submits from anywhere in it, and focus
- * leaving it closes it, its words kept.
+ * leaving it closes it, its words kept, unless a review is on its way.
  */
 function ReviewPanel({
   id,
@@ -267,6 +267,11 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
             writes={writes}
             onClose={close}
             onLeave={(left) => {
+              // Note that a review on its way holds the panel open, because the
+              // press it was sent from is disabled as it goes, which drops the
+              // focus the way a click outside would, and GitHub's answer is
+              // drawn in the panel.
+              if (writes.pending !== undefined) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}
           />
