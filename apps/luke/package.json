@@ -21,6 +21,7 @@
     "@luke/database": "workspace:*",
     "@luke/service": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@sentry/node": "11.7.0",
     "@vercel/connect": "2.4.1",
     "@vercel/oidc": "4.0.0",
     "ai": "catalog:",
