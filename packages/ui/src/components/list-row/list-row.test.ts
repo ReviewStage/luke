@@ -9,9 +9,10 @@ import { List, ListRow } from "./list-row.js";
 /**
  * list-row.test.ts -- a row's press and its acts are separate buttons, never
  * one inside the other, and an act is pressed without pressing its row. A
- * row reads as its words, title first; the open one is announced as current,
- * whether it opens something or not; and a row that opens nothing is no
- * control, though its acts still are. Synthetic members.
+ * row reads as its words, title first, and Tab meets it before its acts; the
+ * open one is announced as current, whether it opens something or not; and a
+ * row that opens nothing is no control, though its acts still are. Synthetic
+ * members.
  */
 
 declare global {
@@ -126,6 +127,25 @@ test("a row reads as its words, title first, its leading mark hidden from a read
   const container = draw(createElement(Members));
   const row = button(container, "Ada Lovelaceada@example.comOwner");
   expect(row.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
+  // Note that nothing names the row over its words, because a voice says what it sees.
+  expect([row.getAttribute("aria-label"), row.getAttribute("aria-labelledby")]).toEqual([
+    null,
+    null,
+  ]);
+});
+
+test("Tab meets a row, then its acts, then the next row, none taken out of the order", () => {
+  const container = draw(createElement(Members));
+  const order = [
+    "Ada Lovelaceada@example.comOwner",
+    "More for ada",
+    "Grace Hoppergrace@example.comAdmin",
+    "More for grace",
+  ].map((name) => button(container, name));
+  expect([...container.querySelectorAll("button")]).toEqual(order);
+  for (const each of order) {
+    expect(each.tabIndex).toBe(0);
+  }
 });
 
 test("a row that opens nothing is no control, its acts still are", () => {
