@@ -137,7 +137,7 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
 const TASKS_LIST_LIMIT = 50;
 
 const CODING_AGENT_TOOL_BOUNDS = {
-  /** The newest turns a progress read walks, the one under way included. */
+  /** The newest turns a progress read walks first, the one under way included. */
   TAIL_TURNS: 3,
   /** The entries a progress read answers where it asks for no number, the newest last. */
   TAIL_ENTRIES: 20,
@@ -898,6 +898,27 @@ export function runListAgents(
   );
 }
 
+/**
+ * The newest entries of an agent's transcript, as many as asked where it
+ * has them. Note that the newest turns are read first and older ones only
+ * where those fall short, because a coding agent's one turn is often its
+ * whole run, long enough on its own; and that the second read takes as many
+ * turns as entries asked, since a turn that ended carries at least one.
+ */
+const tailOf = (agent: CodingAgent, entries: number, entryChars: number) =>
+  Effect.gen(function* () {
+    const entriesIn = (journals: readonly StoredUIMessage[]) =>
+      journals.flatMap((journal) => entriesOf(journal, entryChars));
+    const newest = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
+    const read = entriesIn(newest);
+    const more =
+      read.length < entries &&
+      newest.length === CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS &&
+      entries > CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS;
+    const all = more ? entriesIn(yield* journalsOf(agent, entries)) : read;
+    return all.slice(-entries);
+  });
+
 /** One call of `read_agent`: the agent as the list reads it, and the tail of its newest turns, as long as asked and each entry cut for the caller. */
 export function runReadAgent(
   call: CodingAgentCall,
@@ -921,8 +942,7 @@ export function runReadAgent(
       const step = yield* workspaceStepOf(callerUserId(call.caller), workspaceId);
       const reading = yield* readAgent(agent, task, standing(agent), yield* offeredModels, step);
       const published = yield* publishedOf(callerUserId(call.caller), agent);
-      const journals = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
-      const tail = journals.flatMap((journal) => entriesOf(journal, entryChars)).slice(-entries);
+      const tail = yield* tailOf(agent, entries, entryChars);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: readingRecord(reading),

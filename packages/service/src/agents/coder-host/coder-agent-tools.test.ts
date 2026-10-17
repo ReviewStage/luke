@@ -430,7 +430,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
   assert.equal(eve.sent.length, 0, "a list sends nothing");
 });
 
-test("read_agent reads a teammate's agent on another task of the caller's workspace, with the tail of its transcript in entries kept longer than Luke's and as many as asked, and reads no agent of another workspace", async () => {
+test("read_agent reads a teammate's agent on another task of the caller's workspace, with the tail of its transcript in entries kept longer than Luke's and as many as asked, older turns included, and reads no agent of another workspace", async () => {
   const { workspaceId, plans, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
@@ -462,6 +462,24 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   assert.deepEqual(
     (await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 1 })).tail,
     [`Said: ${report}`],
+  );
+
+  // A tail longer than the newest turns hold reaches back into older ones.
+  for (const turn of [2, 3, 4]) {
+    const later = new AssistantMessageBuilder();
+    later.stepStart();
+    later.text(`Turn ${turn} done.`);
+    await answeredTurnOn(agents.teammates, later);
+  }
+  assert.deepEqual(
+    (await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 5 })).tail,
+    [
+      "Ran: pnpm test",
+      `Said: ${report}`,
+      "Said: Turn 2 done.",
+      "Said: Turn 3 done.",
+      "Said: Turn 4 done.",
+    ],
   );
 
   // An agent of another workspace is none of the caller's, even one its starter is also in.
