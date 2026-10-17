@@ -227,8 +227,7 @@ function SingleRelease({
 }
 
 export function ChangelogPage({ view }: { readonly view: ChangelogView }): React.JSX.Element {
-  /* Only the first page of releases is the changelog's own address; a later
-     page and a release stand beneath it. */
+  // Note that only page one is the changelog's own address; later pages and releases sit beneath it.
   const place = {
     page: SITE_PAGE.CHANGELOG,
     beneath: view.kind !== CHANGELOG_VIEW.PAGE || view.page !== 1,
