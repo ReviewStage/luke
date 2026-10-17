@@ -200,6 +200,8 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
           onOpen: ignore,
           onClose: ignore,
           onChoose: ignore,
+          pages: undefined,
+          onRereadPages: () => undefined,
         },
       }),
     }),

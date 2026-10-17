@@ -4326,6 +4326,13 @@ button.integration-tool-head:hover,
   padding-right: var(--column-inset);
 }
 
+/* Split beside the item, the list's bar ends at the item's edge rather than
+   the window's, so it keeps its own inset though the side panel's toggle
+   stands at the window's top right. */
+.desktop-shell .inbox-view[data-columns="both"] .inbox-tasks-bar {
+  padding-right: var(--column-inset);
+}
+
 /* While the sidebar is folded the window's Inbox's list is its first column, so its
    name stands centred over the list, as a sidebar's title does, rather than
    pushed past the title bar's buttons. Each side of the name holds at least
@@ -4335,6 +4342,7 @@ button.integration-tool-head:hover,
    on both sides, so centred in the bar is centred in the list. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view
   .inbox-tasks-bar {
@@ -4348,6 +4356,7 @@ button.integration-tool-head:hover,
 
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view
   .inbox-tasks-bar
@@ -4357,6 +4366,7 @@ button.integration-tool-head:hover,
 
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view
   .inbox-tasks-bar
@@ -4384,6 +4394,7 @@ button.integration-tool-head:hover,
    its bar past the title bar's buttons, as a page's title does. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view[data-columns="list"]
   .inbox-tasks-bar {
@@ -4837,6 +4848,7 @@ button.integration-tool-head:hover,
    bar, led by the way back, leaves the title bar's buttons their room. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view[data-columns="item"]
   .inbox-view-items
@@ -6844,9 +6856,10 @@ button.automation-run:hover {
 
 /* Hidden, not removed, while the panel fills the window: it keeps its layout
    beneath the panel, and is hidden only once the panel has grown over it. An
-   agent's page beside its panel is hidden alike. */
+   agent's page and the window's Inbox beside their panel are hidden alike. */
 .desktop-task-main[hidden],
-.desktop-task > .agent-page[hidden] {
+.desktop-task > .agent-page[hidden],
+.desktop-task > .page-find[hidden] {
   visibility: hidden;
   transition: visibility 0s linear var(--duration-pane);
 }

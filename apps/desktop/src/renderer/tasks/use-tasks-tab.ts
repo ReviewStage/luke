@@ -7,6 +7,7 @@ import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
@@ -132,6 +133,7 @@ import {
 } from "./tasks-fixture";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
+import { useInboxPages } from "./use-inbox-pages";
 import { useLastTask } from "./use-last-task";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
@@ -224,6 +226,10 @@ interface InboxViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
+  /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
+  readonly pages: readonly PageLine[] | undefined;
+  /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
+  readonly onRereadPages: () => void;
 }
 
 /**
@@ -1264,16 +1270,48 @@ export function useTasksTab(input: {
     () => (pageAgent === undefined ? undefined : [pageAgent]),
     [pageAgent],
   );
+  // The Inbox lists the listed workspace's items alone, so a choice another workspace's list made gives way with it.
+  // Note that an agent's with no task is held to the listed workspace by the list itself, which lists its workspace's alone.
+  const inboxAsked = inboxView?.chosen;
+  const inboxChosen =
+    inboxAsked !== undefined &&
+    (!("taskId" in inboxAsked) ||
+      inWorkspace([inboxAsked], tasks.tasks, listedWorkspaceId).length > 0)
+      ? inboxAsked
+      : undefined;
+  // While the Inbox stands, the panel beside it is the chosen item's task's, or its agent's where it
+  // has no task, as that agent's page's is: what the item opens there, its files, its task's pages,
+  // and its agents' pull requests, and none of the fixed kinds, which the task's page draws.
+  const inboxTask =
+    inboxChosen !== undefined && "taskId" in inboxChosen ? inboxChosen.taskId : undefined;
+  const inboxAgent =
+    inboxChosen !== undefined && "agentId" in inboxChosen ? inboxChosen.agentId : undefined;
+  const inboxPages = useInboxPages(inboxView === undefined ? undefined : inboxTask);
+  const inboxPageIds = useMemo(
+    () => (inboxPages.pages ?? NO_PAGES).map((page) => page.id),
+    [inboxPages.pages],
+  );
+  const inboxAgents = useMemo(
+    () => (inboxAgent === undefined ? NO_IDS : [inboxAgent]),
+    [inboxAgent],
+  );
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
-    pageAgents === undefined
-      ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
-      : { id: pageAgent, holds: NO_HOLDS },
-    pageAgents ?? mainTabs.openAgents,
-    pageAgents === undefined ? workers : NO_IDS,
-    pageAgents === undefined ? files : NO_IDS,
-    pageAgents === undefined ? pages : NO_IDS,
-    pageAgents ?? agents.agentIds,
+    inboxView !== undefined
+      ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
+      : pageAgents === undefined
+        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
+        : { id: pageAgent, holds: NO_HOLDS },
+    inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
+    inboxView === undefined && pageAgents === undefined ? workers : NO_IDS,
+    inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
+    inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : NO_IDS,
+    // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by.
+    inboxView !== undefined
+      ? inboxAgent === undefined
+        ? undefined
+        : inboxAgents
+      : (pageAgents ?? agents.agentIds),
   );
   // An agent pinned to the sidebar is named there as its tab is named now,
   // so a pin made before the agent had its title, or before a rename,
@@ -1307,15 +1345,6 @@ export function useTasksTab(input: {
       : columnShown && isAgentTab(mainTabs.tab)
         ? mainTabs.tab.agent
         : null;
-  // The Inbox lists the listed workspace's items alone, so a choice another workspace's list made gives way with it.
-  // Note that an agent's with no task is held to the listed workspace by the list itself, which lists its workspace's alone.
-  const inboxAsked = inboxView?.chosen;
-  const inboxChosen =
-    inboxAsked !== undefined &&
-    (!("taskId" in inboxAsked) ||
-      inWorkspace([inboxAsked], tasks.tasks, listedWorkspaceId).length > 0)
-      ? inboxAsked
-      : undefined;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
       ? inboxChosen !== undefined && "taskId" in inboxChosen
@@ -2665,6 +2694,8 @@ export function useTasksTab(input: {
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
         ),
+      pages: inboxPages.pages,
+      onRereadPages: inboxPages.onReread,
     },
     // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.
     chatView: {

@@ -364,6 +364,8 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
             asked.closed += 1;
           },
           onChoose: setChosen,
+          pages: undefined,
+          onRereadPages: () => undefined,
         },
         onShowTask: (planId) => asked.shownTasks.push(planId),
         onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),

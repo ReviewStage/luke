@@ -142,6 +142,8 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      pages: undefined,
+      onRereadPages: () => undefined,
     },
     factoryView: { open: true, onOpen: () => undefined, onClose: () => undefined },
     ...overrides,
