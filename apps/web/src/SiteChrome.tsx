@@ -85,11 +85,11 @@ function currentProps(page: SitePage, current: SitePage | undefined) {
 /**
  * Shared between every page so navigation and branding never drift apart:
  * the wordmark and the links the banner holds, handed to PublicPage's
- * `banner`; `current` marks the page the reader is on.
+ * `banner`; `current` marks the page the reader is on. Every link stands the
+ * web's 44px tall inside the 64px banner, so its hit target is the contract's
+ * without moving a word.
  */
 export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
-  // Every link stands the web's 44px tall inside the 64px banner, so its hit
-  // target is the contract's without moving a word.
   return (
     <nav aria-label="Site" className="flex items-center justify-between">
       <a
