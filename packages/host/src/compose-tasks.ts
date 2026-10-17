@@ -18,6 +18,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
+  CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
@@ -123,6 +124,7 @@ import {
   FiberHandle,
   Option,
   Queue,
+  RcMap,
   Result,
   Schedule,
   Schema,
@@ -133,8 +135,10 @@ import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
+import { type TranscriptFollows, transcriptFollows, transcriptPast } from "./transcript-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document, drawn as the notetaker writes it during a call.
@@ -381,14 +385,22 @@ export type TasksClient = Pick<
   github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnect">;
 };
 
-/** The service's side of a task's conversation, read as an agent's transcript is. */
-export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
+/** The service's side of a task's planning conversation, read as an agent's transcript is, and a planning worker's transcript, read at once and sealed for following over Neon Realtime. */
+export type TasksConversationClient = Pick<
+  HostedCodingAgentClient,
+  "taskMessages" | "taskWorkerMessagesNow" | "taskWorkerTranscriptLive"
+>;
+
+/** Which planning worker's transcript: the task's, by the call that started the worker. */
+class TaskWorkerKey extends Data.Class<{ readonly taskId: string; readonly callId: string }> {}
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   conversations: TasksConversationClient;
+  /** Realtime's client at an address, which a planning worker's transcript is followed over; Realtime's own outside a test. */
+  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /**
    * Ends the call standing about `taskId`, or whatever it is about
    * where none is named, and waits for it to end. A call about another task
@@ -534,6 +546,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
+
+  /** The planning workers' transcripts the windows' reads share, each followed over Neon Realtime while read and a while after. */
+  const workerTranscripts: TranscriptFollows<TaskWorkerKey> = yield* transcriptFollows({
+    seal: ({ taskId, callId }: TaskWorkerKey) =>
+      gate()
+        ? served(conversations.taskWorkerTranscriptLive(taskId, callId))
+        : Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    openLive: dependencies.openLive ?? openRealtimeClient,
+    now: kernel.now,
+  });
 
   /** The tasks whose call just said something, whose parked conversation read the loop below wakes. */
   const conversationWakes = yield* Queue.sliding<string>(1);
@@ -1292,7 +1314,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           });
         }
         const { taskId, callId, ...page } = read.success;
-        const answer = yield* served(conversations.taskMessages(taskId, page, callId));
+        const held = served(conversations.taskMessages(taskId, page, callId));
+        // A planning worker's transcript is held here on its live statements where the service seals them.
+        const answer =
+          callId === undefined
+            ? yield* held
+            : yield* transcriptPast(workerTranscripts, new TaskWorkerKey({ taskId, callId }), {
+                now: served(
+                  conversations.taskWorkerMessagesNow(
+                    taskId,
+                    callId,
+                    page.after ?? CODING_AGENT_CURSOR_START,
+                  ),
+                ),
+                held,
+              });
         return carried<CodingAgentMessagesAnswerView>(answer);
       }),
     // A file's window is answered to the File tab that asked, coloured here,
@@ -2130,6 +2166,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     reset: Effect.gen(function* () {
       yield* endTaskCall(undefined);
       yield* FiberHandle.clear(conversationRead);
+      for (const key of yield* RcMap.keys(workerTranscripts)) {
+        yield* RcMap.invalidate(workerTranscripts, key);
+      }
       yield* serial(
         Effect.sync(() => {
           workspacesAskedAt = undefined;

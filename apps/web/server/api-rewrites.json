@@ -408,6 +408,10 @@
     "dest": "/api/default.js?route=live/inbox"
   },
   {
+    "src": "/api/live/plan-worker-transcript",
+    "dest": "/api/default.js?route=live/plan-worker-transcript"
+  },
+  {
     "src": "/api/live/task-inbox",
     "dest": "/api/default.js?route=live/task-inbox"
   },

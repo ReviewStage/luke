@@ -395,6 +395,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const taskId = yield* uuidNamed(input.id);
       const call = yield* callNamed(input.call);
       const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
+      const now = readsNow(input.wait);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task) || task.value.conversationId === undefined) {
         return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -407,26 +408,39 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         if (status !== CODING_AGENT_STATUS.RUNNING) {
           return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
         }
-        return taskAnswer(
+        return transcriptAnswer(
           { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
           null,
+          now ? true : undefined,
         );
       }
       const child = childConversationId(parent.conversationId, session);
       const createdAt = new Date(yield* Clock.currentTimeMillis);
-      const page = yield* hostedStoreOrUnavailable(
-        transcriptPast(
-          { userId: context.userId, conversationId: child },
-          HOSTED_TOOL_SET,
-          cursorOfWire(after),
-          { createdAt },
-          undefined,
-          brainTitleAwaited(parent, child),
-          BRAIN_POLL,
-        ),
-      );
+      const worker = { userId: context.userId, conversationId: child };
+      const cursor = cursorOfWire(after);
+      const titleAwaited = brainTitleAwaited(parent, child);
+      const { page, holds, wakeIn } = now
+        ? yield* hostedStoreOrUnavailable(
+            transcriptNow(worker, HOSTED_TOOL_SET, cursor, { createdAt }, undefined, titleAwaited),
+          )
+        : {
+            page: yield* hostedStoreOrUnavailable(
+              transcriptPast(
+                worker,
+                HOSTED_TOOL_SET,
+                cursor,
+                { createdAt },
+                undefined,
+                titleAwaited,
+                BRAIN_POLL,
+              ),
+            ),
+            holds: undefined,
+            wakeIn: undefined,
+          };
+      // The title is read after the page, since it lands beside the worker's start, which a held read may span.
       const titles = yield* hostedStoreOrUnavailable(childTitlesOf(parent, [child]));
-      return taskAnswer(page, titles.get(child) ?? null);
+      return transcriptAnswer(page, titles.get(child) ?? null, holds, wakeIn);
     }),
 
     chat: signedIn.chat.effect(function* ({ input, context }) {

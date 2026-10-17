@@ -42,7 +42,7 @@ const byCall = { id: EffectSchema.String, call: EffectSchema.String };
 /** A transcript read past a cursor. */
 const transcriptQuery = { after: queryValue };
 
-/** An agent's or a worker's transcript read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`). */
+/** An agent's or a worker's transcript, or a planning worker's, read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`). */
 const agentTranscriptQuery = { ...transcriptQuery, wait: queryValue };
 
 /** A page of an agent's or a worker's transcript, with whether the held read would have held on it, and how soon the clock alone may end that, where it was read at once (`transcriptNowAnswerSchema`). */
@@ -84,11 +84,11 @@ export const messagesContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/messages" }))
     .input(EffectSchema.Struct({ ...byId, ...transcriptQuery, before: queryValue }))
     .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
-  /** One task's brain worker's transcript past the cursor, held while it runs. */
+  /** One task's brain worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   taskWorker: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/subagents/{call}/messages" }))
-    .input(EffectSchema.Struct({ ...byCall, ...transcriptQuery }))
-    .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
+    .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
+    .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
   /** A workspace's chat past the cursor, held while nothing moved. */
   chat: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_CHAT }))

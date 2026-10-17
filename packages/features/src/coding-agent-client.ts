@@ -315,6 +315,14 @@ function readAnswer<Answer, Encoded>(
  * caller names, with the fields that refusal carries; unanswered for
  * everything else.
  */
+/** A transcript page read at once, or unanswered where the service said nothing of whether it would hold, as one too old to read at once does. */
+function readNow(
+  answer: (CodingAgentMessagesAnswerView & { readonly holds?: boolean }) | Failed,
+): TranscriptNowAnswer | Failed {
+  if ("failure" in answer) return answer;
+  return answer.holds === undefined ? UNANSWERED : { ...answer, holds: answer.holds };
+}
+
 function hostedAnswer<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: NamedRefusals,
@@ -568,11 +576,7 @@ export class HostedCodingAgentClient {
       callId === undefined
         ? askHosted(this.#hosted.messages.agent, { id: agentId, after, wait })
         : askHosted(this.#hosted.messages.agentWorker, { id: agentId, call: callId, after, wait });
-    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), (answer) =>
-      "failure" in answer || answer.holds === undefined
-        ? UNANSWERED
-        : { ...answer, holds: answer.holds },
-    );
+    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
   }
 
   /**
@@ -591,6 +595,46 @@ export class HostedCodingAgentClient {
       this.#call.send({
         method: HTTP_METHOD.GET,
         path: `${HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT}?${query}`,
+      }),
+      (answer) => readAnswer(answer, agentTranscriptLiveAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * One planning worker's transcript past the cursor, read at once rather
+   * than held, with whether the held read would have held on it: for a
+   * reader following the worker's live statements.
+   */
+  taskWorkerMessagesNow(
+    taskId: string,
+    callId: string,
+    after: string,
+  ): Effect.Effect<TranscriptNowAnswer | Failed, never, HttpClient.HttpClient> {
+    const asked = askHosted(this.#hosted.messages.taskWorker, {
+      id: taskId,
+      call: callId,
+      after,
+      wait: TRANSCRIPT_NOW_QUERY.NONE,
+    });
+    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
+  }
+
+  /**
+   * One planning worker's transcript sealed for following over Neon
+   * Realtime, as an agent's worker's is, answered at once: not found where
+   * the account reaches no such plan, unanswered where the deployment has
+   * no Realtime and for anything else, which the caller answers by holding
+   * its read open as before.
+   */
+  taskWorkerTranscriptLive(
+    taskId: string,
+    callId: string,
+  ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({ id: taskId, call: callId });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_TASK_WORKER_TRANSCRIPT}?${query}`,
       }),
       (answer) => readAnswer(answer, agentTranscriptLiveAnswerSchema, ROW_REFUSALS),
     );
