@@ -326,6 +326,21 @@ function fixture() {
             ? { issues: [LINEAR_ISSUE] }
             : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const);
         }),
+      workspaceEnvironmentRead: (params) =>
+        Effect.sync(() => {
+          asked.push(`environment:${params.workspaceId}`);
+          return { entries: [] };
+        }),
+      workspaceEnvironmentSave: (params) =>
+        Effect.sync(() => {
+          asked.push(`environment-save:${params.workspaceId}:${params.name}`);
+          return host.notPermitted ? refusal() : { entries: [] };
+        }),
+      workspaceEnvironmentRemove: (params) =>
+        Effect.sync(() => {
+          asked.push(`environment-remove:${params.workspaceId}:${params.name}`);
+          return host.notPermitted ? refusal() : { entries: [] };
+        }),
       workspaceMembers: (params) =>
         Effect.sync(() => {
           asked.push(`members:${params.workspaceId}`);

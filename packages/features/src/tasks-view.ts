@@ -49,6 +49,12 @@ import {
 import { taskTranscriptSchema } from "./transcript-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import {
+  workspaceEnvironmentAnswerSchema,
+  workspaceEnvironmentListRequestSchema,
+  workspaceEnvironmentRemoveRequestSchema,
+  workspaceEnvironmentSaveRequestSchema,
+} from "./workspace-environment-wire.js";
+import {
   workspaceInvitationCancelSchema,
   workspaceInvitationSchema,
   workspaceInviteRequestSchema,
@@ -930,6 +936,31 @@ export const tasksLinearIssuesAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksLinearIssuesAnswer = typeof tasksLinearIssuesAnswerSchema.Type;
+
+/** A workspace's environment variables and secrets, as the window asks for them: the workspace. */
+export const tasksWorkspaceEnvironmentParamsSchema = workspaceEnvironmentListRequestSchema;
+
+export type TasksWorkspaceEnvironmentParams = typeof tasksWorkspaceEnvironmentParamsSchema.Type;
+
+/** One environment variable or secret saved, as the window asks it: the workspace, the name, the kind, and the value, once. */
+export const tasksWorkspaceEnvironmentSaveParamsSchema = workspaceEnvironmentSaveRequestSchema;
+
+export type TasksWorkspaceEnvironmentSaveParams =
+  typeof tasksWorkspaceEnvironmentSaveParamsSchema.Type;
+
+/** One environment variable or secret removed, as the window asks it: the workspace and the name. */
+export const tasksWorkspaceEnvironmentRemoveParamsSchema = workspaceEnvironmentRemoveRequestSchema;
+
+export type TasksWorkspaceEnvironmentRemoveParams =
+  typeof tasksWorkspaceEnvironmentRemoveParamsSchema.Type;
+
+/** A workspace's environment as the window hears it read, saved, or removed: the list as it then stands, or why it does not. */
+export const tasksWorkspaceEnvironmentAnswerSchema = EffectSchema.Union([
+  workspaceEnvironmentAnswerSchema,
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceEnvironmentAnswer = typeof tasksWorkspaceEnvironmentAnswerSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

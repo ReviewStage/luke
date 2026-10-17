@@ -166,6 +166,8 @@ const MAC_GROUP_READS: ReadonlySet<ActKind> = new Set([
 function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
+    case ACT_KIND.WORKSPACE_ENVIRONMENT_READ:
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { entries: [] } });
     case ACT_KIND.WORKSPACE_MEMBERS_READ:
       if (refuseMembersRead) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
@@ -712,7 +714,7 @@ test("the chosen team workspace's members are listed with their email and role, 
 
   assert.deepEqual(
     sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
-    [ACT_KIND.WORKSPACE_MEMBERS_READ],
+    [ACT_KIND.WORKSPACE_ENVIRONMENT_READ, ACT_KIND.WORKSPACE_MEMBERS_READ],
   );
   assert.equal(rowNamed(page, "Dana").querySelector("small")?.textContent, "dana@example.com");
   assert.deepEqual(
@@ -1459,7 +1461,9 @@ test("the owner invites an address as a role, sees it pending with its link to c
     sent
       .filter(
         (request) =>
-          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ && !MAC_GROUP_READS.has(request.kind),
+          request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_ENVIRONMENT_READ &&
+          !MAC_GROUP_READS.has(request.kind),
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [

@@ -32,6 +32,15 @@ import {
   type WorkspaceCallResult,
 } from "./workspace-call.js";
 import {
+  type WorkspaceEnvironmentAnswer,
+  type WorkspaceEnvironmentRemoveRequest,
+  type WorkspaceEnvironmentSaveRequest,
+  workspaceEnvironmentAnswerSchema,
+  workspaceEnvironmentListRequestSchema,
+  workspaceEnvironmentRemoveRequestSchema,
+  workspaceEnvironmentSaveRequestSchema,
+} from "./workspace-environment-wire.js";
+import {
   WORKSPACE_INVITATIONS_QUERY,
   type WorkspaceInvitation,
   workspaceInvitationAnswerSchema,
@@ -454,6 +463,53 @@ export class HostedWorkspaceClient {
       workspaceInvitationsAnswerSchema,
       (answer) => answer.invitations,
       this.#inSession,
+    );
+  }
+
+  /** The workspace's environment variables and secrets: a variable with its value, a secret by its hint. */
+  environment(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    return this.#environment(
+      HOSTED_SERVICE_PATH.WORKSPACE_ENVIRONMENT,
+      readEither(workspaceEnvironmentListRequestSchema)({ workspaceId }),
+    );
+  }
+
+  /**
+   * One variable or secret saved, answering the list as it then stands and,
+   * where the service kept nothing, why; a save the service would refuse by
+   * shape never travels, so a secret is sent nowhere it would not be kept.
+   */
+  saveEnvironment(
+    request: WorkspaceEnvironmentSaveRequest,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    return this.#environment(
+      HOSTED_SERVICE_PATH.WORKSPACE_ENVIRONMENT_SAVE,
+      readEither(workspaceEnvironmentSaveRequestSchema)(request),
+    );
+  }
+
+  /** One variable or secret removed, answering the list as it then stands. */
+  removeEnvironment(
+    request: WorkspaceEnvironmentRemoveRequest,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    return this.#environment(
+      HOSTED_SERVICE_PATH.WORKSPACE_ENVIRONMENT_REMOVE,
+      readEither(workspaceEnvironmentRemoveRequestSchema)(request),
+    );
+  }
+
+  /** An environment call sent where its body is one the service would take, its answer read as the list. */
+  #environment(
+    path: string,
+    admitted: Result.Result<object, unknown>,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceEnvironmentAnswer>, never, HttpClient.HttpClient> {
+    if (Result.isFailure(admitted)) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      { method: HTTP_METHOD.POST, path, body: JSON.stringify(admitted.success) },
+      workspaceEnvironmentAnswerSchema,
+      (answer) => answer,
     );
   }
 
