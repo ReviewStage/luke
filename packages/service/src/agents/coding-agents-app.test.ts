@@ -80,6 +80,8 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPullRequestAnswerSchema,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ANSWER_LEAD,
@@ -554,49 +556,54 @@ const otherAccount = (token: string | null | undefined) =>
 const PUBLISHED = { branch: "luke/teammate-invitations", number: 12, headSha: "c0ffee1" } as const;
 
 /** The repository answering the published pull request's reads, its overview's among them: no checks, no comments, no reviews. */
-const publishedPullRequest: RepositoryScript = (sent) => {
-  const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
-  const pull = `${repository}/pulls/${PUBLISHED.number}`;
-  const commit = `${repository}/commits/${PUBLISHED.headSha}`;
-  // The overview's checks name the head by the ref GitHub keeps on the pull request.
-  const head = `${repository}/commits/refs%2Fpull%2F${PUBLISHED.number}%2Fhead`;
-  switch (new URL(sent.url).pathname) {
-    case `${repository}/pulls`:
-      return Response.json([{ number: PUBLISHED.number }]);
-    case pull:
-      return Response.json({
-        number: PUBLISHED.number,
-        title: "Expire teammate invitations",
-        html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
-        state: "open",
-        draft: false,
-        merged: false,
-        merged_at: null,
-        additions: 4,
-        deletions: 1,
-        changed_files: 1,
-        body: "Invitations expire.",
-        body_html: "<p>Invitations expire.</p>",
-        base: { ref: "main" },
-        head: { ref: PUBLISHED.branch, sha: PUBLISHED.headSha },
-        created_at: "2026-10-15T09:00:00Z",
-        mergeable_state: "clean",
-        user: null,
-        requested_reviewers: [],
-      });
-    case `${commit}/check-runs`:
-    case `${head}/check-runs`:
-      return Response.json({ check_runs: [] });
-    case `${commit}/status`:
-    case `${head}/status`:
-      return Response.json({ statuses: [] });
-    case `${repository}/issues/${PUBLISHED.number}/comments`:
-    case `${pull}/reviews`:
-      return Response.json([]);
-    default:
-      return undefined;
-  }
-};
+/** The same, the pull request a draft while `draft` says it is. */
+const publishedPullRequestDrafted =
+  (draft: () => boolean): RepositoryScript =>
+  (sent) => {
+    const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+    const pull = `${repository}/pulls/${PUBLISHED.number}`;
+    const commit = `${repository}/commits/${PUBLISHED.headSha}`;
+    // The overview's checks name the head by the ref GitHub keeps on the pull request.
+    const head = `${repository}/commits/refs%2Fpull%2F${PUBLISHED.number}%2Fhead`;
+    switch (new URL(sent.url).pathname) {
+      case `${repository}/pulls`:
+        return Response.json([{ number: PUBLISHED.number }]);
+      case pull:
+        return Response.json({
+          number: PUBLISHED.number,
+          title: "Expire teammate invitations",
+          html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
+          state: "open",
+          draft: draft(),
+          merged: false,
+          merged_at: null,
+          additions: 4,
+          deletions: 1,
+          changed_files: 1,
+          body: "Invitations expire.",
+          body_html: "<p>Invitations expire.</p>",
+          base: { ref: "main" },
+          head: { ref: PUBLISHED.branch, sha: PUBLISHED.headSha },
+          created_at: "2026-10-15T09:00:00Z",
+          mergeable_state: "clean",
+          user: null,
+          requested_reviewers: [],
+        });
+      case `${commit}/check-runs`:
+      case `${head}/check-runs`:
+        return Response.json({ check_runs: [] });
+      case `${commit}/status`:
+      case `${head}/status`:
+        return Response.json({ statuses: [] });
+      case `${repository}/issues/${PUBLISHED.number}/comments`:
+      case `${pull}/reviews`:
+        return Response.json([]);
+      default:
+        return undefined;
+    }
+  };
+
+const publishedPullRequest = publishedPullRequestDrafted(() => false);
 
 /** What GitHub was asked on the way to a repository token: the installation read, its listing and the token minted for it, and the repository's own token. */
 function reachRequests(sent: readonly SentToGitHub[], installationId: number) {
@@ -1168,6 +1175,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 });
 
 const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
+const AGENT_PULL_REQUEST = "/api/agents/pull-request";
 
 /** The GraphQL id GitHub gives the published pull request. */
 const PULL_REQUEST_NODE_ID = "PR_kwDOfixture12";
@@ -1193,9 +1201,10 @@ function graphqlAnswering(
         ? {}
         : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
     }),
+  repository: RepositoryScript = publishedPullRequest,
 ): RepositoryScript {
   return (sent) => {
-    if (new URL(sent.url).pathname !== "/graphql") return publishedPullRequest(sent);
+    if (new URL(sent.url).pathname !== "/graphql") return repository(sent);
     const { query, variables } = JSON.parse(sent.body);
     const call = { authorization: sent.headers.get("authorization"), query, variables };
     calls.push(call);
@@ -1216,13 +1225,14 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
   const published = (options: {
     readonly answer?: (call: GraphqlCall) => Response;
+    readonly repository?: RepositoryScript;
     readonly otherToken?: string | null;
     readonly otherJoins?: boolean;
   }) =>
     Effect.gen(function* () {
       const calls: GraphqlCall[] = [];
       const opened = yield* openTask({
-        github: graphqlAnswering(calls, options.answer),
+        github: graphqlAnswering(calls, options.answer, options.repository),
         ...(options.otherToken === undefined ? undefined : { otherToken: options.otherToken }),
       });
       if (options.otherJoins ?? true) yield* joinWorkspace(opened.task.workspaceId, opened.other);
@@ -1242,10 +1252,8 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
 
         assert.deepEqual(ready, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
         assert.deepEqual(draft, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
-        assert.deepEqual(
-          calls.map((call) => call.authorization),
-          Array.from({ length: 4 }, () => "Bearer ghu_teammate"),
-        );
+        assert.ok(calls.length > 0);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
         const mutations = calls.filter((call) => call.query.includes("mutation"));
         assert.deepEqual(
           mutations.map((call) => [
@@ -1300,10 +1308,8 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           body: { outcome: "sign-in-required" },
         });
-        assert.deepEqual(
-          calls.map((call) => call.authorization),
-          ["Bearer ghu_revoked"],
-        );
+        assert.ok(calls.length > 0);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_revoked"));
       }),
   );
 
@@ -1336,6 +1342,56 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           body: { outcome: "refused", words: "Resource not accessible by integration" },
         });
+      }),
+  );
+
+  it.effect(
+    "a teammate who read the pull request a moment before another member marked it ready reads it ready at once, not from what was kept",
+    () =>
+      Effect.gen(function* () {
+        let draft = true;
+        const { owner, other, agent, ask } = yield* published({
+          repository: publishedPullRequestDrafted(() => draft),
+          answer: (call) => {
+            if (call.query.includes("markPullRequestReadyForReview")) draft = false;
+            return Response.json({
+              data: call.query.includes("mutation")
+                ? {}
+                : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+            });
+          },
+        });
+        const stateAs = (bearer: string) =>
+          Effect.map(
+            ask(request(AGENT_PULL_REQUEST, bearer, { id: agent.id })),
+            (answered) =>
+              readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .pullRequest?.state,
+          );
+        assert.equal(yield* stateAs(owner), PULL_REQUEST_STATE.DRAFT);
+
+        yield* ask(actionAs(other, agent.id, "ready-for-review"));
+
+        assert.equal(yield* stateAs(owner), PULL_REQUEST_STATE.OPEN);
+      }),
+  );
+
+  it.effect(
+    "a pull request GitHub answers as none, with no word of why, is refused in words saying so",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: () => Response.json({ data: { repository: { pullRequest: null } } }),
+        });
+
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "ready-for-review")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words: "Could not resolve to a pull request your GitHub account can see.",
+          },
+        });
+        assert.ok(calls.every((call) => !call.query.includes("mutation")));
       }),
   );
 

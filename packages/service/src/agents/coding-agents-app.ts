@@ -792,13 +792,19 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** The instance's kept answers for the agent let go, whichever side of its end they were kept under, so the next ask reads GitHub afresh. */
-const forgetPublished = (published: PublishedCache, userId: string, agentId: string) =>
-  Effect.all(
-    [true, false].map((ended) =>
-      Cache.invalidate(published, new PublishedKey({ userId, agentId, ended })),
+/**
+ * The instance's kept answers for the agent let go, every member's and on
+ * either side of its end, so the next ask on this instance reads GitHub
+ * afresh whoever asks. Note that another instance keeps its own for at most
+ * `CODER.PUBLISHED_TTL`, as it keeps one past a change made on GitHub itself.
+ */
+const forgetPublished = (published: PublishedCache, agentId: string) =>
+  Effect.flatMap(Cache.keys(published), (keys) =>
+    Effect.forEach(
+      [...keys].filter((key) => key.agentId === agentId),
+      (key) => Cache.invalidate(published, key),
+      { discard: true },
     ),
-    { discard: true },
   );
 
 /** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
@@ -994,7 +1000,7 @@ const pullRequestActionEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullReques
       agent,
       pullRequest.number,
       actionWrite(asked.success),
-    ).pipe(Effect.ensuring(forgetPublished(published, userId, agent.id)));
+    ).pipe(Effect.ensuring(forgetPublished(published, agent.id)));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, writeAnswerOf(written));
   },
 );

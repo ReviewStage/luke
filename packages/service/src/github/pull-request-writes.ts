@@ -123,9 +123,15 @@ const NODE_ID_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } }
 }`;
 
+/** GraphQL answers a repository or pull request it cannot resolve as null, at times with no error beside it. */
 const NodeIdSchema = Schema.Struct({
-  repository: Schema.Struct({ pullRequest: Schema.Struct({ id: Schema.String }) }),
+  repository: Schema.NullOr(
+    Schema.Struct({ pullRequest: Schema.NullOr(Schema.Struct({ id: Schema.String })) }),
+  ),
 });
+
+/** What the member is told where GitHub answered no such pull request and said nothing of why. */
+const NOT_RESOLVED = "Could not resolve to a pull request your GitHub account can see.";
 
 /**
  * The pull request's GraphQL id, which every mutation names it by, read on
@@ -139,7 +145,9 @@ export const pullRequestNodeId = /* @__PURE__ */ Effect.fn("web/pullRequestNodeI
 ): Effect.fn.Return<string, GitHubWriteFailure, HttpClient.HttpClient> {
   const [owner = "", name = ""] = fullName.split("/");
   const read = yield* githubWrite(token, NODE_ID_QUERY, { owner, name, number }, NodeIdSchema);
-  return read.repository.pullRequest.id;
+  const id = read.repository?.pullRequest?.id;
+  if (id === undefined) return yield* refusalOf([NOT_RESOLVED]);
+  return id;
 });
 
 const READY_FOR_REVIEW_MUTATION = `mutation($id: ID!) {
