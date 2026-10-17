@@ -5,17 +5,21 @@ import { Database } from "@luke/database/core/query";
 import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { messages } from "@luke/database/schemas/storage";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
+import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING, GITHUB_TRIGGER_EVENT } from "@luke/features/automation-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { Effect, Option } from "effect";
+import { BRAIN_TURN_TRIGGER, userMetadataOf } from "../../core.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { titleCodingAgent } from "./title.js";
 
 /**
  * title.test.ts -- an automation's run is named from the automation's prompt
  * alone, without the lines Luke adds of the firing, and the subject of the
- * GitHub event that fired it; the model's answer is the agent's title. The
+ * GitHub event that fired it; an agent started from another is named from
+ * its brief and note, never the replay between them; the model's answer is
+ * the agent's title. The
  * model is a script that keeps what it was asked; the store is PGlite.
  * Synthetic throughout.
  */
@@ -101,6 +105,67 @@ it.layer(getTestDB())("an agent's title", (it) => {
         assert.match(asked[0] ?? "", /release\/2\.4/u, "the subject survives a long prompt");
         assert.doesNotMatch(asked[0] ?? "", /Luke started this run/u);
         assert.equal(titled.title, "Fix the flakiest CI test");
+      }),
+  );
+
+  it.effect(
+    "an agent started from another is named from its brief and the note after the replay, never the replay",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const organizationId = yield* openWorkspace(owner);
+        const handed = firstMessageText(
+          "Expire teammate invitations after a week.",
+          {
+            agentId: randomUUID(),
+            preamble: "You continue the work of another agent.",
+            steps: [
+              {
+                kind: REPLAY_STEP_KIND.SAID,
+                summary: "Said: Rewrote billing.",
+                words: "Rewrote billing.",
+              },
+            ],
+            totalSteps: 1,
+          },
+          "Also send a reminder the day before.",
+        );
+        const started = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: null,
+            organizationId,
+            planSnapshot: null,
+            prompt: handed,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/relay",
+          }),
+        );
+        yield* Database.use((db) =>
+          db.insert(messages).values({
+            userId: owner,
+            conversationId: started.agent.conversationId,
+            seq: 1,
+            clientId: randomUUID(),
+            role: MESSAGE_ROLE.USER,
+            parts: [{ type: "text", text: handed }],
+            metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+            placedAt: new Date(),
+          }),
+        );
+        const { model, asked } = scriptedTitleModel("Expire invitations with a reminder");
+
+        yield* titleCodingAgent(
+          model,
+          { userId: owner, conversationId: started.agent.conversationId },
+          started.agent,
+        );
+
+        assert.equal(asked.length, 1);
+        assert.match(asked[0] ?? "", /Expire teammate invitations after a week/u);
+        assert.match(asked[0] ?? "", /Also send a reminder the day before/u);
+        assert.doesNotMatch(asked[0] ?? "", /billing|luke:replay|You continue the work/u);
       }),
   );
 });
