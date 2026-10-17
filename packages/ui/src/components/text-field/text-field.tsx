@@ -1,4 +1,5 @@
-import type { KeyboardEvent, Ref } from "react";
+import type { ClipboardEvent, KeyboardEvent, Ref } from "react";
+import { cssCustomProperties } from "../../css.js";
 import type { FieldControl } from "../form-field/form-field.js";
 
 /**
@@ -29,6 +30,14 @@ export const TEXT_FIELD_TYPE = {
 
 export type TextFieldType = (typeof TEXT_FIELD_TYPE)[keyof typeof TEXT_FIELD_TYPE];
 
+/** What the system may fill a one-line field with: nothing, for a credential it must neither offer nor keep. */
+export const TEXT_FIELD_AUTO_COMPLETE = {
+  OFF: "off",
+} as const;
+
+export type TextFieldAutoComplete =
+  (typeof TEXT_FIELD_AUTO_COMPLETE)[keyof typeof TEXT_FIELD_AUTO_COMPLETE];
+
 /**
  * How a text entry is named: by its `FormField`'s label, through the field's
  * control, or by a `label` of its own where it stands alone, so none is
@@ -56,6 +65,8 @@ type TextEntryProps = Named & {
   autoFocus?: boolean | undefined;
   name?: string | undefined;
   maxLength?: number | undefined;
+  /** Whether the system's spell check marks the words; off for a name, an identifier, or code. */
+  spellCheck?: boolean | undefined;
 };
 
 /** The attributes a text entry carries for its field, or its own name where it has none. */
@@ -71,6 +82,7 @@ function entryAttributes(props: TextEntryProps) {
     autoFocus: props.autoFocus,
     name: props.name,
     maxLength: props.maxLength,
+    spellCheck: props.spellCheck,
     value: props.value,
   };
 }
@@ -85,11 +97,14 @@ function composing(event: KeyboardEvent): boolean {
 /** One line of text, answering Enter with `onEnter` where it is given. */
 export function TextField({
   type = TEXT_FIELD_TYPE.TEXT,
+  autoComplete,
   onEnter,
   ref,
   ...props
 }: TextEntryProps & {
   type?: TextFieldType;
+  /** What the system may fill the field with; the browser's own choice where none is named. */
+  autoComplete?: TextFieldAutoComplete | undefined;
   /** What an Enter does, pressed while no input method is composing. */
   onEnter?: (() => void) | undefined;
   ref?: Ref<HTMLInputElement> | undefined;
@@ -99,6 +114,7 @@ export function TextField({
       ref={ref}
       className="luke-text-field"
       type={type}
+      autoComplete={autoComplete}
       {...entryAttributes(props)}
       onChange={(event) => props.onChange(event.target.value)}
       onKeyDown={(event) => {
@@ -110,13 +126,23 @@ export function TextField({
   );
 }
 
-/** Many lines of text, `rows` tall to start, growing a scroll of its own past that. */
+/**
+ * Many lines of text, `rows` tall to start, growing a scroll of its own past
+ * that, or, where it may `grow`, growing with its words up to the profile's
+ * tallest note before it scrolls, with no handle to size it by.
+ */
 export function TextArea({
   rows = 4,
+  grow = false,
+  onPaste,
   ref,
   ...props
 }: TextEntryProps & {
   rows?: number;
+  /** Whether it grows with its words from `rows` tall, rather than standing at that height. */
+  grow?: boolean;
+  /** What a paste does before the text arrives, for a caller that takes pasted files itself. */
+  onPaste?: ((event: ClipboardEvent<HTMLTextAreaElement>) => void) | undefined;
   ref?: Ref<HTMLTextAreaElement> | undefined;
 }): React.JSX.Element {
   return (
@@ -124,8 +150,13 @@ export function TextArea({
       ref={ref}
       className="luke-text-field"
       rows={rows}
+      data-grow={grow}
+      // Note that a growing note sizes to its words, which the browser does
+      // without reading `rows`, so its rows reach its stylesheet as its least height.
+      style={grow ? cssCustomProperties({ "--luke-text-area-rows": rows }) : undefined}
       {...entryAttributes(props)}
       onChange={(event) => props.onChange(event.target.value)}
+      onPaste={onPaste}
     />
   );
 }

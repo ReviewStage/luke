@@ -7,6 +7,7 @@ import {
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxParams,
 } from "@luke/features/coding-agent-view";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
@@ -49,8 +50,8 @@ import {
  * reached it as one of the developer's messages, which may have started
  * its turn again, so the task's agents are read again for where they stand.
  *
- * An image block names an attachment the service keeps, and its bytes are
- * read apart from the inbox, once per attachment while the task is open,
+ * An image block names an attachment the service keeps, and so does each
+ * file an answer carried, and their bytes are read apart from the inbox, once per attachment while the task is open,
  * as a card first draws the block: the host fetches them under the account
  * and the hook holds them as a `data:` URL the card draws, so a read of
  * the inbox that replaces every item draws the same picture again without
@@ -67,7 +68,9 @@ import {
  * What the developer has put on a card and not sent is its draft, kept by
  * item at the revision it was written against (`../composer-drafts.ts`), so
  * it waits through a look at another tab, task, or page, the Inbox's and the
- * plan's tab reading the same one, and outlasts a relaunch. A read of the
+ * plan's tab reading the same one, and its words outlast a relaunch; the
+ * files attached to it are held in this window's memory alone, as a
+ * message's are, and go with the answer apart from it. A read of the
  * inbox lets go of the drafts of items no longer open at their revision,
  * and an answer taken lets go of its own.
  */
@@ -106,6 +109,11 @@ export interface TaskInboxControl {
   readonly draftOf: (item: InboxItem) => InboxDraft;
   /** Keeps what the developer has put on the item's card, at its revision. */
   readonly onDraft: (item: InboxItem, draft: InboxDraft) => void;
+  /** Moves the files on the item's card on from what they are as the write lands, so two reads landing in one render both stand. */
+  readonly onAttachments: (
+    item: InboxItem,
+    next: (was: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => void;
   /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
@@ -157,13 +165,14 @@ function fresh(taskId: string | undefined): Held {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** Every attachment the items' blocks name. */
+/** Every attachment the items name: their blocks' pictures, and the files their answers carried. */
 function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
   const named = new Set<string>();
   for (const item of items) {
     for (const block of item.blocks) {
       if (knownBlock(block) && block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
     }
+    for (const file of item.answerFiles ?? []) named.add(file.attachmentId);
   }
   return named;
 }
@@ -280,7 +289,8 @@ export function useTaskInbox(input: {
     (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => {
       const reply = inboxReply(item, draft, press);
       if (reply === undefined || sending.has(item.id)) return;
-      const words = JSON.stringify([item.revision, reply]);
+      const { attachments } = draft;
+      const words = JSON.stringify([item.revision, reply, attachments]);
       const was = attempts.current.get(item.id);
       const key = was?.words === words ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, words });
@@ -288,7 +298,13 @@ export function useTaskInbox(input: {
       note(item.id, undefined);
       const askedOn = taskId;
       latest.current
-        .answerInbox({ itemId: item.id, revision: item.revision, ...reply, clientKey: key })
+        .answerInbox({
+          itemId: item.id,
+          revision: item.revision,
+          ...reply,
+          ...(attachments.length === 0 ? undefined : { attachments }),
+          clientKey: key,
+        })
         .catch((): CodingAgentInboxAnsweredView => UNANSWERED)
         .then((answer) => {
           setSending((standing) => {
@@ -312,7 +328,7 @@ export function useTaskInbox(input: {
           }
           writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
           // Note that an answer the agent hears may open its turn, so the agents are read again.
-          if (inboxAnswerHeard(item, reply)) latest.current.onRetryList();
+          if (inboxAnswerHeard(item, reply, attachments)) latest.current.onRetryList();
         });
     },
     [sending, note, taskId, writer],
@@ -397,7 +413,12 @@ export function useTaskInbox(input: {
       );
       return kept === undefined
         ? EMPTY_INBOX_DRAFT
-        : { choices: kept.choices, values: kept.values, note: kept.text };
+        : {
+            choices: kept.choices,
+            values: kept.values,
+            note: kept.text,
+            attachments: kept.attachments,
+          };
     },
     [drafts],
   );
@@ -411,7 +432,31 @@ export function useTaskInbox(input: {
           itemId: item.id,
           revision: item.revision,
         },
-        (was) => ({ ...was, text: draft.note, choices: draft.choices, values: draft.values }),
+        (was) => ({
+          ...was,
+          text: draft.note,
+          choices: draft.choices,
+          values: draft.values,
+          attachments: draft.attachments,
+        }),
+      ),
+    [writer, draftsOn],
+  );
+
+  const onAttachments = useCallback(
+    (
+      item: InboxItem,
+      next: (was: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+    ) =>
+      writer.update(
+        {
+          kind: DRAFT_PLACE.INBOX,
+          planId: draftsOn,
+          agentId: item.agentId,
+          itemId: item.id,
+          revision: item.revision,
+        },
+        (was) => ({ ...was, attachments: next(was.attachments) }),
       ),
     [writer, draftsOn],
   );
@@ -420,6 +465,7 @@ export function useTaskInbox(input: {
     board,
     draftOf,
     onDraft,
+    onAttachments,
     reading: active && !held.read,
     read: held.read,
     failed: held.failed,

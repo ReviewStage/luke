@@ -9,11 +9,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
@@ -161,18 +161,19 @@ function hover(control: Element): void {
 /** The agent named in the Changes card the pull request's row hangs. */
 function cardAgent(page: HTMLElement): HTMLButtonElement {
   const row = [...page.querySelectorAll("button")].find((each) =>
-    each.textContent?.includes("Pull request: Expiry job"),
+    each.textContent?.includes("#42 Expire invitations"),
   );
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card .card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-tooltip-card .luke-hover-card-sub button.actor-ref[data-kind="agent"]',
   );
   assert.ok(named, "the Changes card names the agent");
   return named;
 }
 
 test("a page's row hangs the page's tab's card, previewing its newest version", () => {
+  fakeAppPlatform({ pageFrameUrl });
   const funnel = {
     id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
     title: "Invite funnel",
@@ -207,8 +208,12 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
   hover(row);
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, funnel.title);
-  assert.equal(card.querySelector(".card-sub"), null, "a page's one version is not counted");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, funnel.title);
+  assert.equal(
+    card.querySelector(".luke-hover-card-sub"),
+    null,
+    "a page's one version is not counted",
+  );
   assert.equal(
     card.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId, pageId: funnel.id, version: 1 }),
@@ -240,16 +245,7 @@ test("the agent's card hung from a Changes card previews its running step while 
 
 test("an agent's row in the summary offers Copy link on a right-click, copying the agent's link under its task, before Archive agent", async () => {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
   const row = [...page.querySelectorAll<HTMLElement>(".task-summary-row")].find((each) =>
     each.textContent?.includes(AGENT.title ?? ""),

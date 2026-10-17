@@ -17,6 +17,7 @@ import { listTasks } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -35,11 +36,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
-  isRecord,
-  isSettledToolPartState,
   isStoredToolPart,
-  isWireString,
-  type StoredToolPart,
   type StoredUIMessage,
   type UnparsedWireValue,
   type WireRecord,
@@ -54,10 +51,11 @@ import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
-import { START_NOTE_HEADING, startCodingAgent } from "./coder-host/start.js";
+import { callEntry } from "./coder-host/replay.js";
+import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
-import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
   AGENT_LIST_INPUT,
   type AgentTask,
@@ -547,66 +545,13 @@ export const LIST_TASKS_TOOL = {
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
-/** How a call of one coding tool is said: its verb, and the one input field that names its subject. */
-interface CallWords {
-  readonly verb: string;
-  readonly key: string;
-}
-
-/** Each coding tool's words; a patch names its files in its own headers and stands apart. */
-const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
-  [CODER_TOOL.BASH, { verb: "Ran", key: "command" }],
-  [CODER_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
-  [CODER_TOOL.WRITE_FILE, { verb: "Wrote", key: "filePath" }],
-  [CODER_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.GREP, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
-  [CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
-  [RETIRED_CODER_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
-  [RETIRED_CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
-]);
-
-/** A patch header naming a file, as `apply_patch` spells one. */
-const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete|Move to) File: (.+)$/u;
-
 const ENTRY_WORDS = {
   SAID: "Said",
-  EDITED: "Edited",
-  USED: "Used",
-  RUNNING: "(running)",
 } as const;
 
 function cut(text: string, maximumChars: number): string {
   const line = text.replace(/\s+/gu, " ").trim();
   return line.length > maximumChars ? `${line.slice(0, maximumChars - 1)}…` : line;
-}
-
-/** What a call was done to, read from its input alone. */
-function subjectOf(name: string, input: UnparsedWireValue): string {
-  if (name === CODER_TOOL.APPLY_PATCH) {
-    const patch = isRecord(input) && isWireString(input.patchText) ? input.patchText : "";
-    return patch
-      .split("\n")
-      .flatMap((line) => PATCH_FILE_HEADER.exec(line.trimEnd())?.[1] ?? [])
-      .join(", ");
-  }
-  const words = CALL_WORDS.get(name);
-  if (words === undefined || !isRecord(input)) return "";
-  const subject = input[words.key];
-  return isWireString(subject) ? subject : "";
-}
-
-/** One call as a line of the tail: its verb, its subject, and whether it still runs. */
-function callEntry(part: StoredToolPart): string {
-  const name = part.type.slice("tool-".length);
-  const verb =
-    name === CODER_TOOL.APPLY_PATCH
-      ? ENTRY_WORDS.EDITED
-      : (CALL_WORDS.get(name)?.verb ?? ENTRY_WORDS.USED);
-  // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
-  const subject = subjectOf(name, part.input as UnparsedWireValue) || name;
-  const running = isSettledToolPartState(part.state) ? "" : ` ${ENTRY_WORDS.RUNNING}`;
-  return `${verb}: ${subject}${running}`;
 }
 
 /** A journal's entries in order: each of the agent's own texts, and each call with its subject. */

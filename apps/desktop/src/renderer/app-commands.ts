@@ -25,6 +25,7 @@ import {
   shortcutEditsText,
   shortcutLayered,
 } from "#shared/shortcuts";
+import { appPlatform } from "./app-platform";
 
 type CommandRun = { current: () => void };
 
@@ -137,7 +138,7 @@ export function useAppKeymap(enabled: boolean): void {
 export function useMenuCommands(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
-    return window.luke.onMenuCommand((command) => {
+    return appPlatform().onMenuCommand((command) => {
       if (HELD_UNDER_OVERLAY.has(command) && overlayStands()) return;
       runAppCommand(command);
     });

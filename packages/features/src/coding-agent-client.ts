@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -17,11 +17,20 @@ import {
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import type { AccountToken } from "./account-token.js";
 import {
+  CHAT_QUERY,
+  type ChatWriteRequest,
+  chatAnswerSchema,
+  chatWriteAnswerSchema,
+  chatWriteRequestSchema,
+} from "./chat-wire.js";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
@@ -51,6 +60,7 @@ import {
   type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
@@ -146,9 +156,10 @@ import {
  * attempt and a 401 is renewed and retried once. Each call answers one of
  * the view's shapes rather than failing, because every caller does the same
  * thing with a failure: draws why, and offers to try again. The transcript
- * read and the two inbox reads, a task's and the account's, are the calls
- * the service holds open, for as long as it waits on the agent's next
- * message or the inbox's next change, so they travel under a deadline of
+ * read, the two inbox reads, a task's and the account's, and the
+ * workspace's chat read are the calls the service holds open, for as long
+ * as it waits on the agent's next message or the next change, so they
+ * travel under a deadline of
  * their own that outlasts that hold; every other call keeps the account
  * call's usual one. The account's task
  * template is read and written here too, as Settings asks for it beside
@@ -242,6 +253,14 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
 /** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
 function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
   return Effect.map(imageBodyOf(response, inboxImageTypeSchema), (image) => image ?? UNANSWERED);
+}
+
+/** The types an inbox item's attachment is served under: a block's picture's, or any a file an answer carried travelled as. */
+const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** An inbox attachment's bytes in base64 under its type: a picture, or a file an answer carried; unanswered under any other type. */
+function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
+  return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
 }
 
 /**
@@ -756,6 +775,24 @@ export class HostedCodingAgentClient {
     );
   }
 
+  /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
+  chat(
+    workspaceId: string,
+    after: string,
+  ): Effect.Effect<CodingAgentChatAnswerView, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({
+      [CHAT_QUERY.WORKSPACE_ID]: workspaceId,
+      [CHAT_QUERY.AFTER]: after,
+    });
+    return Effect.flatMap(
+      this.#held.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
+      }),
+      (answer) => readAnswer(answer, chatAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
   /**
    * One picture a tool answered an agent, or one of its workers where
    * `callId` names the delegation call, fetched under the account: its
@@ -807,6 +844,29 @@ export class HostedCodingAgentClient {
   }
 
   /**
+   * Writes to a workspace's chat as the account's own member of it: a post,
+   * an answer to an ask, a resolve, or how far the person has read, under
+   * the key the window made where the write carries one, which a retry
+   * carries again; a write the service would refuse by shape is refused
+   * here without traveling.
+   */
+  chatPost(
+    workspaceId: string,
+    request: ChatWriteRequest,
+  ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    const query = new URLSearchParams({ [CHAT_QUERY.WORKSPACE_ID]: workspaceId });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, chatWriteAnswerSchema, MESSAGE_REFUSALS),
+    );
+  }
+  /**
    * One image an agent's pull request's overview names, by the address
    * GitHub's rendering spelled, fetched under the account: its bytes in
    * base64 under the type GitHub served; not found where GitHub answers no
@@ -836,7 +896,7 @@ export class HostedCodingAgentClient {
   /**
    * One image of an inbox item, fetched under the account: its bytes in
    * base64 under the media type the service kept, where the service answered
-   * with one of the types an image block may be; not found where the item or
+   * with one of the types an image block's picture or an answer's file may be; not found where the item or
    * the attachment is not the account's; unanswered for anything else,
    * another media type included, so nothing the window draws is a type it
    * did not expect.
@@ -854,7 +914,7 @@ export class HostedCodingAgentClient {
             refusedAs(unparsedWire(body), ROW_REFUSALS),
           );
         }
-        return readImage(answer.response);
+        return readInboxFile(answer.response);
       },
     );
   }

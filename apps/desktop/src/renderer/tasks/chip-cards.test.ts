@@ -9,6 +9,7 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -25,6 +26,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -210,18 +213,15 @@ const PAGE: PlanMentionsValue = {
 
 /** The words drawn as a transcript draws them on the plan's page, in a window holding `STATE`. */
 async function drawn(text: string): Promise<HTMLElement> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(STATE),
-      act: (request: Act): Promise<ActOutcome> => {
-        told.push(request);
-        return Promise.resolve(answer(request));
-      },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(STATE),
+    act: (request: Act): Promise<ActOutcome> => {
+      told.push(request);
+      return Promise.resolve(answer(request));
     },
   });
+  fakeAppPlatform({ pageFrameUrl });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const words: ReactNode = createElement(PlanMentions, {
@@ -261,10 +261,10 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(card, "the chip hangs a card");
   const look = {
     card: [...card.attributes].map((attribute) => attribute.name).find((name) => name !== "class"),
-    name: card.querySelector(".card-name")?.textContent,
-    sub: card.querySelector(".card-sub")?.textContent,
-    corner: card.querySelector(".card-corner")?.textContent,
-    notes: [...card.querySelectorAll(".card-note")].map((note) => note.textContent),
+    name: card.querySelector(".luke-hover-card-name")?.textContent,
+    sub: card.querySelector(".luke-hover-card-sub")?.textContent,
+    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
+    notes: [...card.querySelectorAll(".luke-hover-card-note")].map((note) => note.textContent),
     focus: card.querySelector("[data-task-card-focus]")?.textContent,
     details: [...card.querySelectorAll(".task-card-detail")].map((detail) => detail.textContent),
   };

@@ -3,7 +3,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CallIcon, EmptyState } from "@luke/ui";
+import { CallIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   type CallTurn,
@@ -28,7 +28,6 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { usePerson } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
@@ -451,7 +450,7 @@ export function TaskCall({
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
               <div className="pt-(--section-gap)">
-                <ReadFailure line={TRANSCRIPT_FAILED_LINE} onRetry={onRetry} />
+                <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState>
               </div>
             ) : null}
             {region.kind === TRANSCRIPT_REGION.READY && region.earlierOmitted ? (
@@ -473,13 +472,9 @@ export function TaskCall({
           <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
         </ConversationEmptyState>
       ) : region.kind === TRANSCRIPT_REGION.FAILED ? (
-        <ConversationEmptyState>
-          <ReadFailure
-            line={TRANSCRIPT_FAILED_LINE}
-            onRetry={onRetry}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
-        </ConversationEmptyState>
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {TRANSCRIPT_FAILED_LINE}
+        </ErrorState>
       ) : (
         <EmptyState icon={<CallIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
       )}

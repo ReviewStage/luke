@@ -12,15 +12,14 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { EmptyState, ProviderMark } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, ProviderMark, useMenu } from "@luke/ui";
 import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";
 import { momentText, sinceText, useMinute } from "../tasks/task-time";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
 import { usePaneSlide } from "./pane-motion";
 import type { RunsRead } from "./use-automation-runs";
@@ -92,7 +91,7 @@ function RunRow({
   const state = STANDING_GLYPH[automationRunStanding(run)];
   const line = automationRunLine(run, keyHolder);
   const glyph = <FiringGlyph kind={run.firing.kind} />;
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const linkItem = useCopyLinkItem();
   const copyLink =
     automationId === undefined
@@ -224,11 +223,9 @@ export function AutomationRunsPanel({
         {!created ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : runs === undefined ? null : "failed" in runs ? (
-          <ReadFailure
-            line="Its runs could not be read."
-            onRetry={onRetry}
-            place={READ_FAILURE_PLACE.INLINE}
-          />
+          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            Its runs could not be read.
+          </ErrorState>
         ) : runs.runs.length === 0 ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (

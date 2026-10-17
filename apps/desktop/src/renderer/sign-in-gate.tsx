@@ -1,8 +1,15 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
-import { ProviderMark, WingFace } from "@luke/ui";
+import {
+  ProviderMark,
+  SpinnerRing,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  WingFace,
+} from "@luke/ui";
 import { useId } from "react";
-import { SpinnerRing } from "./spinner";
 
 /**
  * A provider's button, which says so while it is the sign-in being waited on.
@@ -96,7 +103,9 @@ export function SignInGate({
       <span className="sign-in-face" aria-hidden="true">
         <WingFace />
       </span>
-      <h1 id="sign-in-title">Welcome to Luke</h1>
+      <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.H1} id="sign-in-title">
+        Welcome to Luke
+      </Text>
       <div className="sign-in-actions">
         <ProviderButton
           provider={ACCOUNT_PROVIDER.GOOGLE}
@@ -121,12 +130,14 @@ export function SignInGate({
           anything, so beginning a wait does not move the column. */}
       <div className="sign-in-note">
         {waiting ? (
-          <p role="status">
-            Finish in your browser.{" "}
-            <button type="button" className="sign-in-cancel" onClick={onCancel}>
-              Cancel
-            </button>
-          </p>
+          <div role="status">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              Finish in your browser.{" "}
+              <button type="button" className="sign-in-cancel" onClick={onCancel}>
+                Cancel
+              </button>
+            </Text>
+          </div>
         ) : failure ? (
           <p className="sign-in-error" role="alert">
             {failure}

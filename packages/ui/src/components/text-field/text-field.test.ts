@@ -5,12 +5,13 @@ import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { FormField } from "../form-field/form-field.js";
-import { TextArea, TextField } from "./text-field.js";
+import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_TYPE, TextArea, TextField } from "./text-field.js";
 
 /**
  * text-field.test.ts -- a text entry draws the value its caller holds and
  * hands every change back, answers Enter only when no input method is
- * composing, and inside a field is named, described, and marked invalid by
+ * composing, stays out of spell check and autofill where asked, hands a paste to a
+ * caller that takes pasted files itself, and inside a field is named, described, and marked invalid by
  * the field's words.
  */
 
@@ -110,6 +111,79 @@ test("a text area holds the many lines its caller holds and hands back every cha
   type(area, "One\nTwo");
   assert.equal(page.querySelector("output")?.textContent, "2");
   assert.equal(area.value, "One\nTwo");
+});
+
+test("a paste reaches a text area's caller, which may take it instead of the text", () => {
+  function Note(): React.JSX.Element {
+    const [taken, setTaken] = useState(0);
+    return createElement(
+      "div",
+      null,
+      createElement(TextArea, {
+        label: "Note",
+        value: "",
+        onChange: () => undefined,
+        grow: true,
+        onPaste: (event) => {
+          event.preventDefault();
+          setTaken((count) => count + 1);
+        },
+      }),
+      createElement("output", null, `${String(taken)} taken`),
+    );
+  }
+  const page = render(createElement(Note));
+  const area = page.querySelector("textarea") ?? assert.fail("no text area");
+  const paste = new Event("paste", { bubbles: true, cancelable: true });
+  act(() => {
+    area.dispatchEvent(paste);
+  });
+  assert.equal(page.querySelector("output")?.textContent, "1 taken");
+  assert.equal(paste.defaultPrevented, true);
+});
+
+test("a text entry asked not to is left out of the system's spell check, and is checked otherwise", () => {
+  const page = render(
+    createElement(
+      "div",
+      null,
+      createElement(TextField, {
+        label: "Name",
+        value: "",
+        onChange: () => undefined,
+        spellCheck: false,
+      }),
+      createElement(TextArea, {
+        label: "Code",
+        value: "",
+        onChange: () => undefined,
+        spellCheck: false,
+      }),
+      createElement(TextField, { label: "Note", value: "", onChange: () => undefined }),
+    ),
+  );
+  assert.equal(fieldNamed(page, "Name").getAttribute("spellcheck"), "false");
+  assert.equal(page.querySelector("textarea")?.getAttribute("spellcheck"), "false");
+  assert.equal(fieldNamed(page, "Note").getAttribute("spellcheck"), null);
+});
+
+test("a field asked to is left out of the system's autofill, and is the browser's to fill otherwise", () => {
+  const page = render(
+    createElement(
+      "div",
+      null,
+      createElement(TextField, {
+        label: "API key",
+        type: TEXT_FIELD_TYPE.PASSWORD,
+        autoComplete: TEXT_FIELD_AUTO_COMPLETE.OFF,
+        value: "",
+        onChange: () => undefined,
+      }),
+      createElement(TextField, { label: "Note", value: "", onChange: () => undefined }),
+    ),
+  );
+  assert.equal(fieldNamed(page, "API key").autocomplete, "off");
+  assert.equal(fieldNamed(page, "Note").getAttribute("autocomplete"), null);
 });
 
 test("inside a field, a text entry is named, described, and marked invalid by the field's words", () => {

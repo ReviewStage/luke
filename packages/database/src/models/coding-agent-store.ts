@@ -43,6 +43,7 @@ import {
   type StoredAgentStep,
   type StoredArchive,
   type StoredAutomationOrigin,
+  type StoredStartedFrom,
 } from "../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
@@ -146,6 +147,8 @@ export interface CodingAgent {
   readonly automationId: string | null;
   /** The run of an automation that started the agent, as it stood then, kept once that automation is deleted; null for one started by hand. */
   readonly automationOrigin: StoredAutomationOrigin | null;
+  /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
+  readonly startedFrom: StoredStartedFrom | null;
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
@@ -219,6 +222,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent; none for one started by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The agent of the same plan this one is started from, with its replay's counts; none for one started afresh. */
+  readonly startedFrom?: StoredStartedFrom | undefined;
   /** The agent's title from the start, a run's fixed name; none where it is named later. */
   readonly title?: string | undefined;
   readonly idempotencyKey: string;
@@ -241,6 +246,7 @@ const CODING_AGENT_COLUMNS = {
   organizationId: AGENT_WORKSPACE,
   automationId: codingAgent.automationId,
   automationOrigin: codingAgent.automationOrigin,
+  startedFrom: codingAgent.startedFrom,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
@@ -290,6 +296,16 @@ const AutomationOriginColumnSchema = Schema.NullOr(
     body: Schema.optionalKey(Schema.String),
   }),
 );
+/** The `started_from` column as a row holds it. */
+const StartedFromColumnSchema = Schema.NullOr(
+  Schema.Struct({
+    agentId: Schema.String,
+    messageId: Schema.optionalKey(Schema.String),
+    steps: Schema.Number,
+    totalSteps: Schema.Number,
+    branch: Schema.optionalKey(Schema.String),
+  }),
+);
 /** The `archived_by` column as a row holds it. */
 const ArchivedByColumnSchema = Schema.NullOr(
   Schema.Struct({
@@ -310,6 +326,7 @@ const CodingAgentRowSchema = Schema.Struct({
   organizationId: Schema.String,
   automationId: Schema.NullOr(Schema.String),
   automationOrigin: AutomationOriginColumnSchema,
+  startedFrom: StartedFromColumnSchema,
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
@@ -428,6 +445,7 @@ const insertAgent = SqlSchema.findOne({
     organizationId: Schema.String,
     automationId: Schema.NullOr(Schema.String),
     automationOrigin: AutomationOriginColumnSchema,
+    startedFrom: StartedFromColumnSchema,
     title: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
@@ -451,6 +469,7 @@ const insertAgent = SqlSchema.findOne({
           organizationId: write.organizationId,
           automationId: write.automationId,
           automationOrigin: write.automationOrigin,
+          startedFrom: write.startedFrom,
           title: write.title,
           conversationId: write.conversationId,
           model: write.model,
@@ -1076,6 +1095,7 @@ export function createCodingAgent(
           organizationId: reached.value.organizationId,
           automationId: started.automationId ?? null,
           automationOrigin: started.automationOrigin ?? null,
+          startedFrom: started.startedFrom ?? null,
           title: started.title ?? null,
           idempotencyKey: started.idempotencyKey,
           model: started.model,

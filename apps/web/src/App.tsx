@@ -10,13 +10,15 @@ import {
   SiteNavigation,
 } from "./SiteChrome";
 
+/**
+ * The landing: the copy runs left, the way a page of prose does. The demo is
+ * wider than the column and centers itself on the page.
+ */
 export function App(): React.JSX.Element {
-  // The copy runs left, the way a page of prose does. The demo is wider than
-  // the column and centers itself on the page.
   return (
     <PublicPage
-      banner={<SiteNavigation current={SITE_PAGE.HOME} />}
-      footer={<SiteFooterLinks current={SITE_PAGE.HOME} />}
+      banner={<SiteNavigation current={{ page: SITE_PAGE.HOME }} />}
+      footer={<SiteFooterLinks current={{ page: SITE_PAGE.HOME }} />}
       title="A better way to plan with agents."
       titleStyle={PUBLIC_TITLE.HERO}
       lead="Talk through a feature with Luke. He reads the code while you talk and writes a plan you can paste into Claude Code or Codex."

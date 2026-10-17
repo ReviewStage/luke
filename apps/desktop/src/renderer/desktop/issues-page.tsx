@@ -5,7 +5,7 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { Schema } from "effect";
 import {
   ListIcon,
@@ -20,12 +20,11 @@ import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail } from "./issue-detail";
@@ -201,7 +200,9 @@ function ListPage({
         }
       >
         {read === undefined ? null : "failure" in read ? (
-          <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
+          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_LINE}
+          </ErrorState>
         ) : onBoard ? (
           <IssueBoard
             issues={read.issues}
@@ -244,7 +245,7 @@ function ViewOptions({
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const choices: MenuAction[] = [
     {
       label: "Board",
@@ -299,11 +300,9 @@ function DetailFrame({
       </header>
       <div className="automations-scroll scroll-fade-top">
         {failure === undefined ? null : (
-          <ReadFailure
-            line={failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
-            onRetry={onRetry}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
+          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
+          </ErrorState>
         )}
       </div>
     </section>

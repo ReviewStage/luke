@@ -14,7 +14,7 @@ const privacyHtml = marked.parse(privacyMarkdown, { async: false }) as string;
 export function PrivacyPage(): React.JSX.Element {
   return (
     <>
-      <SiteHeader current={SITE_PAGE.PRIVACY} />
+      <SiteHeader current={{ page: SITE_PAGE.PRIVACY }} />
 
       <main className="shell">
         <article
@@ -23,7 +23,7 @@ export function PrivacyPage(): React.JSX.Element {
         />
       </main>
 
-      <SiteFooter current={SITE_PAGE.PRIVACY} />
+      <SiteFooter current={{ page: SITE_PAGE.PRIVACY }} />
     </>
   );
 }

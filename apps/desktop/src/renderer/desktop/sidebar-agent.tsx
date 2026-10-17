@@ -1,5 +1,5 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import { PinIcon, UnpinIcon } from "@luke/ui";
+import { PinIcon, UnpinIcon, useMenu } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useRef } from "react";
@@ -9,7 +9,7 @@ import { useMemberDirectory } from "../member-directory";
 import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 
 /**
  * sidebar-agent.tsx -- an agent an automation started with no task, as a row among the sidebar's tasks.
@@ -86,7 +86,7 @@ export function SidebarAgent({
   const name = taskRowName(agentRow(agent));
   const starter = starterOf(agent, face, reader);
   const row = useRef<HTMLButtonElement | null>(null);
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   const groups = [
     copyLink === undefined ? [] : [copyLink],
@@ -113,7 +113,7 @@ export function SidebarAgent({
               <AgentGlyph agent={agent} />
             </span>
             <span className="sidebar-task-name">{name}</span>
-            {unread ? <span className="visually-hidden">(unread)</span> : null}
+            {unread ? <span className="luke-visually-hidden">(unread)</span> : null}
             <span className="sidebar-task-time">
               {repository === undefined ? null : (
                 <span className="sidebar-task-repository">{repository}</span>

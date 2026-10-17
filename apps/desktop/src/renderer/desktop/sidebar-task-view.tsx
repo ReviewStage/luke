@@ -1,5 +1,5 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ArchiveIcon } from "@luke/ui";
+import { ArchiveIcon, IconButton, useMenu } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
 import {
@@ -19,7 +19,7 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import type { CountNoun } from "./sidebar-group-header";
 import type { TaskListViewControl } from "./task-list-view";
 
@@ -79,7 +79,7 @@ export function SidebarSectionHead({
             <span className="sidebar-section-head-count">
               {count}
               {noun === undefined ? null : (
-                <span className="visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
+                <span className="luke-visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
               )}
             </span>
           ) : null}
@@ -239,22 +239,20 @@ export function TaskViewOptions({
   /** Whether the view leaves any task out, which the button's dot says. */
   filtered: boolean;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const reader = useMemberDirectory();
   return (
     <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <button
-          type="button"
-          className="icon-button sidebar-view-options"
-          aria-label={VIEW_OPTIONS}
-          aria-description={filtered ? "Filtered" : undefined}
-          data-filtered={filtered ? "true" : undefined}
-          {...menu.trigger()}
-        >
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
-      </Tooltip>
+      <span className="sidebar-view-options" data-filtered={filtered ? "true" : undefined}>
+        <Tooltip label={VIEW_OPTIONS}>
+          <IconButton
+            icon={<SlidersHorizontalIcon />}
+            label={VIEW_OPTIONS}
+            aria-description={filtered ? "Filtered" : undefined}
+            {...menu.trigger()}
+          />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}

@@ -42,10 +42,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -56,6 +58,7 @@ import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
+import { appBridge } from "../app-bridge";
 import { runAppCommand, useAppKeymap } from "../app-commands";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
@@ -195,8 +198,8 @@ let pageAgents = new Map<string, CodingAgentSummary>();
 /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
 let imageReads: (() => void)[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -220,98 +223,88 @@ beforeEach(() => {
   listedWorkspace = undefined;
   automations = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   pageAgents = new Map();
   imageReads = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
-          Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
-          return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
-          const agent = pageAgents.get(request.payload.agentId);
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value:
-              agent === undefined
-                ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
-                : {
-                    agent: {
-                      id: agent.id,
-                      planId: null,
-                      model: agent.model,
-                      effort: agent.effort,
-                      title: agent.title,
-                      createdAt: agent.createdAt,
-                      status: agent.status,
-                      turnId: null,
-                      automationId: null,
-                      workspaceId: "workspace-acme",
-                      repository: "acme/relay",
-                    },
+  fakeAppBridge({
+    act: (request: Act) => {
+      const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
+        Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+        return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+        const agent = pageAgents.get(request.payload.agentId);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value:
+            agent === undefined
+              ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
+              : {
+                  agent: {
+                    id: agent.id,
+                    planId: null,
+                    model: agent.model,
+                    effort: agent.effort,
+                    title: agent.title,
+                    createdAt: agent.createdAt,
+                    status: agent.status,
+                    turnId: null,
+                    automationId: null,
+                    workspaceId: "workspace-acme",
+                    repository: "acme/relay",
                   },
-          });
-        }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        if (request.kind === ACT_KIND.TASKS_TREE) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: {
-              folder: {
-                path: "",
-                repository: "acme/relay",
-                branch: "main",
-                entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
-                truncated: false,
-              },
+                },
+        });
+      }
+      if (request.kind === ACT_KIND.TASKS_TREE) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            folder: {
+              path: "",
+              repository: "acme/relay",
+              branch: "main",
+              entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
+              truncated: false,
             },
-          });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+          },
+        });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+        return new Promise((resolve) =>
+          imageReads.push(() =>
+            resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+            }),
+          ),
+        );
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+        const { agentId, after } = request.payload;
+        if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
+        agentReads.push(agentId);
+        if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        const items = agentInboxes.get(agentId) ?? [];
+        const hold = holdAgentRead;
+        if (hold !== undefined) {
           return new Promise((resolve) =>
-            imageReads.push(() =>
-              resolve({
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
-              }),
-            ),
+            hold(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } })),
           );
         }
-        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-          const { agentId, after } = request.payload;
-          if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
-          agentReads.push(agentId);
-          if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-          const items = agentInboxes.get(agentId) ?? [];
-          const hold = holdAgentRead;
-          if (hold !== undefined) {
-            return new Promise((resolve) =>
-              hold(() =>
-                resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } }),
-              ),
-            );
-          }
-          return done({ items, cursor: "1" });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
-          const { taskId, after } = request.payload;
-          // A read past the cursor is held open while nothing changes, as the service holds it.
-          if (after !== INBOX_CURSOR_START) return heldRead(taskId);
-          return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        return done({ items, cursor: "1" });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
+        const { taskId, after } = request.payload;
+        // A read past the cursor is held open while nothing changes, as the service holds it.
+        if (after !== INBOX_CURSOR_START) return heldRead(taskId);
+        return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -364,6 +357,8 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
             asked.closed += 1;
           },
           onChoose: setChosen,
+          pages: undefined,
+          onRereadPages: () => undefined,
         },
         onShowTask: (planId) => asked.shownTasks.push(planId),
         onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
@@ -805,8 +800,8 @@ function standingCard(): readonly [string | null | undefined, string | null | un
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "an agent's card is hung");
   return [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-corner")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-corner")?.textContent,
   ];
 }
 
@@ -1497,16 +1492,13 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
 /** Every answer the pane sends, written down and left unanswered, so the box stays as it was. */
 function heldAnswers(): CodingAgentInboxAnswerParams[] {
   const sent: CodingAgentInboxAnswerParams[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
-        sent.push(request.payload);
-        return new Promise(() => undefined);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
+      sent.push(request.payload);
+      return new Promise(() => undefined);
     },
   });
   return sent;
@@ -1536,6 +1528,217 @@ test("an item's box is the agent's message box: it takes no caret as the item op
   assert.deepEqual(
     sent.map(({ itemId, reply, note }) => ({ itemId, reply, note })),
     [{ itemId: THRESHOLD.id, reply: INBOX_REPLY.ANSWERED, note: "Use 90%\ninstead" }],
+  );
+});
+
+/** Hands `files` to the open item's box: picked in its hidden picker, or dropped on its card. */
+async function handFiles(page: HTMLElement, files: readonly File[], how: "pick" | "drop") {
+  const pane = itemPane(page);
+  if (how === "pick") {
+    const picker =
+      pane.querySelector<HTMLInputElement>('input[type="file"]') ?? assert.fail("no file picker");
+    Object.defineProperty(picker, "files", { configurable: true, value: files });
+    act(() => picker.dispatchEvent(new Event("change", { bubbles: true })));
+  } else {
+    const card = pane.querySelector(".agent-composer") ?? assert.fail("no answer card");
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files } });
+    act(() => card.dispatchEvent(drop));
+  }
+  // Note that a file is read off the disk before it lands in the box.
+  for (let round = 0; round < 4; round += 1) await settle();
+}
+
+test("files picked or dropped in an item's box are drawn as chips and go with its answer, standing for the developer's own words where they wrote none", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  assert.equal(readTitle(page), "Alert at 80%?");
+
+  await handFiles(page, [new File(["threshold: 0.9\n"], "alerts.yml", { type: "" })], "pick");
+  await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "drop");
+  assert.deepEqual(
+    [...pane.querySelectorAll(".attached-file-name")].map((name) => name.textContent),
+    ["alerts.yml", "spec.pdf"],
+  );
+
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, note, attachments }) => ({ reply, note, attachments })),
+    [
+      {
+        reply: INBOX_REPLY.ANSWERED,
+        note: undefined,
+        attachments: [
+          { name: "alerts.yml", mediaType: "text/plain", data: btoa("threshold: 0.9\n") },
+          { name: "spec.pdf", mediaType: "application/pdf", data: btoa("%PDF-1.7") },
+        ],
+      },
+    ],
+  );
+});
+
+/** A text file whose bytes are read only once the test opens its gate, as a slow disk would hand them over. */
+function gatedFile(name: string, words: string) {
+  const file = new File([words], name, { type: "text/plain" });
+  let open: () => void = () => undefined;
+  const gate = new Promise<ArrayBuffer>((resolve) => {
+    open = () => resolve(new TextEncoder().encode(words).buffer);
+  });
+  Object.defineProperty(file, "arrayBuffer", { value: () => gate });
+  return { file, open };
+}
+
+test("files whose reads land together both stand in the box", async () => {
+  const { page } = mount();
+  await settle();
+  const first = gatedFile("a.txt", "a\n");
+  const second = gatedFile("b.txt", "b\n");
+  await handFiles(page, [first.file], "pick");
+  await handFiles(page, [second.file], "drop");
+  await act(async () => {
+    first.open();
+    second.open();
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  await settle();
+  assert.deepEqual(
+    [...itemPane(page).querySelectorAll(".attached-file-name")].map((name) => name.textContent),
+    ["a.txt", "b.txt"],
+  );
+});
+
+test("files read for an item its agent changed meanwhile land nowhere, and the box says to attach them again", async () => {
+  let deliver: (outcome: ReadOutcome) => void = () => undefined;
+  heldRead = () =>
+    new Promise((resolve) => {
+      deliver = resolve;
+    });
+  const { page } = mount();
+  await settle();
+  const slow = gatedFile("trace.txt", "boom\n");
+  await handFiles(page, [slow.file], "pick");
+  const revised = { ...THRESHOLD, revision: 2, title: "Alert at 85%?" };
+  act(() =>
+    deliver({
+      status: ACT_OUTCOME_STATUS.DONE,
+      value: { items: [revised, RETRY], cursor: "2" },
+    }),
+  );
+  await settle();
+  assert.equal(readTitle(page), "Alert at 85%?");
+  await act(async () => {
+    slow.open();
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(pane.querySelector(".attached-file"), null, "the file lands on no revision");
+  assert.match(pane.querySelector('[role="alert"]')?.textContent ?? "", /Attach them again/u);
+});
+
+test("an answer file whose read failed says so under the files, and Retry reads it again", async () => {
+  const answered: InboxItem = {
+    ...THRESHOLD,
+    response: { type: INBOX_RESPONSE.TEXT },
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: READER,
+    answer: { reply: INBOX_REPLY.ANSWERED, note: "See the spec." },
+    answerFiles: [
+      {
+        attachmentId: "a1b2c3d4-0000-4000-8000-0000000000f2",
+        name: "spec.pdf",
+        mediaType: "application/pdf",
+      },
+    ],
+  };
+  inboxes = new Map([[BILLING.id, [answered]]]);
+  let failing = true;
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: failing
+          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          : { contentType: "application/pdf", base64: "JVBERg==" },
+      });
+    },
+  });
+  const { page } = mount();
+  await settle();
+  const comment = () =>
+    itemPane(page).querySelector('[data-inbox-comment="answered"]') ??
+    assert.fail("the answer is drawn");
+  const failed = comment().querySelector("[data-inbox-files-failed]");
+  assert.ok(failed, "the failed read is said");
+  failing = false;
+  const retry = [...failed.querySelectorAll("button")].find((each) =>
+    /retry/iu.test(each.textContent ?? ""),
+  );
+  act(() => retry?.click());
+  await settle();
+  assert.equal(comment().querySelector("[data-inbox-files-failed]"), null);
+  assert.ok(comment().querySelector('button[aria-label="Open spec.pdf"]'), "the file opens now");
+});
+
+test("an item that needs no reply says a file attached in its box will be sent to the agent", async () => {
+  inboxes = new Map([
+    [BILLING.id, [{ ...THRESHOLD, response: { type: INBOX_RESPONSE.TODO }, needsReply: false }]],
+  ]);
+  const { page } = mount();
+  await settle();
+  const quiet = () => itemPane(page).querySelector("[data-inbox-quiet]")?.textContent;
+  assert.equal(quiet(), "Without a note, this won't message the agent.");
+  await handFiles(page, [new File(["ok\n"], "flag.txt", { type: "text/plain" })], "pick");
+  assert.equal(quiet(), "Your answer and its files will be sent to the agent.");
+});
+
+test("an answered item draws the files its answer carried as a sent message's are, a picture by its thumbnail once read and any other file by its name, and files alone stand under the answer's head with no pick and no empty note", async () => {
+  const answered: InboxItem = {
+    ...THRESHOLD,
+    response: { type: INBOX_RESPONSE.TEXT },
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: READER,
+    answer: { reply: INBOX_REPLY.ANSWERED },
+    answerFiles: [
+      {
+        attachmentId: "a1b2c3d4-0000-4000-8000-0000000000f1",
+        name: "alerts.png",
+        mediaType: INBOX_IMAGE_TYPE.PNG,
+      },
+      {
+        attachmentId: "a1b2c3d4-0000-4000-8000-0000000000f2",
+        name: "spec.pdf",
+        mediaType: "application/pdf",
+      },
+    ],
+  };
+  inboxes = new Map([[BILLING.id, [answered]]]);
+  const { page } = mount();
+  await settle();
+  const comment = () =>
+    itemPane(page).querySelector('[data-inbox-comment="answered"]') ??
+    assert.fail("the answer is drawn");
+  assert.deepEqual(
+    [...comment().querySelectorAll(".attached-file")].map((chip) => chip.getAttribute("title")),
+    ["alerts.png", "spec.pdf"],
+  );
+  assert.equal(comment().querySelector("[data-inbox-pick]"), null, "no chip says it was answered");
+  assert.equal(comment().querySelector("[data-inbox-note]"), null, "no empty note stands");
+
+  act(() => {
+    for (const land of imageReads) land();
+  });
+  await settle();
+  assert.equal(
+    comment().querySelector(".attached-file img")?.getAttribute("src"),
+    "data:image/png;base64,iVBORw0KGgo=",
   );
 });
 
@@ -1608,16 +1811,13 @@ test("what an item's box said of a dictation that failed stays with that item, a
       removeEventListener: () => undefined,
     }),
   });
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) =>
-        request.kind === ACT_KIND.MICROPHONE_REQUEST
-          ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
-          : bridge.act(request),
-    },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) =>
+      request.kind === ACT_KIND.MICROPHONE_REQUEST
+        ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
+        : bridge.act(request),
   });
   const { page } = mount();
   await settle();
@@ -1642,29 +1842,26 @@ test("what an item's box said of a dictation that failed stays with that item, a
 /** The repository's one skill read for the box, and every GitHub page a press opened, written down. */
 function skillReads(): string[] {
   const opened: string[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.TASKS_SKILLS) {
-          const release = {
-            name: "release",
-            description: "Use to cut a release.",
-            path: ".agents/skills/release/SKILL.md",
-          };
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
-          });
-        }
-        if (request.kind === ACT_KIND.GITHUB_OPEN) {
-          opened.push(request.payload.url);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        return bridge.act(request);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.TASKS_SKILLS) {
+        const release = {
+          name: "release",
+          description: "Use to cut a release.",
+          path: ".agents/skills/release/SKILL.md",
+        };
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
+        });
+      }
+      if (request.kind === ACT_KIND.GITHUB_OPEN) {
+        opened.push(request.payload.url);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
+      return bridge.act(request);
     },
   });
   return opened;
@@ -1745,7 +1942,7 @@ test("an item that needs no reply says a bare press won't message the agent, and
   assert.equal(quiet(), "Your note will be sent to the agent.");
 });
 
-test("an item that needs no reply, once settled, says a note was sent to the agent and a bare press kept for it to read", async () => {
+test("an item that needs no reply, once settled, says a note or a file was sent to the agent and a bare press kept for it to read", async () => {
   const quietDone = (id: string, title: string, at: number, note?: string): InboxItem => ({
     ...item(id, title, at),
     response: { type: INBOX_RESPONSE.TODO },
@@ -1754,6 +1951,16 @@ test("an item that needs no reply, once settled, says a note was sent to the age
     answeredBy: READER,
     answer: { reply: INBOX_REPLY.DONE, ...(note === undefined ? undefined : { note }) },
   });
+  const withFile: InboxItem = {
+    ...quietDone("a1b2c3d4-0000-4000-8000-000000000012", "Rotate the key", 5_000),
+    answerFiles: [
+      {
+        attachmentId: "a1b2c3d4-0000-4000-8000-0000000000f1",
+        name: "rotation.txt",
+        mediaType: "text/plain",
+      },
+    ],
+  };
   inboxes = new Map([
     [
       BILLING.id,
@@ -1765,6 +1972,7 @@ test("an item that needs no reply, once settled, says a note was sent to the age
           "On preview too.",
         ),
         quietDone("a1b2c3d4-0000-4000-8000-000000000011", "Add the secret", 5_500),
+        withFile,
       ],
     ],
     [INVITES.id, [EXPIRY]],
@@ -1777,6 +1985,11 @@ test("an item that needs no reply, once settled, says a note was sent to the age
   };
   assert.match(where("Turn on the flag") ?? "", /· Sent to /u);
   assert.match(where("Add the secret") ?? "", /Saved for the agent to read$/u);
+  assert.match(
+    where("Rotate the key") ?? "",
+    /· Sent to /u,
+    "a file reaches the agent as a note does",
+  );
 });
 
 test("an answered item that asked to be heard back, carried without its answer, still says it was sent to the agent", async () => {
@@ -1806,23 +2019,20 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
   const { page } = mount();
   await settle();
   const listReads: Act[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
-          const asked = request.payload.itemId === noted.id ? noted : bare;
-          const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { item: answered, taken: true },
-          });
-        }
-        return bridge.act(request);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+        const asked = request.payload.itemId === noted.id ? noted : bare;
+        const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { item: answered, taken: true },
+        });
+      }
+      return bridge.act(request);
     },
   });
   const press = (name: string) =>
@@ -2060,7 +2270,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.deepEqual(openings('[data-actor-card="automation"]'), [], "no Open automation");
   const name = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card [data-actor-card="automation"] .card-name button',
+    '.luke-tooltip-card [data-actor-card="automation"] .luke-hover-card-name button',
   );
   assert.equal(name?.textContent, "Nightly flake sweep", "the card's name is a button");
   act(() => name?.click());

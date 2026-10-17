@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -16,6 +16,8 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
@@ -198,14 +200,10 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
+  fakeAppPlatform(QUIET_PANEL);
 });
 
 afterEach(() => {
@@ -253,6 +251,18 @@ function pageButtons(page: HTMLElement): HTMLButtonElement[] {
   ];
 }
 
+/** The title of the page drawn beside the sidebar: its own `h1`, the sidebar's being Settings'. */
+function shownTitle(page: HTMLElement): string | null | undefined {
+  return [...page.querySelectorAll("h1")].find((title) => title.closest("nav") === null)
+    ?.textContent;
+}
+
+/** What scrolls the page drawn beside the sidebar: the shared settings page around its title. */
+function shownScroller(page: HTMLElement): HTMLElement {
+  const title = [...page.querySelectorAll("h1")].find((each) => each.closest("nav") === null);
+  return title?.closest<HTMLElement>(".luke-settings-page") ?? assert.fail("the page scrolls");
+}
+
 /** Opens the page the sidebar names, answering the page drawn beside it. */
 function openPage(page: HTMLElement, title: string): HTMLElement {
   const button = pageButtons(page).find((each) => each.textContent === title);
@@ -268,7 +278,7 @@ test("Settings opens on Profile, and its sidebar lists every page once under Wor
   assert.deepEqual(pageGroups(page), PAGE_GROUPS);
   const current = pageButtons(page).find((each) => each.getAttribute("aria-current") === "page");
   assert.equal(current?.textContent, "Profile");
-  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Profile");
+  assert.equal(shownTitle(page), "Profile");
 });
 
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
@@ -283,12 +293,12 @@ test("the sidebar's first group is headed by the listed workspace's name, over i
 test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(PERSONAL) }));
   openPage(page, "Workspace");
-  const first = page.querySelector(".settings-page-title")?.textContent;
+  const first = shownTitle(page);
 
   redraw(createElement(SettingsHarness, { workspace: listing(ACME) }));
 
   assert.equal(first, "Dana Reyes");
-  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Acme");
+  assert.equal(shownTitle(page), "Acme");
   assert.equal(pageGroups(page)[0]?.heading, "Acme");
 });
 
@@ -332,8 +342,9 @@ test("Appearance draws every diff setting in a Diffs group of its own, under the
         "Diffs",
     ) ?? assert.fail("a Diffs group stands");
   assert.deepEqual(
-    [...group.querySelectorAll(".settings-copy strong")].map(
-      (name) => name.firstChild?.textContent,
+    [...group.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
+      // A pop-up's name ends with the value it names, which is not the row's.
+      (control) => control.getAttribute("aria-label")?.split(": ")[0],
     ),
     [
       "Line numbers",
@@ -356,12 +367,11 @@ test("Appearance draws every diff setting in a Diffs group of its own, under the
 test("a page turned to opens at its top, not where the last page was scrolled", () => {
   const page = mount(createElement(SettingsHarness));
   openPage(page, "Voice");
-  const scroller = page.querySelector<HTMLElement>(".settings-page-scroll");
-  assert.ok(scroller, "the page scrolls");
+  const scroller = shownScroller(page);
   // Note that jsdom lays nothing out, so the scroll offset is held by hand.
   Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 400 });
   openPage(page, "Coding agents");
-  assert.equal(page.querySelector<HTMLElement>(".settings-page-scroll")?.scrollTop, 0);
+  assert.equal(shownScroller(page).scrollTop, 0);
 });
 
 /** Types `words` over whatever the field holds, as the developer would. */
@@ -406,13 +416,10 @@ function pressEscape(composing = false): void {
 /** Counts the searches the window reports opened. */
 function countSearchOpens() {
   let opens = 0;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      recordSurfaceEvent: (event: string) => {
-        if (event === PRODUCT_SURFACE_EVENT.SEARCH_OPEN) opens += 1;
-      },
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    recordSurfaceEvent: (event: string) => {
+      if (event === PRODUCT_SURFACE_EVENT.SEARCH_OPEN) opens += 1;
     },
   });
   return () => opens;
@@ -487,7 +494,7 @@ test("a sidebar result that opens an integration hands its query to the page's s
 
   typeInto(sidebar, "postgres");
   openIntegrationResult(page, "Neon");
-  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Integrations");
+  assert.equal(shownTitle(page), "Integrations");
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "postgres");
 
   // Note that "mcp" finds every integration's row in the sidebar but none by
@@ -511,18 +518,15 @@ test("the Integrations page's search is cleared when another page is turned to",
 
 test("the plan template's version history keeps a call's card at the foot of its versions, as Settings' page list held it, and its way back asks for the call's plan", async () => {
   const sent: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: { kind: string }) => {
-        sent.push(request.kind);
-        return Promise.resolve(
-          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        );
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: { kind: string }) => {
+      sent.push(request.kind);
+      return Promise.resolve(
+        request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      );
     },
   });
   // The card's presses sent as `App` sends them, over the bridge.
@@ -565,17 +569,7 @@ test("the plan template's version history keeps a call's card at the foot of its
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   const row = pageButtons(page).find((each) => each.textContent === "Workspace");
   assert.ok(row, "the Workspace page is listed");

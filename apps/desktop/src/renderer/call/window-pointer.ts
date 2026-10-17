@@ -3,6 +3,7 @@
  */
 
 import { useEffect } from "react";
+import { appBridge } from "../app-bridge";
 
 /**
  * A drag region moves the window under the pointer, and the engine keeps the
@@ -17,7 +18,7 @@ import { useEffect } from "react";
 export function useStaleHoverAfterMove(): void {
   useEffect(() => {
     const root = document.documentElement;
-    const stopMoved = window.luke.onCallWindowMoved(() => {
+    const stopMoved = appBridge().onCallWindowMoved(() => {
       root.dataset.pointerStale = "true";
       delete root.dataset.keyboard;
     });

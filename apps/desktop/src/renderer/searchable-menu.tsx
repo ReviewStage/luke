@@ -1,10 +1,10 @@
 import { CheckIcon, ChevronRightIcon, SearchIcon } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
 import { Shortcut } from "./shortcut";
 import { Switch } from "./switch";
 import { Tooltip } from "./tooltip";
-import { useClipped } from "./use-clipped";
 
 /**
  * searchable-menu.tsx -- the one picker menu the repository chip, the Start button, and the side panel's "+" drop, and Settings' menus may.

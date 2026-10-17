@@ -12,7 +12,16 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { CollapseIcon, EmptyState, ExpandIcon, SidePanelIcon } from "@luke/ui";
+import {
+  CollapseIcon,
+  EmptyState,
+  ExpandIcon,
+  IconButton,
+  SidePanelIcon,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -45,6 +54,7 @@ import {
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
@@ -66,12 +76,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card";
 import { CodePane, centreWithin } from "../tasks/code-pane";
-import {
-  agentGlyphState,
-  agentStateWords,
-  agentTabLabel,
-  pullRequestNumberLabel,
-} from "../tasks/coding-agent-model";
+import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { snippetOf } from "../tasks/file-tab-model";
 import { FileView } from "../tasks/file-view";
@@ -92,6 +97,7 @@ import {
 } from "../tasks/transcript-copy";
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
+import { OpenHereProvider } from "../tasks/use-open-link";
 import {
   type DrawnTabs,
   drawsChanges,
@@ -222,11 +228,16 @@ const NO_PAGES: readonly PageLine[] = [];
  * of tab, or the page of an agent no plan holds, whose panel holds that
  * agent's workers, its Pull request, and its Terminal, and no plan's Board,
  * Code, Call, files, or pages. A tab of an agent's page is no plan's to
- * pin, so none is offered.
+ * pin, so none is offered. Beside the window's Inbox it stands for the
+ * chosen item's task, holding what the item opened there, the task's
+ * files, pages, and Pull requests, and none of the kinds its page draws
+ * from what it holds, the fixed three and Terminal; nor is a tab of it
+ * pinned there, since the Inbox is no plan's page.
  */
 export const SIDE_PANEL_HOLDER = {
   PLAN: "plan",
   AGENT: "agent",
+  INBOX: "inbox",
 } as const;
 
 type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
@@ -234,10 +245,14 @@ type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER
 /** No fixed kind, the same array every render. */
 const NO_KINDS: readonly FixedSidePanelTab[] = [];
 
+/** No Terminal tab, as the Inbox's panel draws. */
+const NO_TERMINALS: readonly TerminalStripTab[] = [];
+
 /** The fixed kinds each holder's panel offers. */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.PLAN]: SIDE_PANEL_TABS,
   [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
+  [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
 
 /** Which of a page's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to: its own, or the side panel beside it. */
@@ -405,9 +420,9 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * no row says it is open; a file not open opens through the panel's one
  * door for a file on the newest snippet of it. Then, under Pull requests,
  * each agent's pull request (`changesOffers`), named as its Pull request tab
- * is (a kind still spelled `changes`, as the tab of its files alone was),
- * with the pull request's number beside it, found by its title and number
- * too, which opens the agent's Pull request tab. The task's coding agents are opened
+ * is, by its number and title (a kind still spelled `changes`, as the tab
+ * of its files alone was), with the agent whose it is beside it, found by
+ * the agent's name too, which opens the agent's Pull request tab. The task's coding agents are opened
  * from the task's column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
@@ -456,14 +471,13 @@ export function panelEntries(input: {
   // Note that a pull request's row is named by its page, because an agent's
   // id already names the agent's own row in the task's summary.
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
-    const look = tabLook({ kind: TAB_KIND.CHANGES, agentName: label, pullRequest });
-    const number = pullRequestNumberLabel(pullRequest);
+    const look = tabLook({ kind: TAB_KIND.CHANGES, pullRequest });
     return {
       row: {
         id: pullRequest.url,
         ...look,
-        detail: number,
-        terms: [look.label, pullRequest.title, number],
+        detail: label,
+        terms: [look.label, label],
         section: ADD_SECTION.PULL_REQUESTS,
       },
       onPick: () => panel.onChoose({ changes: agentId }),
@@ -502,15 +516,9 @@ export function taskWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
   });
 }
 
-/** An agent's Pull request tab's look, named for the agent as the task's agents last read it, wearing its pull request's mark for where it stands. */
+/** An agent's Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
 function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
-  const agent = agents.agents?.find((each) => each.id === agentId);
-  const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
-  return tabLook({
-    kind: TAB_KIND.CHANGES,
-    agentName,
-    pullRequest: agents.pullRequests.get(agentId),
-  });
+  return tabLook({ kind: TAB_KIND.CHANGES, pullRequest: agents.pullRequests.get(agentId) });
 }
 
 /**
@@ -890,7 +898,11 @@ function PanelTabs({
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
-      <p className="side-panel-no-tabs-line">No tabs open</p>
+      <div className="side-panel-no-tabs-line">
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          No tabs open
+        </Text>
+      </div>
       <MenuRowList
         rows={entries.map((entry) => entry.row)}
         onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
@@ -1304,7 +1316,7 @@ function TabContent({
   /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
-  const { act, tell } = useAct();
+  const { act } = useAct();
   if (isMacTerminalTab(tab)) {
     return <MacTerminalTab key={tab.macTerminal} tab={tab} />;
   }
@@ -1339,17 +1351,19 @@ function TabContent({
     );
   }
   if (isChangesTab(tab)) {
+    // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
-      <AgentPullRequestTab
-        key={tab.changes}
-        agentId={tab.changes}
-        control={agents}
-        shown={shown}
-        repository={repository}
-        tree={fileTree}
-        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
-        onView={(view) => onPullRequestView(tab.changes, view)}
-      />
+      <OpenHereProvider key={tab.changes} value={undefined}>
+        <AgentPullRequestTab
+          agentId={tab.changes}
+          control={agents}
+          shown={shown}
+          repository={repository}
+          tree={fileTree}
+          view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
+          onView={(view) => onPullRequestView(tab.changes, view)}
+        />
+      </OpenHereProvider>
     );
   }
   if (isFileTab(tab)) {
@@ -1371,7 +1385,7 @@ function TabContent({
           readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId: taskId, ...window })}
           readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
           readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
-          openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+          openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
           onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}
@@ -1498,17 +1512,13 @@ export function SidePanelToggle({
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
-      <button
-        type="button"
-        className="icon-button side-panel-toggle"
-        aria-label={label}
+      <IconButton
+        icon={<SidePanelIcon />}
+        label={label}
         aria-expanded={panel.open}
-        data-open={String(panel.open)}
         disabled={disabled}
         onClick={panel.onToggle}
-      >
-        <SidePanelIcon />
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -1534,15 +1544,12 @@ function FullScreenToggle({
   useAppCommand(APP_COMMAND.EXIT_FULL_SCREEN, fullScreen && !leaving ? onToggle : undefined);
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_FULL_SCREEN}>
-      <button
-        type="button"
-        className="icon-button side-panel-full-screen"
-        aria-label={label}
-        aria-pressed={fullScreen}
+      <IconButton
+        icon={fullScreen ? <CollapseIcon /> : <ExpandIcon />}
+        label={label}
+        pressed={fullScreen}
         onClick={onToggle}
-      >
-        {fullScreen ? <CollapseIcon /> : <ExpandIcon />}
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -1769,10 +1776,11 @@ export function SidePanel({
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.agentIds }),
   );
-  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does.
-  const terminals = panel.terminals.filter((each) =>
-    drawsTerminal(each, { taskAgents: agents.agentIds }),
-  );
+  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox.
+  const terminals =
+    holder === SIDE_PANEL_HOLDER.INBOX
+      ? NO_TERMINALS
+      : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {
@@ -1819,10 +1827,15 @@ export function SidePanel({
     files: offered,
     changes: changesOffers(agents, changes),
     pages: taskPages,
-    terminals: {
-      offers: terminalOffers(agents, panel),
-      onNew: (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW),
-    },
+    // Note that the Inbox's panel offers no Terminal, since it draws none.
+    ...(holder === SIDE_PANEL_HOLDER.INBOX
+      ? undefined
+      : {
+          terminals: {
+            offers: terminalOffers(agents, panel),
+            onNew: (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW),
+          },
+        }),
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);

@@ -3,7 +3,10 @@ import type { Failure } from "@luke/features/failure-remedy";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { AgentComposer } from "./agent-composer";
+import type { TranscriptCards } from "./agent-tab";
 import { ArchivedComposerNote } from "./archived-task";
+import { ForkChip } from "./fork-action";
+import { forkChoice } from "./fork-model";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
@@ -30,6 +33,13 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * nothing was started, nothing is left behind. While the task is archived,
  * nothing starts on it, so the box gives way to the note that offers
  * Unarchive, and the words written wait in the draft until it is back.
+ *
+ * A draft may fork one of the task's agents at one of its messages
+ * (`fork-action.tsx`): a chip over the box names the source and the message,
+ * the model chip starts on the source's model and effort, and a send forks
+ * the source there with the box's words and files as the developer's note,
+ * an empty box forking alone. The chip's × lets the fork go, leaving an
+ * ordinary draft with its words.
  */
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
@@ -39,9 +49,12 @@ const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
 export function DraftAgentTab({
   draft,
   control,
+  cards,
 }: {
   draft: AgentDraft;
   control: CodingAgentsControl;
+  /** The cards a fork's source chip hangs, as its tab's own chip does; none where the place draws none. */
+  cards?: TranscriptCards | undefined;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
@@ -62,17 +75,27 @@ export function DraftAgentTab({
     };
   }, []);
 
+  const { fork } = draft;
+  const source =
+    fork === undefined
+      ? undefined
+      : [...(control.agents ?? []), ...(control.archived ?? [])].find(
+          (agent) => agent.id === fork.agentId,
+        );
   const send = () => {
     const prompt = draft.prompt.trim();
-    if (!hasWordsOrFiles(prompt, draft.attachments) || sending) return;
+    if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
     setSending(true);
     setNote(undefined);
-    latest.current
-      .startPrompt(draft.id, prompt, draft.choice, draft.attachments, draft.disabledServers)
-      .then((failed) => {
-        setSending(false);
-        setNote(failed);
-      });
+    const { id, choice, attachments, disabledServers } = draft;
+    const started =
+      fork === undefined
+        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers)
+        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers);
+    started.then((failed) => {
+      setSending(false);
+      setNote(failed);
+    });
   };
   const composer: AgentComposerControl = {
     draft: draft.prompt,
@@ -86,7 +109,8 @@ export function DraftAgentTab({
     retry: send,
     sent: [],
   };
-  const choice = draft.choice ?? fallback;
+  // A fork runs on its source's model and effort until the developer picks another.
+  const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
   if (control.onUnarchive !== undefined) {
     return (
       <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
@@ -100,8 +124,12 @@ export function DraftAgentTab({
   return (
     <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
       <footer className="agent-tab-foot">
+        {fork === undefined ? null : (
+          <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />
+        )}
         <AgentComposer
           status={CODING_AGENT_STATUS.STARTING}
+          sendsEmpty={fork !== undefined}
           composer={composer}
           model={
             choice === undefined

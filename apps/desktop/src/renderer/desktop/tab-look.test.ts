@@ -16,6 +16,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { conversationOf, worker, workerCall, workTurn } from "#testing/task-work";
@@ -209,7 +210,7 @@ function tabLooks(column: Element): Map<string, Look> {
 
 /** Each row of the "+" menu in `column`, opened, by its name. */
 function rowLooks(column: Element): Map<string, Look> {
-  const add = column.querySelector<HTMLButtonElement>("button.tab-add");
+  const add = column.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {
@@ -243,18 +244,18 @@ test("the plan's own tab closes beside the agents', and the column's + offers th
   assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name));
 });
 
-test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear", () => {
+test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear, the Pull request named by its number and title rather than its agent's name", () => {
   const panel = mount().querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
   const tabs = tabLooks(panel);
   const rows = rowLooks(panel);
-  for (const name of [READER.title, `Pull request: ${DONE.title}`]) {
+  for (const name of [READER.title, "#42 Expire invitations"]) {
     assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
     assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
   }
   assert.match(tabs.get(READER.title ?? "")?.glyph ?? "", /data-state="working"/u);
   assert.match(
-    tabs.get(`Pull request: ${DONE.title}`)?.glyph ?? "",
+    tabs.get("#42 Expire invitations")?.glyph ?? "",
     /data-pull-request-state="open"/u,
     "the Pull request tab wears its pull request's mark for where it stands",
   );
@@ -269,7 +270,7 @@ test("the plan's own tab hangs the plan's card, as its sidebar row does, its age
   });
   const card = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.ok(card, "the plan's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, TASK.name);
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, TASK.name);
   assert.match(card.textContent ?? "", /acme\/relay/u);
   // The card is the task as the list names it, its agents among it.
   assert.equal(card.querySelector("[data-task-card-agent]")?.textContent, "Invite flow");
@@ -288,15 +289,16 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   });
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the agent's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, WORKING.title);
-  assert.ok(card.querySelector(".card-rule"));
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, WORKING.title);
+  assert.ok(card.querySelector(".luke-hover-card-rule"));
   assert.equal(
-    [...card.querySelectorAll(".card-note")].at(-1)?.textContent,
+    [...card.querySelectorAll(".luke-hover-card-note")].at(-1)?.textContent,
     "Terminal in this agent’s sandbox",
   );
 });
 
 test("a page's tab hangs the page's card: its title and version over its newest version drawn small, in a frame that runs its scripts alone, takes no pointer or focus, and is left out of the recording", () => {
+  fakeAppPlatform({ pageFrameUrl });
   const panel = mount().querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
     (each) => each.querySelector(".tab-label")?.textContent === FUNNEL.title,
@@ -307,8 +309,8 @@ test("a page's tab hangs the page's card: its title and version over its newest 
   });
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, FUNNEL.title);
-  assert.equal(card.querySelector(".card-sub")?.textContent, "Version 3");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
+  assert.equal(card.querySelector(".luke-hover-card-sub")?.textContent, "Version 3");
   const frame = card.querySelector("iframe");
   assert.ok(frame, "the card previews the page");
   assert.equal(

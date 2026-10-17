@@ -1,5 +1,5 @@
 /**
- * contract.ts -- what session replay and the recorder's bundle say to each other: the file it is, and the one name the client finds it by.
+ * contract.ts -- what session replay and the recorder's bundle say to each other: the one name the client finds it by.
  *
  * The recorder (rrweb and the library's replay engine) is nearly a tenth of
  * what the panel's bundle would otherwise carry, and a window that never
@@ -8,7 +8,7 @@
  * `./index.ts`) that `../session-replay.ts` loads before it starts the
  * client, the first time a run is to be recorded. That bundle is the
  * library's own recorder script, the one its full build fetches from the
- * library's host, served from beside `index.html` instead, since the
+ * library's host, served as the panel's own chunk instead, since the
  * renderer's policy admits no script from elsewhere. It registers itself
  * where the client looks for it, `window.__PosthogExtensions__`, and this
  * file names that and nothing more: nothing here imports a value, so the
@@ -29,9 +29,6 @@ declare global {
     __PosthogExtensions__?: { readonly initSessionRecording?: unknown };
   }
 }
-
-/** The file the recorder's bundle is, beside `index.html`. */
-export const SESSION_RECORDER_ASSET = { SCRIPT: "session-recorder.js" } as const;
 
 /** Whether the recorder's bundle has run in this window. */
 export function sessionRecorderLoaded(): boolean {
