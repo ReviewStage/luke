@@ -392,7 +392,8 @@
    and a refused save says why under them. The field takes the line's room.
    The hint is the key's own characters, so it reads in the code face. */
 .api-key,
-.workspace-identity {
+.workspace-identity,
+.workspace-member {
   display: flex;
   flex-direction: column;
 }
@@ -412,7 +413,8 @@
 }
 
 .api-key > .error-message,
-.workspace-identity > .error-message {
+.workspace-identity > .error-message,
+.workspace-member > .error-message {
   margin-top: calc(-1 * var(--luke-space-4));
   padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
 }
@@ -454,21 +456,23 @@
   letter-spacing: 0;
 }
 
-/* A row's value standing in a column of its own at the row's end, in the
-   value's ink at the row's size, as the Keyboard shortcuts page sets a
-   chord: a member's role. */
+/* Settings › Workspace › Members (`.workspace-member`, a role change's
+   refusal standing under it as API keys' does): a member's role standing in
+   a column of its own at the row's end, in the value's ink at the body's
+   size, as the Keyboard shortcuts page sets a chord. */
 .settings-row-value {
   min-width: 64px;
   flex: none;
-  color: var(--text-secondary);
-  font-size: 13px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   text-align: right;
 }
 
 /* The ⋯'s room on a row with none, in a list where other rows have one, so
    every row's value ends in one column. */
 .settings-act-slot {
-  width: var(--control-height);
+  width: var(--luke-control-height);
   flex: none;
 }
 
