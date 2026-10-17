@@ -1,6 +1,6 @@
 import {
+  DEFAULT_VIDEO_AVATAR,
   isVideoAvatar,
-  VIDEO_AVATAR,
   VIDEO_AVATAR_LIST,
   VIDEO_AVATAR_NAME,
   videoAvatarCover,
@@ -144,8 +144,9 @@ export const APP_SETTING_SCHEMA = {
     visible: voiceControlDrawn,
   }),
   /*
-   * Who Luke appears as on video: the deployment's own persona, or one of
-   * Keyframe's stock avatars. Kept on this Mac, beside the Video calls switch
+   * Who Luke appears as on video: one of Keyframe's stock avatars. A stored
+   * `default`, the deployment's own persona an earlier build offered, is no
+   * longer listed and reads as the default. Kept on this Mac, beside the Video calls switch
    * it belongs to, and read as each avatar starts, so a change shows the next
    * time video does rather than ending the call in progress.
    */
@@ -160,7 +161,7 @@ export const APP_SETTING_SCHEMA = {
     // Each stock avatar's face, loaded from Keyframe as the menu draws it.
     optionPicture: videoAvatarCover,
     guard: (value: UnparsedWireValue) => optional(value, isVideoAvatar),
-    default: VIDEO_AVATAR.DEFAULT,
+    default: DEFAULT_VIDEO_AVATAR,
     page: SETTINGS_PAGE.EXPERIMENTAL,
     section: SETTING_SECTION.VIDEO_CALLS,
     order: 40,
