@@ -1,8 +1,8 @@
-import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine, type PageShower } from "@luke/features/page-wire";
 import { HoverCard, HoverCardHead } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { useState } from "react";
+import { appPlatform } from "../app-platform";
 import { PAGE_SANDBOX } from "./page-pane";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
@@ -41,7 +41,7 @@ function PagePreview({ taskId, page }: CardPage): React.JSX.Element {
       <iframe
         className="page-card-frame"
         title={`${page.title} preview`}
-        src={pageFrameUrl({ taskId, pageId: page.id, version: page.version })}
+        src={appPlatform().pageFrameUrl({ taskId, pageId: page.id, version: page.version })}
         sandbox={PAGE_SANDBOX}
         allow=""
         referrerPolicy="no-referrer"

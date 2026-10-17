@@ -682,6 +682,45 @@ test("start_agent hands over a prompt and a note each as long as a start allows,
   assert.ok(message.includes(`\n\n${note}`), "the note follows it whole");
 });
 
+test("start_agent with a title names the agent by it from the start, and a title generated later never covers it; an empty or over-long title starts nothing", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const title = "start_agent takes a title";
+
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt: "Add a title to start_agent.", title: `  ${title}  ` },
+    "call-titled",
+  );
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  const startedId = started.agent.id;
+  assert.equal(
+    started.agent.mention,
+    `[@${title}](https://tryluke.dev/workspace-${workspaceId}/plan/${plans.invitations}/agent/${startedId})`,
+  );
+
+  // The title generated as the agent's words arrive is filled only where none stands.
+  assert.equal(
+    await database.run(fillCodingAgentTitle(caller.userId, startedId, "Generated name")),
+    false,
+  );
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
+  assert.equal(stored.title, title);
+
+  for (const [refused, key] of [
+    ["   ", "call-empty"],
+    ["a".repeat(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS + 1), "call-long"],
+  ] as const) {
+    assert.deepEqual(await call(CODER_TOOL.START_AGENT, { title: refused }, key), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+    });
+  }
+});
+
 test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {
   const { workspaceId, elsewhere, plans, agents } = await openWorkspaces();
   const { caller } = agents;

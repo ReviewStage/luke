@@ -20,7 +20,7 @@ import {
   PromptInputTools,
   submitPromptInput,
 } from "../ai-elements/prompt-input";
-import { editorBundleAtom } from "../editor-bundle";
+import { useSideBundles } from "../bundle-loader";
 import { imageFiles } from "../feedback-images";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
@@ -208,7 +208,7 @@ function AnswerCard({
   latest.current = item;
   const byPress = pressesOf(item.response) !== undefined;
   const placeholder = placeholderOf(item.response);
-  const bundle = useAtomValue(editorBundleAtom);
+  const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const pickers = useComposerPickers({
     editor,

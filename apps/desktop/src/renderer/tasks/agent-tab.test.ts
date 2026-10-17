@@ -733,3 +733,38 @@ test("a notice of a message holding no Markdown, a link alone, keeps the notice'
     "Chat: @agent-2 in #teammate-invitations asked about memberships.",
   );
 });
+
+/** A chat call's row drawn with Chat offered or not, every place it opens recorded. */
+function chatCallDrawn(chatOn: boolean) {
+  const opened: ToolTarget[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(AgentMessage, {
+        message: assistant([toolPart("post_chat", { text: "Rebased." }, ACCEPTED)]),
+        plan: false,
+        lead: AGENT_LEAD,
+        moving: false,
+        delegation: { models: [], chatOn, onOpenTarget: (target) => opened.push(target) },
+      }),
+    ),
+  );
+  return { container, opened };
+}
+
+test("a chat call's row opens the task's Chat while Chat is offered, and folds open as any call's does while it is off", () => {
+  const on = chatCallDrawn(true);
+  const row = on.container.querySelector<HTMLButtonElement>(
+    'button[data-call-id="call-post_chat"]',
+  );
+  assert.ok(row, "the row is a button");
+  act(() => row.click());
+  assert.deepEqual(on.opened, [{ kind: TOOL_TARGET.CHAT }]);
+
+  const off = chatCallDrawn(false);
+  assert.equal(off.container.querySelector('button[data-call-id="call-post_chat"]'), null);
+  assert.ok(off.container.querySelector("details"), "the row folds its call open in place");
+});

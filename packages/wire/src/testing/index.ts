@@ -9,6 +9,7 @@ export {
   type FakeResponder,
   fakeHttpClient,
   fakeHttpClientLayer,
+  noNetwork,
 } from "./http-client-fake.js";
 export {
   HTTP_STATUS,
