@@ -1,6 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,
@@ -9,7 +8,6 @@ import {
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
-  type PlanCommentAsked,
   type PlanCommentEntry,
   type PlanCommentThread,
   type PlanCommentWriter,
@@ -38,7 +36,6 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   ArrowUpIcon,
   CheckIcon,
-  ChevronDownIcon,
   CircleCheckIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
@@ -128,7 +125,6 @@ const CARD_GAP = 8;
 /** The words a thread's controls are named by. */
 const COMMENT_WORDS = {
   COMMENT: "Comment",
-  SEND_TO: "Send to",
   ADD: "Add a comment",
   REPLY: "Reply",
   RESOLVE: "Resolve",
@@ -529,6 +525,8 @@ function MentionCommentText({
     // Note that the list rises over the card, since the cards under it in the margin would stand over it.
     side: MENTION_MENU_SIDE.ABOVE,
     onChoose: (mention) => editor.current?.chooseMention(mention),
+    // Luke is offered with the agents, whom a comment's mention sends its thread.
+    luke: true,
   });
   return (
     <ComposerField
@@ -621,66 +619,6 @@ function PlainCommentText({
   );
 }
 
-/** Who a thread may be sent to, and the door that sends it: the draft posted first where one stands. */
-interface SendTo {
-  readonly agents: EditAgents | undefined;
-  readonly onAsk: (
-    to: PlanCommentAsked,
-    draft: { words: string; clientKey: string } | undefined,
-  ) => Promise<boolean>;
-}
-
-/**
- * The one Send to control: Luke first, for reasoning about the plan, then the
- * task's coding agents by name, each with its model, for changing code.
- * Picking one asks it to read the thread with the plan and answer in it.
- */
-function SendToMenu({
-  sendTo,
-  onPick,
-}: {
-  sendTo: SendTo;
-  onPick: (to: PlanCommentAsked) => void;
-}): React.JSX.Element {
-  const menu = useMenu(true);
-  const trigger = menu.trigger();
-  const control = sendTo.agents?.control;
-  const agents = (control?.agents ?? []).filter((agent) => agent.archivedAt === undefined);
-  const luke: MenuAction = {
-    label: "Luke",
-    icon: <ActorMark actor={LUKE_ACTOR} />,
-    detail: "Thinks about the plan",
-    onSelect: () => onPick({ actor: PLAN_COMMENT_ACTOR.LUKE }),
-  };
-  const coding: MenuAction[] = agents.map((agent) => ({
-    label: agentTabLabel(agent, control?.models),
-    icon: (
-      <WriterMark
-        writer={{ actor: PLAN_COMMENT_ACTOR.AGENT, agentId: agent.id }}
-        agents={sendTo.agents}
-      />
-    ),
-    detail: modelLabel(agent.model, control?.models),
-    onSelect: () => onPick({ actor: PLAN_COMMENT_ACTOR.AGENT, agentId: agent.id }),
-  }));
-  return (
-    <>
-      <button type="button" className="toolbar-button comment-send-to" {...trigger}>
-        {COMMENT_WORDS.SEND_TO}
-        <ChevronDownIcon aria-hidden="true" />
-      </button>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={COMMENT_WORDS.SEND_TO}
-          menu={menu.drawn}
-          groups={coding.length === 0 ? [[luke]] : [[luke], coding]}
-          onClose={menu.close}
-        />
-      )}
-    </>
-  );
-}
-
 /** The field under a thread that answers it, or starts it where it is the thread being started. */
 function ReplyField({
   label,
@@ -688,7 +626,6 @@ function ReplyField({
   onSend,
   onCancel,
   autoFocus,
-  sendTo,
   onDraft,
   variant = REPLY_VARIANT.REPLY,
 }: {
@@ -698,8 +635,6 @@ function ReplyField({
   onSend: (words: string, clientKey: string) => Promise<boolean>;
   onCancel: () => void;
   autoFocus: boolean;
-  /** Who the thread may be sent to; none for a thread not yet posted. */
-  sendTo?: SendTo | undefined;
   /** Told the words as they are typed, and whether a dictation is under way, as a thread being started tells whether it holds a draft. */
   onDraft?: ((words: string, dictating: boolean) => void) | undefined;
   /** A thread's first comment, which is the card itself, or a reply under its comments, which stays a line until it is used. */
@@ -753,25 +688,9 @@ function ReplyField({
       <div className="comment-field-foot">
         {dictating ? (
           <DictationStrip dictation={dictation} />
-        ) : sendTo === undefined ? (
-          <span />
         ) : (
-          <SendToMenu
-            sendTo={sendTo}
-            onPick={(to) => {
-              const trimmed = words.trim();
-              const key =
-                attempt.current?.words === trimmed ? attempt.current.key : crypto.randomUUID();
-              if (trimmed !== "") attempt.current = { words: trimmed, key };
-              void sendTo
-                .onAsk(to, trimmed === "" ? undefined : { words: trimmed, clientKey: key })
-                .then((sent) => {
-                  if (!sent || trimmed === "") return;
-                  attempt.current = undefined;
-                  setWords("");
-                });
-            }}
-          />
+          // Note that a thread is sent by mentioning Luke or an agent in its words, so the foot holds the field's tools alone.
+          <span />
         )}
         {dictating ? null : (
           <span className="comment-field-tools">
@@ -880,8 +799,6 @@ function ThreadCard({
 }): React.JSX.Element {
   const now = useMinute();
   const [sending, setSending] = useState(false);
-  // A send that failed is retried under its own key, so a send whose answer was lost hands the thread over once.
-  const askAttempt = useRef<{ to: string; key: string } | undefined>(undefined);
   const comments = thread.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT);
   const [first] = comments;
   const gone = thread.anchor === undefined;
@@ -986,33 +903,6 @@ function ThreadCard({
           sending={sending}
           autoFocus={false}
           onCancel={onClose}
-          sendTo={{
-            agents: doors.agents,
-            // Note that a draft standing as the thread is sent is posted first, so it is part of what is asked.
-            onAsk: async (to, draft) => {
-              setSending(true);
-              const posted =
-                draft === undefined ||
-                (await doors.control.act(thread.id, {
-                  action: PLAN_COMMENT_ACTION.REPLY,
-                  ...draft,
-                }));
-              const recipient = `${to.actor}:${to.agentId ?? ""}`;
-              if (askAttempt.current?.to !== recipient) {
-                askAttempt.current = { to: recipient, key: crypto.randomUUID() };
-              }
-              const asked =
-                posted &&
-                (await doors.control.act(thread.id, {
-                  action: PLAN_COMMENT_ACTION.ASK,
-                  clientKey: askAttempt.current.key,
-                  to,
-                }));
-              if (asked) askAttempt.current = undefined;
-              setSending(false);
-              return asked;
-            },
-          }}
           onSend={async (words, clientKey) => {
             setSending(true);
             const sent = await doors.control.act(thread.id, {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import {
+  askedInWords,
   decodeMention,
   encodeMention,
   handedMentionsIn,
@@ -855,4 +856,43 @@ test("a bare address's end is read in one pass however long the punctuation afte
     handedMentionsIn(words, null).map(({ target }) => target),
     [section],
   );
+});
+
+test("Luke on a task is mentioned by the task's link and `/luke`, read back by either scheme, and on no task names nothing", () => {
+  const luke: Mention = { kind: MENTION_KIND.LUKE, taskId: "plan-1" };
+
+  assert.equal(encodeMention(luke, PLACE), "https://tryluke.dev/acme/plan/plan-1/luke");
+  assert.deepEqual(decodeMention("https://tryluke.dev/acme/plan/plan-1/luke", null), luke);
+  assert.deepEqual(decodeMention("tryluke://tryluke.dev/acme/plan/plan-1/luke", null), luke);
+  for (const target of [
+    "https://tryluke.dev/acme/luke",
+    "https://tryluke.dev/acme/plan/plan-1/luke/more",
+    "https://tryluke.dev/acme/plan/plan-1/luke#top",
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
+});
+
+test("a comment's words ask the Luke and the agents they mention with `@`, each once, and no bare link", () => {
+  const words = [
+    "[@Luke](https://tryluke.dev/acme/plan/plan-1/luke), and",
+    "[@Wire it](https://tryluke.dev/acme/plan/plan-1/agent/agent-1) with",
+    "[@wire it again](https://tryluke.dev/acme/plan/plan-1/agent/AGENT-1),",
+    "[@Other](https://tryluke.dev/acme/agent/agent-2), not",
+    "[this one](https://tryluke.dev/acme/plan/plan-1/agent/agent-3) or `[@code](https://tryluke.dev/acme/plan/plan-1/agent/agent-4)`.",
+  ].join(" ");
+
+  assert.deepEqual(askedInWords(words), { lukeOn: ["plan-1"], agentIds: ["agent-1", "agent-2"] });
+});
+
+test("a comment's words ask Luke though twenty other mentions come before him", () => {
+  const files = Array.from(
+    { length: 20 },
+    (_, index) => `[@f${index}.ts](https://github.com/acme/relay/blob/main/f${index}.ts)`,
+  ).join(" ");
+
+  assert.deepEqual(askedInWords(`${files} [@Luke](https://tryluke.dev/acme/plan/plan-1/luke)`), {
+    lukeOn: ["plan-1"],
+    agentIds: [],
+  });
 });

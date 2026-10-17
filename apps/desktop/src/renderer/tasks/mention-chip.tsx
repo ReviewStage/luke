@@ -28,6 +28,7 @@ import {
   UserIcon,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
+import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
   AppWindowIcon,
@@ -235,6 +236,9 @@ function pressOf(
     case MENTION_KIND.AGENT:
     case MENTION_KIND.PERSON:
       return () => openLink(target);
+    // Luke has no tab of his own on a task, so his chip opens the task he thinks about.
+    case MENTION_KIND.LUKE:
+      return () => doors.onOpenTask({ kind: MENTION_KIND.TASK, taskId: mention.taskId });
   }
 }
 
@@ -289,6 +293,8 @@ function MentionGlyph({
     }
     case MENTION_KIND.PERSON:
       return <PersonGlyph userId={mention.userId} name={name} />;
+    case MENTION_KIND.LUKE:
+      return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
   }
 }
 

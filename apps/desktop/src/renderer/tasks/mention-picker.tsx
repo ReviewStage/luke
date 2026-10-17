@@ -13,7 +13,7 @@ import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ArrowLeftIcon, ChevronRightIcon, DocumentIcon, ProviderMark, UserIcon } from "@luke/ui";
-import { type Actor, memberActor } from "@luke/ui/actor-model";
+import { type Actor, LUKE_ACTOR, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
@@ -430,6 +430,21 @@ function agentDetail(agent: MentionableAgent, planId: string): string {
   return agent.archived === true ? `${task}${DETAIL_JOIN}${AGENT_DETAIL.ARCHIVED}` : task;
 }
 
+/** Luke's row's name, and what it says of him, where a comment's list offers him first among the agents. */
+const LUKE_NAME = "Luke";
+const LUKE_DETAIL = "Thinks about the task";
+
+/** Luke's row, on the task the list stands on: a comment's mention of him sends him its thread. */
+function lukeRow(planId: string): MentionRow {
+  return {
+    mention: { kind: MENTION_KIND.LUKE, taskId: planId },
+    name: LUKE_NAME,
+    detail: LUKE_DETAIL,
+    terms: `${LUKE_NAME} ${LUKE_DETAIL}`,
+    actor: LUKE_ACTOR,
+  };
+}
+
 /**
  * Each agent's row, by its tab's name, wearing its tile, labelled and found
  * by its task: the plan's own agents first, then the workspace's others in
@@ -722,6 +737,8 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       ) : (
         <ActorMark actor={row.actor} size={ACTOR_SIZE.INLINE} />
       );
+    case MENTION_KIND.LUKE:
+      return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
   }
 }
 
@@ -1045,6 +1062,7 @@ export function useMentionPicker({
   room,
   side,
   onChoose,
+  luke = false,
 }: {
   source: MentionSource | undefined;
   /** The agent whose box the list stands in, which it does not offer; none for the plan's own words. */
@@ -1057,6 +1075,8 @@ export function useMentionPicker({
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
+  /** Whether Luke is offered first among the agents, as a comment's list offers him, whom its mention sends the thread. */
+  luke?: boolean;
 }): MentionPicker {
   const listId = useId();
   const { act } = useAct();
@@ -1172,13 +1192,16 @@ export function useMentionPicker({
           {
             plan: taskRows(planId, source.taskName, source.text()),
             pages: pageRows(planId, source.pages ?? NO_PAGES),
-            agents: agentRows(
-              planId,
-              source.agents ?? NO_AGENTS,
-              agentsRead?.agents ?? NO_AGENTS,
-              self,
-              term,
-            ),
+            agents: [
+              ...(luke && planId !== NO_TASK ? [lukeRow(planId)] : []),
+              ...agentRows(
+                planId,
+                source.agents ?? NO_AGENTS,
+                agentsRead?.agents ?? NO_AGENTS,
+                self,
+                term,
+              ),
+            ],
             people: personRows(members ?? NO_MEMBERS, readerId),
             pullRequests: pullRequestRows(planId, source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),

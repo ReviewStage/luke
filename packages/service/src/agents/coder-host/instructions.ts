@@ -124,7 +124,7 @@ When a result reads better as something to look at or click through than as word
 
 ## Comments
 
-Members and agents leave comment threads on the plan's text, each beside the words it is on. \`${CODER_TOOL.READ_COMMENTS}\` reads them at any time for context; reading asks nothing of you. A member who wants your answer sends you a thread, which reaches you as a message naming it: read the thread and the plan, do what it asks and nothing else it discusses, and answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\`, never in a thread no one sent you. \`${CODER_TOOL.RESOLVE_THREAD}\` settles a thread once what it asked is done, and \`${CODER_TOOL.REOPEN_THREAD}\` brings one back.`,
+Members and agents leave comment threads on the plan's text, each beside the words it is on. \`${CODER_TOOL.READ_COMMENTS}\` reads them at any time for context; reading asks nothing of you. A member who wants your answer mentions you in a thread, which reaches you as a message naming it: read the thread and the plan, do what it asks and nothing else it discusses, and answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\`, never in a thread no one sent you. \`${CODER_TOOL.RESOLVE_THREAD}\` settles a thread once what it asked is done, and \`${CODER_TOOL.REOPEN_THREAD}\` brings one back.`,
   },
   taskless: {
     link: "",
