@@ -5,7 +5,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
   type AutomationCreateParams,
+  type AutomationFollowed,
   type AutomationListView,
 } from "@luke/features/automation-view";
 import {
@@ -127,6 +129,10 @@ const CI_DIGEST = {
 let root: Root | undefined;
 /** The service's automations, as a read of the list answers them and a change changes them. */
 let standing: AutomationSummary[] = [];
+/** Whoever this window's follows are pushed to, as the bridge hands them on; none before a page follows anything. */
+let pushed: ((changed: AutomationFollowed) => void) | undefined;
+/** Every follow and let-go the window asked for, in order. */
+let follows: [string, unknown][] = [];
 /** How the next reads of the list answer before the service's own, in order. */
 let lists: AutomationListView[] = [];
 /** Whether a read of the list is held unanswered, so only the writes' answers draw. */
@@ -179,6 +185,8 @@ beforeEach(() => {
   copied = [];
   feedbackAbout = [];
   standing = [DIGEST, SWEEP, FAILING];
+  pushed = undefined;
+  follows = [];
   lists = [];
   listHeld = false;
   heldChanges = undefined;
@@ -199,9 +207,22 @@ beforeEach(() => {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
+      onAutomations: (listener: (changed: AutomationFollowed) => void) => {
+        pushed = listener;
+        return () => {
+          if (pushed === listener) pushed = undefined;
+        };
+      },
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
+        if (
+          request.kind === ACT_KIND.AUTOMATIONS_FOLLOW ||
+          request.kind === ACT_KIND.AUTOMATIONS_UNFOLLOW
+        ) {
+          follows.push([request.kind, request.payload]);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           listed.push(request.payload.workspaceId);
           if (listHeld) return new Promise(() => undefined);
@@ -491,6 +512,30 @@ test("an older switch's answer landing after a newer one's draws nothing over it
     page.querySelector(".automation-row-name")?.textContent,
     "Nightly flaky-test sweep, write 2",
   );
+});
+
+test("the list is followed while the page stands and drawn as the host pushes it, with nothing read again, and let go as the page closes", async () => {
+  const page = mount();
+  await settle();
+  const before = listed.length;
+  const scope = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE.id } as const;
+
+  act(() =>
+    pushed?.({
+      scope,
+      view: { automations: [{ ...SWEEP, name: "Nightly sweep, renamed elsewhere" }] },
+    }),
+  );
+  await settle();
+
+  assert.deepEqual(rows(page), [["Nightly sweep, renamed elsewhere", "Acme"]]);
+  assert.equal(listed.length, before, "nothing is read for what the host pushed");
+  act(() => root?.unmount());
+  root = undefined;
+  assert.deepEqual(follows, [
+    [ACT_KIND.AUTOMATIONS_FOLLOW, scope],
+    [ACT_KIND.AUTOMATIONS_UNFOLLOW, scope],
+  ]);
 });
 
 test("once a switch settles the list is read again, so what changed elsewhere meanwhile is drawn", async () => {

@@ -1,5 +1,6 @@
 import {
   AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
   type AutomationCallFailure,
   type AutomationChangeParams,
   type AutomationCreateParams,
@@ -10,14 +11,15 @@ import type { AutomationSummary } from "@luke/features/automation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
-import { useMinute } from "../tasks/task-time";
+import { useFollowedAutomations } from "./use-followed-automations";
 
 /**
- * use-automations.ts -- the Automations pages' list: one workspace's automations, read when a page opens and each minute after, and the writes that make, change, and delete one.
+ * use-automations.ts -- the Automations pages' list: one workspace's automations, read when a page opens and followed while it stands, and the writes that make, change, and delete one.
  *
- * Nothing is held past the pages. The list is read again each minute they
- * stand, so a schedule's next run and a run's agent move on without a
- * press. A write answers the automation as the service then holds it,
+ * Nothing is held past the pages. The list is followed while they stand
+ * (`use-followed-automations.ts`): the host pushes it each time it moves,
+ * so a schedule's next run and a run's agent move on without a press, and
+ * nothing is read on a clock here. A write answers the automation as the service then holds it,
  * which takes its place in the list at once, a new one first, where it is
  * the newest write of that automation, and a deletion takes its row away;
  * the list is read again once any write settles, so what changed elsewhere
@@ -61,7 +63,6 @@ interface HeldRead {
 /** One workspace's automations, none asked for while no workspace is listed, with the writes that make, change, and delete one. */
 export function useAutomations(workspaceId: string | undefined) {
   const { act } = useAct();
-  const now = useMinute();
   const [held, setHeld] = useState<HeldRead | undefined>(undefined);
   // Note that every read and every write moves the generation on, so only
   // the newest read is taken: one asked before a write, or for another
@@ -97,11 +98,27 @@ export function useAutomations(workspaceId: string | undefined) {
   // workspace reads that one's list rather than the list it was made in.
   const reloadNow = useRef(reload);
   reloadNow.current = reload;
-  // Note that the minute is read so the list is read again each minute the pages stand.
   useEffect(() => {
-    void now;
     reload();
-  }, [reload, now]);
+  }, [reload]);
+  // Note that a list the host pushed is the newest word of it, so it is taken
+  // whatever read is out, and a failure keeps a list already drawn.
+  useFollowedAutomations(
+    workspaceId === undefined ? undefined : { kind: AUTOMATION_FOLLOW.WORKSPACE, id: workspaceId },
+    (changed) => {
+      const read = changed.view;
+      if (changed.scope.kind !== AUTOMATION_FOLLOW.WORKSPACE || "runs" in read) return;
+      const listed = changed.scope.id;
+      setHeld((was) =>
+        "failure" in read &&
+        was?.workspaceId === listed &&
+        was.read !== undefined &&
+        "automations" in was.read
+          ? was
+          : { workspaceId: listed, read },
+      );
+    },
+  );
   /**
    * One write out: counted as its automation's newest, a new one's under
    * no automation yet, its answer handed to `land` only while it still is,

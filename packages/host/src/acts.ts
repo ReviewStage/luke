@@ -8,6 +8,7 @@ import {
   automationChangeParamsSchema,
   automationCreateParamsSchema,
   automationDeletedViewSchema,
+  automationFollowSchema,
   automationIdParamsSchema,
   automationListParamsSchema,
   automationListViewSchema,
@@ -450,6 +451,14 @@ export const ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /**
+   * A workspace's automations, or an automation's runs, followed by the
+   * window that asks and let go by it: what they hold is pushed to that
+   * window alone on `app:automations`, each time they move, until the window
+   * lets them go or its page is gone.
+   */
+  AUTOMATIONS_FOLLOW: "automations.follow",
+  AUTOMATIONS_UNFOLLOW: "automations.unfollow",
   /** The listed workspace's issues: listed, one read, one filed, and one changed. */
   ISSUES_LIST: "issues.list",
   ISSUES_READ: "issues.read",
@@ -1282,6 +1291,16 @@ export const ACT = {
     payload: actSchema(automationIdParamsSchema),
     result: wireResult<AutomationView>(isReadable(automationViewSchema)),
     refusal: "Could not make a new webhook secret on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_FOLLOW]: {
+    payload: actSchema(automationFollowSchema),
+    result: answersNothing,
+    refusal: "Could not follow the automations on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_UNFOLLOW]: {
+    payload: actSchema(automationFollowSchema),
+    result: answersNothing,
+    refusal: "Could not let the automations go on this system.",
   },
   [ACT_KIND.ISSUES_LIST]: {
     payload: actSchema(issueListParamsSchema),

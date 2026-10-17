@@ -146,6 +146,15 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /**
+   * A workspace's automations, or an automation's runs, followed from now
+   * until let go: over Neon Realtime where the service seals them, read each
+   * minute where it does not. What it holds is heard as `AUTOMATIONS_CHANGED`
+   * events, never answered; following what is already followed does nothing.
+   */
+  AUTOMATIONS_FOLLOW: "automations.follow",
+  /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
+  AUTOMATIONS_UNFOLLOW: "automations.unfollow",
   /** A workspace's issues: listed, one read, one filed, and one changed. */
   ISSUES_LIST: "issues.list",
   ISSUES_READ: "issues.read",
@@ -535,6 +544,8 @@ export const GATEWAY_EVENT = {
   TERMINAL_STATE: "terminal.state",
   /** What waits on the developer across the account, whole, each time it changes while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
+  /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
+  AUTOMATIONS_CHANGED: "automations.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
