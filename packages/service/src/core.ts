@@ -37,7 +37,7 @@ export {
   userMetadataOf,
 } from "@luke/features/brain";
 export { wireValidatedTool } from "@luke/features/brain/tool-set";
-// The planning vocabulary stands behind doors of its own, which the barrel
+// The task vocabulary stands behind doors of its own, which the barrel
 // above re-exports nothing of.
 export * from "@luke/features/task-wire";
 export * from "@luke/runtime/vocabulary";

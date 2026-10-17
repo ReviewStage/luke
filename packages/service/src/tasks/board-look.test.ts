@@ -12,7 +12,7 @@ import { driven, forkClockDriven } from "../testing/clock-driven.js";
 import { BOARD_LOOK_WAIT, LOOK_AT_BOARD_STATUS, runLookAtBoard } from "./board-look.js";
 
 /**
- * The planning model's look at its latest drawing: the Mac's first save of
+ * The brain's look at its latest drawing: the Mac's first save of
  * the scene holding a drawing carries the scene's image, and the look answers
  * that image, or that none landed because the board is not open. The Mac is
  * played by the store's own scene write, the call its board route makes.
@@ -27,7 +27,7 @@ const SCENE = [
   { id: "api", type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 0, y: 0, width: 200, height: 80 },
 ];
 
-/** An account holding one plan, and the binding a planning call runs under. */
+/** An account holding one task, and the binding a brain call runs under. */
 const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;

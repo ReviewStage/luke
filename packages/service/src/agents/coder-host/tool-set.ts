@@ -14,12 +14,13 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * The coding agent runs eve's own tools, authored one file each under
  * `apps/dev/tools/` so the set is exactly this list and eve adds nothing
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
- * search, the hosted public search and page read the planning model has
+ * search, the hosted public search and page read the brain has
  * too (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`), the pull request the service
- * opens for it (`pull-request.ts`), its reach to the other coding agents of
+ * opens for it (`pull-request.ts`), the workspace's chat it posts in and
+ * reads (`chat.ts`), its reach to the other coding agents of
  * its workspace (`../coding-agent-tools.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
  * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
@@ -56,11 +57,14 @@ export const CODER_TOOL = {
   READ_INBOX: AGENT_TOOL.READ_INBOX,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
+  READ_AGENT: AGENT_TOOL.READ_AGENT,
   MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
   START_AGENT: AGENT_TOOL.START_AGENT,
   ARCHIVE_AGENT: AGENT_TOOL.ARCHIVE_AGENT,
   UNARCHIVE_AGENT: AGENT_TOOL.UNARCHIVE_AGENT,
   LIST_TASKS: AGENT_TOOL.LIST_TASKS,
+  POST_CHAT: AGENT_TOOL.POST_CHAT,
+  READ_CHAT: AGENT_TOOL.READ_CHAT,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   READ_PAGE: AGENT_TOOL.READ_PAGE,

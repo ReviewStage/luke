@@ -19,11 +19,11 @@ import {
 import { createdAt, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { automation } from "./automation.js";
-import { task } from "./plan.js";
 import { conversations } from "./storage.js";
+import { task } from "./task.js";
 
 /**
- * coding-agent.ts -- one coding agent started on a plan, linking its conversation to the plan it works.
+ * coding-agent.ts -- one coding agent started on a task, linking its conversation to the task it works.
  *
  * A coding agent is a `coding_agent` conversation: its transcript is that
  * conversation's `messages` rows and its status its latest `turns` row, so
@@ -48,7 +48,7 @@ import { conversations } from "./storage.js";
  * until it happens, and both are what the tab's context ring reads.
  * `published` is the pull request from the agent's branch as GitHub last
  * answered a read of it (`coder-host/published.ts`), null before a read
- * found one; the plan list reads it so the sidebar asks GitHub nothing.
+ * found one; the task list reads it so the sidebar asks GitHub nothing.
  * `archived_at` is when the developer put the agent away, which leaves it
  * out of every list but the one that asks for archived agents, and null
  * while it stands; its conversation and pull request are kept either way.
@@ -80,7 +80,7 @@ import { conversations } from "./storage.js";
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
- * starting a second. The row goes with its plan, its account, and its
+ * starting a second. The row goes with its task, its account, and its
  * conversation alike.
  */
 /**
@@ -135,9 +135,9 @@ export const codingAgent = pgTable(
   "coding_agent",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** The plan the agent works on; null for an agent an automation started with no plan. */
-    taskId: uuid("plan_id").references(() => task.id, { onDelete: "cascade" }),
-    /** The workspace the agent belongs to, its plan's or its automation's. */
+    /** The task the agent works on; null for an agent an automation started with no task. */
+    taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
+    /** The workspace the agent belongs to, its task's or its automation's. */
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -164,7 +164,7 @@ export const codingAgent = pgTable(
     /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead. */
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
-    prompt: text("task"),
+    prompt: text("prompt"),
     /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`. */
     repository: text("repository").notNull(),
     /** Every repository the agent works in, `owner/name` each, the first where it starts; one until full multi-repo. */
@@ -195,9 +195,9 @@ export const codingAgent = pgTable(
   (table) => [
     // One agent per Start: a retry carrying the same key finds this row.
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
-    // The tabs read one plan's agents in the order they were started.
-    index("coding_agent_plan_created").on(table.taskId, table.createdAt),
-    // A workspace's agents with no plan are read newest first.
+    // The tabs read one task's agents in the order they were started.
+    index("coding_agent_task_created").on(table.taskId, table.createdAt),
+    // A workspace's agents with no task are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
   ],
 );

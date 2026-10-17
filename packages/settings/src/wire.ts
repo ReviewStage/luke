@@ -25,7 +25,18 @@ export interface AppSettings {
 }
 
 /** A renderer-local view over the two disjoint halves of the settings wire. */
-type ResolvedSettingField = "voice" | "theme" | "zoom";
+type ResolvedSettingField =
+  | "voice"
+  | "theme"
+  | "zoom"
+  | "diffLayout"
+  | "diffIndicators"
+  | "inlineDiff"
+  | "diffDarkTheme"
+  | "diffLightTheme"
+  | "diffFont"
+  | "diffFontSize"
+  | "diffLineHeight";
 export type AppSettingsView = Omit<StoredAppSettings, ResolvedSettingField> & {
   [Field in ResolvedSettingField]-?: NonNullable<StoredAppSettings[Field]>;
 } & RuntimeStatus & { experiments: ExperimentChoices };
@@ -38,6 +49,14 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
     voice: settings.stored.voice ?? APP_SETTING_DEFAULTS.voice,
     theme: settings.stored.theme ?? APP_SETTING_DEFAULTS.theme,
     zoom: settings.stored.zoom ?? APP_SETTING_DEFAULTS.zoom,
+    diffLayout: settings.stored.diffLayout ?? APP_SETTING_DEFAULTS.diffLayout,
+    diffIndicators: settings.stored.diffIndicators ?? APP_SETTING_DEFAULTS.diffIndicators,
+    inlineDiff: settings.stored.inlineDiff ?? APP_SETTING_DEFAULTS.inlineDiff,
+    diffDarkTheme: settings.stored.diffDarkTheme ?? APP_SETTING_DEFAULTS.diffDarkTheme,
+    diffLightTheme: settings.stored.diffLightTheme ?? APP_SETTING_DEFAULTS.diffLightTheme,
+    diffFont: settings.stored.diffFont ?? APP_SETTING_DEFAULTS.diffFont,
+    diffFontSize: settings.stored.diffFontSize ?? APP_SETTING_DEFAULTS.diffFontSize,
+    diffLineHeight: settings.stored.diffLineHeight ?? APP_SETTING_DEFAULTS.diffLineHeight,
   };
 }
 

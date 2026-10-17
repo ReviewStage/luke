@@ -7,7 +7,7 @@ import { useFormerMembers, useWorkspaceMembers } from "./tasks/use-workspace-mem
 import { useAppState } from "./use-app-state";
 
 /**
- * member-directory.tsx -- the members of the workspace the open plan lives in, read once for everything in the plan that names a person.
+ * member-directory.tsx -- the members of the workspace the open task lives in, read once for everything in the task that names a person.
  *
  * The wire names a person by `{userId, name}` alone, so a byline, the Call
  * tab, an agent's card, and an Inbox answer each read the person against the

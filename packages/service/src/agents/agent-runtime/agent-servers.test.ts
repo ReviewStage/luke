@@ -37,7 +37,7 @@ import { type ServerStanding, turnServers } from "./servers.js";
 /**
  * The MCP servers an agent's turn is handed, read as the turn starts under
  * its role's policy: a coding agent's switched per agent from its composer,
- * under the root's admission and the worker's alike, and the planning
+ * under the root's admission and the worker's alike, and the brain
  * agents' every one, for a session admitted at all, among the integrations
  * the deployment offers the account. The store and the host are the real
  * ones over the migrations on PGlite; every provider is set up and offered

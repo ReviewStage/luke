@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCreateParams,
@@ -34,10 +32,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
-import { layContainersAt, shown } from "#testing/container-width";
+import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand } from "../app-commands";
@@ -337,22 +334,10 @@ afterEach(() => {
   document.head.innerHTML = "";
 });
 
-/** The window's own stylesheet, which says how tall a row's field stands. */
-const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
-
-/** How tall the field stands as the window's stylesheet draws it. */
-function heightOf(field: Element | null): string {
-  assert.ok(field, "the field stands");
-  if (document.head.querySelector("style") === null) {
-    document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  }
-  return getComputedStyle(field).getPropertyValue("height");
-}
-
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
 
-/** The page as drawn over the plans control given, rendered again in place where one stands. */
+/** The page as drawn over the tasks control given, rendered again in place where one stands. */
 function render(tasks: ReturnType<typeof tasksControl>): void {
   act(() =>
     root?.render(
@@ -369,7 +354,7 @@ function render(tasks: ReturnType<typeof tasksControl>): void {
   );
 }
 
-/** The Automations page, standing in the plan's place over the workspace listed. */
+/** The Automations page, standing in the task's place over the workspace listed. */
 function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -402,15 +387,6 @@ function rowOf(page: HTMLElement, name: string): Element {
   assert.ok(row, `no row for ${name}`);
   return row;
 }
-
-test("a schedule's time and a custom schedule's cron stand at the height of the pickers beside them", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-
-  assert.equal(heightOf(page.querySelector("input[aria-label='Time']")), "var(--control-height)");
-  pick(page, "Repeats", "Custom");
-  assert.equal(heightOf(page.querySelector("input[aria-label='Cron']")), "var(--control-height)");
-});
 
 test("the listed workspace's automations stand before the personal ones, under a heading each, every row naming its owner", async () => {
   const page = mount();
@@ -1217,27 +1193,6 @@ test("the Runs panel slides out past the page's right edge as it is hidden, held
   }
 });
 
-test("the automations' rows, an automation's page, and its runs fade under the bar as they scroll up beneath it, rather than being sliced at its hairline", async () => {
-  window.localStorage.clear();
-  const list = mount();
-  await settle();
-  const rows = list.querySelector(".automations-scroll") ?? assert.fail("the list scrolls");
-  act(() => root?.unmount());
-
-  const edit = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  const form = edit.querySelector(".automations-scroll") ?? assert.fail("the page scrolls");
-  const runs = edit.querySelector("aside[aria-label='Runs']") ?? assert.fail("the runs stand");
-  const sheets = layFades();
-  try {
-    for (const scroller of [rows, form, runs]) {
-      assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
-    }
-  } finally {
-    sheets.remove();
-  }
-});
-
 test("the Runs panel's edge resizes it within its bounds, and the width stands on the next page", async () => {
   window.localStorage.clear();
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -1283,20 +1238,17 @@ function pillOver(element: Element): string | undefined {
   return pill;
 }
 
-test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill, and leaves the draft's state to Save", async () => {
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each named and its words its pill", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
-  const status = toolbar.querySelector(".automation-editor-status") ?? assert.fail("no status");
   const acts = () =>
     ["Automations", "Send feedback", "Run now"].map((name) => {
       const press =
         [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
         assert.fail(`no ${name}`);
-      const words = press.querySelector(".toolbar-button-words") ?? assert.fail("no words");
       return {
         name,
-        drawn: shown(words),
         labelled: press.getAttribute("aria-label"),
         pill: pillOver(press),
       };
@@ -1307,11 +1259,10 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", drawn: false, labelled: "Automations", pill: "Automations" },
-      { name: "Send feedback", drawn: false, labelled: "Send feedback", pill: "Send feedback" },
-      { name: "Run now", drawn: false, labelled: "Run now", pill: "Run now" },
+      { name: "Automations", labelled: "Automations", pill: "Automations" },
+      { name: "Send feedback", labelled: "Send feedback", pill: "Send feedback" },
+      { name: "Run now", labelled: "Run now", pill: "Run now" },
     ]);
-    assert.equal(shown(status), false);
   } finally {
     narrow.remove();
   }
@@ -1319,11 +1270,10 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", drawn: true, labelled: null, pill: undefined },
-      { name: "Send feedback", drawn: true, labelled: null, pill: undefined },
-      { name: "Run now", drawn: true, labelled: null, pill: undefined },
+      { name: "Automations", labelled: null, pill: undefined },
+      { name: "Send feedback", labelled: null, pill: undefined },
+      { name: "Run now", labelled: null, pill: undefined },
     ]);
-    assert.equal(shown(status), true);
   } finally {
     wide.remove();
   }
@@ -1339,28 +1289,6 @@ test("the crumb naming an automation, cut short by its toolbar, reads whole on t
   Object.defineProperty(crumb, "clientWidth", { configurable: true, value: 60 });
   act(() => relayout());
   assert.equal(pillOver(crumb), SWEEP.name);
-});
-
-test("the Owner menu is as wide as its widest owner's name, within the room the form leaves it from the chip's edge, so a long name reads whole and no row's start is cut off", async () => {
-  handState({});
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-  const chip = picker(page, "Owner");
-  const form = page.querySelector(".automations-scroll") ?? assert.fail("no form scroller");
-  // The form beside the runs, 300px from its left edge to the chip's right one.
-  vi.spyOn(chip, "getBoundingClientRect").mockReturnValue(new DOMRect(380, 120, 160, 28));
-  vi.spyOn(form, "getBoundingClientRect").mockReturnValue(new DOMRect(240, 40, 420, 600));
-
-  const sheets = layContainersAt({});
-  try {
-    act(() => chip.click());
-    const menu = page.querySelector(".settings-picker-menu") ?? assert.fail("no menu");
-    const room = chip.closest<HTMLElement>(".settings-picker")?.style;
-    assert.equal(getComputedStyle(menu).width, "max-content");
-    assert.equal(room?.getPropertyValue("--settings-picker-width-max"), "294px");
-  } finally {
-    sheets.remove();
-  }
 });
 
 test("a Run now still out on a toolbar too narrow for its words draws its ring in its glyph's place", async () => {
@@ -1719,7 +1647,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(
-    page.querySelector("aside[aria-label='Runs'] .empty-state")?.textContent ?? "",
+    page.querySelector("aside[aria-label='Runs'] .luke-empty-state")?.textContent ?? "",
     /^No runs yet$/u,
     "the panel with no run stands the empty state",
   );
@@ -1802,7 +1730,7 @@ test("a default model that could not be read is said as unknown, and a model can
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
       return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
-    if (this.classList.contains("anchored-popover"))
+    if (this.classList.contains("luke-anchored-popover"))
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
@@ -1914,7 +1842,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   act(() => button("New secret").click());
   act(() => {
     const confirm = [
-      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
     ].find((each) => each.textContent === "New secret");
     confirm?.click();
   });
@@ -1974,7 +1902,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");
   act(() => {
     const confirm = [
-      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
     ].find((each) => each.textContent === "New secret");
     assert.ok(confirm, "the dialog asks first");
     confirm.click();

@@ -47,6 +47,7 @@ const ID_KIND = {
   ANSWER: "answer",
   REASONING: "reasoning",
   SENT: "sent",
+  CHAT_NOTICE: "chat-notice",
 } as const;
 
 /**
@@ -93,5 +94,18 @@ export function reasoningItemId(
   return nameBasedUuid(
     BRAIN_HOST_ID_NAMESPACE,
     coordinate([ID_KIND.REASONING, sessionId, eveTurnId, String(stepIndex), String(ordinal)]),
+  );
+}
+
+/**
+ * The key a chat notice is steered into a member under: one per message,
+ * revision of what it asks, zero for a message that asks nothing, and
+ * member told, so a notice handed over twice lands once and an ask posted
+ * again under its key is told again.
+ */
+export function chatNoticeKey(messageId: string, revision: number, memberId: string): string {
+  return nameBasedUuid(
+    BRAIN_HOST_ID_NAMESPACE,
+    coordinate([ID_KIND.CHAT_NOTICE, messageId, String(revision), memberId]),
   );
 }

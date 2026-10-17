@@ -21,7 +21,7 @@ import { PLAN_SECTION_BOUNDS, type PlanField, TASK_BOUNDS } from "./task-wire.js
  * through: why it matters, what done looks like, how they will build it and
  * what they weighed against it, the hard parts, what they leave out, how the
  * work lands, and how they will know it works. Each section is a question a
- * good teammate asks, so the sections are what the planning model asks
+ * good teammate asks, so the sections are what the brain asks
  * about, and each is described once here: its heading, what it holds
  * (`PLAN_FIELD_PURPOSE`), and when it is good enough for a coding agent to
  * build from (`PLAN_FIELD_BAR`). The sections keep the keys the fixed
@@ -156,7 +156,7 @@ export const PLAN_FIELD_HEADING = {
 
 /**
  * What each field holds and the form it is written in. Note that this is the
- * one statement of a section's meaning, because the planning model asks from
+ * one statement of a section's meaning, because the brain asks from
  * it and the notetaker writes to it, and two copies would drift into Luke
  * asking for one thing and the notes filing another.
  */
@@ -203,7 +203,7 @@ export const PLAN_FIELD_PURPOSE = {
 
 /**
  * When each section is good enough for a coding agent to build from without
- * coming back with a question. The planning model holds the plan to these
+ * coming back with a question. The brain holds the plan to these
  * before it calls the plan complete; the notetaker is never told them,
  * because it records what was said rather than judging it.
  */

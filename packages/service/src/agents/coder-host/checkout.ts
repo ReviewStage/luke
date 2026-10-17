@@ -29,8 +29,8 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * checkout.ts -- a coding agent's checkout of its repository, whose its commits are, and the credential its sandbox pushes through.
  *
  * The agent's repository is checked out once, as its sandbox opens, on the
- * same terms as the planning checkout (`repository-shell.ts`): the
- * installation of its plan's workspace is confirmed to reach it and a token
+ * same terms as the brain's checkout (`repository-shell.ts`): the
+ * installation of its task's workspace is confirmed to reach it and a token
  * minted for that one repository, set at
  * the sandbox's firewall for the clone alone and withdrawn after it. What
  * differs is the token and the depth: the token carries contents and pull
@@ -171,7 +171,7 @@ export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(func
 
 /**
  * Whether the agent's token will read its pull request's CI: the
- * installation of its plan's workspace grants the App the read (`github-app.ts`'s `CI_READ_PERMISSIONS`). Told to the session
+ * installation of its task's workspace grants the App the read (`github-app.ts`'s `CI_READ_PERMISSIONS`). Told to the session
  * as it starts, so a read that fails is logged and reads as not readable
  * rather than failing the start: the checkout refuses on its own terms when
  * the sandbox opens.
@@ -199,7 +199,7 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
 
 /**
  * A write token for the agent's repository, minted as the App where the
- * installation of its plan's workspace still reaches the repository, with
+ * installation of its task's workspace still reaches the repository, with
  * the repository as GitHub spells it.
  */
 export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(

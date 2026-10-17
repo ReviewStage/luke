@@ -12,7 +12,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
+import { CollapseIcon, EmptyState, ExpandIcon, SidePanelIcon } from "@luke/ui";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -47,7 +47,6 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { drawnVisibly, focusSeek } from "../focus-seek";
 import { panelTabPlace } from "../links-at-hand";
@@ -140,7 +139,7 @@ import { TabStrip } from "./tab-strip";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
- * side-panel.tsx -- the open plan's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
+ * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
  *
  * Each part draws what `use-side-panel.ts` holds and hands every press back
  * to it, so the panel decides nothing about when it shows.
@@ -151,8 +150,8 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * toggle; the tabs narrow, then scroll, rather than push either. The toggle
  * is the window's rather than the panel's (desktop-shell.tsx), so the
  * panel's coming and going never moves it. Each tab stands where it was
- * opened, at the strip's end, and a plan that has used none, and has no agent, says
- * so in the panel's body under the "+". The plan's coding agents follow, one tab each, named by model and wearing
+ * opened, at the strip's end, and a task that has used none, and has no agent, says
+ * so in the panel's body under the "+". The task's coding agents follow, one tab each, named by model and wearing
  * its harness's mark for where the agent stands; after them stand the subagents opened from
  * the Call tab, the "+", or a delegation's row in an agent's tab, one tab
  * each, named by job. A draft agent opened from the "+" stands after the
@@ -161,8 +160,8 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * was, and the "+" opens its tab again; closing a draft's lets the draft
  * go, nothing of it having been started. Every tab's right-click offers
  * Close and Close others, a fixed tab's, an agent's, and a file's Pin to the
- * sidebar, and a transcript's tab its two copies. The plan's own actions stay in
- * the plan's toolbar and never come into the panel. Where a delegated
+ * sidebar, and a transcript's tab its two copies. The task's own actions stay in
+ * the task's toolbar and never come into the panel. Where a delegated
  * worker stands is what its own tab's pages say, kept here for its glyph
  * while the panel is drawn, and taken as running until a page says
  * otherwise. What an agent's or a delegated worker's tab last drew is kept
@@ -174,19 +173,19 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * exit has played (`useSidePanelDrawing`); its arrivals are pane-motion.tsx's.
  */
 
-/** What the Code tab says while Luke has shown no code on the plan. */
+/** What the Code tab says while Luke has shown no code on the task. */
 const NO_CODE_LINE = "No code yet.";
 
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
- * on the plan's area: the panel is dragged no wider than the area less this,
+ * on the task's area: the panel is dragged no wider than the area less this,
  * and has no greatest width of its own. `.side-panel`'s `max-width` holds the
  * same room while the window narrows.
  */
 const DOCUMENT_RESERVE_PROPERTY = "--document-reserve";
 
 /**
- * The room the document keeps in the plan's area, in CSS pixels. Where the
+ * The room the document keeps in the task's area, in CSS pixels. Where the
  * stylesheet declares none it keeps the panel's own least width, the floor
  * the stylesheet gives it beside the open sidebar.
  */
@@ -215,7 +214,7 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
-/** A plan with no page, the same array every render. */
+/** A task with no page, the same array every render. */
 const NO_PAGES: readonly PageLine[] = [];
 
 /**
@@ -282,7 +281,7 @@ export function useColumnFocus(): ColumnFocus {
   return { onArea, focus, setFocus };
 }
 
-/** The "+" menu's sections after the fixed kinds, which the plan's summary lists under the same headings. */
+/** The "+" menu's sections after the fixed kinds, which the task's summary lists under the same headings. */
 export const ADD_SECTION = {
   SUBAGENTS: "Subagents",
   FILES: "Files",
@@ -306,13 +305,13 @@ export interface ChangesOffer {
   readonly pullRequest: CodingAgentPullRequest;
 }
 
-/** No Changes tab open on the plan, the same array every render. */
+/** No Changes tab open on the task, the same array every render. */
 const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
 
 /**
  * The agent whose Changes tab stands for the agent's pull request: among the
  * agents on that pull request, in the order started, the first whose tab is
- * open on the plan (`open`), else the first; the agent itself where its pull
+ * open on the task (`open`), else the first; the agent itself where its pull
  * request is not yet held. Note that an open tab is preferred, because the
  * agents' pull requests are read apart, so a later agent's may land first
  * and its tab be opened before an earlier one shares it.
@@ -332,13 +331,13 @@ function changesAgentOf(
 }
 
 /**
- * The plan's agents' Changes tabs on offer, in the order the agents
+ * The task's agents' Changes tabs on offer, in the order the agents
  * started: one for each agent with a pull request, its tab open in the
- * plan's column or not, and none for an agent that has opened none yet,
+ * task's column or not, and none for an agent that has opened none yet,
  * whose tab would only say so. Note that two agents on one pull request
  * offer it once, under the agent whose tab stands for it (`changesAgentOf`),
  * because a row is named by the pull request and both tabs would draw the
- * same files. `open` is the Changes tabs open on the plan.
+ * same files. `open` is the Changes tabs open on the task.
  */
 export function changesOffers(
   agents: CodingAgentsControl,
@@ -362,7 +361,7 @@ export function changesOffers(
  * The Changes tab an agent's Changes chip opens: the one that stands for its
  * pull request (`changesAgentOf`), as `changesOffers` offers it, so the chip
  * and the "+" never stand two tabs on one pull request's files, whichever
- * agent's read landed first. `open` is the Changes tabs open on the plan.
+ * agent's read landed first. `open` is the Changes tabs open on the task.
  */
 export function changesTabOf(
   agents: CodingAgentsControl,
@@ -374,7 +373,7 @@ export function changesTabOf(
 
 /**
  * Opens an agent's Pull request tab, the one that stands for its pull
- * request (`changesTabOf`), on the view given: the overview its pull
+ * request (`changesTabOf`), on the view given: the conversation its pull
  * request's chip asks for, or the files its Changes chip does.
  */
 export function showPullRequest(
@@ -394,11 +393,11 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
 }
 
 /**
- * What the panel may open, as its "+" menu offers it, the plan's summary
+ * What the panel may open, as its "+" menu offers it, the task's summary
  * lists it (`task-summary.tsx`), and ⌘K finds it: the fixed kinds given,
- * every one for the "+" and those the plan has used for the summary; then,
- * under Subagents, each subagent the plan's work holds; then, under Files,
- * each file Luke showed on the plan, by name with its folder beside it.
+ * every one for the "+" and those the task has used for the summary; then,
+ * under Subagents, each subagent the task's work holds; then, under Files,
+ * each file Luke showed on the task, by name with its folder beside it.
  * Each row wears its tab's own look (`tab-look.tsx`): a subagent its
  * model's mark wearing where the worker stands, and a file as every place
  * names a file (`file-ref.tsx`). Picking a row whose tab is open chooses
@@ -408,8 +407,8 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * each agent's pull request (`changesOffers`), named as its Pull request tab
  * is (a kind still spelled `changes`, as the tab of its files alone was),
  * with the pull request's number beside it, found by its title and number
- * too, which opens the agent's Pull request tab. The plan's coding agents are opened
- * from the plan's column's own "+" (`main-tabs.tsx`).
+ * too, which opens the agent's Pull request tab. The task's coding agents are opened
+ * from the task's column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
   panel: SidePanelControl;
@@ -420,7 +419,7 @@ export function panelEntries(input: {
   changes?: readonly ChangesOffer[];
   /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
   pages?: readonly PageLine[];
-  /** The plan's agents' terminals on offer, and the door a row's pick asks a new shell through; none where the caller offers none. */
+  /** The task's agents' terminals on offer, and the door a row's pick asks a new shell through; none where the caller offers none. */
   terminals?: {
     readonly offers: readonly TerminalOffer[];
     readonly onNew: (agentId: string) => void;
@@ -455,7 +454,7 @@ export function panelEntries(input: {
     };
   });
   // Note that a pull request's row is named by its page, because an agent's
-  // id already names the agent's own row in the plan's summary.
+  // id already names the agent's own row in the task's summary.
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
     const look = tabLook({ kind: TAB_KIND.CHANGES, agentName: label, pullRequest });
     const number = pullRequestNumberLabel(pullRequest);
@@ -495,7 +494,7 @@ export function panelEntries(input: {
   return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows, ...terminalRows];
 }
 
-/** Every subagent the plan's work holds, with where its session stands, in the order started. */
+/** Every subagent the task's work holds, with where its session stands, in the order started. */
 export function taskWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWorkerBlock[] {
   return workerCallIds(workRows).flatMap((callId) => {
     const worker = workerOf(workRows, callId);
@@ -503,7 +502,7 @@ export function taskWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
   });
 }
 
-/** An agent's Pull request tab's look, named for the agent as the plan's agents last read it, wearing its pull request's mark for where it stands. */
+/** An agent's Pull request tab's look, named for the agent as the task's agents last read it, wearing its pull request's mark for where it stands. */
 function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
   const agent = agents.agents?.find((each) => each.id === agentId);
   const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
@@ -515,7 +514,7 @@ function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
 }
 
 /**
- * The plan's agents as the "+" offers their terminals, each marked where ⌘J
+ * The task's agents as the "+" offers their terminals, each marked where ⌘J
  * would open its Terminal tab from the panel's own tab (`terminal-entry.ts`).
  */
 function terminalOffers(
@@ -552,9 +551,9 @@ interface DrawnTab {
  * The tabs the strip draws, in their kinds' order: the open fixed tabs, the
  * subagents, the files, and the agents' changes. A delegated worker's
  * transcript is read whole from the service for a copy, since its tab
- * holds it only while shown; a planning worker's is the session the plan's
+ * holds it only while shown; a brain's worker's is the session the task's
  * work already holds. A subagent's tab hangs a card on hover, previewing
- * its latest step from what its tab last held (`heldLatest`) or the plan's
+ * its latest step from what its tab last held (`heldLatest`) or the task's
  * work holds, and never reading the service for it. A page's tab hangs the
  * page's card, a preview of its newest version under its title
  * (`page-card.tsx`).
@@ -568,13 +567,13 @@ function stripTabs(input: {
   changes: readonly ChangesStripTab[];
   pages: readonly DrawnPage[];
   terminals: readonly TerminalStripTab[];
-  /** Every code Luke showed on the plan, whose newest note on a file its tab's card says. */
+  /** Every code Luke showed on the task, whose newest note on a file its tab's card says. */
   shown: readonly TaskCodeShowing[];
-  /** The plan's repository, whose showings alone a file tab's card reads its note from. */
+  /** The task's repository, whose showings alone a file tab's card reads its note from. */
   repository: string | null;
   held: HeldTranscripts;
   copied: TranscriptCopier;
-  /** Reads a planning worker's whole session for a copy, the plan standing in the agent's place. */
+  /** Reads a brain's worker's whole session for a copy, the task standing in the agent's place. */
   readWorker: (callId: string) => Promise<readonly CodingAgentMessage[] | undefined>;
   /** Opens an agent's tab in the plan's column, as a card naming the agent offers. */
   onOpenAgent: (agentId: string) => void;
@@ -618,7 +617,13 @@ function stripTabs(input: {
       ).then((messages) =>
         messages === undefined
           ? undefined
-          : agentTranscript({ title: label, messages, brief: undefined, task }),
+          : agentTranscript({
+              title: label,
+              messages,
+              brief: undefined,
+              task,
+              chatOn: agents.chatOn,
+            }),
       );
     return {
       tab,
@@ -723,7 +728,7 @@ function stripTabs(input: {
  * while another was shown reads in semibold until shown. Every tab, of
  * whatever kind, stands at the strip's end once opened, a subagent's
  * wearing the worker's glyph with a ring while it runs, until the developer
- * drags or steps any tab to any place, which the plan keeps
+ * drags or steps any tab to any place, which the task keeps
  * (`use-side-panel.ts`). A tab pinned to the sidebar is drawn and moved as
  * any other. Every tab's right-click offers Close, Close others, which
  * closes every tab but it and chooses it, and a fixed tab's, a file's, and
@@ -758,31 +763,31 @@ function PanelTabs({
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
-  /** The open plan, which a tab's pin is of. */
+  /** The open task, which a tab's pin is of. */
   taskId: string;
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
   keys: boolean;
   unread: readonly StripTab[];
   agents: CodingAgentsControl;
-  /** The open subagent tabs the plan draws, in the strip's order. */
+  /** The open subagent tabs the task draws, in the strip's order. */
   subagents: readonly DrawnSubagent[];
-  /** The open file tabs of files shown on the plan, in the strip's order. */
+  /** The open file tabs of files shown on the task, in the strip's order. */
   files: readonly OpenFile[];
-  /** The open Changes tabs of the plan's agents, in the order opened. */
+  /** The open Changes tabs of the task's agents, in the order opened. */
   changes: readonly ChangesStripTab[];
   /** The open page tabs of the plan's pages, in the order opened. */
   pages: readonly DrawnPage[];
-  /** The open Terminal tabs of the plan's agents, in the order opened. */
+  /** The open Terminal tabs of the task's agents, in the order opened. */
   terminals: readonly TerminalStripTab[];
-  /** Every code Luke showed on the plan, whose notes the file tabs' cards say. */
+  /** Every code Luke showed on the task, whose notes the file tabs' cards say. */
   shown: readonly TaskCodeShowing[];
-  /** The plan's repository, whose showings alone the file tabs' cards read. */
+  /** The task's repository, whose showings alone the file tabs' cards read. */
   repository: string | null;
   /** What the "+" offers (`panelEntries`), which the empty panel offers too. */
   offers: readonly AddEntry[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
-  /** Reads a planning worker's session past a cursor, the plan standing in the agent's place. */
+  /** Reads a brain's worker's session past a cursor, the task standing in the agent's place. */
   readWorker: TranscriptReader;
   /** The bar's slot the chosen tab's ⋯ stands in. */
   actionsSlot: HTMLElement | null;
@@ -894,7 +899,7 @@ function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Elemen
   );
 }
 
-/** What was said on the open plan's calls, and the retry of a read that failed. */
+/** What was said on the open task's calls, and the retry of a read that failed. */
 interface SidePanelTranscript {
   region: TranscriptRegion;
   onRetry: () => void;
@@ -902,24 +907,24 @@ interface SidePanelTranscript {
   reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
 }
 
-/** What Luke's planning model wrote and ran on the open plan's calls, and whether a call still stands. */
+/** What the brain wrote and ran on the open task's calls, and whether a call still stands. */
 interface SidePanelWork {
   conversation: TaskConversation;
   callLive: boolean;
   onLoadEarlier: () => Promise<void>;
-  /** Reads a planning worker's session past a cursor, as an agent's worker's tab reads its own, the plan standing in the agent's place. */
+  /** Reads a brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
   readWorker: TranscriptReader;
   /** The moment whose turn a version's Open asked to bring into view. */
   reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
 }
 
-/** An open page tab the plan draws, with the page as the plan lists it. */
+/** An open page tab the task draws, with the page as the plan lists it. */
 interface DrawnPage {
   tab: PageStripTab;
   line: PageLine;
 }
 
-/** An open subagent tab the plan draws: its tab, what the strip calls it, where its glyph says it stands, and the planning worker's block where it is one. */
+/** An open subagent tab the task draws: its tab, what the strip calls it, where its glyph says it stands, and the brain's worker's block where it is one. */
 interface DrawnSubagent {
   tab: SubagentStripTab;
   /** Its title, or its task's first line until it has one. */
@@ -932,13 +937,13 @@ interface DrawnSubagent {
 }
 
 /**
- * Where a planning worker stands as its tab wears it: working while its
+ * Where a brain's worker stands as its tab wears it: working while its
  * call still moves, failed where its session's own task failed, as an
- * agent's failed turn is, even where the planning model answered the call
+ * agent's failed turn is, even where the brain answered the call
  * and went on, and at rest once it ended otherwise. Note that a
  * worker whose call ended without answering and whose task recorded no
  * failure is said to have stopped, because that is a worker the developer
- * stopped or whose planning call ended under it, as its own transcript's
+ * stopped or whose task call ended under it, as its own transcript's
  * end line says (`plan-work.tsx`), and no failure of its own.
  */
 function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | "stateWords"> {
@@ -952,9 +957,9 @@ function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | 
 }
 
 /**
- * What a planning worker's card says: where it stands and when it last
+ * What a brain's worker's card says: where it stands and when it last
  * moved, the model it ran on, and its latest step, from the session the
- * plan's work holds. Its tab's card and its row's in the plan's summary both
+ * task's work holds. Its tab's card and its row's in the task's summary both
  * say it. A worker the work no longer holds says nothing, as its tab is
  * then not drawn (`drawnSubagents`).
  */
@@ -987,13 +992,15 @@ export function workerCardReading(
         messages,
         brief: undefined,
         task: worker.task,
+        // A worker's own lines carry no chat notice, which reaches the agent's turn alone.
+        chatOn: false,
       }),
   };
 }
 
 /**
  * A subagent as its tab draws it, `status` saying where a delegated worker
- * stands; nothing for a planning worker the work no longer holds.
+ * stands; nothing for a brain's worker the work no longer holds.
  */
 function drawnSubagent(
   tab: SubagentStripTab,
@@ -1023,7 +1030,7 @@ function drawnSubagent(
   return { tab, label, untitled: title === undefined, ...workerStanding(worker), worker };
 }
 
-/** The open subagent tabs the plan draws now (`drawsSubagent`), in the strip's order: each planning worker the work still holds, and each delegated worker whose agent's tab is open. */
+/** The open subagent tabs the task draws now (`drawsSubagent`), in the strip's order: each brain's worker the work still holds, and each delegated worker whose agent's tab is open. */
 function drawnSubagents(
   tabs: readonly SubagentStripTab[],
   workRows: readonly WorkTurnRow[],
@@ -1066,7 +1073,7 @@ function delegationChoices(
 
 /**
  * What a subagent's card says, its tab's and its row's in a transcript
- * alike: a planning worker's from the session the plan's work holds
+ * alike: a brain's worker's from the session the task's work holds
  * (`workerCardReading`), a delegated worker's from what its own tab last
  * held, its pair as the call that started it says it. A worker runs one
  * turn, so the run its tab last read is its run for good.
@@ -1094,7 +1101,13 @@ function subagentCardReading(
       choice: delegationChoices(delegation, tab.subagent, agents, held).delegated,
       transcript:
         messages &&
-        agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
+        agentTranscript({
+          title: label,
+          messages,
+          brief: undefined,
+          task: delegation.task,
+          chatOn: agents.chatOn,
+        }),
     };
   };
 }
@@ -1118,7 +1131,7 @@ function seekCall(callId: string): void {
   });
 }
 
-/** What a transcript's rows hang, by where they stand: the Call tab's, whose workers are the plan's own, and an agent's transcript's, whose workers are its delegations. */
+/** What a transcript's rows hang, by where they stand: the Call tab's, whose workers are the task's own, and an agent's transcript's, whose workers are its delegations. */
 export interface TaskCards {
   readonly call: TranscriptCards;
   readonly agent: (agentId: string) => TranscriptCards;
@@ -1140,7 +1153,7 @@ export function taskCards(input: {
   workRows: readonly WorkTurnRow[];
   held: HeldTranscripts;
   chosen: (tab: StripTab) => boolean;
-  /** Every code Luke showed on the plan, whose note on a `show_code` call's lines its row's card says. */
+  /** Every code Luke showed on the task, whose note on a `show_code` call's lines its row's card says. */
   shownCode: readonly TaskCodeShowing[];
   /** The plan's task, which an agent's plan card names as its sender. */
   task?: BriefTask | undefined;
@@ -1194,7 +1207,7 @@ export function taskCards(input: {
   };
 }
 
-/** Where a planning worker stands, as its tab's working line reads it: running while it moves, failed where it failed, and done otherwise. */
+/** Where a brain's worker stands, as its tab's working line reads it: running while it moves, failed where it failed, and done otherwise. */
 function workerStatus(worker: WorkWorkerBlock): CodingAgentStatus {
   if (worker.call.running) return CODING_AGENT_STATUS.RUNNING;
   return worker.call.state === TASK_WORK_STATE.FAILED
@@ -1238,7 +1251,7 @@ function TabContent({
 }: {
   tab: SidePanelTab;
   taskId: string;
-  /** The plan's repository, which a file's tab is read from as it stands now. */
+  /** The task's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
   board: Board | undefined;
   shownCode: readonly TaskCodeShowing[] | undefined;
@@ -1248,7 +1261,7 @@ function TabContent({
   pages: readonly PageLine[];
   transcript: SidePanelTranscript;
   work: SidePanelWork;
-  /** The plan's work as rows, which a subagent's tab reads its session from. */
+  /** The task's work as rows, which a subagent's tab reads its session from. */
   workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
   standings: WorkerStandings;
@@ -1256,9 +1269,9 @@ function TabContent({
   shown: boolean;
   /** Whether the panel holds the window's keys, so a page's tab finds in its source. */
   findActive: boolean;
-  /** Opens a planning worker's session in a tab of its own, by the call that started it. */
+  /** Opens a brain's worker's session in a tab of its own, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
-  /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the plan's column. */
+  /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the task's column. */
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the Call tab's rows that open a tab hang. */
   cards: TranscriptCards;
@@ -1266,7 +1279,7 @@ function TabContent({
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
   onWorkerHeld: TabViews["onWorkerHeld"];
-  /** Opens a file of the plan's repository in a tab of its own, the reference's lines lit. */
+  /** Opens a file of the task's repository in a tab of its own, the reference's lines lit. */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** Whether a File or Changes tab's tree is open, which holds for every one of them alike, and its toggle. */
   fileTree: { readonly open: boolean; readonly onToggle: () => void };
@@ -1334,7 +1347,7 @@ function TabContent({
         shown={shown}
         repository={repository}
         tree={fileTree}
-        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.OVERVIEW}
+        view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
         onView={(view) => onPullRequestView(tab.changes, view)}
       />
     );
@@ -1343,7 +1356,7 @@ function TabContent({
     const file = files.find((each) => each.path === tab.file);
     // The tab stands for a file no longer open only until the panel moves
     // on, a render away.
-    // Note that the plan given another repository draws the file afresh,
+    // Note that the task given another repository draws the file afresh,
     // because the lines held were read from the one before.
     return file === undefined ? (
       <SpinnerRegion label="Loading file" />
@@ -1374,7 +1387,7 @@ function TabContent({
     );
   }
   if (isSubagentTab(tab)) {
-    // A planning worker's tab is an agent's worker's own, reading its session under the plan.
+    // A brain's worker's tab is an agent's worker's own, reading its session under the task.
     const tasksWorkers = { ...agents, readTranscript: work.readWorker };
     if (tab.delegation !== undefined) {
       const parent: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: tab.delegation.agent };
@@ -1417,7 +1430,7 @@ function TabContent({
         status={workerStatus(worker)}
         control={tasksWorkers}
         shown={shown}
-        // Where a planning worker stands is the plan's pages' to say, beside its call.
+        // Where a brain's worker stands is the plan's pages' to say, beside its call.
         onStatus={() => undefined}
         onHeld={onWorkerHeld}
       />
@@ -1425,7 +1438,7 @@ function TabContent({
   }
   switch (tab) {
     case SIDE_PANEL_TAB.BOARD:
-      // An archived plan's board only shows, as its agents only read.
+      // An archived task's board only shows, as its agents only read.
       return (
         <TaskBoard taskId={taskId} board={board} viewOnly={agents.onUnarchive !== undefined} />
       );
@@ -1468,9 +1481,9 @@ function TabContent({
  * neither top row it serves, the way the sidebar's toggle stands beside the
  * traffic lights: one button in one place whether the panel is hidden,
  * beside the document, full screen, or still sliding, so a press lands on
- * it however fast the presses come. It stands on every plan's page, so it
- * is also what offers the panel's shortcut. ⌘T is the plan's page's, which hands it to the column
- * holding the window's focus (desktop-plans.tsx). While the plan is not
+ * it however fast the presses come. It stands on every task's page, so it
+ * is also what offers the panel's shortcut. ⌘T is the task's page's, which hands it to the column
+ * holding the window's focus (desktop-tasks.tsx). While the task is not
  * drawn there is no panel to show, so it is disabled and offers none.
  */
 export function SidePanelToggle({
@@ -1587,7 +1600,7 @@ function exitFor(
 }
 
 /**
- * The panel the plan's page draws for the one asked for, and the edge it is
+ * The panel the task's page draws for the one asked for, and the edge it is
  * resized by. A panel shut, or brought back from full screen, keeps drawing
  * what it last held until its exit has played, as docs/DESIGN.md asks of
  * anything leaving. The edge's drag is held here rather than in the panel,
@@ -1690,31 +1703,31 @@ export function SidePanel({
   holder: SidePanelHolder;
   /** The plan the panel stands beside, or the agent where it stands beside the agent's own page. */
   planId: string;
-  /** The plan's repository, `owner/name`, or none before one is chosen. */
+  /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
   board: Board | undefined;
-  /** Every code Luke showed on the plan, oldest first. */
+  /** Every code Luke showed on the task, oldest first. */
   shownCode: readonly TaskCodeShowing[] | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
   transcript: SidePanelTranscript;
   work: SidePanelWork;
   agents: CodingAgentsControl;
-  /** The plan's agents whose tabs stand open in the plan's column, whose workers' tabs stand here; nothing while unread. */
+  /** The task's agents whose tabs stand open in the task's column, whose workers' tabs stand here; nothing while unread. */
   openAgents: readonly string[] | undefined;
   /** The agent whose tab follows its run in the plan's column, whose card previews its latest step (`followedAgent`); none while another tab is shown or the column is out of sight. */
   shownAgent: string | undefined;
   /** What the agents' and the workers' tabs last drew and said, which the workers' tabs and cards read. */
   views: TabViews;
-  /** Whether the plan's page is on screen, which a subagent's tab follows its transcript under. */
+  /** Whether the task's page is on screen, which a subagent's tab follows its transcript under. */
   shown: boolean;
   /** Whether the panel holds the window's focus, which its ⌘W, ⌘T, and ⌘F answer to. */
   focused: boolean;
-  /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the plan's column. */
+  /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the task's column. */
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the Call tab's rows that open a tab hang, as those tabs hang them. */
   cards: TaskCards;
-  /** The plan's banner, where one stands (`task-banner.tsx`), drawn under the bar while the panel fills the window and covers the column that draws it otherwise. */
+  /** The task's banner, where one stands (`task-banner.tsx`), drawn under the bar while the panel fills the window and covers the column that draws it otherwise. */
   banner?: React.ReactNode;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
@@ -1737,7 +1750,7 @@ export function SidePanel({
     () => ({ open: shellsOpen, onToggle: () => setShellsOpen((was) => !was) }),
     [shellsOpen],
   );
-  // Every subagent the plan's work holds, and those with a tab open, each
+  // Every subagent the task's work holds, and those with a tab open, each
   // with its session, in the order started and the strip's order; a
   // delegated worker's tab stands while its agent's does.
   const workRows = workRowsOf(work.conversation, work.callLive);
@@ -1747,16 +1760,16 @@ export function SidePanel({
     agents: openAgents,
     subagents: workers.map((worker) => worker.call.id),
   });
-  // The file tabs of files shown on the plan or browsed to on it, in the strip's order.
+  // The file tabs of files shown on the task or browsed to on it, in the strip's order.
   const offered = shownFiles(shownCode ?? []);
   const files = panel.files.filter(
     (file) => file.browsedOn === planId || offered.some((ref) => ref.path === file.path),
   );
-  // An agent's Changes tab stands while the agent is the plan's.
+  // An agent's Changes tab stands while the agent is the task's.
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.agentIds }),
   );
-  // An agent's Terminal tab stands while the agent is the plan's, as its Changes tab does.
+  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does.
   const terminals = panel.terminals.filter((each) =>
     drawsTerminal(each, { taskAgents: agents.agentIds }),
   );

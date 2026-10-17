@@ -178,6 +178,8 @@ export function ChatComposer({
     setCaret(now.selectionStart === now.selectionEnd ? now.selectionStart : undefined);
   };
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Note that every key an input method composes with is the method's, its candidates' arrows and Escape among them.
+    if (event.nativeEvent.isComposing) return;
     if (listed && mention !== undefined) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -192,10 +194,8 @@ export function ChatComposer({
         return;
       }
       const row = rows[at];
-      // Note that an Enter that confirms what an input method composed is the method's, never a pick.
       if (
         row !== undefined &&
-        !event.nativeEvent.isComposing &&
         ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab")
       ) {
         event.preventDefault();
@@ -203,7 +203,7 @@ export function ChatComposer({
         return;
       }
     }
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       send();
     }

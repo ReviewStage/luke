@@ -1,5 +1,6 @@
 {
   "name": "@luke/features",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "The client side of the hosted service: its paths and wire, its clients, the plan and board domain, the planner's run vocabulary, product events, and feedback delivery",
@@ -59,6 +60,7 @@
     "./plan-template": "./src/plan-template.js",
     "./task-wire": "./src/task-wire.js",
     "./tasks-view": "./src/tasks-view.js",
+    "./pull-request-write-wire": "./src/pull-request-write-wire.js",
     "./provider-key-wire": "./src/provider-key-wire.js",
     "./repository-reach-wire": "./src/repository-reach-wire.js",
     "./terminal-view": "./src/terminal-view.js",

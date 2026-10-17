@@ -763,7 +763,7 @@ export function noReceiptOfLine() {
  * named with no turn yet: each is a message the session took and the next
  * turn will receive, which is what reads an idle agent as running again
  * until that turn opens. The kind is held here as the writer holds it when
- * it takes such a line, since a planning conversation's turnless user rows
+ * it takes such a line, since a task conversation's turnless user rows
  * are its spoken asks and wait for no turn of eve's. A line a turn already
  * received under another row (`noReceiptOfLine`) is not counted.
  */

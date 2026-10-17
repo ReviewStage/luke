@@ -38,7 +38,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
  * more part after its words, the plan or each section it named as it stood
  * at the send, under a heading eve's receipt is read back by
  * (`attached-file-parts.ts`). Only the agent's own plan is read, the plan the
- * send already read as its sender; a mention of another plan adds nothing.
+ * send already read as its sender; a mention of another task adds nothing.
  *
  * Each excerpt is cut on a line to its own bound, and the part to one bound
  * over all of them, in the order the mentions stand; an excerpt cut short
@@ -56,7 +56,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
  * automation's own prompt mentions, never a webhook body's or a GitHub
  * event's; but a message steering a turn already running
  * reaches one handed only what it started with, so the note says a server
- * not among its connections joins at its next turn. An agent with no plan
+ * not among its connections joins at its next turn. An agent with no task
  * is handed the notes alone.
  *
  * A page an agent showed on the plan is named by its id, read at the send
@@ -408,7 +408,7 @@ export function mentionedIds(words: string, plan: Task | undefined): MentionedId
 
 /** The MCP servers the words mention, by connection name, by themselves, by one of their tools, or by a page of theirs, each once: the ones the turn the words open is handed whatever the agent's switches say. */
 export function mentionedServers(words: string, repository: string | null): readonly string[] {
-  // Note that the plan's repository is handed, so a page that is a file of it brings in no server.
+  // Note that the task's repository is handed, so a page that is a file of it brings in no server.
   const connections = handedMentionsIn(words, repository).flatMap(({ mention }) => {
     if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
       return [mention.connection ?? mention.provider];

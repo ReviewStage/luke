@@ -26,7 +26,7 @@ the host, and a web function alike.
   here and nowhere else; each line is one labelled policy stating one behavior,
   the template's own shape, with no sample line.
 
-No full persona stands here: the brain's planning instructions
+No full persona stands here: the brain's own instructions
 (`packages/service/src/agents/brain-host/brain.ts`) hold it, and shape what the
 brain hands the voice.
 

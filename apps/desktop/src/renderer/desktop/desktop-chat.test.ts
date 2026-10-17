@@ -69,6 +69,7 @@ function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTM
           onOpen: () => undefined,
           onClose: () => undefined,
           onChoose: setPlace,
+          onShow: setPlace,
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
         },
@@ -368,5 +369,21 @@ test("an Enter that confirms what an input method composed leaves the mention li
     ),
   );
   assert.equal(box.value, "@age");
+  assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
+});
+
+test("the arrows and Escape an input method composes with move its candidates, never the mention list", () => {
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInto(box, "@age");
+  const highlighted = () => page.querySelector('[role="option"][aria-selected="true"]')?.id;
+  const before = highlighted();
+  for (const key of ["ArrowDown", "ArrowUp", "Escape"]) {
+    act(() =>
+      box.dispatchEvent(new KeyboardEvent("keydown", { key, isComposing: true, bubbles: true })),
+    );
+  }
+  assert.equal(highlighted(), before, "the highlight stays where it was");
   assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
 });

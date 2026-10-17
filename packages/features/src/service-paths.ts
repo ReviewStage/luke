@@ -23,7 +23,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
   /**
-   * The Markdown the account's new plans start from: read it (GET), or keep
+   * The Markdown the account's new tasks start from: read it (GET), or keep
    * one verbatim or go back to the default (PUT).
    * `plan-document-template.ts` declares both bodies.
    */
@@ -50,13 +50,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_INTEGRATIONS_CONNECTED: "/api/account/integrations/connected",
   /**
-   * What waits on the developer across the account's plans: every open
+   * What waits on the developer across the account's tasks: every open
    * inbox item, past a cursor (GET), held open while nothing changed, as a
-   * plan's inbox is. `account-inbox-wire.ts` declares the answer.
+   * task's inbox is. `account-inbox-wire.ts` declares the answer.
    */
   INBOX: "/api/inbox",
   /**
-   * A workspace's agents, on a plan or with none, newest started first and
+   * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
    * one repository where the query names one (GET), what an automation's
    * Same agent and an `@` list's agents are chosen from; the plan list's
@@ -71,7 +71,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   MAC_COMMANDS: "/api/mac-commands",
   /**
-   * The account's automations: list them, newest first, or one plan's where
+   * The account's automations: list them, newest first, or one task's where
    * `planId` names it (GET), or make one (POST). `automation-wire.ts`
    * declares the bodies.
    */
@@ -85,7 +85,7 @@ export const HOSTED_SERVICE_PATH = {
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
-   * The account's named feature plans: list them, newest started first
+   * The account's named feature tasks: list them, newest started first
    * (GET), or start one (POST) with its name and, where one is chosen, the
    * GitHub repository it is about. `task-wire.ts` declares both.
    */
@@ -291,28 +291,28 @@ export function issuePath(issueId: string): string {
   return `${HOSTED_SERVICE_PATH.ISSUES}/${encodeURIComponent(issueId)}`;
 }
 
-/** One plan the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
+/** One task the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
 export function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 
-/** One plan's whiteboard: read it with Luke's latest drawing (GET), or write its scene whole (PUT). */
+/** One task's whiteboard: read it with Luke's latest drawing (GET), or write its scene whole (PUT). */
 export function taskBoardPath(taskId: string): string {
   return `${taskPath(taskId)}/board`;
 }
 
-/** The developer's edit of one plan's document (POST). */
+/** The developer's edit of one task's document (POST). */
 export function planEditPath(taskId: string): string {
   return `${taskPath(taskId)}/edit`;
 }
 
-/** What was said on one plan's calls (GET). */
+/** What was said on one task's calls (GET). */
 export function taskTranscriptPath(taskId: string): string {
   return `${taskPath(taskId)}/transcript`;
 }
 
 /**
- * One plan's work (GET): a page of the planning turns of its calls, the
+ * One task's work (GET): a page of the brain turns of its calls, the
  * newest of all or, with `before`, the newest queued before that turn, and
  * on the newest page every code Luke showed on it.
  */
@@ -324,7 +324,7 @@ export function taskWorkPath(taskId: string, before?: string): string {
 }
 
 /**
- * One plan's planning conversation as a coding agent's transcript is read
+ * One task's conversation as a coding agent's transcript is read
  * (GET), the same answer as `agentMessagesPath`'s read: past a cursor, held
  * open while a turn runs; with no cursor, its newest turns; with `before`,
  * the turns queued before that one.
@@ -341,18 +341,18 @@ export function taskMessagesPath(
   return query.size === 0 ? path : `${path}?${query}`;
 }
 
-/** One planning worker's transcript past a cursor (GET), under the plan and the call that started it, held open while the worker runs; the same answer as `planMessagesPath`'s read. */
+/** One brain worker's transcript past a cursor (GET), under the task and the call that started it, held open while the worker runs; the same answer as `planMessagesPath`'s read. */
 export function taskSubagentMessagesPath(taskId: string, callId: string, after: string): string {
   const query = new URLSearchParams({ after });
   return `${taskPath(taskId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
 }
 
-/** Every code Luke showed on one plan, oldest first (GET). */
+/** Every code Luke showed on one task, oldest first (GET). */
 export function taskCodePath(taskId: string): string {
   return `${taskPath(taskId)}/code`;
 }
 
-/** One window of a file of one plan's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
+/** One window of a file of one task's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
 export function taskFilePath(
   taskId: string,
   window: {
@@ -373,7 +373,7 @@ export function taskFilePath(
   return `${taskPath(taskId)}/file?${query}`;
 }
 
-/** One folder of one plan's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one, and `recursive=1` for everything under it. */
+/** One folder of one task's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one, and `recursive=1` for everything under it. */
 export function taskTreePath(
   taskId: string,
   folder: { readonly path: string; readonly recursive?: boolean },
@@ -385,7 +385,7 @@ export function taskTreePath(
   return query.size === 0 ? path : `${path}?${query}`;
 }
 
-/** The skills a developer may choose of one plan's repository, as GitHub holds it now (GET). */
+/** The skills a developer may choose of one task's repository, as GitHub holds it now (GET). */
 export function taskSkillsPath(taskId: string): string {
   return `${taskPath(taskId)}/skills`;
 }
@@ -434,7 +434,7 @@ export function repositoryIssuePath(place: RepositoryPlace, number: number): str
   return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE}?${query}`;
 }
 
-/** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
+/** One task's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
 export function planRevisionsPath(taskId: string, before?: number): string {
   const path = `${taskPath(taskId)}/revisions`;
   if (before === undefined) return path;
@@ -482,13 +482,13 @@ export function planTemplateRestorePath(seq: number): string {
   return `${planTemplateRevisionPath(seq)}/restore`;
 }
 
-/** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
+/** One task's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
 export function taskAgentsPath(taskId: string): string {
   return `${taskPath(taskId)}/agents`;
 }
 
 /**
- * One plan's inbox: every item its coding agents posted for the developer,
+ * One task's inbox: every item its coding agents posted for the developer,
  * past a cursor (GET), held open while nothing changed, as an agent's
  * transcript is. `inbox-wire.ts` declares the answer.
  */
@@ -499,13 +499,13 @@ export function taskInboxPath(taskId: string, after?: string): string {
   return `${path}?${query}`;
 }
 
-/** One agent's inbox past a cursor (GET), held open while nothing changed as a plan's is, an agent with no plan as much as one on a plan; the same answer as `planInboxPath`'s read. */
+/** One agent's inbox past a cursor (GET), held open while nothing changed as a task's is, an agent with no task as much as one on a task; the same answer as `planInboxPath`'s read. */
 export function agentInboxPath(agentId: string, after: string): string {
   const query = new URLSearchParams({ after });
   return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;
 }
 
-/** One item of a plan's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
+/** One item of a task's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
 export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
 }
@@ -565,14 +565,29 @@ export function agentChangesPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/changes`;
 }
 
-/** One agent's pull request as its Pull request tab draws it (GET): its description, checks, reviewers, and conversation as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/overview`;
+/** One agent's pull request itself as its overview draws it (GET): its description, branches, mergeability, author, and the reviewers it asks for; `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewPullRequestPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview/pull-request`;
+}
+
+/** The checks on one agent's pull request's head as its overview draws them (GET); `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewChecksPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview/checks`;
+}
+
+/** One agent's pull request's conversation as its overview draws it (GET): its comments, reviews, threads, and where its reviewers stand; `coding-agent-wire.ts` declares the answer. */
+export function agentOverviewConversationPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/overview/conversation`;
 }
 
 /** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */
 export function agentGitHubImagePath(agentId: string, src: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
+}
+
+/** One change to an agent's pull request (POST), made on GitHub as the member who asks; `pull-request-write-wire.ts` declares the request and the answer. */
+export function agentPullRequestActionPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/pull-request/action`;
 }
 
 /** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */

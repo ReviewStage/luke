@@ -1,11 +1,10 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { ProviderMark } from "@luke/ui";
+import { ConfirmDialog, DIALOG_TONE, ProviderMark, useConfirmDialog } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "./confirm-dialog";
 import { OneLine } from "./one-line";
 import { SettingsGroup } from "./settings-group";
 
