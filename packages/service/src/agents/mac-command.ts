@@ -5,6 +5,7 @@ import {
   macCommandResult,
   macCommandSettledLiveStatement,
   macCommandsWaiting,
+  macCommandsWaitingLiveStatement,
   macListeningSince,
   markMacListening,
   queueMacCommand,
@@ -19,7 +20,7 @@ import {
 } from "@luke/features/mac-command-wire";
 import type { UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
-import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";
+import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import { lookedUntil } from "../http/held-read.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
@@ -213,18 +214,27 @@ export function runOnMacTool(
 /**
  * The Mac's held read: it is counted listening as the read arrives, and
  * answered with every waiting command claimed for it as soon as one waits,
- * or with none once the hold ends.
+ * or with none once the hold ends. Between looks it waits on Neon Realtime's
+ * word that the account's unclaimed commands changed, where the deployment
+ * has Realtime, and its own poll where it has none (`lookedUntil`).
  */
 export function macCommandsFor(userId: string): TaskStoreEffect<readonly MacCommand[]> {
   const queuedSince = Effect.map(
     Clock.currentTimeMillis,
     (now) => new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.CLAIM_WINDOW)),
   );
+  const waits = Effect.flatMap(queuedSince, (since) =>
+    Effect.map(macCommandsWaiting(userId, since), (any) =>
+      any ? Option.some(true) : Option.none(),
+    ),
+  );
   return markMacListening(userId).pipe(
     Effect.andThen(
-      Effect.flatMap(queuedSince, (since) => macCommandsWaiting(userId, since)).pipe(
-        Effect.repeat({ schedule: Schedule.spaced(MAC_COMMAND_SERVICE.POLL), until: (any) => any }),
-        Effect.timeoutOption(MAC_COMMAND_SERVICE.HOLD),
+      lookedUntil(
+        waits,
+        MAC_COMMAND_SERVICE.POLL,
+        MAC_COMMAND_SERVICE.HOLD,
+        Option.toArray(macCommandsWaitingLiveStatement(userId)),
       ),
     ),
     Effect.andThen(Effect.flatMap(queuedSince, (since) => claimMacCommands(userId, since))),

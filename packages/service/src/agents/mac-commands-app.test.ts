@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { queueMacCommand } from "@luke/database/models/mac-command-store";
+import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Deferred, Effect, Fiber, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { LiveWake, type LiveWakeShape } from "../live/live-wake.js";
+import { macCommandsFor } from "./mac-command.js";
 import { macCommandsApp } from "./mac-commands-app.js";
 
 /**
@@ -14,7 +19,9 @@ import { macCommandsApp } from "./mac-commands-app.js";
  * dialect: the call refuses where no Mac of the account read lately, a
  * Mac's held read counts it listening and is answered with the command the
  * call queued, the result it posts is what the call answers, and a call
- * that hears nothing says so. The route answers the bearer's account alone.
+ * that hears nothing says so. A held read is woken by Neon Realtime's word
+ * that the account's unclaimed commands changed, rather than its poll. The
+ * route answers the bearer's account alone.
  *
  * Synthetic accounts, bearers, and commands throughout.
  */
@@ -64,5 +71,45 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
       });
     }),
+  );
+
+  it.effect(
+    "the Mac's held read answers a command queued while it is held as soon as Realtime says the account's unclaimed commands changed, without waiting out its poll",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = `user-${randomUUID()}`;
+        yield* db
+          .insert(user)
+          .values({ id: owner, name: "Test User", email: `${owner}@luke.test` });
+        const parked = yield* Deferred.make<() => void>();
+        const watched: (readonly unknown[])[] = [];
+        // Realtime as a script: the watch parks each wait until the test says the rows changed.
+        const wake: LiveWakeShape = {
+          watch: (statements) =>
+            Effect.sync(() => {
+              watched.push(...statements.map((statement) => statement.params));
+              return {
+                live: Effect.succeed(true),
+                changed: Effect.callback<void>((resume) => {
+                  Deferred.doneUnsafe(
+                    parked,
+                    Effect.succeed(() => resume(Effect.void)),
+                  );
+                }),
+              };
+            }),
+        };
+        const read = yield* Effect.forkChild(
+          macCommandsFor(owner).pipe(Effect.provideService(LiveWake, wake)),
+        );
+        const changed = yield* Deferred.await(parked);
+        const queued = { id: randomUUID(), command: "git status", timeoutSeconds: 60 };
+        yield* queueMacCommand(owner, queued);
+        changed();
+
+        assert.deepEqual(yield* Fiber.join(read), [queued]);
+        assert.deepEqual(watched, [[owner]], "the account's own unclaimed commands are watched");
+      }),
   );
 });
