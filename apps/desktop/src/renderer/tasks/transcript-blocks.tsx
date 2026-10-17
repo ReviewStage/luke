@@ -986,38 +986,33 @@ export function TranscriptSubagent({
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>
-      <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">
+      <span className="subagent-icon">
         <SubagentMark model={pair?.choice.model} />
       </span>
-      <span
-        ref={words}
-        className="subagent-job min-w-0 flex-1 text-foreground"
-        data-overflow={String(clipped)}
-      >
+      <span ref={words} className="subagent-job" data-overflow={String(clipped)}>
         {job}
       </span>
       {pair === undefined ? null : (
-        <span className="shrink-0" data-subagent-pair="">
+        <span className="subagent-pair" data-subagent-pair="">
           <ModelLabel choice={pair.choice} models={pair.models} />
         </span>
       )}
       {running && startedAt !== undefined ? (
-        <WorkingTime startedAt={startedAt} className="shrink-0" />
+        <WorkingTime startedAt={startedAt} className="subagent-time" />
       ) : null}
       <ToolStateMark state={state} />
     </>
   );
-  const className = "subagent-line flex w-full min-w-0 items-center gap-2";
   const row =
     onOpen === undefined ? (
-      <div className={className} data-subagent-row="" data-call-id={callId}>
+      <div className="subagent-line" data-subagent-row="" data-call-id={callId}>
         {line}
       </div>
     ) : (
       <Tooltip label={SUBAGENT_HINT} card={card ?? undefined}>
         <button
           type="button"
-          className={className}
+          className="subagent-line"
           data-subagent-row=""
           data-call-id={callId}
           onClick={onOpen}
@@ -1030,11 +1025,7 @@ export function TranscriptSubagent({
   return (
     <div>
       {row}
-      {/* Note that the reason sits under the job, past the line's 4px padding, glyph, and gap. */}
-      <p
-        className="m-0 mt-1 ml-7 text-[12.5px] text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
-        role="alert"
-      >
+      <p className="subagent-error" role="alert">
         {errorText}
       </p>
     </div>
