@@ -39,6 +39,7 @@ import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
+  AssistantMessageBuilder,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -46,6 +47,7 @@ import {
   isRecord,
   isWireString,
   sessionKey,
+  TOOL_CALL_SETTLEMENT,
   TURN_ORIGIN,
   type WireRecord,
 } from "../../core.js";
@@ -299,6 +301,40 @@ const lineSenderUnder = (target: ConversationTarget, clientKey: string) =>
     return id === undefined ? undefined : (yield* lineSendersOf(target, [id])).get(id);
   });
 
+/** A turn of the agent's that ended on the answer given, journaled as the relay journals one. */
+async function answeredTurnOn(agent: StartedAgent, answer: AssistantMessageBuilder): Promise<void> {
+  const target = { userId: agent.userId, conversationId: agent.conversationId };
+  const turnId = randomUUID();
+  const turn = { conversationId: sessionKey(target.conversationId), turnId };
+  await database.run(
+    Effect.gen(function* () {
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: NOW,
+      });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        sequence: 2,
+        message: answer.finish(randomUUID()),
+      });
+      yield* writer.consume(target, {
+        ...turn,
+        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        sequence: 3,
+        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        responseIds: [],
+        at: NOW,
+      });
+    }),
+  );
+}
+
 /**
  * One workspace with the caller's agent on one plan, a teammate's agent on
  * another plan, and an archived agent; a second workspace the caller's
@@ -392,6 +428,68 @@ test("list_agents names every other agent of the caller's workspace, on any task
     reason: AGENT_LIST_FILTER_REFUSAL.BOTH,
   });
   assert.equal(eve.sent.length, 0, "a list sends nothing");
+});
+
+test("read_agent reads a teammate's agent on another task of the caller's workspace, with the tail of its transcript in entries kept longer than Luke's and as many as asked, older turns included, and reads no agent of another workspace", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  // The teammate's final report runs past the short entry Luke summarises aloud.
+  const report = Array.from(
+    { length: 10 },
+    () => "The invitations backfill stalls on rows whose inviter left the workspace.",
+  ).join(" ");
+  const answer = new AssistantMessageBuilder();
+  answer.stepStart();
+  answer.toolCall(
+    { callId: "call-bash", name: CODER_TOOL.BASH, argumentsJson: "{}" },
+    unparsedWire({ command: "pnpm test" }),
+  );
+  answer.toolResult("call-bash", {
+    state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,
+    output: unparsedWire({ exitCode: 1 }),
+  });
+  answer.stepStart();
+  answer.text(report);
+  await answeredTurnOn(agents.teammates, answer);
+
+  const read = await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id });
+  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
+  assert.ok(isRecord(read.agent));
+  assert.equal(read.agent.id, agents.teammates.id);
+  assert.deepEqual(read.agent.task, { id: plans.billing, name: "Billing", archived: false });
+  assert.deepEqual(read.tail, ["Ran: pnpm test", `Said: ${report}`]);
+  assert.deepEqual(
+    (await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 1 })).tail,
+    [`Said: ${report}`],
+  );
+
+  // A tail longer than the newest turns hold reaches back into older ones.
+  for (const turn of [2, 3, 4]) {
+    const later = new AssistantMessageBuilder();
+    later.stepStart();
+    later.text(`Turn ${turn} done.`);
+    await answeredTurnOn(agents.teammates, later);
+  }
+  assert.deepEqual(
+    (await call(CODER_TOOL.READ_AGENT, { agentId: agents.teammates.id, entries: 5 })).tail,
+    [
+      "Ran: pnpm test",
+      `Said: ${report}`,
+      "Said: Turn 2 done.",
+      "Said: Turn 3 done.",
+      "Said: Turn 4 done.",
+    ],
+  );
+
+  // An agent of another workspace is none of the caller's, even one its starter is also in.
+  for (const other of [agents.otherWorkspaces, agents.strangers]) {
+    assert.deepEqual(await call(CODER_TOOL.READ_AGENT, { agentId: other.id }), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+    });
+  }
+  assert.equal(eve.sent.length, 0, "a read sends nothing");
 });
 
 test("message_agent reaches a teammate's agent on another plan as the deployment acting for the caller's starter, opening with who sent it, kept under the sending agent's name, and sent once under the call's key", async () => {

@@ -330,3 +330,44 @@ body {
 .catalog-grow {
   flex: 1;
 }
+
+/* A frame the size of a screen a page pattern fills: a tablet's width, or
+   a phone's, as tall as the window, so the page centres in it as it would. */
+.catalog-screens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-24);
+}
+
+.catalog-screen {
+  box-sizing: border-box;
+  width: 768px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px dashed var(--luke-color-border-strong);
+  background: var(--luke-color-ground);
+}
+
+.catalog-screen-phone {
+  width: 320px;
+}
+
+/* Luke's face at the size the OAuth cards open with. */
+.catalog-auth-mark {
+  display: block;
+  width: 52px;
+  height: 52px;
+  color: var(--luke-color-working);
+}
+
+.catalog-auth-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A provider's mark at a control's glyph size. */
+.catalog-auth-provider {
+  display: block;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}

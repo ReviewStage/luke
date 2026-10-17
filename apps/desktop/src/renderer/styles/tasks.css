@@ -2449,6 +2449,79 @@ button.pull-request-check:hover {
   margin: 0 var(--boxed-inset) var(--space-8);
 }
 
+/* Under a thread's comments, what a member does on it
+   (`pull-request-thread-actions.tsx`): a quiet field-shaped Reply… that
+   opens the reply's own field, and Resolve or Unresolve at the row's end;
+   GitHub's refusal of the last one under them. */
+.pull-request-thread-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--boxed-inset);
+  border-top: 1px solid var(--hairline);
+}
+
+.pull-request-thread-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--control-gap);
+}
+
+.pull-request-thread-reply-open {
+  min-width: 0;
+  height: var(--control-height);
+  flex: 1 1 auto;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--input-fill);
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: start;
+  cursor: text;
+}
+
+.pull-request-thread-reply-open:hover {
+  border-color: var(--hairline-strong);
+}
+
+.pull-request-thread-resolve {
+  margin-inline-start: auto;
+}
+
+.pull-request-thread-reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.pull-request-thread-reply-field {
+  box-sizing: border-box;
+  min-height: 72px;
+  max-height: 240px;
+  resize: vertical;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.pull-request-thread-reply-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--control-gap);
+}
+
+.pull-request-thread-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pull-request-thread-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
   margin: 0 0 var(--space-8);

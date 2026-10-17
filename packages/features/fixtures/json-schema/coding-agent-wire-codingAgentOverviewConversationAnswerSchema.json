@@ -260,6 +260,9 @@
                         "more": {
                           "type": "number",
                           "minimum": 0
+                        },
+                        "id": {
+                          "type": "string"
                         }
                       },
                       "required": [

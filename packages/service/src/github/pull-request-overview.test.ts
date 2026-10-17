@@ -620,7 +620,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
   );
 
   it.effect(
-    "a review that only left line comments stands with its threads, each with its file, lines, hunk, standing, and comments; a draft's comment is left out, replies past the bound and threads left on GitHub are counted, and a thread whose review is unlisted stands at its own time",
+    "a review that only left line comments stands with its threads, each with its file, lines, hunk, standing, comments, and GitHub's id for it; a draft's comment is left out, replies past the bound and threads left on GitHub are counted, and a thread whose review is unlisted stands at its own time",
     () =>
       Effect.gen(function* () {
         const charles = yield* linkedAccount(CHARLES.id);
@@ -689,6 +689,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
                       totalCount: 4,
                       nodes: [
                         {
+                          id: "PRRT_invite",
                           path: "src/invite.ts",
                           line: 12,
                           startLine: 11,
@@ -717,6 +718,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
                           },
                         },
                         {
+                          id: "PRRT_old",
                           path: "src/old.ts",
                           line: null,
                           startLine: null,
@@ -737,6 +739,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
                           },
                         },
                         {
+                          id: "PRRT_draft",
                           path: "src/draft.ts",
                           line: 1,
                           startLine: null,
@@ -811,6 +814,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
                   },
                 ],
                 more: 1,
+                id: "PRRT_invite",
               },
             ],
           },
@@ -852,6 +856,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
                   },
                 ],
                 more: 0,
+                id: "PRRT_old",
               },
             ],
           },

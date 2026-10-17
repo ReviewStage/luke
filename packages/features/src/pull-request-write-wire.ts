@@ -20,6 +20,8 @@ export const PULL_REQUEST_WRITE_BOUNDS = {
   MAX_REFUSAL_CHARS: 1_000,
   /** The longest body a review may carry, GitHub's own bound on a comment's. */
   MAX_BODY_CHARS: 65_536,
+  /** The longest GitHub id for a review thread the request names; GitHub's run near thirty. */
+  MAX_NODE_ID_CHARS: 256,
 } as const;
 
 /** The changes the Pull request tab makes, each one press. */
@@ -30,6 +32,12 @@ export const PULL_REQUEST_ACTION = {
   CONVERT_TO_DRAFT: "convert-to-draft",
   /** A review submitted: the member's own pending review where they hold one, else a new one. */
   SUBMIT_REVIEW: "submit-review",
+  /** A reply on a review thread of the pull request. */
+  REPLY_TO_THREAD: "reply-to-thread",
+  /** A review thread of the pull request marked resolved. */
+  RESOLVE_THREAD: "resolve-thread",
+  /** A resolved review thread of the pull request opened again. */
+  UNRESOLVE_THREAD: "unresolve-thread",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
@@ -49,6 +57,14 @@ const reviewBodySchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS),
 );
 
+/** GitHub's own id for a review thread of the pull request, as the conversation's read carries it. */
+const threadIdSchema = EffectSchema.NonEmptyString.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
+);
+
+/** A reply's words, Markdown, never blank; GitHub's bound. */
+const replyBodySchema = reviewBodySchema.check(EffectSchema.isPattern(/\S/u));
+
 /** One change, as the tab asks the service to make it (POST). */
 export const pullRequestActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.READY_FOR_REVIEW) }),
@@ -57,6 +73,19 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.SUBMIT_REVIEW),
     event: EffectSchema.Literals(Object.values(REVIEW_EVENT)),
     body: reviewBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.REPLY_TO_THREAD),
+    threadId: threadIdSchema,
+    body: replyBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.RESOLVE_THREAD),
+    threadId: threadIdSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.UNRESOLVE_THREAD),
+    threadId: threadIdSchema,
   }),
 ]);
 
