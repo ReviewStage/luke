@@ -62,21 +62,6 @@ const SETTINGS_GROUP_HEADING = {
   [SETTINGS_PAGE_GROUP.THIS_MAC]: "This Mac",
 } satisfies Record<SettingsPageGroup, string>;
 
-/**
- * The pages drawn in `@luke/ui`'s `SettingsPage`, which owns their inset,
- * title, and the room between their sections. The rest stand in the
- * window's own frame until each moves onto it.
- */
-const SETTINGS_PAGE_DRAWN: ReadonlySet<SettingsView> = new Set([
-  SETTINGS_VIEW.APPEARANCE,
-  SETTINGS_VIEW.THIS_MAC,
-]);
-
-/** Whether `view` is drawn in the shared settings page rather than the window's own frame. */
-export function drawnInSettingsPage(view: SettingsView): boolean {
-  return SETTINGS_PAGE_DRAWN.has(view);
-}
-
 /** Any page's name and glyph: what the Settings sidebar, a page's title, and the command palette name it by. */
 export function settingsPageOf(view: SettingsView): SettingsPage {
   return SETTINGS_PAGE[view];

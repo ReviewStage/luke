@@ -2963,17 +2963,10 @@ ul.actor-stack {
 }
 
 /* A pane that scrolls a list lays its empty state out as a column the state
-   fills, while it holds one. Settings' column holds its page's name over the
-   page, which keep their measure. */
-:is(.automations-scroll, .factory-scroll, .inbox-tasks-scroll, .settings-page-scroll):has(
-  .luke-empty-state
-) {
+   fills, while it holds one. */
+:is(.automations-scroll, .factory-scroll, .inbox-tasks-scroll):has(.luke-empty-state) {
   display: flex;
   flex-direction: column;
-}
-
-.settings-page-scroll:has(.luke-empty-state) > * {
-  width: 100%;
 }
 
 /* Something wanting a hand (`attention-mark.tsx`): a white exclamation on a
@@ -6204,19 +6197,19 @@ button.automation-run:hover {
   min-height: 0;
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
-  border-right: 1px solid var(--hairline);
+  border-right: 1px solid var(--luke-color-border);
   background: var(--desktop-sidebar);
 }
 
 .settings-pages-back,
 .version-log-back {
   width: auto;
-  margin-bottom: var(--space-12);
+  margin-bottom: var(--luke-space-12);
 }
 
 .settings-pages-title,
 .version-log-title {
-  margin: 0 var(--row-inset) var(--space-12);
+  margin: 0 var(--row-inset) var(--luke-space-12);
   font-size: 20px;
   font-weight: 720;
   letter-spacing: -0.015em;
@@ -6228,26 +6221,26 @@ button.automation-run:hover {
    beneath it. */
 .settings-search {
   flex: 0 0 auto;
-  margin-bottom: var(--section-gap);
+  margin-bottom: var(--luke-section-gap);
 }
 
 .settings-search-well {
   display: flex;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   height: 30px;
-  padding: 0 var(--space-2) 0 calc(var(--row-inset) - 1px); /* off-scale: less the well's edge */
-  border: 1px solid var(--hairline);
+  padding: 0 var(--luke-space-2) 0 calc(var(--row-inset) - 1px); /* off-scale: less the well's edge */
+  border: 1px solid var(--luke-color-border);
   border-radius: 8px;
-  background: var(--raised);
-  color: var(--text-tertiary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-subtle);
   cursor: text;
   transition: border-color var(--duration-hover) ease;
 }
 
 .settings-search-well .search-glyph {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: 0 0 auto;
 }
 
@@ -6258,19 +6251,19 @@ button.automation-run:hover {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-family: inherit;
   font-size: 13px;
   outline: none; /* no ring: its well rings */
 }
 
 .settings-search-input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* The search's chord, printed in the empty field until the caret arrives. */
 .settings-search-shortcut {
-  padding-right: var(--space-6);
+  padding-right: var(--luke-space-6);
 }
 
 .settings-search-well:focus-within .settings-search-shortcut {
@@ -6280,9 +6273,9 @@ button.automation-run:hover {
 .settings-search-clear {
   /* An icon button nested in the well: as far inside the well's edge on
      every side as it is from the end, with the corner that inset leaves. */
-  width: calc(var(--control-height) - 2px - 2 * var(--space-2));
-  height: calc(var(--control-height) - 2px - 2 * var(--space-2));
-  border-radius: calc(var(--control-radius) - var(--space-2));
+  width: calc(var(--control-height) - 2px - 2 * var(--luke-space-2));
+  height: calc(var(--control-height) - 2px - 2 * var(--luke-space-2));
+  border-radius: calc(var(--control-radius) - var(--luke-space-2));
 }
 
 /* Find in a tab --------------------------------------------------------- */
@@ -6403,7 +6396,7 @@ button.automation-run:hover {
 .settings-search-results {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: var(--luke-section-gap);
 }
 
 .settings-search-result {
@@ -6427,15 +6420,15 @@ button.automation-run:hover {
    the primary ink, as the plans' sidebar heads its list
    (`desktop-settings.tsx`). */
 .settings-nav-group + .settings-nav-group {
-  margin-top: var(--section-gap);
+  margin-top: var(--luke-section-gap);
 }
 
 .settings-nav-workspace {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-6);
-  color: var(--text-primary);
+  gap: var(--luke-space-6);
+  color: var(--luke-color-text);
 }
 
 /* A page that needs a hand wears the front page's own mark at the row's end,
@@ -6502,62 +6495,66 @@ button.automation-run:hover {
 }
 
 /* A Settings page has no top bar: the page names itself at the head of its
-   column, so the title-bar row above it is only the window's drag strip, and
-   the column scrolls beneath it, its top edge fading (`scroll-fade-top`) so
-   a row scrolled up dissolves into the strip rather than being sliced off. */
-.settings-page-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 var(--page-inset) var(--page-inset);
-  /* A landed search result scrolls to the top of this column with the
-     column's own top margin above it, which is wider than the fade. */
-  scroll-padding-top: var(--page-inset);
-  /* A bar that takes room takes it on every page, so the column never slides. */
-  scrollbar-gutter: stable;
-}
-
-/* A page drawn in the shared settings page (`SettingsPage`) fills the room
-   under the drag strip and scrolls in it, its top fading as the window's own
-   frame's does (`base.css`), and a landed search result keeps the page's
-   inset above it rather than the fade's. */
+   column (`SettingsPage`), so the title-bar row above it is only the
+   window's drag strip, and the page fills the room under the strip and
+   scrolls in it, its top fading as `scroll-fade-top` does (`base.css`) so a
+   row scrolled up dissolves into the strip rather than being sliced off. A
+   landed search result keeps the page's inset above it rather than the
+   fade's. */
 .settings-page > .luke-settings-page {
   flex: 1 1 0;
-  scroll-padding-top: var(--page-inset);
+  scroll-padding-top: var(--luke-page-inset);
+}
+
+/* The page's inset narrows under 480px (`settings-page.css`), and a landed
+   result keeps the narrower inset above it. The page cannot query its own
+   width, so the pane around it is the container. */
+.settings-page {
+  container: settings-pane / inline-size;
+}
+
+@container settings-pane (max-width: 479px) {
+  .settings-page > .luke-settings-page {
+    scroll-padding-top: var(--luke-page-inset-narrow);
+  }
+}
+
+/* The page's sections are the width its rows answer (`@container settings`
+   in `settings.css`) rather than the window's: the column beside the page
+   list is as narrow at a wide nav as a small window makes it. */
+.settings-page .luke-settings-page-sections {
+  container: settings / inline-size;
 }
 
 /* A page whose reads are out draws nothing under its name until every one
    has answered, then the whole page at once, so nothing grows into place. */
-.settings-page-scroll:has(.settings-reading) .settings {
+.settings-page:has(.settings-reading) .luke-settings-page-sections {
   visibility: hidden;
 }
 
-/* The page's name and what acts on the whole page, its reset, on one line. */
-.settings-page-head {
+/* A page that holds an empty state gives it the room under the page's
+   name, which the state stands in the middle of, at the page's measure. */
+.settings-page > .luke-settings-page:has(.luke-empty-state),
+.settings-page .luke-settings-page:has(.luke-empty-state) .luke-settings-page-column {
   display: flex;
-  max-width: var(--settings-width);
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-8);
-  margin: 0 auto var(--space-24);
-  padding-top: var(--space-32);
+  flex-direction: column;
+}
+
+.settings-page .luke-settings-page:has(.luke-empty-state) .luke-settings-page-column {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--luke-settings-page-measure) + 2 * var(--luke-page-inset));
+  flex: 1 0 auto;
+}
+
+.settings-page .luke-settings-page-sections:has(> .luke-empty-state) {
+  flex: 1 0 auto;
 }
 
 /* A quiet act ends the line flush with the card's edge, its words rather than
    its hover's pill standing in the column. */
-.settings-page-head .quiet-button,
 .settings-page .luke-settings-page-actions .quiet-button {
   margin-right: calc(-1 * var(--space-8));
-}
-
-/* The page scrolls with the column rather than inside a scroller of its own,
-   at the width its rows read at, its groups a section apart and more. */
-.settings-page-scroll .settings {
-  max-width: var(--settings-width);
-  gap: var(--space-32);
-  margin: 0 auto;
-  overflow: visible;
 }
 
 /* Version history ------------------------------------------------------------ */

@@ -251,6 +251,18 @@ function pageButtons(page: HTMLElement): HTMLButtonElement[] {
   ];
 }
 
+/** The title of the page drawn beside the sidebar: its own `h1`, the sidebar's being Settings'. */
+function shownTitle(page: HTMLElement): string | null | undefined {
+  return [...page.querySelectorAll("h1")].find((title) => title.closest("nav") === null)
+    ?.textContent;
+}
+
+/** What scrolls the page drawn beside the sidebar: the shared settings page around its title. */
+function shownScroller(page: HTMLElement): HTMLElement {
+  const title = [...page.querySelectorAll("h1")].find((each) => each.closest("nav") === null);
+  return title?.closest<HTMLElement>(".luke-settings-page") ?? assert.fail("the page scrolls");
+}
+
 /** Opens the page the sidebar names, answering the page drawn beside it. */
 function openPage(page: HTMLElement, title: string): HTMLElement {
   const button = pageButtons(page).find((each) => each.textContent === title);
@@ -266,7 +278,7 @@ test("Settings opens on Profile, and its sidebar lists every page once under Wor
   assert.deepEqual(pageGroups(page), PAGE_GROUPS);
   const current = pageButtons(page).find((each) => each.getAttribute("aria-current") === "page");
   assert.equal(current?.textContent, "Profile");
-  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Profile");
+  assert.equal(shownTitle(page), "Profile");
 });
 
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
@@ -281,12 +293,12 @@ test("the sidebar's first group is headed by the listed workspace's name, over i
 test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(PERSONAL) }));
   openPage(page, "Workspace");
-  const first = page.querySelector(".settings-page-title")?.textContent;
+  const first = shownTitle(page);
 
   redraw(createElement(SettingsHarness, { workspace: listing(ACME) }));
 
   assert.equal(first, "Dana Reyes");
-  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Acme");
+  assert.equal(shownTitle(page), "Acme");
   assert.equal(pageGroups(page)[0]?.heading, "Acme");
 });
 
@@ -355,12 +367,11 @@ test("Appearance draws every diff setting in a Diffs group of its own, under the
 test("a page turned to opens at its top, not where the last page was scrolled", () => {
   const page = mount(createElement(SettingsHarness));
   openPage(page, "Voice");
-  const scroller = page.querySelector<HTMLElement>(".settings-page-scroll");
-  assert.ok(scroller, "the page scrolls");
+  const scroller = shownScroller(page);
   // Note that jsdom lays nothing out, so the scroll offset is held by hand.
   Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 400 });
   openPage(page, "Coding agents");
-  assert.equal(page.querySelector<HTMLElement>(".settings-page-scroll")?.scrollTop, 0);
+  assert.equal(shownScroller(page).scrollTop, 0);
 });
 
 /** Types `words` over whatever the field holds, as the developer would. */
@@ -483,7 +494,7 @@ test("a sidebar result that opens an integration hands its query to the page's s
 
   typeInto(sidebar, "postgres");
   openIntegrationResult(page, "Neon");
-  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Integrations");
+  assert.equal(shownTitle(page), "Integrations");
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "postgres");
 
   // Note that "mcp" finds every integration's row in the sidebar but none by

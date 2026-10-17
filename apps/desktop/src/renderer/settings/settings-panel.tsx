@@ -19,7 +19,6 @@ import { ExperimentalPage } from "./experimental-page";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
-import { drawnInSettingsPage } from "./pages";
 import { WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { ShortcutSection } from "./voice-keys";
@@ -124,7 +123,8 @@ export function SettingsPanel({
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, microphone, account });
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  const page = (
+  // The shared settings page frames these, spacing them as sections.
+  return (
     <>
       {view === SETTINGS_VIEW.ACCOUNT ? (
         signedIn ? (
@@ -192,6 +192,4 @@ export function SettingsPanel({
       ) : null}
     </>
   );
-  // A page the shared settings page frames hands it its sections alone, which it spaces itself.
-  return drawnInSettingsPage(view) ? page : <div className="settings">{page}</div>;
 }
