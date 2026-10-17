@@ -9,10 +9,13 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-vi
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
+  BUTTON_VARIANT,
+  Button,
   ConfirmDialog,
   type DialogQuestion,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  IconButton,
   ResetIcon,
   SettingsPage,
   TEXT_TONE,
@@ -319,7 +322,8 @@ function TemplateNote(): React.JSX.Element {
 /**
  * The page's actions at the right end of its title line, as every Settings
  * page carries its own: the version history, and Reset to default while the
- * account holds a template of its own.
+ * account holds a template of its own. They are `@luke/ui`'s quiet
+ * `IconButton` and outline `Button`.
  */
 function TitleActions({
   custom,
@@ -333,20 +337,12 @@ function TitleActions({
   return (
     <span className="task-title-actions">
       <Tooltip label={HISTORY_LABEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={HISTORY_LABEL}
-          onClick={onShowHistory}
-        >
-          <HistoryIcon />
-        </button>
+        <IconButton icon={<HistoryIcon />} label={HISTORY_LABEL} onClick={onShowHistory} />
       </Tooltip>
       {custom ? (
-        <button type="button" className="toolbar-button bordered-button" onClick={onReset}>
-          <ResetIcon />
+        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onReset}>
           Reset to default
-        </button>
+        </Button>
       ) : null}
     </span>
   );
