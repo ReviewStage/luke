@@ -543,7 +543,7 @@
 .plan-document-block:focus-visible::before {
   position: absolute;
   z-index: -1;
-  inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
   border-radius: 6px;
   background: color-mix(in srgb, var(--focus-ring) 14%, transparent);
   content: "";
@@ -581,11 +581,6 @@
 .task-title-text {
   caret-color: var(--luke-color-accent);
   outline: none; /* no ring: the caret alone, edited where it is drawn */
-}
-
-/* The section between an editor's words and what stands under them. */
-.plan-document-editor > .plan-editor-note {
-  margin-top: 0.5em;
 }
 
 /* The space between two sections, resolved at the text's own size so a
@@ -739,15 +734,17 @@
 }
 
 /* What stands under the editor: a failed save, or Luke's change and the
-   choice it asks, in the muted meta weight. */
+   choice it asks, in the caption role. Note that it outranks the editor's
+   own gap between its children by coming later. */
 .plan-editor-note {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-8);
-  margin: var(--space-6) 0 0;
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-6) 0 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The Code tab: every code Luke showed on the plan, one card each under the
