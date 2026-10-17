@@ -105,6 +105,7 @@ async function titled(page: HTMLElement, title: string): Promise<void> {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
@@ -176,5 +177,35 @@ test("a signed-out visitor is offered the providers, and a sign-in that cannot s
       "Sign-in could not start. Try again.",
     ),
   );
+  expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);
+});
+
+test("a sign-in asked for again, after a session came and went, carries no earlier failure", async () => {
+  let session = SIGNED_OUT;
+  const page = await openPage(
+    new Map([
+      ["/api/auth/get-session", () => session],
+      ["/api/auth/sign-in/social", () => ({ status: 500, body: { message: "unavailable" } })],
+      [HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER, () => VALID],
+    ]),
+  );
+  await titled(page, "Sign in to accept your invitation");
+  await act(async () => buttonNamed(page, "Continue with GitHub").click());
+  await vi.waitFor(() => expect(page.querySelector('[role="alert"]')?.textContent).not.toBe(""));
+
+  // Note that Better Auth refetches the session when the tab is shown again,
+  // but not within seconds of its last read, so the clock moves past that.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const refocus = async (now: Answer) => {
+    session = now;
+    vi.setSystemTime(Date.now() + 60_000);
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+  };
+  await refocus(SIGNED_IN);
+  await titled(page, "Join Atlas");
+  await refocus(SIGNED_OUT);
+
+  await titled(page, "Sign in to accept your invitation");
+  expect(page.querySelector('[role="alert"]')?.textContent).toBe("");
   expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);
 });
