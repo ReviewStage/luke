@@ -14,10 +14,12 @@ import {
 } from "@luke/features/plan-comment-wire";
 import type { PlanSection } from "@luke/features/plan-document";
 import {
+  CommentsIcon,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
   EllipsisIcon,
+  EmptyState,
   TrashIcon,
   useConfirmDialog,
   useMenu,
@@ -35,6 +37,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   ArrowUpIcon,
+  AtSignIcon,
   CheckIcon,
   CircleCheckIcon,
   MessageSquareIcon,
@@ -136,8 +139,8 @@ const COMMENT_WORDS = {
   SAVE: "Save",
   CANCEL: "Cancel",
   GONE: "Original content deleted",
-  RESOLVED_BY: "Resolved by",
-  REOPENED_BY: "Reopened by",
+  RESOLVED_IT: "resolved this",
+  REOPENED_IT: "reopened this",
   ASKED: "asked",
   EDITED: "edited",
   OPEN_THREAD: "Open thread",
@@ -237,12 +240,21 @@ function EventLine({
   now: number;
 }): React.JSX.Element {
   const asked = entry.asked;
+  const glyph =
+    entry.kind === PLAN_COMMENT_ENTRY.ASKED ? (
+      <AtSignIcon aria-hidden="true" />
+    ) : entry.kind === PLAN_COMMENT_ENTRY.RESOLVED ? (
+      <CircleCheckIcon aria-hidden="true" />
+    ) : (
+      <RotateCcwIcon aria-hidden="true" />
+    );
   return (
-    <div className="comment-event">
+    <div className="comment-event" data-kind={entry.kind}>
+      <span className="comment-event-glyph">{glyph}</span>
       <ActorLine>
+        <WriterRef writer={entry.writer} agents={agents} />
         {entry.kind === PLAN_COMMENT_ENTRY.ASKED ? (
           <>
-            <WriterRef writer={entry.writer} agents={agents} />
             {` ${COMMENT_WORDS.ASKED} `}
             {asked === undefined ? null : (
               <WriterRef
@@ -254,17 +266,13 @@ function EventLine({
               />
             )}
           </>
+        ) : entry.kind === PLAN_COMMENT_ENTRY.RESOLVED ? (
+          ` ${COMMENT_WORDS.RESOLVED_IT}`
         ) : (
-          <>
-            {entry.kind === PLAN_COMMENT_ENTRY.RESOLVED
-              ? `${COMMENT_WORDS.RESOLVED_BY} `
-              : `${COMMENT_WORDS.REOPENED_BY} `}
-            <WriterRef writer={entry.writer} agents={agents} />
-          </>
+          ` ${COMMENT_WORDS.REOPENED_IT}`
         )}
       </ActorLine>
       <span className="comment-time comment-event-time">
-        {"· "}
         <RelativeTime at={entry.at} now={now} ago />
       </span>
     </div>
@@ -304,12 +312,15 @@ function CommentEntry({
   first,
   doors,
   now,
+  lead,
 }: {
   thread: PlanCommentThread;
   entry: PlanCommentEntry;
   first: boolean;
   doors: ThreadDoors;
   now: number;
+  /** What stands between the comment's writer and its words: the thread's quote, under the first comment's name, so the thread's tools keep the card's top corner. */
+  lead?: ReactNode;
 }): React.JSX.Element {
   const [editing, setEditing] = useState<string | undefined>(undefined);
   const deleting = useConfirmDialog({ subject: true, surfaceOpen: true }, async () =>
@@ -427,6 +438,7 @@ function CommentEntry({
           />
         </span>
       </div>
+      {lead}
       {editing === undefined ? (
         <CommentWords words={entry.words ?? ""} />
       ) : (
@@ -877,7 +889,7 @@ function ThreadCard({
   }
   return (
     <div className="comment-card" data-open="true" data-thread={thread.id}>
-      {head}
+      {first === undefined ? head : null}
       {thread.entries.map((entry) =>
         entry.kind === PLAN_COMMENT_ENTRY.COMMENT ? (
           <CommentEntry
@@ -887,6 +899,7 @@ function ThreadCard({
             first={entry.id === first?.id}
             doors={doors}
             now={now}
+            lead={entry.id === first?.id ? head : undefined}
           />
         ) : (
           <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
@@ -1660,9 +1673,15 @@ function ResolvedOnly({
 
 /** What the Comments tab says over a list holding nothing, by its filter. */
 const NO_COMMENTS = {
-  [COMMENTS_FILTER.OPEN]: "No open comments.",
-  [COMMENTS_FILTER.RESOLVED]: "No resolved comments.",
-} as const satisfies Record<CommentsFilter, string>;
+  [COMMENTS_FILTER.OPEN]: {
+    title: "No comments",
+    line: "Select words in the plan, or press a block's comment button, to start a thread.",
+  },
+  [COMMENTS_FILTER.RESOLVED]: {
+    title: "No resolved comments",
+    line: "Threads stay here once they are resolved.",
+  },
+} as const satisfies Record<CommentsFilter, { title: string; line: string }>;
 
 /**
  * The side panel's Comments tab: the plan's threads, open or resolved, each
@@ -1732,7 +1751,11 @@ export function PlanCommentsTab({
             </button>
           </div>
         ) : listed.length === 0 ? (
-          <div className="comments-empty">{control.read ? NO_COMMENTS[filter] : null}</div>
+          control.read ? (
+            <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
+              {NO_COMMENTS[filter].line}
+            </EmptyState>
+          ) : null
         ) : (
           listed.map((thread) => (
             <div key={thread.id} className="comments-row">
