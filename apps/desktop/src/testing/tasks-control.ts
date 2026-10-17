@@ -310,7 +310,10 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     callTaskId: undefined,
     chatView: {
       open: false,
+      available: false,
       chat: undefined,
+      failed: false,
+      onRetry: ignore,
       place: FOR_YOU,
       onOpen: ignore,
       onClose: ignore,

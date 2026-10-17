@@ -62,7 +62,10 @@ function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTM
       tasks: tasksControl({
         chatView: {
           open: true,
+          available: true,
           chat,
+          failed: false,
+          onRetry: () => undefined,
           place,
           onOpen: () => undefined,
           onClose: () => undefined,

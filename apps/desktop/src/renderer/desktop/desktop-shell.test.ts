@@ -937,14 +937,14 @@ function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
   );
 }
 
-test("the sidebar's Chat row stands only while the account has Chat on and a chat is read, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
+test("the sidebar's Chat row stands only while the account has Chat on and a chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
-  assert.equal(chatRow(mount(false)), undefined, "no chat is read");
+  assert.equal(chatRow(mount(false)), undefined, "no chat is available");
   act(() => root?.unmount());
 
   let opened = 0;
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat, onOpen: () => (opened += 1) };
+  const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
   const page = mount(false, false, { chatView: view });
   await settle();
   const row = chatRow(page);
@@ -965,7 +965,12 @@ test("with Chat off for the account, its row stands nowhere, and Chat standing i
   handState({});
   const closed: string[] = [];
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat, onClose: () => closed.push("closed") };
+  const view = {
+    ...tasksControl().chatView,
+    available: true,
+    chat,
+    onClose: () => closed.push("closed"),
+  };
   const off = mount(false, false, { chatView: view });
   await settle();
   assert.equal(chatRow(off), undefined);
@@ -980,7 +985,7 @@ test("with Chat off for the account, its row stands nowhere, and Chat standing i
 
 test("a fixture run staged on Chat offers it with no account to turn its experiment on, where any other run does not", async () => {
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat };
+  const view = { ...tasksControl().chatView, available: true, chat };
   const run = { ...stateWith({}, {}).run, fixtureMode: true };
   handState({}, { run: { ...run, profile: RUN_PROFILE.CHAT } });
   const staged = mount(false, false, { chatView: view });
