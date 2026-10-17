@@ -1882,18 +1882,53 @@ button.file-ref:hover .file-ref-path {
   border-radius: var(--control-radius);
 }
 
-/* The checks, one boxed list, each row opening the check's page. */
+/* The checks, one boxed list, each row opening the check's page, folded
+   past five behind a quiet control along its foot. */
 .pull-request-checks {
-  margin: 0;
-  padding: 0;
   overflow: clip;
   border: 1px solid var(--hairline);
   border-radius: var(--control-radius);
+}
+
+.pull-request-check-list {
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
-.pull-request-checks > li + li {
+.pull-request-check-list > li + li {
   border-top: 1px solid var(--hairline);
+}
+
+.pull-request-checks-fold {
+  display: block;
+  width: 100%;
+  padding: var(--space-6) var(--boxed-inset);
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.pull-request-checks-fold:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+/* The App that runs a check, by its square logo as GitHub draws an App. */
+.pull-request-check-avatar {
+  display: block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--raised);
+  object-fit: cover;
 }
 
 .pull-request-check {

@@ -1,3 +1,4 @@
+import { githubAvatarAt, githubAvatarUrl } from "@luke/features/account-picture";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -39,7 +40,7 @@ import {
   RotateCwIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useId } from "react";
+import { type ReactNode, useCallback, useId, useState } from "react";
 import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
@@ -65,6 +66,7 @@ import {
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenLink } from "./use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
+import { useWorkingNow, workingTime } from "./working-time";
 
 /**
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, and its files.
@@ -130,6 +132,9 @@ const PULL_REQUEST_WORDS = {
   moreReplies: (count: number) => `${count} more ${count === 1 ? "reply" : "replies"} on GitHub`,
   RESOLVED: "Resolved",
   OUTDATED: "Outdated",
+  /** What the folded checks' control says while folded, by how many checks there are in all. */
+  showAll: (count: number) => `Show all ${count}`,
+  SHOW_LESS: "Show less",
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -249,14 +254,25 @@ const CHECK_ORDER: readonly CheckState[] = [
   CHECK_STATE.SKIPPED,
 ];
 
-/** How long a check ran, as "42s", "3m 5s", or "1h 2m"; none for one still running or never timed. */
+/** How many checks stand before the list folds, as stage-cli folds its own; a check that failed or still runs never folds away. */
+const CHECKS_UNFOLDED = 5;
+
+/** The size, in CSS pixels, a check's avatar is drawn at, and the density GitHub is asked for it at. */
+const CHECK_AVATAR_PIXELS = 16;
+const CHECK_AVATAR_DENSITY = 2;
+
+/** How long a check ran, as a working count says it ("42s", "3m 5s", "1h 2m"); none for one still running or never timed. */
 function durationOf(check: PullRequestCheck): string | undefined {
   if (check.startedAt === null || check.completedAt === null) return undefined;
-  const seconds = Math.max(0, Math.round((check.completedAt - check.startedAt) / 1_000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return workingTime(check.completedAt - check.startedAt);
+}
+
+/** How many of the checks, in the order the service ranks them, stand unfolded: the first five, and past them every one that failed or still runs. */
+function unfoldedCountOf(checks: readonly PullRequestCheck[]): number {
+  const asking = checks.filter(
+    (check) => check.state === CHECK_STATE.FAILED || check.state === CHECK_STATE.PENDING,
+  ).length;
+  return Math.max(CHECKS_UNFOLDED, asking);
 }
 
 /** The bar's ⋯: the page read again, and the pull request's link copied. */
@@ -414,11 +430,62 @@ function Section({
   );
 }
 
-/** One check: its glyph for where it stands, its name, its App, and how long it ran; a press opens its page where it has one. */
-function CheckRow({ check }: { check: PullRequestCheck }): React.JSX.Element {
+/** How the tab reads a picture GitHub names through the service, on the App's token as the agent's (`githubImageOf`). */
+function useGitHubImageRead() {
+  const { act } = useAct();
+  return useCallback(
+    (owner: string, address: string) =>
+      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
+    [act],
+  );
+}
+
+/** A running check's count since it started, moving each second on the window's own clock; a timer to a reader, never announced. */
+function RunningTime({ startedAt }: { startedAt: number }): React.JSX.Element | null {
+  const now = useWorkingNow();
+  if (now === undefined) return null;
+  return (
+    <span className="pull-request-quiet pull-request-check-time" role="timer" aria-live="off">
+      {workingTime(now - startedAt)}
+    </span>
+  );
+}
+
+/** A check's avatar read through the service's image proxy as the agent's, drawn once read and an empty square until then or where it answered none. */
+function ProxiedCheckAvatar({ agentId, src }: { agentId: string; src: string }): React.JSX.Element {
+  const state = usePicture(agentId, src, useGitHubImageRead());
+  return state.kind === PICTURE_STATE.READY ? (
+    <img className="pull-request-check-avatar" src={state.url} alt="" />
+  ) : (
+    <span className="pull-request-check-avatar" aria-hidden="true" />
+  );
+}
+
+/** The picture of the App that runs a check, or of whoever posted it: one GitHub's avatar host serves drawn as it is, at its size, and any other through the service's image proxy. */
+function CheckAvatar({ agentId, src }: { agentId: string; src: string }): React.JSX.Element {
+  const hosted = githubAvatarUrl(src);
+  if (hosted === undefined) return <ProxiedCheckAvatar agentId={agentId} src={src} />;
+  return (
+    <img
+      className="pull-request-check-avatar"
+      src={githubAvatarAt(hosted, CHECK_AVATAR_PIXELS * CHECK_AVATAR_DENSITY)}
+      alt=""
+    />
+  );
+}
+
+/** One check: its glyph for where it stands, its App's avatar, its name, its App, and how long it ran, counting each second while it runs; a press opens its page where it has one. */
+function CheckRow({
+  agentId,
+  check,
+}: {
+  agentId: string;
+  check: PullRequestCheck;
+}): React.JSX.Element {
   const openLink = useOpenLink();
   const duration = durationOf(check);
-  const { url } = check;
+  const { url, avatarUrl, startedAt } = check;
+  const running = check.state === CHECK_STATE.PENDING && startedAt !== null;
   const inner = (
     <>
       <span
@@ -429,9 +496,11 @@ function CheckRow({ check }: { check: PullRequestCheck }): React.JSX.Element {
       >
         {CHECK_GLYPHS[check.state]}
       </span>
+      {avatarUrl === undefined ? null : <CheckAvatar agentId={agentId} src={avatarUrl} />}
       <span className="pull-request-check-name">{check.name}</span>
       {check.app === null ? null : <span className="pull-request-quiet">{check.app}</span>}
-      {duration === undefined ? null : (
+      {running ? <RunningTime startedAt={startedAt} /> : null}
+      {running || duration === undefined ? null : (
         <span className="pull-request-quiet pull-request-check-time">{duration}</span>
       )}
     </>
@@ -449,23 +518,51 @@ function CheckRow({ check }: { check: PullRequestCheck }): React.JSX.Element {
   );
 }
 
-/** Every check, in the order the service ranks them, failures first, under a count of each standing. */
-function Checks({ checks }: { checks: readonly PullRequestCheck[] }): React.JSX.Element {
+/**
+ * Every check, in the order the service ranks them, failures first, under a
+ * count of each standing. Past five the list folds, as stage-cli's does,
+ * behind a control that shows them all and folds them again; a check that
+ * failed or still runs stands above the fold however many there are.
+ */
+function Checks({
+  agentId,
+  checks,
+}: {
+  agentId: string;
+  checks: readonly PullRequestCheck[];
+}): React.JSX.Element {
+  const [unfolded, setUnfolded] = useState(false);
+  const listId = useId();
   const counts = CHECK_ORDER.flatMap((state) => {
     const count = checks.filter((check) => check.state === state).length;
     return count === 0 ? [] : [`${count} ${CHECK_WORDS[state]}`];
   });
+  const folds = checks.length > unfoldedCountOf(checks);
+  const shown = folds && !unfolded ? checks.slice(0, unfoldedCountOf(checks)) : checks;
   return (
     <Section title="Checks" count={counts.length === 0 ? undefined : counts.join(", ")}>
       {checks.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
       ) : (
-        <ul className="pull-request-checks">
-          {checks.map((check, at) => (
-            // Note that two checks may share a name across Apps, so a row is keyed by its place too.
-            <CheckRow key={`${at}`} check={check} />
-          ))}
-        </ul>
+        <div className="pull-request-checks">
+          <ul id={listId} className="pull-request-check-list">
+            {shown.map((check, at) => (
+              // Note that two checks may share a name across Apps, so a row is keyed by its place too.
+              <CheckRow key={`${at}`} agentId={agentId} check={check} />
+            ))}
+          </ul>
+          {folds ? (
+            <button
+              type="button"
+              className="pull-request-checks-fold"
+              aria-expanded={unfolded}
+              aria-controls={listId}
+              onClick={() => setUnfolded((was) => !was)}
+            >
+              {unfolded ? PULL_REQUEST_WORDS.SHOW_LESS : PULL_REQUEST_WORDS.showAll(checks.length)}
+            </button>
+          ) : null}
+        </div>
       )}
     </Section>
   );
@@ -535,13 +632,7 @@ function GitHubPicture({
   src: string;
   alt: string;
 }): React.JSX.Element {
-  const { act } = useAct();
-  const read = useCallback(
-    (owner: string, address: string) =>
-      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
-    [act],
-  );
-  const state = usePicture(agentId, src, read);
+  const state = usePicture(agentId, src, useGitHubImageRead());
   if (state.kind === PICTURE_STATE.READY) {
     return <img className="pull-request-picture" src={state.url} alt={alt} />;
   }
@@ -755,9 +846,15 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
 }
 
 /** The checks section as its read stands: every check once landed, a skeleton of rows while out, its failure with Retry. */
-function ChecksPart({ parts }: { parts: OverviewParts }): React.JSX.Element {
+function ChecksPart({
+  agentId,
+  parts,
+}: {
+  agentId: string;
+  parts: OverviewParts;
+}): React.JSX.Element {
   const part = parts.checks;
-  if (part.kind === PART.LANDED) return <Checks checks={part.value.checks} />;
+  if (part.kind === PART.LANDED) return <Checks agentId={agentId} checks={part.value.checks} />;
   return (
     <Section title="Checks">
       {part.kind === PART.PENDING ? (
@@ -1228,7 +1325,7 @@ export function AgentPullRequestTab({
             hidden={view !== PULL_REQUEST_VIEW.CHECKS}
           >
             <div className="pull-request-page">
-              <ChecksPart parts={parts} />
+              <ChecksPart agentId={agentId} parts={parts} />
             </div>
           </div>
         </>

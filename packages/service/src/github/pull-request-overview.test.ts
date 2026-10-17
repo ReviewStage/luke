@@ -105,7 +105,7 @@ function checkRun(name: string, status: string, conclusion: string | null) {
     html_url: `https://github.com/acme/relay/runs/${name}`,
     started_at: "2026-10-15T09:01:00Z",
     completed_at: status === "completed" ? "2026-10-15T09:04:00Z" : null,
-    app: { name: "GitHub Actions" },
+    app: { id: 15368, name: "GitHub Actions" },
   };
 }
 
@@ -337,6 +337,46 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
             url: `${PAGE}#pullrequestreview-3`,
           },
         ]);
+      }),
+  );
+
+  it.effect(
+    "each check wears its avatar: a run its App's logo, a status the picture GitHub names on it, and none for a picture GitHub serves from no host of its own",
+    () =>
+      Effect.gen(function* () {
+        const checks = yield* pullRequestChecks(TOKEN, REPOSITORY, NUMBER).pipe(
+          answering(
+            repository({
+              checkRuns: [checkRun("lint", "completed", "failure")],
+              statuses: [
+                {
+                  context: "vercel",
+                  state: "success",
+                  target_url: null,
+                  created_at: "2026-10-15T09:02:00Z",
+                  updated_at: "2026-10-15T09:03:00Z",
+                  avatar_url: "https://avatars.githubusercontent.com/in/8329?v=4",
+                },
+                {
+                  context: "ci/legacy",
+                  state: "success",
+                  target_url: null,
+                  created_at: "2026-10-15T09:02:00Z",
+                  updated_at: "2026-10-15T09:03:00Z",
+                  avatar_url: "https://ci.example.com/logo.png",
+                },
+              ],
+            }),
+          ),
+        );
+        assert.deepEqual(
+          checks.map(({ name, avatarUrl }) => ({ name, avatarUrl })),
+          [
+            { name: "lint", avatarUrl: "https://avatars.githubusercontent.com/in/15368?v=4" },
+            { name: "vercel", avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4" },
+            { name: "ci/legacy", avatarUrl: undefined },
+          ],
+        );
       }),
   );
 
