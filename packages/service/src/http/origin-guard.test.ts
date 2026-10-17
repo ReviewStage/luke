@@ -37,6 +37,9 @@ const REFUSED = {
   body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
 } as const;
 
+/** A JSON string literal as a log line quotes a value. */
+const QUOTED_VALUE = /"(?:[^"\\]|\\.)*"/g;
+
 // The guard says what it refused at warn; the suite keeps those lines off its own output.
 beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -271,15 +274,17 @@ test("an address that is no web page's owns no origin, so an opaque origin is re
   }
 });
 
-test("a refusal is logged with its path and origin, and nothing of its query or cookie", () => {
+test("a refusal is logged with its path and origin alone, and nothing of its query or cookie", () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
   const guard = cookieOriginGuard(PRODUCTION);
 
   guard(cookiePost(`${COOKIE_ROUTE}?token=query-secret`, { origin: FOREIGN_ORIGIN }));
 
   const logged = warn.mock.calls.flat().join("\n");
-  assert.ok(logged.includes(COOKIE_ROUTE), logged);
-  assert.ok(logged.includes(FOREIGN_ORIGIN), logged);
+  assert.deepEqual(logged.match(QUOTED_VALUE), [
+    JSON.stringify(COOKIE_ROUTE),
+    JSON.stringify(FOREIGN_ORIGIN),
+  ]);
   assert.equal(logged.includes("query-secret"), false, logged);
   assert.equal(logged.includes("session-cookie-value"), false, logged);
 });
