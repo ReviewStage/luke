@@ -136,6 +136,7 @@ import {
   type TasksIssue,
   type TasksMoveAnswer,
   type TasksPageSourceAnswer,
+  type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksRepositoriesAnswer,
@@ -160,6 +161,8 @@ import {
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPageSourceAnswerSchema,
+  tasksPagesAnswerSchema,
+  tasksPagesParamsSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
   tasksPictureKeepParamsSchema,
@@ -194,6 +197,7 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceTransferParamsSchema,
+  tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -321,6 +325,8 @@ export const ACT_KIND = {
   TASKS_PIN: "tasks.pin",
   /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
+  /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
+  TASKS_WRITE_SECTION: "tasks.writeSection",
   TASKS_ARCHIVE: "tasks.archive",
   /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
   TASKS_REPOSITORIES: "tasks.repositories",
@@ -368,6 +374,8 @@ export const ACT_KIND = {
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
   TASKS_PAGE_SOURCE: "planning.pageSource",
+  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
+  TASKS_PAGES: "planning.pages",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   TASKS_PICTURE_READ: "planning.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
@@ -913,6 +921,11 @@ export const ACT = {
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not pin that repository on this system.",
   },
+  [ACT_KIND.TASKS_WRITE_SECTION]: {
+    payload: actSchema(tasksWriteSectionParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not change that section on this system.",
+  },
   [ACT_KIND.TASKS_ARCHIVE]: {
     payload: actSchema(tasksArchiveParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
@@ -1108,6 +1121,11 @@ export const ACT = {
     payload: actSchema(tasksPageParamsSchema),
     result: wireResult<TasksPageSourceAnswer>(isReadable(tasksPageSourceAnswerSchema)),
     refusal: "Could not read that page's source on this system.",
+  },
+  [ACT_KIND.TASKS_PAGES]: {
+    payload: actSchema(tasksPagesParamsSchema),
+    result: wireResult<TasksPagesAnswer>(isReadable(tasksPagesAnswerSchema)),
+    refusal: "Could not read that plan's pages on this system.",
   },
   [ACT_KIND.TASKS_WORK_EARLIER]: press("Could not read that task's earlier work on this system."),
   [ACT_KIND.TASKS_CONVERSATION_EARLIER]: press(

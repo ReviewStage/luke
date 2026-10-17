@@ -231,6 +231,20 @@ body {
   gap: var(--luke-space-12);
 }
 
+/* The row the menu example right-clicks, marked out so a reader sees where to press. */
+.catalog-menu-row {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: var(--luke-space-24) var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
 /* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;
@@ -379,6 +393,54 @@ body {
 
 .catalog-screen-phone {
   width: 320px;
+}
+
+/* A screen as tall as a window's content, so a collection page scrolls in it. */
+.catalog-screen-collection {
+  display: flex;
+  height: 480px;
+}
+
+/* A screen as tall as a window's content, so a detail page's columns
+   scroll in it. */
+.catalog-screen-detail {
+  display: flex;
+  height: 480px;
+}
+
+/* A screen as tall as a window, which scrolls the public page it holds as a
+   document would, so its banner stands still at the top. */
+.catalog-screen-public {
+  height: 480px;
+  overflow-y: auto;
+}
+
+/* The words an example lays in a public page's banner and footer, as the
+   site's own chrome lays them. */
+.catalog-public-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-16);
+}
+
+.catalog-public-wordmark {
+  font-family: var(--luke-font-display);
+  font-weight: var(--luke-weight-bold);
+}
+
+.catalog-public-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-16);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-label-size);
+}
+
+.catalog-public-footer {
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* Luke's face at the size the OAuth cards open with. */

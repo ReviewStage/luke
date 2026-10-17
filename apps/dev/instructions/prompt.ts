@@ -32,6 +32,7 @@ export default defineDynamic({
             ciReadable: composed.ciReadable,
             ...(composed.coAuthor === undefined ? undefined : { coAuthor: composed.coAuthor }),
             workspace: composed.workspace,
+            chatOn: composed.chatOn,
           }));
           return defineInstructions({ content: composed.text });
         }),

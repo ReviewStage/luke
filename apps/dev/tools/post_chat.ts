@@ -6,7 +6,7 @@ import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luk
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
 import { offeredChatTools, runChatTool } from "../host.js";
-import { chatPostsMade } from "../session-prompt.js";
+import { chatPostsMade, sessionPrompt } from "../session-prompt.js";
 
 /**
  * post_chat.ts -- the agent posts a message in its workspace's chat, told to the members it addresses.
@@ -18,13 +18,15 @@ import { chatPostsMade } from "../session-prompt.js";
  * posts is the session's own state, pinned before anything awaits, and
  * reserved before the post goes out, as `edit_plan` reserves its notes,
  * because calls one step makes run at once and each must see the other's
- * reservation. It is offered at each turn's start only where the agent's
- * starter turned Chat on (`offeredChatTools`).
+ * reservation. An image block's picture is read from the session's
+ * sandbox through the same door eve hands every file tool, opened on first
+ * use, so a post with no image opens none. It is offered at each turn's
+ * start only where the agent's starter turned Chat on and its session's prompt told of chat (`offeredChatTools`).
  */
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      (await offeredChatTools(ctx.session.auth, ctx.session.id))
+      (await offeredChatTools(ctx.session.auth, ctx.session.id, pinnedState(sessionPrompt).get()))
         ? defineTool({
             description: CHAT_TOOLS.POST.description,
             inputSchema: emitJsonSchema(CHAT_TOOLS.POST.inputSchema),
@@ -39,6 +41,7 @@ export default defineDynamic({
                 input: unparsedWire(input as WireBoundaryInput),
                 clientKey: toolContext.callId,
                 postsInTurn: before,
+                sandbox: () => toolContext.getSandbox(),
               });
               const posted = answer.status === ACTION_RESULT_STATUS.ACCEPTED ? 1 : 0;
               made.update((held) => settleNotes(held, turnId, 1, posted));

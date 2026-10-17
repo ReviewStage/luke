@@ -4,6 +4,7 @@ import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { GearIcon, ProviderMark } from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
@@ -12,7 +13,6 @@ import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row";
 import { Spinner } from "../spinner";
-import { useDisclosure } from "../use-disclosure";
 
 /**
  * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.

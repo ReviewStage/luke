@@ -3,7 +3,7 @@ import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { EllipsisIcon } from "@luke/ui";
+import { EllipsisIcon, useMenu } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -35,7 +35,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { AgentPane } from "./main-tabs";
 import {
   COLUMN,
@@ -107,7 +107,7 @@ function AgentPageActions({
   agent: { readonly id: string; readonly planId: string | null };
   shown: boolean;
 }): React.JSX.Element | null {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   if (copyLink === undefined) return null;
   return (

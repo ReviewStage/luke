@@ -1,4 +1,5 @@
 import type { FileChip } from "@luke/features/attachment-model";
+import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -12,8 +13,6 @@ import {
   type InboxForm,
   type InboxImageBlock,
   type InboxItem,
-  type InboxReadResponse,
-  type InboxReplyKind,
   inboxAnswerHeard,
   knownBlock,
   knownResponse,
@@ -29,14 +28,6 @@ import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
-import {
-  PROMPT_INPUT_STATUS,
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
-} from "../ai-elements/prompt-input";
 import { AttentionMark } from "../attention-mark";
 import { useAutomation } from "../automation-directory";
 import { TaskRef } from "../desktop/task-card";
@@ -44,7 +35,7 @@ import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
 import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
-import { BusyLabel, SpinnerRegion } from "../spinner";
+import { SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
@@ -58,6 +49,7 @@ import {
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
+import { InboxAnswerBox } from "./inbox-answer-box";
 import {
   CODE_READ,
   CODE_READ_FAILED,
@@ -69,11 +61,9 @@ import {
   INBOX_HOLDER,
   type InboxDraft,
   type InboxHolder,
-  inboxReply,
   itemWorkspaceId,
   NEEDS_YOU,
   needsReader,
-  pressesOf,
   proposedOptions,
   readersItem,
   SETTLED_BY,
@@ -82,7 +72,9 @@ import {
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
+import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 import { RelativeTime } from "./relative-time";
+import { SentWords } from "./skill-chip";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
 import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
@@ -115,7 +107,8 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * message: a choice's options, one perhaps recommended, pressed one at a
  * time or several where the choice allows; a form's fields, each the
  * control Settings draws for its type; nothing for the rest. While the item
- * waits, the agent composer's box (`ai-elements/prompt-input.tsx`) is
+ * waits, the agent composer's box, its card and its field, with its `@`
+ * mentions, its skills, and its microphone (`inbox-answer-box.tsx`), is
  * docked under the thread for the note: an approval, a task, and an item
  * asking nothing are answered by presses in its footer, the one that holds
  * back and the one that goes ahead, as a confirm's are; words, a choice,
@@ -127,7 +120,8 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * pick marked and the rest stepped back; the developer's answer follows as
  * their comment, when and whether it reached the agent as a message or was
  * kept for it to read, then what they picked as a chip and what they
- * wrote; or the agent's comment says it took the item back, and why. A block or a response of a type
+ * wrote, their note drawn as the agent's tab draws a sent message, its
+ * mentions chips; or the agent's comment says it took the item back, and why. A block or a response of a type
  * this build does not know, one a newer service wrote, is drawn as a line
  * naming a newer Luke, so the rest still reads. The pane's bar is its
  * path, task › agent, each crumb drawn as its tab in the task's column,
@@ -151,38 +145,14 @@ const INBOX_FAILED_LINE = "The inbox could not be read.";
 /** What a card says of an image whose read did not answer. */
 const IMAGE_FAILED_LINE = "The image could not be read.";
 
-/** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
-const NOTE_PLACEHOLDER = {
-  [INBOX_RESPONSE.CHOICE]: "Add a note, or answer in your own words",
-  [INBOX_RESPONSE.APPROVAL]: "Add a note for the agent",
-  [INBOX_RESPONSE.TEXT]: "Your answer",
-  [INBOX_RESPONSE.TODO]: "Add a note for the agent",
-  [INBOX_RESPONSE.FORM]: "Add a note for the agent",
-  [INBOX_RESPONSE.NONE]: "Add a note for the agent",
-} as const;
-
 /** What a card says of a block or a response this build does not know. */
 const NEWER_LUKE = {
   BLOCK: "Open this in a newer Luke to see the rest.",
-  RESPONSE: "Answer this in a newer Luke.",
 } as const;
 
 /** How long ago a thread's line says something happened: muted a size down, in tabular figures, as a card's corner says it. */
 const THREAD_TIME_CLASS =
   "text-[11.5px] whitespace-nowrap text-(color:--text-tertiary) tabular-nums";
-
-/**
- * What the box says on an item whose agent need not hear back: a bare
- * press, Done or Got it, is kept for the agent to read, and a typed note is
- * sent to it as a message, so the line says which the answer will be.
- */
-const QUIET_LINE = {
-  BARE: "Without a note, this won't message the agent.",
-  NOTED: "Your note will be sent to the agent.",
-} as const;
-
-/** What the box's Send is called. */
-const SEND = "Send to agent";
 
 /** What the way back from an item standing alone to the list says it does. */
 const BACK_TO_INBOX = "Back to inbox";
@@ -633,66 +603,6 @@ export function FormFields({
   );
 }
 
-/** The presses that send a card, in the box's footer: its response's where it is answered by a press, Send for the rest. */
-function SendPresses({
-  item,
-  draft,
-  sending,
-  onAnswer,
-}: {
-  item: InboxItem;
-  draft: InboxDraft;
-  sending: boolean;
-  onAnswer: (press?: InboxReplyKind) => void;
-}): React.JSX.Element {
-  const presses = pressesOf(item.response);
-  if (presses !== undefined) {
-    const { back, ahead } = presses;
-    return (
-      <div className="inbox-presses flex gap-(--control-gap)">
-        {back === undefined ? null : (
-          <button
-            type="button"
-            className="toolbar-button"
-            disabled={sending}
-            onClick={() => onAnswer(back.reply)}
-          >
-            {back.label}
-          </button>
-        )}
-        <button
-          type="button"
-          className="primary-button"
-          disabled={sending}
-          onClick={() => onAnswer(ahead.reply)}
-        >
-          <BusyLabel busy={sending} label="Sending">
-            {ahead.label}
-          </BusyLabel>
-        </button>
-      </div>
-    );
-  }
-  return (
-    <Tooltip label={SEND}>
-      <PromptInputSubmit
-        aria-label={SEND}
-        status={sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY}
-        disabled={sending || inboxReply(item, draft) === undefined}
-      />
-    </Tooltip>
-  );
-}
-
-/** What the card's box asks for: the agent's own placeholder on a text, its response's words otherwise. */
-function placeholderOf(response: InboxReadResponse): string {
-  if (!knownResponse(response)) return "";
-  if (response.type === INBOX_RESPONSE.TEXT && response.placeholder !== undefined) {
-    return response.placeholder;
-  }
-  return NOTE_PLACEHOLDER[response.type];
-}
-
 /** The controls an item's response puts between its blocks and its box: a choice's options, a form's fields, nothing for the rest. */
 function ResponseControls({
   item,
@@ -887,7 +797,7 @@ function Answered({
   const settled = settlementOf(item);
   if (settled === undefined) return null;
   if (settled.by === SETTLED_BY.AGENT) return null;
-  const pick = pickOf(item, settled.did, settled.words);
+  const pick = pickOf(item, settled.did, settled.values ?? settled.note);
   return (
     <Comment
       kind={COMMENT.ANSWERED}
@@ -910,8 +820,14 @@ function Answered({
           <span>{pick}</span>
         </span>
       )}
-      {settled.words === undefined ? null : (
-        <p className="m-0 whitespace-pre-line select-text">{settled.words}</p>
+      {settled.values === undefined ? null : (
+        <p className="m-0 whitespace-pre-line select-text">{settled.values}</p>
+      )}
+      {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
+      {settled.note === undefined ? null : (
+        <div className="select-text" data-inbox-note="">
+          <SentWords text={settled.note} />
+        </div>
       )}
     </Comment>
   );
@@ -1032,66 +948,29 @@ function Subject({
   );
 }
 
-/** The box an open item is answered in, docked under its thread as an agent's composer is under its transcript, a note that it was not sent under the card as the composer's is. */
-function AnswerBox({
-  item,
-  control,
+/** The box's mentions where the pane is handed them; the page's own where it is not. */
+function AnswerMentions({
+  value,
+  children,
 }: {
-  item: InboxItem;
-  control: TaskInboxControl;
-}): React.JSX.Element {
-  const draft = control.draftOf(item);
-  const sending = control.sending.has(item.id);
-  const note = control.notes.get(item.id);
-  const byPress = pressesOf(item.response) !== undefined;
-  const placeholder = placeholderOf(item.response);
-  return (
-    <div className="agent-composer">
-      {knownResponse(item.response) ? (
-        <PromptInput
-          className="inbox-answer"
-          data-presses={byPress ? "" : undefined}
-          // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
-          onSubmit={() => (byPress ? undefined : control.onAnswer(item, draft))}
-        >
-          <PromptInputTextarea
-            aria-label={placeholder}
-            placeholder={placeholder}
-            maxLength={INBOX_BOUNDS.MAX_NOTE_CHARS}
-            value={draft.note}
-            disabled={sending}
-            onChange={(event) =>
-              control.onDraft(item, { ...draft, note: event.currentTarget.value })
-            }
-          />
-          <PromptInputFooter className="inbox-answer-foot">
-            <PromptInputTools className="inbox-answer-quiet px-1 text-[12px] text-muted-foreground">
-              {item.needsReply ? null : (
-                <span data-inbox-quiet="">
-                  {draft.note.trim() === "" ? QUIET_LINE.BARE : QUIET_LINE.NOTED}
-                </span>
-              )}
-            </PromptInputTools>
-            <SendPresses
-              item={item}
-              draft={draft}
-              sending={sending}
-              onAnswer={(press) => control.onAnswer(item, draft, press)}
-            />
-          </PromptInputFooter>
-        </PromptInput>
-      ) : (
-        <p className="m-0 text-muted-foreground" data-inbox-unknown="">
-          {NEWER_LUKE.RESPONSE}
-        </p>
-      )}
-      {note === undefined ? null : (
-        <p className="error-message agent-composer-note" role="alert">
-          {note}
-        </p>
-      )}
-    </div>
-  );
+  value: PlanMentionsValue | undefined;
+  children: React.ReactNode;
+}): React.ReactNode {
+  return value === undefined ? children : <PlanMentions value={value}>{children}</PlanMentions>;
+}
+
+/** The words a dictation into an item's box is likely to say: its repository's, its title's, and the paths its blocks name. */
+function answerKeywords(holder: InboxHolder, item: InboxItem): readonly string[] {
+  const repository =
+    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.repository || null;
+  const body = item.blocks
+    .flatMap((block) => {
+      if (!knownBlock(block)) return [];
+      if (block.type === INBOX_BLOCK.MARKDOWN) return [block.text];
+      return block.type === INBOX_BLOCK.CODE ? [block.path] : [];
+    })
+    .join("\n");
+  return dictationKeywords({ repository, title: item.title, body });
 }
 
 /** What the pane's crumbs open, and the cards they hang. */
@@ -1237,6 +1116,7 @@ export function InboxPane({
   onBack,
   pager,
   next,
+  mentions,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
@@ -1253,6 +1133,8 @@ export function InboxPane({
   pager: InboxPager | undefined;
   /** The next item that needs the developer, offered where the box stood once the item is settled. */
   next: InboxNext | undefined;
+  /** What the box's `@` offers where the page around the pane hands nothing, as the window's Inbox does; the page's own otherwise. */
+  mentions?: PlanMentionsValue | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
@@ -1344,7 +1226,15 @@ export function InboxPane({
           ) : null}
         </div>
         {open ? (
-          <AnswerBox item={item} control={control} />
+          <AnswerMentions value={mentions}>
+            <InboxAnswerBox
+              item={item}
+              control={control}
+              agent={by.subject.agent}
+              skills={agents.readSkills}
+              keywords={answerKeywords(holder, item)}
+            />
+          </AnswerMentions>
         ) : next === undefined ? null : (
           <InboxNextUp next={next} />
         )}

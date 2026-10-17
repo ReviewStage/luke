@@ -364,6 +364,10 @@
     "dest": "/api/default.js?route=repository-pins"
   },
   {
+    "src": "/api/task-sections",
+    "dest": "/api/default.js?route=task-sections"
+  },
+  {
     "src": "/api/workspaces",
     "dest": "/api/default.js?route=workspaces"
   },
