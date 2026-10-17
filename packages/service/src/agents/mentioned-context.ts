@@ -314,6 +314,8 @@ function handedMention(mention: Mention, plan: Task | undefined): Handed | undef
     case MENTION_KIND.FILE:
       return mention.lines === undefined ? undefined : mention;
     case MENTION_KIND.FOLDER:
+    // Luke named in words is a comment's ask of him, which hands an agent nothing.
+    case MENTION_KIND.LUKE:
       return undefined;
   }
 }

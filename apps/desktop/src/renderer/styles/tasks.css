@@ -5916,21 +5916,6 @@ button.picture-frame {
   display: none;
 }
 
-/* Send to, at the field's start, as the composer's model chip stands at its foot. */
-.comment-send-to {
-  height: 26px; /* off-scale: a chip in a field's foot stands a size under a control */
-  padding: 0 var(--space-8);
-  color: var(--text-body);
-  font-size: 12px;
-  font-weight: 560;
-}
-
-.comment-send-to svg {
-  width: 12px;
-  height: 12px;
-  color: var(--text-tertiary);
-}
-
 /* Send, as the composer's: a disc in the primary ink. */
 .comment-send {
   display: grid;
