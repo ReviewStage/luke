@@ -119,26 +119,6 @@
     font-family: var(--font-page);
   }
 
-  /* Two places deliberately draw wider than the measure — the full-bleed
-     hairline and the demo video — and both size themselves in `vw`, which
-     counts a classic scrollbar's gutter that `100%` does not. Left alone that
-     gutter is a horizontal scrollbar on every page anywhere scrollbars take
-     space, which is everywhere the visitor is not on a Mac.
-
-     It has to be `clip` and not `hidden`: `hidden` makes a scroll container,
-     which script and keyboard can scroll even without bars, where `clip`
-     merely crops. `overflow-y` is left alone, which a `clip` on the other
-     axis permits, so the page still scrolls down.
-
-     And it has to name both elements. The root's overflow propagates to the
-     viewport and the root itself is then drawn as `visible`, so `html` alone
-     clips nothing; `body` alone is likewise skipped while the root carries a
-     value. Only the pair actually holds. */
-  html,
-  body {
-    overflow-x: clip;
-  }
-
   body {
     background: var(--background);
     color: var(--foreground);
@@ -154,33 +134,13 @@
 
 /* The column every page shares. Narrow and left-aligned: the references this
    page is drawn against run 625–720px, and a measure that wide reads as a
-   document rather than as a poster. */
+   document rather than as a poster. Its gutter is the web's page inset at
+   every width, the one the site's banner and footer keep. */
 @utility shell {
   width: 100%;
   max-width: 700px;
   margin-inline: auto;
-  padding-inline: var(--space-5);
-
-  @media (width < 520px) {
-    padding-inline: var(--space-4);
-  }
-}
-
-/* A full-bleed rule that escapes the column it is written in, so a section
-   break reads across the whole page rather than stopping at the measure. */
-@utility hairline {
-  position: relative;
-
-  &::before {
-    position: absolute;
-    top: calc(var(--space-5) * -1);
-    left: 50%;
-    width: 100vw;
-    height: 1px;
-    background: var(--border);
-    content: "";
-    transform: translateX(-50%);
-  }
+  padding-inline: var(--luke-page-inset);
 }
 
 /* Documents

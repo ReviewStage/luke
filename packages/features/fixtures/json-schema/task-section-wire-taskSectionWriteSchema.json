@@ -57,19 +57,19 @@
                 },
                 "glyph": {
                   "type": "string",
+                  "maxLength": 64
+                },
+                "color": {
+                  "type": "string",
                   "enum": [
-                    "folder",
-                    "star",
-                    "bookmark",
-                    "flag",
-                    "rocket",
-                    "zap",
-                    "bug",
-                    "flask",
-                    "briefcase",
-                    "layers",
-                    "heart",
-                    "circle"
+                    "red",
+                    "orange",
+                    "yellow",
+                    "green",
+                    "teal",
+                    "blue",
+                    "purple",
+                    "pink"
                   ]
                 }
               },
@@ -144,19 +144,19 @@
                     },
                     "glyph": {
                       "type": "string",
+                      "maxLength": 64
+                    },
+                    "color": {
+                      "type": "string",
                       "enum": [
-                        "folder",
-                        "star",
-                        "bookmark",
-                        "flag",
-                        "rocket",
-                        "zap",
-                        "bug",
-                        "flask",
-                        "briefcase",
-                        "layers",
-                        "heart",
-                        "circle"
+                        "red",
+                        "orange",
+                        "yellow",
+                        "green",
+                        "teal",
+                        "blue",
+                        "purple",
+                        "pink"
                       ]
                     }
                   },

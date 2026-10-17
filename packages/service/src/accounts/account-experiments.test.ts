@@ -24,6 +24,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@luke/wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -32,7 +33,6 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { noNetwork } from "../testing/no-network.js";
 import { accountApp } from "./account-app.js";
 
 /**

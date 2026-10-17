@@ -38,8 +38,10 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState, stateWith } from "#testing/app-state";
-import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
+import { editorBundleLanded, installEditorLayout, typeInComposer } from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -149,6 +151,9 @@ let workspace: readonly CodingAgentSummary[] = [];
 let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequestState }> =
   new Map();
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
   pages = [{ agent: PAGE }];
   read = [];
@@ -161,89 +166,81 @@ beforeEach(() => {
   earlier = 0;
   openedOnGitHub = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   workspace = [];
   gitHub = new Map();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        told.push(request);
-        if (request.kind === ACT_KIND.TASKS_SKILLS) {
-          const value = {
-            skills: {
-              repository: "acme/relay",
-              branch: "main",
-              skills: [
-                {
-                  name: "release",
-                  description: "Cut a release.",
-                  path: ".agents/skills/release/SKILL.md",
-                },
-              ],
-            },
-          };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
-          archives.push(request.payload);
-          // The agent answered is the one the page read, brought back, which names no archive.
-          const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
-          const { archivedAt: _archived, ...back } = shown;
-          // Brought back, the agent is read so from then on.
-          if (!archiveRefused) pages = [{ agent: back }];
-          const value = archiveRefused
-            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-            : { agent: back };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_MESSAGES && transcript !== undefined) {
-          // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
-          const value = transcript;
-          transcript = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
-          const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: published });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { automations: [SWEEP] },
-          });
-        }
-        if (request.kind === ACT_KIND.GITHUB_OPEN) {
-          openedOnGitHub.push(request.payload.url);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
-          const { number } = request.payload;
-          const held = gitHub.get(number);
-          const value = held === undefined ? null : { number, author: "octo-dev", ...held };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: workspace } });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
-          read.push(request.payload.agentId);
-          const value = pages.length > 1 ? pages.shift() : pages[0];
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+  fakeAppBridge({
+    act: (request: Act) => {
+      told.push(request);
+      if (request.kind === ACT_KIND.TASKS_SKILLS) {
+        const value = {
+          skills: {
+            repository: "acme/relay",
+            branch: "main",
+            skills: [
+              {
+                name: "release",
+                description: "Cut a release.",
+                path: ".agents/skills/release/SKILL.md",
+              },
+            ],
+          },
+        };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
+        archives.push(request.payload);
+        // The agent answered is the one the page read, brought back, which names no archive.
+        const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
+        const { archivedAt: _archived, ...back } = shown;
+        // Brought back, the agent is read so from then on.
+        if (!archiveRefused) pages = [{ agent: back }];
+        const value = archiveRefused
+          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          : { agent: back };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_MESSAGES && transcript !== undefined) {
+        // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
+        const value = transcript;
+        transcript = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
+        const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: published });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { automations: [SWEEP] },
+        });
+      }
+      if (request.kind === ACT_KIND.GITHUB_OPEN) {
+        openedOnGitHub.push(request.payload.url);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
+      if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
+        const { number } = request.payload;
+        const held = gitHub.get(number);
+        const value = held === undefined ? null : { number, author: "octo-dev", ...held };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: workspace } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+        read.push(request.payload.agentId);
+        const value = pages.length > 1 ? pages.shift() : pages[0];
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -928,13 +925,10 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
   const acme = { ...ACME, github: { login: "acme", active: true } };
   gitHub = new Map([[2905, { title: "View commands", url, state: PULL_REQUEST_STATE.OPEN }]]);
   const state = stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-    },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
   });
   pages = [
     {
@@ -1037,7 +1031,6 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
 });
 
 test("an @ in the agent's box names an archived agent of an archived task by that task's name, read from the window's archived tasks", async () => {
-  installEditorBundle();
   installEditorLayout();
   installScrollIntoView();
   const billing: Task = {

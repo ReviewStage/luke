@@ -12,10 +12,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput, CallWindowCard } from "./call-card";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "./call-card";
 import { CALL_VIDEO_LABEL } from "./call-video-tile";
+import { CallWindowCard } from "./call-window-card";
 import { CallTabVideo, useCallCardVideo } from "./panel-avatar";
 
 /**
@@ -91,25 +93,20 @@ function onCall(
 
 /** The bridge as a panel meets it: the document given, every act written down. */
 function handBridge(first: AppStateSnapshot): void {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      requestAppState: () => Promise.resolve(first),
-      onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
-        deliver = listener;
-        return () => undefined;
-      },
-      onAvatarSession: () => () => undefined,
-      onAvatarFeed: () => () => undefined,
-      onAvatarViewSignal: () => () => undefined,
-      signalAvatarView: () => undefined,
-      onCallWindowMoved: () => () => undefined,
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: { kind: string; payload?: unknown }) => {
-        sent.push(request);
-        return Promise.resolve({ status: "done", value: undefined });
-      },
+  fakeAppBridge({
+    requestAppState: () => Promise.resolve(first),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      deliver = listener;
+      return () => undefined;
+    },
+    onAvatarSession: () => () => undefined,
+    onAvatarFeed: () => () => undefined,
+    onAvatarViewSignal: () => () => undefined,
+    signalAvatarView: () => undefined,
+    onCallWindowMoved: () => () => undefined,
+    act: (request: { kind: string; payload?: unknown }) => {
+      sent.push(request);
+      return Promise.resolve({ status: "done", value: undefined });
     },
   });
 }
