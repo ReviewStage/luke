@@ -4,6 +4,7 @@ import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ErrorState, useMenu } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -23,7 +24,6 @@ import {
 } from "@luke/ui/person-page-model";
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";

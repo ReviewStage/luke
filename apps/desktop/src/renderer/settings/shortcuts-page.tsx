@@ -1,7 +1,7 @@
 import type { ExperimentChoices } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import { APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
 import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection } from "@luke/ui";
-import { APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 
 /**
