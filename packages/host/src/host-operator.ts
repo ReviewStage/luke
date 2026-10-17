@@ -40,6 +40,8 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
+  type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
@@ -73,6 +75,7 @@ import {
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxMessagedViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
@@ -598,6 +601,10 @@ export interface HostOperator {
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
   ): Effect.Effect<CodingAgentInboxAnsweredView>;
+  /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
+  codingAgentInboxMessage(
+    params: CodingAgentInboxMessageParams,
+  ): Effect.Effect<CodingAgentInboxMessagedView>;
   /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
   codingAgentAccountInbox(
     params: CodingAgentAccountInboxParams,
@@ -1684,6 +1691,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
+      ),
+    codingAgentInboxMessage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+          itemId: params.itemId,
+          text: params.text,
+          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
+          clientKey: params.clientKey,
+        }),
+        codingAgentAnswer(codingAgentInboxMessagedViewSchema),
       ),
     codingAgentAccountInbox: (params) =>
       Effect.map(

@@ -27,6 +27,7 @@ import {
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxMessagedSchema,
+  inboxMessageRequestSchema,
 } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
@@ -436,6 +437,14 @@ export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSc
 export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
+
+/** A message on one item's thread, as the window asks it: the item, and the message request the service takes, its key the window's own. */
+export const codingAgentInboxMessageParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  ...inboxMessageRequestSchema.fields,
+});
+
+export type CodingAgentInboxMessageParams = typeof codingAgentInboxMessageParamsSchema.Type;
 
 /** A message on an item's thread, as the window hears it: the item as it then stands, its thread with the message on it, or why there is no answer. */
 export const codingAgentInboxMessagedViewSchema = EffectSchema.Union([inboxMessagedSchema, failed]);

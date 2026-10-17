@@ -342,6 +342,35 @@ test("a post to the inbox is a row naming its item, its blocks and options as th
   assert.deepEqual(closed.input, { kind: TOOL_BLOCK.TEXT, text: "Found it in the README." });
 });
 
+test("an agent's reply on an inbox thread is its own row, naming the item's key and showing the words and pictures it sent, and one refused says why", () => {
+  const view = toolCallView({
+    tool: "reply_inbox",
+    input: {
+      key: "invite-queue",
+      text: "Postgres it is; the migration is in.",
+      images: [{ path: "shots/queue.png" }],
+    },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.equal(view.kind, CALL_KIND.INBOX_REPLY);
+  assert.equal(view.subject, "invite-queue");
+  assert.deepEqual(view.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Postgres it is; the migration is in.\nImage: shots/queue.png",
+  });
+  assert.equal(view.output, undefined);
+
+  const refused = toolCallView({
+    tool: "reply_inbox",
+    input: { key: "gone", text: "Done." },
+    output: { status: "rejected", reason: "No item of yours is under the key gone." },
+  });
+  assert.deepEqual(refused.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "No item of yours is under the key gone.",
+  });
+});
+
 test("an inbox call that did nothing shows why, so a refused post never reads as posted", () => {
   const view = toolCallView({
     tool: "post_to_inbox",

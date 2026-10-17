@@ -57,7 +57,12 @@ import type { ChoiceWriter } from "./use-agent-model";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
 import type { ServersWriter } from "./use-agent-servers";
 import type { TranscriptReader } from "./use-agent-transcript";
-import type { InboxAnswerer, InboxImageReader, InboxReader } from "./use-task-inbox";
+import type {
+  InboxAnswerer,
+  InboxImageReader,
+  InboxMessenger,
+  InboxReader,
+} from "./use-task-inbox";
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -288,6 +293,8 @@ export interface CodingAgentsControl {
   readInbox: InboxReader;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
+  /** One message on an inbox item's thread, as its box sends it. */
+  messageInbox: InboxMessenger;
   /** One read of an inbox item's image, as its card asks it. */
   readInboxImage: InboxImageReader;
 }
@@ -1113,6 +1120,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const messageInbox = useCallback<InboxMessenger>(
+    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, params),
+    [act],
+  );
+
   // Note that the skills are kept for the plan and its repository as they
   // stand, so another plan, or the plan moved to another repository, reads
   // afresh; an agent no plan holds reads its repository's through the
@@ -1196,6 +1208,7 @@ export function useCodingAgents(input: {
     readSkills,
     readInbox,
     answerInbox,
+    messageInbox,
     readInboxImage,
   };
 }

@@ -4499,6 +4499,27 @@ button.integration-tool-head:hover,
   content: "";
 }
 
+/* Where a thread read is cut to its latest messages, a muted line in the
+   comments' column says the earlier ones stand in the agent's tab, the line
+   down from the faces running on past it. */
+.inbox-thread-earlier {
+  position: relative;
+  padding: 0 0 var(--space-20) calc(20px + var(--space-12));
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.inbox-thread-earlier::before {
+  position: absolute;
+  top: 0;
+  bottom: var(--space-6);
+  left: 9px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--hairline);
+  content: "";
+}
+
 .inbox-comment-face {
   display: flex;
   height: var(--inbox-face);
@@ -4650,7 +4671,7 @@ button.integration-tool-head:hover,
   color: var(--text-primary);
 }
 
-/* A settled item's foot, where its box stood: the next item that needs the
+/* A settled item's foot, over its box: the next item that needs the
    developer as one wide press in the options' fill (`inbox-pager.tsx`), led
    by Next in the meta voice, then its agent's tile and its title in the
    unread weight, cut short at the row's end, and J where J reaches it. */
