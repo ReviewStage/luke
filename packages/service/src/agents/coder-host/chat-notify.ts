@@ -282,11 +282,12 @@ function tellAgent(
       isWorkspaceMember(agent.value.userId, organizationId),
     );
     if (!starterStays) return NOTICE_OUTCOME.LEFT;
+    // Note that who sent it is read before the notice is claimed, because a read that fails after the claim would hold the notice with nothing to release it.
+    const sender = yield* senderOf(userId, notice.from);
     const claimed = yield* hostedStoreOrUnavailable(
       markNoticed(userId, organizationId, member.id, place),
     );
     if (!claimed) return NOTICE_OUTCOME.HELD;
-    const sender = yield* senderOf(userId, notice.from);
     // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
     const steered = yield* steerCodingAgent(
       telling.eveFor(agent.value.userId),
