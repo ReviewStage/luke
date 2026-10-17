@@ -32,7 +32,7 @@ import { LIGHT_APPEARANCE, terminalFindTints, terminalTheme } from "./terminal-t
 const SURFACE_CLASS = "terminal-surface";
 
 /** The token the terminal's typeface is read from, and the face it falls back to without one. */
-const FONT_TOKEN = "--font-mono";
+const FONT_TOKEN = "--luke-font-mono";
 const FALLBACK_FONT = "monospace";
 
 /**

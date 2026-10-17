@@ -12,10 +12,9 @@
      edges, accent, states, and shadows, is `@luke/ui`'s desktop palette
      (`tokens/palettes.css`), keyed on the root's `data-luke-profile` and
      `data-luke-theme`, and its theme is `system`, so it follows the Mac's
-     appearance and Luke's own Theme setting through it. This file's old names
-     for those colours (`--text-primary`, `--hairline`, …) are aliases of it
-     (`tokens/legacy.css`). What stays here is the window's own: whose voice
-     is live, the code's and the terminal's inks, a file icon's. */
+     appearance and Luke's own Theme setting through it. What stays here is
+     the window's own: whose voice is live, the code's and the terminal's
+     inks, a file icon's. */
 
   /* Whose voice is live, so a glance says who is talking. Your turn is green,
      which is nowhere else on the surface and so belongs to you alone; Luke
@@ -23,7 +22,7 @@
      live and in progress, which is what a reply is. Both the meter and the face
      read from here, so the two can never disagree about who has the turn. */
   --voice-developer: #7fe0ac;
-  --voice-luke: var(--state-working);
+  --voice-luke: var(--luke-color-working);
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's accent. The reach is how far the ring
      stands past the control's
@@ -73,7 +72,7 @@
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
   --terminal-selection: rgba(56, 139, 253, 0.4);
-  /* The scrollbar's ink, restated rather than read through `--scrollbar`,
+  /* The scrollbar's ink, restated rather than read through `--luke-color-scrollbar`,
      because the canvas is handed the token's computed text, and the shared
      palette's is a `light-dark()` pair the terminal cannot parse. */
   --terminal-scrollbar: rgba(255, 255, 255, 0.18);
@@ -367,7 +366,7 @@
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ):focus-visible:not(:has(> [data-focus-ring])) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
     outline-offset: var(--focus-ring-offset);
   }
 
@@ -380,7 +379,7 @@
   }
 
   :root[data-keyboard="true"] :focus-visible > [data-focus-ring] {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
     outline-offset: var(--focus-ring-offset);
   }
 
@@ -419,7 +418,7 @@
      caret without ringing the composer around it. */
   :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
   .field-well:has(:is(textarea, [contenteditable], input):not(.menu-surface *):focus-visible) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
     outline-offset: calc(var(--focus-ring-width) / -2);
   }
 }
@@ -474,7 +473,7 @@ body,
   height: 18px;
   flex: 0 0 auto;
   overflow: visible;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   transition: color var(--duration-quick) var(--motion-exit);
 }
 
@@ -549,7 +548,7 @@ body,
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--text-secondary);
+  background: var(--luke-color-text-muted);
   opacity: 0.35;
   animation-duration: 2s;
   animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
@@ -784,7 +783,7 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: var(--danger);
+  color: var(--luke-color-danger);
 }
 
 .failed-mark > svg {
@@ -801,7 +800,7 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .draft-mark > svg {
@@ -816,7 +815,7 @@ body,
    `ErrorState`). */
 .error-message {
   margin: 0;
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
   font-size: 12px;
 }
 

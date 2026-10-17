@@ -38,37 +38,36 @@
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
   /* A tab's own bar under a tab strip and its hairline: a control's height
-     with --space-4 above and below it. Every tab that leads with a bar, in
+     with --luke-space-4 above and below it. Every tab that leads with a bar, in
      the side panel or in a task's column, stands it this tall, so moving
      between tabs never moves the content under the bar. */
-  --secondary-bar-height: calc(var(--control-height) + 2 * var(--space-4) + 1px);
+  --secondary-bar-height: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 1px);
   /* The call bar's own row, which the passing notices stand clear of. */
   --call-row-height: 36px;
   /* The spacing scale, one control's box, corner, and glyph, the gaps
      between controls and sections, a page's inset, and a menu's rows are the
      desktop profile's roles in `@luke/ui` (`tokens/profiles.css`), read here
-     by their old names (`--space-8`, `--control-height`, `--page-inset`, …)
-     through its aliases (`tokens/legacy.css`). Every padding, margin, and gap
-     in the window is one of those steps or a name below built from them
-     (docs/DESIGN.md). */
+     by their own names (`--luke-space-8`, `--luke-control-height`, …). Every
+     padding, margin, and gap in the window is one of those steps or a name
+     below built from them (docs/DESIGN.md). */
   /* A column's edge to the rows and controls it holds: the sidebar's rows, a
      top row's first and last control, Settings' page list. */
-  --column-inset: var(--space-12);
+  --column-inset: var(--luke-space-12);
   /* A row's own edge to its glyph or words: a sidebar row, a tab, a menu item. */
-  --row-inset: var(--space-8);
+  --row-inset: var(--luke-space-8);
   /* Where a column's glyphs and words start, which is where a row's padding
      puts them; words drawn on no row (a page's title, the transcript, the
      code's path) start there too, so a column reads down one edge. */
   --content-inset: calc(var(--column-inset) + var(--row-inset));
   /* Between two items of a list. */
-  --list-gap: var(--space-2);
-  /* Every menu and popover draws from one set: the --surface-popover ground
-     inside a --hairline-strong edge, this corner and shadow, and its items
+  --list-gap: var(--luke-space-2);
+  /* Every menu and popover draws from one set: the --luke-color-overlay ground
+     inside a --luke-color-border-strong edge, this corner and shadow, and its items
      this inset from its edge, each row this tall and its glyph this big. The
      corner is a row's own and the inset together, so a highlighted row
      follows the menu's curve wherever it meets it. */
   --menu-glyph: 16px;
-  --menu-shadow: 0 12px 32px var(--shadow);
+  --menu-shadow: 0 12px 32px var(--luke-color-shadow);
   /* The sidebar's default width (`SIDEBAR_WIDTH.DEFAULT`), and its width as
      drawn, which the app stage carries once the developer has dragged it. */
   --sidebar-width-default: 264px;
@@ -88,7 +87,7 @@
      the first this far past the green light: about what the lights leave
      between themselves. The buttons stand edge to edge, so each glyph is as
      far from the next as the first is from the light, and the row reads as one. */
-  --title-bar-inset: var(--space-8);
+  --title-bar-inset: var(--luke-space-8);
   --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
   /* Where the work column's toolbar starts its tab while the sidebar is
      folded: clear of the traffic lights and both buttons beside them, by a
@@ -96,13 +95,17 @@
   --sidebar-toggle-clearance: calc(
     var(--title-bar-left) +
     2 *
-    var(--control-height) +
-    var(--control-gap)
+    var(--luke-control-height) +
+    var(--luke-control-gap)
   );
   /* What a top row at the window's right edge leaves past its last control
      for the side panel's toggle: the toggle, a row's inset from the edge,
      and a row's gap between its items. */
-  --panel-toggle-clearance: calc(var(--column-inset) + var(--control-height) + var(--control-gap));
+  --panel-toggle-clearance: calc(
+    var(--column-inset) +
+    var(--luke-control-height) +
+    var(--luke-control-gap)
+  );
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
   /* The measure code is read at, a step wider than words', so a hundred
@@ -159,13 +162,13 @@
 html,
 body,
 #root {
-  background: var(--desktop-ground);
+  background: var(--luke-color-ground);
 }
 
 /* Scrollbars ---------------------------------------------------------------- */
 
 /* Every scroller in the window draws the one scrollbar a Mac app does: a thin
-   rounded thumb in the muted `--scrollbar` ink and no track at all, faded in
+   rounded thumb in the muted `--luke-color-scrollbar` ink and no track at all, faded in
    while the pointer is over the scroller or focus is in it. Note that the
    track is named transparent rather than left to the engine, because macOS
    set to always show scroll bars (or a mouse attached) draws Chromium's
@@ -185,7 +188,7 @@ body,
 
   *:hover,
   *:focus-within {
-    scrollbar-color: var(--scrollbar) transparent;
+    scrollbar-color: var(--luke-color-scrollbar) transparent;
   }
 
   /* The board is Excalidraw's, which draws its own thin thumbs on no track. */
@@ -204,7 +207,7 @@ body,
   --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
   inset: 0;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 13px;
 }
 
@@ -222,7 +225,7 @@ body,
 
 .desktop-shell {
   /* What a pinned header paints behind itself is the window's ground here. */
-  --surface-fill: var(--desktop-ground);
+  --surface-fill: var(--luke-color-ground);
   display: grid;
   height: 100%;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -316,11 +319,11 @@ body,
    the left cluster, which a ground at rest could match on one side of that
    edge and never on both. */
 .title-bar-controls {
-  --title-bar-ground: var(--desktop-ground);
+  --title-bar-ground: var(--luke-color-ground);
   --luke-button-ground: var(--title-bar-ground);
   position: absolute;
   z-index: 2;
-  top: calc(var(--traffic-lights-middle) - var(--control-height) / 2);
+  top: calc(var(--traffic-lights-middle) - var(--luke-control-height) / 2);
   left: var(--title-bar-left);
   display: flex;
 }
@@ -347,7 +350,7 @@ body,
 .title-bar-controls[data-edge="end"] {
   right: var(--column-inset);
   left: auto;
-  border-radius: var(--control-radius);
+  border-radius: var(--luke-control-radius);
   background: var(--title-bar-ground);
 }
 
@@ -850,9 +853,9 @@ button.sidebar-section-head-name:hover {
 /* A section's name over its rows, in the headings' voice: the sidebar's
    settings search and the plan's summary alike. */
 .section-heading {
-  margin: 0 0 var(--space-4);
+  margin: 0 0 var(--luke-space-4);
   padding: 0 var(--row-inset);
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1824,8 +1827,8 @@ ul.actor-stack {
 
 .section-glyph-blank {
   display: block;
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 /* The section dialog's icon picker: the Icons and Emoji tabs beside No
@@ -1836,16 +1839,16 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-8);
-  margin: var(--space-12) 0 0;
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-12) 0 0;
   padding: 0;
   border: 0;
 }
 
 .section-icon-legend {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--luke-space-4);
   padding: 0;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1854,7 +1857,7 @@ ul.actor-stack {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .section-icon-search {
@@ -1872,7 +1875,7 @@ ul.actor-stack {
 .section-icon-colors {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 /* A swatch is filled with the color it names, which its `data-icon-color` sets. */
@@ -1890,14 +1893,14 @@ ul.actor-stack {
   background-image: linear-gradient(
     135deg,
     transparent calc(50% - 0.75px),
-    var(--text-tertiary) calc(50% - 0.75px),
-    var(--text-tertiary) calc(50% + 0.75px),
+    var(--luke-color-text-subtle) calc(50% - 0.75px),
+    var(--luke-color-text-subtle) calc(50% + 0.75px),
     transparent calc(50% + 0.75px)
   );
 }
 
 .section-icon-color[aria-pressed="true"] {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid var(--luke-color-focus-ring);
   outline-offset: 1px;
 }
 
@@ -1910,29 +1913,29 @@ ul.actor-stack {
 .section-icon-grid {
   display: grid;
   grid-template-columns: repeat(10, 28px);
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .section-emoji-group + .section-emoji-group {
-  margin-top: var(--space-8);
+  margin-top: var(--luke-space-8);
 }
 
 /* An emoji is drawn in the text's own ink, nearly opaque, since Chromium
    lays the ink's alpha over a color glyph too. */
 .section-emoji-group .section-icon-choice {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .section-emoji-group-name {
-  margin: 0 0 var(--space-4);
-  color: var(--text-tertiary);
+  margin: 0 0 var(--luke-space-4);
+  color: var(--luke-color-text-subtle);
   font-size: 11px;
   font-weight: 500;
 }
 
 .section-icon-note {
-  margin: var(--space-8) 0;
-  color: var(--text-tertiary);
+  margin: var(--luke-space-8) 0;
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
 }
 
@@ -1940,7 +1943,7 @@ ul.actor-stack {
   min-height: 16px;
   margin: 0;
   overflow: hidden;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1954,9 +1957,9 @@ ul.actor-stack {
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--control-radius);
+  border-radius: var(--luke-control-radius);
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 15px;
   line-height: 1;
   transition:
@@ -1970,14 +1973,14 @@ ul.actor-stack {
 }
 
 .section-icon-choice:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 .section-icon-choice[aria-pressed="true"] {
-  border-color: var(--focus-ring);
-  background: var(--raised);
-  color: var(--text-primary);
+  border-color: var(--luke-color-focus-ring);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 .section-emoji-field {
@@ -2060,7 +2063,7 @@ ul.actor-stack {
 .repository-picture {
   flex: 0 0 auto;
   border-radius: 4px;
-  outline: 1px solid var(--hairline);
+  outline: 1px solid var(--luke-color-border);
   outline-offset: -1px; /* off-scale */
   object-fit: cover;
 }
@@ -2247,10 +2250,10 @@ ul.actor-stack {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--control-gap);
+  gap: var(--luke-control-gap);
   min-height: var(--desktop-bar-height);
-  padding: var(--space-8) var(--content-inset);
-  border-bottom: 1px solid var(--hairline);
+  padding: var(--luke-space-8) var(--content-inset);
+  border-bottom: 1px solid var(--luke-color-border);
   -webkit-app-region: drag;
 }
 
@@ -2282,7 +2285,7 @@ ul.actor-stack {
 .desktop-toolbar::before {
   top: 0;
   bottom: -1px;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .desktop-toolbar-heading {
@@ -2293,8 +2296,8 @@ ul.actor-stack {
 /* Its room reaches 6px left of the words, so the title's own hover fill and
    field ring, which start there, are not clipped. */
 .desktop-toolbar-title {
-  margin: 0 0 0 calc(-1 * var(--space-6));
-  padding-left: var(--space-6);
+  margin: 0 0 0 calc(-1 * var(--luke-space-6));
+  padding-left: var(--luke-space-6);
   overflow: hidden;
   font-size: 15px;
   font-weight: 680;
@@ -2327,7 +2330,7 @@ ul.actor-stack {
   }
 
   .start-agent .start-agent-main {
-    width: var(--control-height);
+    width: var(--luke-control-height);
     padding: 0;
   }
 }
@@ -2339,7 +2342,7 @@ ul.actor-stack {
   }
 
   .start-agent .start-agent-main {
-    border-radius: calc(var(--control-radius) - 1px);
+    border-radius: calc(var(--luke-control-radius) - 1px);
   }
 }
 
@@ -2348,7 +2351,7 @@ ul.actor-stack {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--control-gap);
+  gap: var(--luke-control-gap);
 }
 
 .toolbar-button,
@@ -2395,10 +2398,10 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   justify-content: center;
-  gap: var(--glyph-gap);
-  height: var(--control-height);
-  padding: 0 var(--space-12);
-  border-radius: var(--control-radius);
+  gap: var(--luke-icon-gap);
+  height: var(--luke-control-height);
+  padding: 0 var(--luke-space-12);
+  border-radius: var(--luke-control-radius);
   background: var(--button-fill);
   font-size: 12.5px;
   font-weight: 600;
@@ -2414,17 +2417,17 @@ ul.actor-stack {
 .icon-button svg,
 .primary-button svg,
 .danger-button svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: 0 0 auto;
 }
 
 /* Square however tight its row, so only the tabs beside it give way, and
    muted until the pointer is on it, as a toolbar's glyphs are. */
 .icon-button {
-  width: var(--control-height);
+  width: var(--luke-control-height);
   padding: 0;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 /* A state weighs a class and its pseudo-class alone, so a button that says
@@ -2436,22 +2439,24 @@ ul.actor-stack {
 :is(.toolbar-button, .icon-button):hover:where(:not(:disabled, [aria-disabled="true"])),
 :is(.toolbar-button, .icon-button):where([aria-haspopup][aria-expanded="true"]),
 :is(.toolbar-button, .icon-button):where([aria-pressed="true"]) {
-  background: linear-gradient(var(--selected), var(--selected)) var(--button-ground);
-  color: var(--text-primary);
+  background: linear-gradient(var(--luke-color-fill-selected), var(--luke-color-fill-selected))
+    var(--button-ground);
+  color: var(--luke-color-text);
 }
 
 :is(.toolbar-button, .icon-button):active:where(:not(:disabled, [aria-disabled="true"])) {
-  background: linear-gradient(var(--pressed), var(--pressed)) var(--button-ground);
+  background: linear-gradient(var(--luke-color-fill-pressed), var(--luke-color-fill-pressed))
+    var(--button-ground);
 }
 
 .primary-button {
-  --button-fill: var(--message-sent);
-  color: var(--on-accent);
+  --button-fill: var(--luke-color-accent);
+  color: var(--luke-color-on-accent);
 }
 
 .danger-button {
-  --button-fill: var(--danger-fill);
-  color: var(--on-accent);
+  --button-fill: var(--luke-color-danger-fill);
+  color: var(--luke-color-on-accent);
 }
 
 :is(.primary-button, .danger-button):hover:where(:not(:disabled, [aria-disabled="true"])) {
@@ -2500,8 +2505,8 @@ ul.actor-stack {
    toolbar. A failed row that is itself the button draws the retry's glyph
    and word in its own colour (`.retry-label`), its hover lighting both. */
 .quiet-button {
-  padding: 0 var(--space-8);
-  color: var(--text-secondary);
+  padding: 0 var(--luke-space-8);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
 }
 
@@ -2511,15 +2516,15 @@ ul.actor-stack {
    one keeps the same face and says so in red, as a destructive menu item
    does; the red fill is the confirm dialog's alone. */
 .bordered-button {
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--luke-color-border);
 }
 
 .bordered-button[data-danger="true"] {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 .bordered-button[data-danger="true"]:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  background: color-mix(in srgb, var(--luke-color-danger) 12%, transparent);
 }
 
 .quiet-button svg {
@@ -2530,8 +2535,8 @@ ul.actor-stack {
 .retry-label {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--space-4);
-  margin-left: var(--space-4);
+  gap: var(--luke-space-4);
+  margin-left: var(--luke-space-4);
   font-weight: 600;
 }
 
@@ -2543,13 +2548,13 @@ ul.actor-stack {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4) var(--space-8);
+  gap: var(--luke-space-4) var(--luke-space-8);
 }
 
 .failure-note-remedy {
   height: 24px;
-  padding: 0 var(--space-8);
-  color: var(--text-primary);
+  padding: 0 var(--luke-space-8);
+  color: var(--luke-color-text);
   font-size: 12px;
 }
 
@@ -2581,7 +2586,7 @@ ul.actor-stack {
 .luke-chip .settings-chevron {
   width: 12px;
   height: 12px;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
@@ -2610,11 +2615,11 @@ ul.actor-stack {
 }
 
 .copy-glyph > [data-glyph="copied"] {
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
 }
 
 .copy-glyph > [data-glyph="failed"] {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 /* Menus ----------------------------------------------------------------- */
@@ -2633,10 +2638,10 @@ ul.actor-stack {
 .menu-surface {
   display: flex;
   flex-direction: column;
-  padding: var(--menu-inset);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
+  padding: var(--luke-menu-inset);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-menu-radius);
+  background: var(--luke-color-overlay);
   box-shadow: var(--menu-shadow);
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
@@ -2655,12 +2660,12 @@ ul.actor-stack {
   flex: none;
   width: 100%;
   align-items: center;
-  gap: var(--glyph-gap);
-  height: var(--menu-row-height);
+  gap: var(--luke-icon-gap);
+  height: var(--luke-menu-row-height);
   padding: 0 var(--row-inset);
-  border-radius: var(--menu-row-radius);
+  border-radius: var(--luke-menu-row-radius);
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 13px;
   text-align: left;
   white-space: nowrap;
@@ -2674,7 +2679,7 @@ ul.actor-stack {
 .menu-item:is(:hover, :focus-visible),
 .menu-item[data-open="true"] {
   outline: none; /* no ring: the row's fill marks it */
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 /* A list whose keys stay in its field (a picker's, the composer's `/`, and
@@ -2693,15 +2698,15 @@ ul.actor-stack {
     [data-selected="true"],
     :focus-visible
   ) {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .menu-item[data-danger="true"] {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 .menu-item[data-danger="true"]:is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
 }
 
 /* A row that cannot be chosen now is dimmed with its mark and lit by
@@ -2723,7 +2728,7 @@ ul.actor-stack {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .menu-item[data-danger="true"] .menu-item-glyph {
@@ -2745,8 +2750,8 @@ ul.actor-stack {
 .menu-item-hint {
   flex: 0 0 auto;
   margin-left: auto;
-  padding-left: var(--space-16);
-  color: var(--text-tertiary);
+  padding-left: var(--luke-space-16);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -2761,7 +2766,7 @@ ul.actor-stack {
   width: var(--menu-glyph);
   height: var(--menu-glyph);
   margin-left: auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .menu-item-hint + .menu-item-end {
@@ -2771,7 +2776,7 @@ ul.actor-stack {
 .menu-item-end .credential-check {
   width: var(--menu-glyph);
   height: var(--menu-glyph);
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .menu-item-end .settings-chevron {
@@ -2812,13 +2817,13 @@ ul.actor-stack {
 }
 
 .luke-menu-item-end .credential-check {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .luke-menu-item-end .settings-chevron {
   width: 14px;
   height: 14px;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
@@ -2840,18 +2845,18 @@ ul.actor-stack {
 }
 
 .account-menu-name {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-weight: 600;
 }
 
 .account-menu-email {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* A sidebar plan whose menu is open is ringed, the way Finder rings the row a
    right-click is about, so the menu is plainly about that plan. */
 .sidebar-task[data-menu-open="true"] {
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
 /* Empty and waiting states ---------------------------------------------- */
@@ -2863,15 +2868,15 @@ ul.actor-stack {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-12);
-  padding: var(--page-inset);
-  color: var(--text-secondary);
+  gap: var(--luke-space-12);
+  padding: var(--luke-page-inset);
+  color: var(--luke-color-text-muted);
   text-align: center;
 }
 
 .desktop-empty p {
   max-width: 400px;
-  margin: 0 0 var(--space-8);
+  margin: 0 0 var(--luke-space-8);
   font-size: 13.5px;
   line-height: 1.55;
 }
@@ -2965,7 +2970,7 @@ ul.actor-stack {
   padding: var(--luke-space-2) var(--column-inset) var(--luke-space-2) var(--content-inset);
   border-bottom: 1px solid
     color-mix(in srgb, var(--luke-color-attention) 30%, var(--luke-color-border));
-  background: color-mix(in srgb, var(--luke-color-attention) 9%, var(--desktop-ground));
+  background: color-mix(in srgb, var(--luke-color-attention) 9%, var(--luke-color-ground));
 }
 
 .task-banner .banner-row {
@@ -3011,7 +3016,7 @@ ul.actor-stack {
 .document-banner {
   --banner-gap: var(--luke-space-12);
   box-sizing: border-box;
-  width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
+  width: min(var(--reading-width), calc(100% - 2 * var(--luke-page-inset)));
   margin: var(--luke-space-16) auto 0;
   padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-16);
   border: 1px solid var(--luke-color-border-strong);
@@ -3083,8 +3088,8 @@ ul.actor-stack {
 .message-sender {
   display: flex;
   align-items: center;
-  padding-inline: var(--space-4);
-  color: var(--text-secondary);
+  padding-inline: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
   font-size: 11.5px;
 }
 
@@ -3095,7 +3100,7 @@ ul.actor-stack {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   max-width: 100%;
 }
 
@@ -3103,9 +3108,9 @@ ul.actor-stack {
 .message-sent-at {
   display: flex;
   align-items: center;
-  gap: calc(var(--space-4) + var(--space-2));
-  padding-inline-end: var(--space-4);
-  color: var(--text-secondary);
+  gap: calc(var(--luke-space-4) + var(--luke-space-2));
+  padding-inline-end: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3226,7 +3231,7 @@ ul.actor-stack {
 /* The transcript's way back to its newest line stands on the column's own
    ground rather than the panel's. */
 .desktop-agent .conversation-scroll {
-  --luke-button-ground: var(--desktop-ground);
+  --luke-button-ground: var(--luke-color-ground);
 }
 
 /* The "Edited by" line opens the version history, so it is a press drawn as
@@ -3266,20 +3271,20 @@ ul.actor-stack {
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
 .desktop-document .plan-unit.version-added {
-  padding-left: var(--space-12);
-  border-left: 2px solid color-mix(in srgb, var(--state-complete) 70%, transparent);
+  padding-left: var(--luke-space-12);
+  border-left: 2px solid color-mix(in srgb, var(--luke-color-complete) 70%, transparent);
 }
 
 .desktop-document .plan-unit.version-removed {
-  padding-left: var(--space-12);
-  border-left: 2px solid color-mix(in srgb, var(--danger) 60%, transparent);
-  color: var(--text-secondary);
+  padding-left: var(--luke-space-12);
+  border-left: 2px solid color-mix(in srgb, var(--luke-color-danger) 60%, transparent);
+  color: var(--luke-color-text-muted);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--luke-color-danger) 60%, transparent);
 }
 
 .desktop-document .plan-document-scroll {
-  padding: var(--page-inset);
+  padding: var(--luke-page-inset);
   /* Room for the last line to scroll clear of the captions over the call bar. */
   padding-bottom: 140px; /* off-scale */
   /* Nothing in a plan is wider than the column (its code and tables scroll
@@ -3302,7 +3307,7 @@ ul.actor-stack {
 }
 
 .desktop-document .plan-body {
-  color: var(--text-body);
+  color: var(--luke-color-text-body);
   font-size: 15px;
   line-height: 1.65;
 }
@@ -3312,7 +3317,7 @@ ul.actor-stack {
 }
 
 .desktop-document .markdown-heading {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .desktop-document .markdown-heading[data-level="1"] {
@@ -3325,7 +3330,7 @@ ul.actor-stack {
 .desktop-document .markdown-heading[data-level="2"] {
   margin-top: 0.6em;
   padding-bottom: 0.35em;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--luke-color-border);
   font-size: 1.3em;
 }
 
@@ -3349,16 +3354,16 @@ ul.actor-stack {
   container: plan-call-bar / inline-size;
   position: relative;
   flex: 0 0 auto;
-  padding: var(--space-12) calc(var(--page-inset) + var(--summary-room)) var(--space-12)
-    var(--page-inset);
-  border-top: 1px solid var(--hairline);
+  padding: var(--luke-space-12) calc(var(--luke-page-inset) + var(--summary-room))
+    var(--luke-space-12) var(--luke-page-inset);
+  border-top: 1px solid var(--luke-color-border);
   background: var(--desktop-well);
 }
 
 .desktop-call-bar::before {
   top: -1px;
   bottom: 0;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--luke-color-border);
   background: var(--desktop-well);
 }
 
@@ -3368,7 +3373,7 @@ ul.actor-stack {
 .desktop-call-bar .voice-caption {
   bottom: calc(100% + var(--luke-space-12));
   left: calc(50% - var(--summary-room) / 2);
-  width: min(var(--caption-width-max), 100% - 2 * var(--page-inset) - var(--summary-room));
+  width: min(var(--caption-width-max), 100% - 2 * var(--luke-page-inset) - var(--summary-room));
 }
 
 /* Too narrow a column to keep the rail's room: the bar, which stands under
@@ -3413,7 +3418,7 @@ ul.actor-stack {
   flex-wrap: wrap;
   align-items: center;
   margin: 0 auto;
-  gap: var(--space-8) var(--space-12);
+  gap: var(--luke-space-8) var(--luke-space-12);
 }
 
 .call-bar[data-call="false"] {
@@ -3425,7 +3430,7 @@ ul.actor-stack {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   white-space: nowrap;
 }
 
@@ -3466,7 +3471,7 @@ ul.actor-stack {
 }
 
 .call-backend-action {
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
 }
 
 .call-controls,
@@ -3557,7 +3562,7 @@ ul.actor-stack {
    there, its list capped to the room on the side it took. */
 .repository-chip[data-side="above"] .searchable-menu {
   top: auto;
-  bottom: calc(100% + var(--space-4));
+  bottom: calc(100% + var(--luke-space-4));
 }
 
 .repository-chip .task-compose-menu-list {
@@ -3628,7 +3633,7 @@ ul.actor-stack {
 .searchable-menu {
   position: absolute;
   z-index: 2;
-  top: calc(100% + var(--space-4));
+  top: calc(100% + var(--luke-space-4));
   left: 0;
   width: 340px;
   padding: 0;
@@ -3638,11 +3643,11 @@ ul.actor-stack {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   height: 38px;
-  padding: 0 var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-tertiary);
+  padding: 0 var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-subtle);
 }
 
 /* The glyph is sized here, as every glyph is by what it sits in: an SVG
@@ -3660,13 +3665,13 @@ ul.actor-stack {
   border: 0;
   outline: none; /* no ring: a menu's filter, which always holds the caret */
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font: inherit;
   font-size: 13px;
 }
 
 .task-compose-menu-search input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* The list scrolls down and never sideways: a row's words that outrun the
@@ -3674,7 +3679,7 @@ ul.actor-stack {
 .task-compose-menu-list {
   display: block;
   max-height: 288px;
-  padding: var(--menu-inset);
+  padding: var(--luke-menu-inset);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -3687,16 +3692,16 @@ ul.actor-stack {
 .task-compose-menu-foot {
   display: block;
   flex: 0 0 auto;
-  padding: var(--menu-inset);
-  border-top: 1px solid var(--hairline);
+  padding: var(--luke-menu-inset);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 /* One muted line under the pinned rows, inset as a row's words are: what
    the agent has cost. */
 .task-compose-menu-foot-note {
   margin: 0;
-  padding: var(--space-4) var(--row-inset) 0;
-  color: var(--text-tertiary);
+  padding: var(--luke-space-4) var(--row-inset) 0;
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
 }
 
@@ -3708,8 +3713,8 @@ ul.actor-stack {
   align-items: center;
   justify-content: center;
   margin: 0;
-  padding: var(--space-4) var(--space-12);
-  color: var(--text-tertiary);
+  padding: var(--luke-space-4) var(--luke-space-12);
+  color: var(--luke-color-text-subtle);
   font-size: 12.5px;
   text-align: center;
 }
@@ -3773,7 +3778,7 @@ ul.actor-stack {
 
 @keyframes menu-drop {
   from {
-    transform: translateY(calc(-1 * var(--space-4)));
+    transform: translateY(calc(-1 * var(--luke-space-4)));
   }
 }
 
@@ -3820,7 +3825,7 @@ body:has(.app-stage[data-capture="true"])
    the foot, where the row names a setting and the detail is its value. */
 .task-compose-menu-detail {
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -3839,15 +3844,15 @@ body:has(.app-stage[data-capture="true"])
    reached by its attribute rather than given the class. */
 .menu-heading,
 .command-palette [cmdk-group-heading] {
-  padding: var(--space-8) var(--row-inset) var(--space-4);
-  color: var(--text-tertiary);
+  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
+  color: var(--luke-color-text-subtle);
   font-size: 11.5px;
   font-weight: 500;
 }
 
 [role="group"]:first-child > .menu-heading,
 .command-palette [cmdk-group]:first-child [cmdk-group-heading] {
-  padding-top: var(--space-2);
+  padding-top: var(--luke-space-2);
 }
 
 /* An integration's tools (`integration-tool-list.tsx`), in the MCP
@@ -3868,7 +3873,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   min-width: 0;
   flex-direction: column;
-  border-radius: var(--menu-row-radius);
+  border-radius: var(--luke-menu-row-radius);
 }
 
 .integration-tool-head {
@@ -3878,8 +3883,9 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
   flex-direction: column;
   gap: 1px; /* off-scale */
-  padding: var(--space-4) calc(var(--row-inset) + var(--space-16)) var(--space-4) var(--row-inset);
-  border-radius: var(--menu-row-radius);
+  padding: var(--luke-space-4) calc(var(--row-inset) + var(--luke-space-16)) var(--luke-space-4)
+    var(--row-inset);
+  border-radius: var(--luke-menu-row-radius);
   background: none;
   color: inherit;
   font: inherit;
@@ -3888,14 +3894,14 @@ body:has(.app-stage[data-capture="true"])
 
 button.integration-tool-head:hover,
 .integration-tool[data-current="true"] > .integration-tool-head {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .integration-tool-name {
   display: flex;
   min-width: 0;
   align-items: baseline;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 .integration-tool-title {
@@ -3918,8 +3924,8 @@ button.integration-tool-head:hover,
   overflow: hidden;
   flex: 0 100 auto;
   min-width: 0;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3946,7 +3952,7 @@ button.integration-tool-head:hover,
   top: 50%;
   right: var(--row-inset);
   display: flex;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   opacity: 0;
   transform: translateY(-50%);
 }
@@ -3981,14 +3987,14 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   height: 40px;
-  padding: 0 var(--space-12);
-  border-bottom: 1px solid var(--hairline);
+  padding: 0 var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .integration-tool-detail-head:has(> .luke-button) {
-  padding-left: var(--space-6);
+  padding-left: var(--luke-space-6);
 }
 
 .integration-tool-detail-title {
@@ -4007,8 +4013,8 @@ button.integration-tool-head:hover,
   overflow: hidden;
   flex: 0 100 auto;
   min-width: 0;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4020,8 +4026,8 @@ button.integration-tool-head:hover,
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-12);
-  padding: var(--space-8) var(--space-12) var(--space-12);
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
   overflow-y: auto;
   overscroll-behavior: contain;
   outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
@@ -4045,7 +4051,7 @@ button.integration-tool-head:hover,
 }
 
 .integration-tool-description-whole :is(strong, .markdown-heading, code) {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .integration-tool-description-whole .markdown-heading {
@@ -4060,9 +4066,9 @@ button.integration-tool-head:hover,
 .integration-tool-section {
   display: flex;
   align-items: baseline;
-  gap: var(--space-6);
-  margin: 0 0 var(--space-4);
-  color: var(--text-tertiary);
+  gap: var(--luke-space-6);
+  margin: 0 0 var(--luke-space-4);
+  color: var(--luke-color-text-subtle);
   font-size: 11px;
   font-weight: 600;
 }
@@ -4081,9 +4087,9 @@ button.integration-tool-head:hover,
 .integration-tool-parameter {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-6) 0;
-  border-top: 1px solid var(--hairline);
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-6) 0;
+  border-top: 1px solid var(--luke-color-border);
 }
 
 .integration-tool-parameter-head {
@@ -4091,26 +4097,26 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex-wrap: wrap;
   align-items: baseline;
-  column-gap: var(--space-6);
+  column-gap: var(--luke-space-6);
 }
 
 .integration-tool-parameter-name {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-mono);
   font-size: 11.5px;
   overflow-wrap: anywhere;
   user-select: text;
 }
 
 .integration-tool-parameter-type {
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
   font-size: 11px;
 }
 
 .integration-tool-parameter-required {
   margin-left: auto;
-  color: var(--state-attention);
+  color: var(--luke-color-attention);
   font-size: 10.5px;
   font-weight: 560;
 }
@@ -4118,46 +4124,46 @@ button.integration-tool-head:hover,
 .integration-tool-parameter-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   margin: 0;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 11.5px;
   line-height: 1.4;
   user-select: text;
 }
 
 .integration-tool-parameter-description code {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .integration-tool-parameter-values {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-4);
-  color: var(--text-tertiary);
+  gap: var(--luke-space-4);
+  color: var(--luke-color-text-subtle);
 }
 
 .integration-tool-parameter-values code {
-  padding: 0 var(--space-4);
+  padding: 0 var(--luke-space-4);
   border-radius: 4px;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
   font-size: 10.5px;
   line-height: 16px;
 }
 
 .integration-tool-parameter-values code[data-default="true"] {
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
-  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
+  color: var(--luke-color-text);
 }
 
 @container (min-width: 440px) {
   .integration-tool-parameter {
     display: grid;
     grid-template-columns: minmax(150px, 34%) 1fr;
-    column-gap: var(--space-12);
+    column-gap: var(--luke-space-12);
   }
 
   .integration-tool-parameter-required {
@@ -4205,7 +4211,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  border-right: 1px solid var(--hairline);
+  border-right: 1px solid var(--luke-color-border);
 }
 
 /* Its buttons end as far in from the list's edge as the side panel's toggle
@@ -4236,7 +4242,10 @@ button.integration-tool-head:hover,
   .inbox-tasks-bar {
   display: grid;
   grid-template-columns:
-    minmax(calc(var(--sidebar-toggle-clearance) - var(--column-inset) - var(--control-gap)), 1fr)
+    minmax(
+      calc(var(--sidebar-toggle-clearance) - var(--column-inset) - var(--luke-control-gap)),
+      1fr
+    )
     minmax(0, max-content)
     minmax(max-content, 1fr);
   padding-left: var(--column-inset);
@@ -4275,7 +4284,7 @@ button.integration-tool-head:hover,
    as tall as every other tab's (`.file-view-bar`), rather than a top row. */
 .desktop-task-main .inbox-view .desktop-toolbar {
   min-height: var(--secondary-bar-height);
-  padding-block: var(--space-4);
+  padding-block: var(--luke-space-4);
 }
 
 /* The list standing alone is a page rather than a column, so its name leads
@@ -4294,14 +4303,14 @@ button.integration-tool-head:hover,
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-8) var(--column-inset) var(--column-inset);
+  padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
 /* An item's row is a sidebar row led by its agent's tile (`actor-ref.tsx`),
    centred on the line as a pinned tab's is, with no Unpin to leave room for. */
 .inbox-row .sidebar-task-line {
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 .inbox-row-mark {
@@ -4321,7 +4330,7 @@ button.integration-tool-head:hover,
 
 .inbox-row .sidebar-task-line {
   position: relative;
-  padding-right: calc(var(--inbox-dot) + var(--space-6));
+  padding-right: calc(var(--inbox-dot) + var(--luke-space-6));
 }
 
 .inbox-row-dot {
@@ -4331,7 +4340,7 @@ button.integration-tool-head:hover,
   width: var(--inbox-dot);
   height: var(--inbox-dot);
   border-radius: 50%;
-  background: var(--message-sent);
+  background: var(--luke-color-accent);
   transform: translateY(-50%);
 }
 
@@ -4340,7 +4349,7 @@ button.integration-tool-head:hover,
    is open there without the blue that means the reader is asked. */
 .inbox-row-dot[data-hollow="true"] {
   background: none;
-  box-shadow: inset 0 0 0 1.5px var(--text-tertiary); /* off-scale: a hairline ring at the dot's size */
+  box-shadow: inset 0 0 0 1.5px var(--luke-color-text-subtle); /* off-scale: a hairline ring at the dot's size */
 }
 
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
@@ -4350,14 +4359,14 @@ button.integration-tool-head:hover,
 .inbox-subject {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding-bottom: var(--space-12);
-  border-bottom: 1px solid var(--hairline);
+  gap: var(--luke-space-4);
+  padding-bottom: var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .inbox-subject-title {
   margin: 0;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 1.25em;
   font-weight: 600;
   line-height: 1.3;
@@ -4369,16 +4378,16 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: 0;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 12.5px;
 }
 
 .inbox-subject-agent {
   display: flex;
   min-width: 0;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 /* An item that needs the reader wears the attention mark beside its
@@ -4388,11 +4397,11 @@ button.integration-tool-head:hover,
 .inbox-standing {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .inbox-standing[data-status="open"]:not([data-waiting]) {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 /* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
@@ -4412,8 +4421,8 @@ button.integration-tool-head:hover,
   position: relative;
   display: grid;
   grid-template-columns: var(--inbox-face) minmax(0, 1fr);
-  column-gap: var(--space-12);
-  padding-bottom: var(--space-20);
+  column-gap: var(--luke-space-12);
+  padding-bottom: var(--luke-space-20);
 }
 
 .inbox-comment:last-child {
@@ -4422,12 +4431,12 @@ button.integration-tool-head:hover,
 
 .inbox-comment:not(:last-child)::before {
   position: absolute;
-  top: calc(var(--inbox-face) + var(--space-6));
-  bottom: var(--space-6);
+  top: calc(var(--inbox-face) + var(--luke-space-6));
+  bottom: var(--luke-space-6);
   left: calc(var(--inbox-face) / 2 - 1px);
   width: 2px;
   border-radius: 1px;
-  background: var(--hairline);
+  background: var(--luke-color-border);
   content: "";
 }
 
@@ -4436,19 +4445,19 @@ button.integration-tool-head:hover,
    down from the faces running on past it. */
 .inbox-thread-earlier {
   position: relative;
-  padding: 0 0 var(--space-20) calc(20px + var(--space-12));
-  color: var(--text-secondary);
+  padding: 0 0 var(--luke-space-20) calc(20px + var(--luke-space-12));
+  color: var(--luke-color-text-muted);
   font-size: 12.5px;
 }
 
 .inbox-thread-earlier::before {
   position: absolute;
   top: 0;
-  bottom: var(--space-6);
+  bottom: var(--luke-space-6);
   left: 9px;
   width: 2px;
   border-radius: 1px;
-  background: var(--hairline);
+  background: var(--luke-color-border);
   content: "";
 }
 
@@ -4461,7 +4470,7 @@ button.integration-tool-head:hover,
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .inbox-comment-head {
@@ -4470,8 +4479,8 @@ button.integration-tool-head:hover,
   min-height: var(--inbox-face);
   flex-wrap: wrap;
   align-items: center;
-  column-gap: var(--space-6);
-  color: var(--text-secondary);
+  column-gap: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
   font-size: 12.5px;
 }
 
@@ -4480,7 +4489,7 @@ button.integration-tool-head:hover,
 .inbox-comment-name {
   display: flex;
   min-width: 0;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 13px;
   font-weight: 500;
 }
@@ -4494,7 +4503,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0 var(--space-4);
+  gap: 0 var(--luke-space-4);
 }
 
 /* A comment's words are set as a message's are, and clip what runs past
@@ -4504,10 +4513,10 @@ button.integration-tool-head:hover,
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 13px;
   line-height: 1.625;
 }
@@ -4522,11 +4531,11 @@ button.integration-tool-head:hover,
   max-width: 100%;
   align-self: flex-start;
   align-items: flex-start;
-  gap: var(--space-4);
-  padding: 1px var(--space-6); /* off-scale */
+  gap: var(--luke-space-4);
+  padding: 1px var(--luke-space-6); /* off-scale */
   border-radius: 6px;
-  background: var(--raised-strong);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
   font-size: 12px;
   font-weight: 500;
 }
@@ -4551,9 +4560,9 @@ button.integration-tool-head:hover,
   display: inline-flex;
   max-width: 100%;
   align-items: flex-start;
-  gap: var(--space-6);
-  border-radius: var(--control-radius);
-  color: var(--text-secondary);
+  gap: var(--luke-space-6);
+  border-radius: var(--luke-control-radius);
+  color: var(--luke-color-text-muted);
   cursor: default;
   list-style: none;
 }
@@ -4563,7 +4572,7 @@ button.integration-tool-head:hover,
 }
 
 .inbox-offered > summary:hover {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .inbox-offered > summary svg {
@@ -4575,7 +4584,7 @@ button.integration-tool-head:hover,
 }
 
 .inbox-offered[open] > summary {
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--luke-space-6);
 }
 
 .inbox-offered[open] > summary svg {
@@ -4599,8 +4608,8 @@ button.integration-tool-head:hover,
 }
 
 .inbox-crumb:active {
-  background: var(--raised-strong);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
 }
 
 /* A settled item's foot, over its box: the next item that needs the
@@ -4608,30 +4617,30 @@ button.integration-tool-head:hover,
    by Next in the meta voice, then its agent's tile and its title in the
    unread weight, cut short at the row's end, and J where J reaches it. */
 .inbox-next-dock {
-  padding-bottom: var(--space-12);
+  padding-bottom: var(--luke-space-12);
 }
 
 .inbox-next {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-12);
-  border-radius: var(--control-radius);
-  background: var(--raised);
-  color: var(--text-primary);
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
   font-size: 13px;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
 .inbox-next:hover {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .inbox-next-lead {
   flex: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
 }
 
@@ -4655,8 +4664,8 @@ button.integration-tool-head:hover,
 }
 
 .inbox-pager-count {
-  margin-right: var(--space-6);
-  color: var(--text-tertiary);
+  margin-right: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -4694,7 +4703,7 @@ button.integration-tool-head:hover,
   .inbox-view-items .inbox-crumbs .tab {
     min-width: calc(
       var(--tab-start) +
-      var(--control-glyph) +
+      var(--luke-control-icon) +
       var(--tab-gap) +
       8ch +
       var(--tab-end)
@@ -4707,7 +4716,7 @@ button.integration-tool-head:hover,
   .inbox-view-items > .desktop-toolbar {
     --luke-fold: folded;
     flex-wrap: wrap;
-    row-gap: var(--space-4);
+    row-gap: var(--luke-space-4);
   }
 
   .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
@@ -4728,7 +4737,7 @@ button.integration-tool-head:hover,
   .inbox-view-items .inbox-crumbs .tab {
     min-width: calc(
       var(--tab-start) +
-      var(--control-glyph) +
+      var(--luke-control-icon) +
       var(--tab-gap) +
       3.5ch +
       var(--tab-end)
@@ -4766,15 +4775,15 @@ button.integration-tool-head:hover,
 .desktop-toolbar-heading:has(.experiment-tag) {
   display: flex;
   align-items: last baseline;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .experiment-tag {
   flex: none;
-  padding: 0 var(--space-6);
-  border: 1px solid var(--hairline-strong);
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 999px;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 10.5px;
   font-weight: 500;
   line-height: 16px;
@@ -4805,7 +4814,7 @@ button.integration-tool-head:hover,
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 0 var(--content-inset) var(--space-32);
+  padding: 0 var(--content-inset) var(--luke-space-32);
   container: factory / inline-size;
 }
 
@@ -4837,9 +4846,9 @@ button.integration-tool-head:hover,
   flex: 1;
   flex-direction: column;
   padding: var(--luke-space-8) var(--luke-space-4) var(--luke-space-6);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-control-radius);
-  background: var(--section-fill);
+  background: var(--luke-color-surface);
 }
 
 /* An arrow stands level with the stations' heads, where the eye reads the
@@ -4912,7 +4921,7 @@ button.integration-tool-head:hover,
 .factory-rows[data-needs] + .factory-rows {
   margin-top: var(--luke-space-4);
   padding-top: var(--luke-space-4);
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 /* A row offers no Pin or Archive to give way to, so its time stays put
@@ -4973,7 +4982,7 @@ button.integration-tool-head:hover,
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-16) var(--content-inset) var(--space-32);
+  padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
 }
 
 .automation-group {
@@ -4982,7 +4991,7 @@ button.integration-tool-head:hover,
 }
 
 .automation-group + .automation-group {
-  margin-top: var(--space-24);
+  margin-top: var(--luke-space-24);
 }
 
 /* The suggested automations, at the list's measure, a group's gap below it,
@@ -4993,17 +5002,17 @@ button.integration-tool-head:hover,
   width: 100%;
   max-width: var(--reading-width);
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin-inline: auto;
 }
 
 .automation-suggestions-head,
 .automation-runs-head {
-  padding: 0 var(--space-2);
+  padding: 0 var(--luke-space-2);
 }
 
 .automation-group + .automation-suggestions {
-  margin-top: var(--space-24);
+  margin-top: var(--luke-space-24);
 }
 
 /* An empty list stands its empty state with the suggestions under it, the
@@ -5035,7 +5044,7 @@ button.integration-tool-head:hover,
 }
 
 .automations-empty > .automation-suggestions {
-  margin-top: var(--space-16);
+  margin-top: var(--luke-space-16);
 }
 
 /* One automation's row: its clock wearing its newest run's state, its name
@@ -5046,8 +5055,8 @@ button.integration-tool-head:hover,
   display: flex;
   min-height: 52px; /* off-scale */
   align-items: center;
-  gap: var(--space-12);
-  padding-right: var(--space-16);
+  gap: var(--luke-space-12);
+  padding-right: var(--luke-space-16);
 }
 
 .automation-row-copy {
@@ -5097,7 +5106,7 @@ button.integration-tool-head:hover,
   width: 112px; /* off-scale */
   flex: none;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   overflow: hidden;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-label-size);
@@ -5126,8 +5135,8 @@ button.integration-tool-head:hover,
   flex: 1;
   align-self: stretch;
   align-items: center;
-  gap: var(--space-12);
-  padding: var(--space-8) 0 var(--space-8) var(--space-16);
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-8) 0 var(--luke-space-8) var(--luke-space-16);
   border-radius: inherit;
   background: none;
   color: inherit;
@@ -5154,12 +5163,12 @@ button.integration-tool-head:hover,
 }
 
 .automation-row-open > .state-glyph {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 /* The row fills wherever it is pointed at, its switch's end included, as a sidebar task's row does. */
 .automation-row:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .automation-row-open:focus-visible {
@@ -5167,7 +5176,7 @@ button.integration-tool-head:hover,
 }
 
 :root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
   outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
@@ -5177,7 +5186,7 @@ button.integration-tool-head:hover,
    press, lifting to the raised fill under the pointer. */
 .automation-suggestion-cards {
   display: grid;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* off-scale */
 }
 
@@ -5186,17 +5195,17 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex-direction: column;
   align-items: stretch;
-  gap: var(--space-6);
-  padding: var(--space-16);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-16);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
   color: inherit;
   text-align: left;
 }
 
 .automation-suggestion:hover:not(:disabled) {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .automation-suggestion:focus-visible {
@@ -5204,7 +5213,7 @@ button.integration-tool-head:hover,
 }
 
 :root[data-keyboard="true"] .automation-suggestion:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
   outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
@@ -5216,7 +5225,7 @@ button.integration-tool-head:hover,
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--luke-space-6);
 }
 
 .automation-suggestion-glyph {
@@ -5224,10 +5233,10 @@ button.integration-tool-head:hover,
   width: 32px; /* off-scale */
   height: 32px; /* off-scale */
   place-items: center;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--raised);
-  color: var(--text-secondary);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
 }
 
 .automation-suggestion-glyph svg,
@@ -5238,11 +5247,11 @@ button.integration-tool-head:hover,
 
 .automation-suggestion-add {
   flex: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .automation-suggestion:hover:not(:disabled) .automation-suggestion-add {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .automation-suggestion-name {
@@ -5266,7 +5275,7 @@ button.integration-tool-head:hover,
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-reach);
   color: var(--luke-color-text-muted);
@@ -5308,7 +5317,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: var(--control-gap);
+  gap: var(--luke-control-gap);
   container: automation-toolbar / inline-size;
 }
 
@@ -5327,7 +5336,7 @@ button.integration-tool-head:hover,
   max-width: var(--reading-width);
   flex-direction: column;
   margin-inline: auto;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
 /* Its name is written where a Settings page's title stands, in the page
@@ -5353,14 +5362,14 @@ button.integration-tool-head:hover,
 .automation-form {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: var(--luke-section-gap);
 }
 
 /* The servers left on, by their marks, inside the servers row's field chip. */
 .automation-servers {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .automation-servers > .provider-mark {
@@ -5447,7 +5456,7 @@ button.integration-tool-head:hover,
   position: absolute;
   inset-block: 0;
   right: 0;
-  background: var(--desktop-ground);
+  background: var(--luke-color-ground);
 }
 
 .automation-runs {
@@ -5455,10 +5464,10 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   overflow-y: auto;
-  padding: var(--space-16);
-  border-left: 1px solid var(--hairline);
+  padding: var(--luke-space-16);
+  border-left: 1px solid var(--luke-color-border);
 }
 
 .automation-runs-list {
@@ -5471,20 +5480,20 @@ button.integration-tool-head:hover,
   width: 100%;
   min-height: 44px; /* off-scale */
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--space-8);
-  border-radius: var(--control-radius);
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--luke-space-8);
+  border-radius: var(--luke-control-radius);
   background: none;
   color: inherit;
   text-align: left;
 }
 
 .automation-run > .state-glyph {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 button.automation-run:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 /* Chat ----------------------------------------------------------------------- */
@@ -5504,7 +5513,7 @@ button.automation-run:hover {
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  border-right: 1px solid var(--hairline);
+  border-right: 1px solid var(--luke-color-border);
   background: var(--desktop-sidebar);
 }
 
@@ -5518,13 +5527,13 @@ button.automation-run:hover {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-8) var(--column-inset) var(--column-inset);
+  padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
 .chat-rail-heading {
-  margin: var(--space-12) 0 var(--space-4);
-  padding: 0 var(--space-8);
-  color: var(--text-tertiary);
+  margin: var(--luke-space-12) 0 var(--luke-space-4);
+  padding: 0 var(--luke-space-8);
+  color: var(--luke-color-text-subtle);
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -5533,7 +5542,7 @@ button.automation-run:hover {
 
 .chat-rail-row .sidebar-task-line {
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 /* What a direct message's row says after the handle, the agent's title or
@@ -5547,7 +5556,7 @@ button.automation-run:hover {
   min-width: 0;
   flex: 1 1 0;
   overflow: hidden;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   font-weight: 400;
   text-overflow: ellipsis;
@@ -5556,10 +5565,10 @@ button.automation-run:hover {
 
 .chat-rail-count {
   margin-left: auto;
-  padding: 0 var(--space-6);
+  padding: 0 var(--luke-space-6);
   border-radius: 9px;
-  background: var(--raised-strong);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -5583,8 +5592,8 @@ button.automation-run:hover {
   flex: none;
   place-items: center;
   border-radius: 8px;
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -5614,7 +5623,7 @@ button.automation-run:hover {
 }
 
 .chat-head {
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
   padding-left: var(--column-inset);
 }
 
@@ -5627,7 +5636,7 @@ button.automation-run:hover {
 .chat-head-meta {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5637,7 +5646,7 @@ button.automation-run:hover {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-16) var(--column-inset);
+  padding: var(--luke-space-16) var(--column-inset);
 }
 
 .chat-messages,
@@ -5651,14 +5660,14 @@ button.automation-run:hover {
 .chat-message,
 .chat-reply {
   display: flex;
-  gap: var(--space-12);
-  padding: var(--space-8) var(--space-12);
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-8) var(--luke-space-12);
   border-radius: 10px;
 }
 
 .chat-reply {
-  gap: var(--space-8);
-  padding: var(--space-6) 0;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) 0;
 }
 
 .chat-message-body {
@@ -5666,13 +5675,13 @@ button.automation-run:hover {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .chat-byline {
   display: flex;
   align-items: baseline;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
 }
 
@@ -5695,37 +5704,37 @@ button.automation-run:hover {
 }
 
 .chat-handle {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 13px;
 }
 
 .chat-where,
 .chat-time {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   white-space: nowrap;
 }
 
 .chat-words {
-  color: var(--text-body);
+  color: var(--luke-color-text-body);
 }
 
 .chat-code {
   display: flex;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
-  padding: var(--space-6) var(--space-12);
-  border: 1px solid var(--hairline);
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
   border-radius: 9px;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
   font-size: 12.5px;
 }
 
 .chat-code-lines,
 .chat-image-words,
 .chat-unknown {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .chat-image-words,
@@ -5738,17 +5747,17 @@ button.automation-run:hover {
 .chat-ask {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
-  margin-top: var(--space-4);
-  padding: var(--space-12) var(--space-16);
-  border: 1px solid var(--hairline-strong);
+  gap: var(--luke-space-6);
+  margin-top: var(--luke-space-4);
+  padding: var(--luke-space-12) var(--luke-space-16);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 12px;
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .chat-ask-kind {
   margin: 0;
-  color: var(--state-attention);
+  color: var(--luke-color-attention);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -5764,17 +5773,17 @@ button.automation-run:hover {
 .chat-ask-options {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .chat-ask-option {
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--hairline);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
   border-radius: 9px;
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .chat-ask-option-label {
@@ -5783,22 +5792,22 @@ button.automation-run:hover {
 
 .chat-ask-recommended,
 .chat-ask-option-detail {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 13px;
 }
 
 .chat-ask-option-detail {
-  margin: var(--space-2) 0 0;
+  margin: var(--luke-space-2) 0 0;
 }
 
 .chat-thread {
-  margin-top: var(--space-6);
-  padding-left: var(--space-12);
-  border-left: 2px solid var(--hairline);
+  margin-top: var(--luke-space-6);
+  padding-left: var(--luke-space-12);
+  border-left: 2px solid var(--luke-color-border);
 }
 
 .chat-thread-toggle {
-  padding: var(--space-4) 0;
+  padding: var(--luke-space-4) 0;
   border: 0;
   background: none;
   color: var(--voice-luke);
@@ -5812,27 +5821,27 @@ button.automation-run:hover {
   position: relative;
   width: calc(100% - 2 * var(--column-inset));
   max-width: 900px;
-  margin: var(--space-12) auto var(--space-16);
+  margin: var(--luke-space-12) auto var(--luke-space-16);
 }
 
 .chat-thread .chat-composer {
   width: 100%;
-  margin: var(--space-6) 0 0;
+  margin: var(--luke-space-6) 0 0;
 }
 
 .chat-composer-box {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-12);
-  border: 1px solid var(--hairline-strong);
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 12px;
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .chat-composer[data-compact="true"] .chat-composer-box {
-  padding: var(--space-6) var(--space-8);
+  padding: var(--luke-space-6) var(--luke-space-8);
   border-radius: 10px;
 }
 
@@ -5843,7 +5852,7 @@ button.automation-run:hover {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font: inherit;
   font-size: 14px;
   resize: none;
@@ -5853,14 +5862,14 @@ button.automation-run:hover {
 .chat-composer-bar {
   display: flex;
   align-items: center;
-  gap: var(--space-12);
-  color: var(--text-tertiary);
+  gap: var(--luke-space-12);
+  color: var(--luke-color-text-subtle);
   font-size: 12.5px;
 }
 
 .chat-composer[data-compact="true"] .chat-composer-bar {
   position: absolute;
-  right: var(--space-8);
+  right: var(--luke-space-8);
   bottom: 6px;
 }
 
@@ -5876,13 +5885,13 @@ button.automation-run:hover {
   place-items: center;
   border: 0;
   border-radius: 50%;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text-muted);
 }
 
 .chat-send:not(:disabled) {
-  background: var(--message-sent);
-  color: var(--on-accent);
+  background: var(--luke-color-accent);
+  color: var(--luke-color-on-accent);
 }
 
 .chat-send svg {
@@ -5891,13 +5900,13 @@ button.automation-run:hover {
 }
 
 .chat-composer-note {
-  margin: var(--space-6) 0 0;
+  margin: var(--luke-space-6) 0 0;
 }
 
 /* The list an `@` or `#` opens stands over the box at its left. */
 .chat-mention-menu {
   position: absolute;
-  bottom: calc(100% + var(--space-4));
+  bottom: calc(100% + var(--luke-space-4));
   left: 0;
   width: 320px;
   z-index: 10;
@@ -5907,41 +5916,41 @@ button.automation-run:hover {
 .chat-ask-note {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
-  margin: var(--space-4) 0 0;
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--hairline);
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-4) 0 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
   border-radius: 10px;
   background: var(--desktop-sidebar);
 }
 
 .chat-ask-presses {
   display: flex;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .chat-ask-quiet,
 .chat-ask-settled {
   margin: 0;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 13px;
 }
 
 .chat-ask-values {
-  margin: var(--space-4) 0 0;
-  padding-left: var(--space-16);
+  margin: var(--luke-space-4) 0 0;
+  padding-left: var(--luke-space-16);
 }
 
 .chat-ask-settled-note {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 /* A chat notice in an agent's transcript: a card across the column washed
    in Luke's blue, headed by its sender and the message's place, Open in
    Chat at the head's end. */
 .chat-notice {
-  margin: var(--space-8) 0;
-  padding: var(--space-12) var(--space-16);
+  margin: var(--luke-space-8) 0;
+  padding: var(--luke-space-12) var(--luke-space-16);
   border: 1px solid color-mix(in srgb, var(--voice-luke) 25%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--voice-luke) 5%, transparent);
@@ -5950,9 +5959,9 @@ button.automation-run:hover {
 .chat-notice-head {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
-  margin-bottom: var(--space-6);
-  color: var(--text-secondary);
+  gap: var(--luke-space-8);
+  margin-bottom: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
   font-size: 13px;
 }
 
@@ -5980,18 +5989,18 @@ button.automation-run:hover {
 .chat-notice-open {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   margin-left: auto;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 13px;
   white-space: nowrap;
 }
 
 .chat-notice-open:hover {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .chat-notice-open svg {
@@ -6000,8 +6009,8 @@ button.automation-run:hover {
 }
 
 .chat-empty {
-  margin: var(--space-24) 0;
-  color: var(--text-tertiary);
+  margin: var(--luke-space-24) 0;
+  color: var(--luke-color-text-subtle);
   text-align: center;
 }
 
@@ -6097,9 +6106,9 @@ button.automation-run:hover {
 .settings-search-clear {
   /* An icon button nested in the well: as far inside the well's edge on
      every side as it is from the end, with the corner that inset leaves. */
-  width: calc(var(--control-height) - 2px - 2 * var(--luke-space-2));
-  height: calc(var(--control-height) - 2px - 2 * var(--luke-space-2));
-  border-radius: calc(var(--control-radius) - var(--luke-space-2));
+  width: calc(var(--luke-control-height) - 2px - 2 * var(--luke-space-2));
+  height: calc(var(--luke-control-height) - 2px - 2 * var(--luke-space-2));
+  border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
 }
 
 /* Find in a tab --------------------------------------------------------- */
@@ -6187,7 +6196,7 @@ button.automation-run:hover {
    (`tasks.css`), whose controls it would otherwise cover: that bar's
    buttons, its padding, and its hairline. */
 .find-scope:has(> .file-view) > .find-bar {
-  top: calc(var(--control-height) + 2 * var(--space-4) + 1px + var(--luke-space-8));
+  top: calc(var(--luke-control-height) + 2 * var(--luke-space-4) + 1px + var(--luke-space-8));
 }
 
 /* The field keeps one width whatever is typed or tallied, so the buttons
@@ -6308,8 +6317,8 @@ button.automation-run:hover {
 /* A search landing on the note keeps the name over it in view. */
 .task-page-head .template-note {
   width: auto;
-  margin: var(--space-16) 0 0;
-  scroll-margin-top: calc(var(--space-32) + 3 * var(--control-height));
+  margin: var(--luke-space-16) 0 0;
+  scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
 }
 
 /* The measure a Settings page's head and rows read at, and a row's height,
@@ -6676,7 +6685,7 @@ button.automation-run:hover {
 
 /* No call bar stands below a version, so it needs no room under its last line. */
 .version-page .desktop-document .plan-document-scroll {
-  padding-bottom: var(--page-inset);
+  padding-bottom: var(--luke-page-inset);
 }
 
 /* Onboarding ----------------------------------------------------------------- */
@@ -6757,7 +6766,7 @@ button.automation-run:hover {
      panel's toggle above it, as far in from that edge, and beside an open
      panel on one line with the toolbar's last button, as far in from the
      panel's. */
-  --summary-rail-width: calc(var(--control-height) + 2 * var(--column-inset));
+  --summary-rail-width: calc(var(--luke-control-height) + 2 * var(--column-inset));
   --summary-room: 0px;
 }
 
@@ -6793,10 +6802,10 @@ button.automation-run:hover {
   width: var(--summary-width);
   flex: none;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: var(--luke-section-gap);
   padding: var(--column-inset);
   overflow-y: auto;
-  background: var(--desktop-ground);
+  background: var(--luke-color-ground);
 }
 
 /* Collapsed, the panel's kinds alone in a rail under the chevron that
@@ -6821,7 +6830,7 @@ button.automation-run:hover {
   cx: 19px;
   cy: 5px;
   r: 3.6px;
-  fill: var(--message-sent);
+  fill: var(--luke-color-accent);
   stroke: none;
 }
 
@@ -6854,13 +6863,13 @@ button.automation-run:hover {
   width: var(--summary-width);
   max-height: 100%;
   flex-direction: column;
-  gap: var(--section-gap);
-  padding: calc(var(--column-inset) - var(--card-edge)) var(--menu-inset) var(--space-12);
+  gap: var(--luke-section-gap);
+  padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
   overflow-y: auto;
-  border: var(--card-edge) solid var(--hairline);
+  border: var(--card-edge) solid var(--luke-color-border);
   border-radius: 12px;
-  background: var(--surface-popover);
-  box-shadow: 0 16px 40px var(--shadow);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 16px 40px var(--luke-color-shadow);
   outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
   animation:
@@ -6886,7 +6895,7 @@ button.automation-run:hover {
 }
 
 .task-summary[data-mode="column"] > .task-summary-chevron {
-  --button-ground: var(--desktop-ground);
+  --button-ground: var(--luke-color-ground);
   position: sticky;
   z-index: 1;
   /* Held off the scroller's edge by the keyboard ring's reach, so its ring
@@ -6894,7 +6903,7 @@ button.automation-run:hover {
   top: var(--focus-ring-reach);
   flex: none;
   align-self: flex-end;
-  margin-bottom: calc(-1 * (var(--control-height) + var(--section-gap)));
+  margin-bottom: calc(-1 * (var(--luke-control-height) + var(--luke-section-gap)));
   background-color: var(--button-ground);
 }
 
@@ -6914,7 +6923,7 @@ button.automation-run:hover {
     right var(--column-inset) top var(--focus-ring-reach);
   mask-size:
     100% 100%,
-    var(--control-height) var(--control-height);
+    var(--luke-control-height) var(--luke-control-height);
   mask-repeat: no-repeat;
 }
 
@@ -6927,7 +6936,7 @@ button.automation-run:hover {
 .task-summary[data-mode="column"] > .task-summary-section:first-of-type > .section-heading,
 .task-summary-card > .task-summary-section:first-of-type > .section-heading {
   display: flex;
-  min-height: var(--control-height);
+  min-height: var(--luke-control-height);
   align-items: center;
   margin-bottom: 0;
 }
@@ -6953,36 +6962,36 @@ button.automation-run:hover {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: var(--glyph-gap);
-  height: var(--control-height);
+  gap: var(--luke-icon-gap);
+  height: var(--luke-control-height);
   padding: 0 var(--row-inset);
-  border-radius: var(--control-radius);
+  border-radius: var(--luke-control-radius);
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 13px;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
 .task-summary-row:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .task-summary-glyph {
   display: flex;
   flex: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .task-summary-glyph svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 /* A glyph wearing where its work stands takes a glyph's footprint, so every
    row's label starts on one edge. */
 .task-summary-glyph .state-glyph {
-  --state-glyph-size: var(--control-glyph);
+  --state-glyph-size: var(--luke-control-icon);
 }
 
 .task-summary-label {
@@ -6993,8 +7002,8 @@ button.automation-run:hover {
 }
 
 .task-summary-detail {
-  margin-left: var(--space-6);
-  color: var(--text-secondary);
+  margin-left: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
 }
 
@@ -7002,7 +7011,7 @@ button.automation-run:hover {
    folded sidebar group shows after its name. */
 .inbox-row-count {
   flex: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -7040,19 +7049,19 @@ button.automation-run:hover {
 
 .task-summary-archived-agent > .task-summary-row {
   padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .task-summary-archived-agent:hover > .task-summary-row {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .task-summary-marks {
   position: absolute;
   top: 0;
-  right: var(--space-4);
+  right: var(--luke-space-4);
   display: flex;
-  height: var(--control-height);
+  height: var(--luke-control-height);
   align-items: center;
   opacity: 0;
 }
@@ -7280,8 +7289,8 @@ button.automation-run:hover {
 .side-panel-empty {
   max-width: 260px;
   margin: auto;
-  padding: var(--space-24);
-  color: var(--text-secondary);
+  padding: var(--luke-space-24);
+  color: var(--luke-color-text-muted);
   font-size: 12.5px;
   line-height: 1.5;
   text-align: center;
@@ -7330,7 +7339,7 @@ button.automation-run:hover {
 }
 
 .main-tabs .tab-strip {
-  --strip-ground: var(--desktop-ground);
+  --strip-ground: var(--luke-color-ground);
 }
 
 /* A fade at either end where tabs go on past it, drawn over them in the
@@ -7633,7 +7642,7 @@ button.automation-run:hover {
 .luke-hover-card-corner .pull-request-mark {
   width: 12px;
   height: 12px;
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
   vertical-align: -2px; /* off-scale */
 }
 
@@ -7643,7 +7652,7 @@ button.automation-run:hover {
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
   background: color-mix(in srgb, currentColor 13%, transparent);
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-weight: 500;
 }
 
@@ -7655,7 +7664,7 @@ button.automation-run:hover {
    starter's among them, keeps to its one row. */
 .luke-hover-card-note .actor-words:has(> .card-when) {
   flex-wrap: wrap;
-  row-gap: var(--space-2);
+  row-gap: var(--luke-space-2);
 }
 
 .card-when {
@@ -7666,14 +7675,14 @@ button.automation-run:hover {
    number, apart as a row of stats. */
 .card-counts {
   display: flex;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   font-variant-numeric: tabular-nums;
 }
 
 .card-count {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .card-count > svg {
@@ -7690,7 +7699,7 @@ button.automation-run:hover {
 .card-labels {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -7700,11 +7709,11 @@ button.automation-run:hover {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   padding: 0 6px; /* off-scale */
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 999px;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 11px;
   line-height: 16px; /* off-scale */
   overflow-wrap: anywhere;
@@ -7715,7 +7724,7 @@ button.automation-run:hover {
   height: 7px;
   flex: none;
   border-radius: 50%;
-  background: var(--text-tertiary);
+  background: var(--luke-color-text-subtle);
 }
 
 /* A server's card lists its tools as the MCP popover's page does
@@ -7858,7 +7867,7 @@ button.automation-run:hover {
 .main-tabs .tab[data-dragging="true"] {
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--desktop-ground);
+    var(--luke-color-ground);
 }
 
 /* The plan's tab alone in its column takes the room the heading has rather
@@ -7898,7 +7907,7 @@ button.automation-run:hover {
   min-height: 0;
   margin: 0;
   overflow-y: auto;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -7906,8 +7915,8 @@ button.automation-run:hover {
 .confirm-dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--control-gap);
-  margin-top: var(--space-12);
+  gap: var(--luke-control-gap);
+  margin-top: var(--luke-space-12);
 }
 
 /* A dialog's answers hold a common width, so a short verb is not a smaller
@@ -8123,24 +8132,24 @@ button.automation-run:hover {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--control-gap);
+  gap: var(--luke-control-gap);
 }
 
 .start-agent-split {
   display: flex;
   align-items: center;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
   -webkit-app-region: no-drag;
 }
 
 .start-agent-main {
-  border-radius: calc(var(--control-radius) - 1px) 0 0 calc(var(--control-radius) - 1px);
+  border-radius: calc(var(--luke-control-radius) - 1px) 0 0 calc(var(--luke-control-radius) - 1px);
 }
 
 .start-agent-chevron {
-  border-left: 1px solid var(--hairline);
-  border-radius: 0 calc(var(--control-radius) - 1px) calc(var(--control-radius) - 1px) 0;
+  border-left: 1px solid var(--luke-color-border);
+  border-radius: 0 calc(var(--luke-control-radius) - 1px) calc(var(--luke-control-radius) - 1px) 0;
 }
 
 /* The model menu hangs under the chevron, to the toolbar's right edge. */
@@ -8222,7 +8231,7 @@ button.automation-run:hover {
 
 /* Create issue's chord, muted against its own fill rather than the card's. */
 .new-task-dialog .primary-button .shortcut {
-  --shortcut-ink: var(--on-accent-muted);
+  --shortcut-ink: var(--luke-color-on-accent-muted);
 }
 
 /* The home page's New task's chord, a glyph's gap after its word, muted
@@ -8248,14 +8257,14 @@ button.automation-run:hover {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-32) var(--page-inset) var(--space-48);
+  padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
 }
 
 .home-column {
   display: flex;
   width: min(600px, 100%);
   flex-direction: column;
-  gap: var(--space-32);
+  gap: var(--luke-space-32);
   margin: clamp(0px, 7vh, 72px) auto 0; /* off-scale */
 }
 
@@ -8263,23 +8272,23 @@ button.automation-run:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-16);
+  gap: var(--luke-space-16);
   padding: 0 var(--row-inset);
 }
 
 .home-section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .home-section-title {
   display: flex;
   align-items: baseline;
-  gap: var(--space-6);
-  margin: 0 0 var(--space-2);
+  gap: var(--luke-space-6);
+  margin: 0 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -8291,7 +8300,7 @@ button.automation-run:hover {
 
 /* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
 .home-section-count {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
@@ -8303,7 +8312,7 @@ button.automation-run:hover {
 
 .home-row .sidebar-task-line,
 .inbox-row .sidebar-task-line:has(.home-row-context) {
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .home-row .sidebar-task-name,
@@ -8321,7 +8330,7 @@ button.automation-run:hover {
   overflow: hidden;
   min-width: min(16ch, 35%);
   flex: 1;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8340,7 +8349,7 @@ button.automation-run:hover {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin-left: auto;
 }
 
@@ -8351,7 +8360,7 @@ button.automation-run:hover {
   flex: none;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .home-row-picture svg {
@@ -8371,14 +8380,14 @@ button.automation-run:hover {
 .person-column,
 .issues-column {
   margin-top: 0;
-  gap: var(--space-24);
+  gap: var(--luke-space-24);
 }
 
 .person-head {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
   padding: 0 var(--row-inset);
 }
 
@@ -8388,7 +8397,7 @@ button.automation-run:hover {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   overflow-wrap: anywhere;
 }
 
@@ -8396,7 +8405,7 @@ button.automation-run:hover {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
 }
 
@@ -8412,7 +8421,7 @@ button.automation-run:hover {
 
 /* The way to the rest of their tasks, standing under the section's rows. */
 .person-section-foot {
-  margin: calc(-1 * var(--space-20)) 0 0;
+  margin: calc(-1 * var(--luke-space-20)) 0 0;
 }
 
 /* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */
@@ -8423,8 +8432,8 @@ button.automation-run:hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-12);
-  padding: var(--page-inset);
+  gap: var(--luke-space-12);
+  padding: var(--luke-page-inset);
   text-align: center;
 }
 
@@ -8434,10 +8443,10 @@ button.automation-run:hover {
   height: 56px;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--luke-space-4);
   border-radius: 14px;
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 .home-welcome-face .luke-face {
@@ -8449,7 +8458,7 @@ button.automation-run:hover {
    one-line name in a well, and its answers at its foot. */
 .new-task-dialog {
   width: min(460px, 100%);
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
 /* New task (`new-task-dialog.tsx`), inside the shared dialog's wide card:
@@ -8523,11 +8532,11 @@ button.automation-run:hover {
 
 .dialog-name-field {
   width: 100%;
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
   background: var(--desktop-well);
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font: inherit;
   font-size: 14px;
   line-height: 1.5;
@@ -8535,7 +8544,7 @@ button.automation-run:hover {
 }
 
 .dialog-name-field::placeholder {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* New task's foot: the repository chip at its start, the answers at its
@@ -8570,7 +8579,7 @@ button.automation-run:hover {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
@@ -8707,8 +8716,8 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   border-radius: 12px;
   background: var(--luke-color-overlay);
   box-shadow:
-    0 1px 2px var(--shadow-soft),
-    0 12px 36px var(--shadow);
+    0 1px 2px var(--luke-color-shadow-soft),
+    0 12px 36px var(--luke-color-shadow);
   pointer-events: none;
   animation:
     toast-fade var(--duration-quick) var(--motion-exit),
@@ -8728,7 +8737,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   height: var(--luke-control-icon);
   flex: none;
   margin-top: calc((var(--toast-row) - var(--luke-control-icon)) / 2);
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
 }
 
 .toast[data-tone="failed"] > svg {
@@ -8820,7 +8829,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 
 .task-card-corner,
 .task-card-more {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -8834,13 +8843,13 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 .task-card-line {
   display: flex;
   width: calc(100% + 2 * var(--row-inset));
-  height: var(--menu-row-height);
+  height: var(--luke-menu-row-height);
   min-width: 0;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   margin-inline: calc(-1 * var(--row-inset));
   padding: 0 var(--row-inset);
-  border-radius: var(--menu-row-radius);
+  border-radius: var(--luke-menu-row-radius);
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
@@ -8848,16 +8857,16 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 
 :is(button.task-card-detail, button.task-card-line):is(:hover, :focus-visible) {
   outline: none; /* no ring: the row's fill marks it, as a menu row's does */
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .task-card-detail {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
 }
 
 .task-card-line {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 13px;
 }
 
@@ -8891,7 +8900,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 }
 
 .task-card-number {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
 }
 
@@ -8899,7 +8908,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   display: flex;
   height: 22px;
   align-items: center;
-  padding-left: calc(var(--menu-glyph) + var(--glyph-gap));
+  padding-left: calc(var(--menu-glyph) + var(--luke-icon-gap));
 }
 
 /* A run's figures under its card's rule (`turn-card.tsx`), a turn's tokens
@@ -8908,7 +8917,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 .run-card-figures {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   margin: 0;
   font-size: 12px;
 }
@@ -8916,11 +8925,11 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 .run-card-figure {
   display: flex;
   justify-content: space-between;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .run-card-figure dt {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .run-card-figure dd {
