@@ -466,6 +466,12 @@ node --input-type=module -e '
     "apps/web/server/preview-*.ts",
     "apps/desktop/src/renderer/stylesheet.d.ts",
     "apps/desktop/src/testing/**",
+    // The doors the window root installs its platform bridge and platform
+    // services into. Step 16 of the web plan moves them into the panel
+    // package, together with renderer/act.ts and the hooks above them, and
+    // removes these rows.
+    "apps/desktop/src/renderer/app-bridge.ts",
+    "apps/desktop/src/renderer/app-platform.ts",
   ];
   const shell = new Set(edges.runtimeEdges);
   for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
