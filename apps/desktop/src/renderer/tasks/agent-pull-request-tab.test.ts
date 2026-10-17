@@ -7,6 +7,7 @@ import {
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
+  type CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_STATE,
@@ -49,6 +50,8 @@ import { type GitHubConnectControl, GitHubConnectProvider } from "../github-conn
 import { MemberDirectory } from "../member-directory";
 import { rendererRuntime } from "../renderer-runtime";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
+import { TAB_KIND, tabLook } from "./tab-look";
+import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
@@ -312,6 +315,29 @@ function Switching({
   });
 }
 
+/**
+ * The tab beside the name the side panel's strip gives it (`tabLook`), both
+ * drawn from what the task's real reads of the agent's published pull
+ * request keep (`useTaskPullRequests`), as the window draws them.
+ */
+function Named({ control, reader }: { control: CodingAgentsControl; reader: PullRequestReader }) {
+  const kept = useTaskPullRequests(AGENT.planId ?? undefined, control.agents, reader);
+  const pullRequest = kept.pullRequests.get(AGENT.id);
+  return createElement(
+    "div",
+    null,
+    createElement(
+      "span",
+      { "data-tab-name": "" },
+      tabLook({ kind: TAB_KIND.CHANGES, pullRequest }).label,
+    ),
+    createElement(Switching, {
+      control: { ...control, pullRequests: kept.pullRequests, readPullRequest: kept.read },
+      first: PULL_REQUEST_VIEW.CONVERSATION,
+    }),
+  );
+}
+
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -340,6 +366,15 @@ async function draw(
   registry = AtomRegistry.make(),
   github: GitHubConnectControl = NO_GITHUB,
 ) {
+  return drawn(createElement(Switching, { control, first }), registry, github);
+}
+
+/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed. */
+async function drawn(
+  tab: React.ReactElement,
+  registry = AtomRegistry.make(),
+  github: GitHubConnectControl = NO_GITHUB,
+) {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
@@ -351,7 +386,7 @@ async function draw(
           children: createElement(MemberDirectory, {
             workspace: { id: "workspace-acme", memberCount: 2 },
             readerId: "user-dana",
-            children: createElement(Switching, { control, first }),
+            children: tab,
           }),
         }),
       ),
@@ -1217,32 +1252,26 @@ function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
   };
 }
 
-test("a part whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads again the header's reads, the checks once shown, and what the agent published, which names its tab", async () => {
+test("a part whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads again the header's reads and the checks once shown", async () => {
   const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
   const later = (name: string) => ({ checks: [check(name, CHECK_STATE.PASSED)] });
-  const publishedReads: string[] = [];
-  const control = controlAnswering({
-    pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
-      { pullRequest: PULL_REQUEST },
-      { pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } },
-    ),
-    checks: inTurn<CodingAgentOverviewChecksAnswerView>(
-      failure,
-      { pullRequest: later("retried") },
-      { pullRequest: later("refreshed") },
-    ),
-    conversation: inTurn<CodingAgentOverviewConversationAnswerView>(
-      { pullRequest: CONVERSATION },
-      { pullRequest: { ...CONVERSATION, conversation: CONVERSATION.conversation.slice(0, 1) } },
-    ),
-  });
-  const tab = await draw({
-    ...control,
-    readPullRequest: (agentId) => {
-      publishedReads.push(agentId);
-      return control.readPullRequest(agentId);
-    },
-  });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+        { pullRequest: PULL_REQUEST },
+        { pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } },
+      ),
+      checks: inTurn<CodingAgentOverviewChecksAnswerView>(
+        failure,
+        { pullRequest: later("retried") },
+        { pullRequest: later("refreshed") },
+      ),
+      conversation: inTurn<CodingAgentOverviewConversationAnswerView>(
+        { pullRequest: CONVERSATION },
+        { pullRequest: { ...CONVERSATION, conversation: CONVERSATION.conversation.slice(0, 1) } },
+      ),
+    }),
+  );
   await choose(tab, "Checks");
   const checks =
     tab.querySelector('[aria-label="Checks"]') ?? assert.fail("the checks section stands");
@@ -1271,16 +1300,55 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
       (each) => each.textContent === "Refresh pull request",
     ) ?? assert.fail("the ⋯ offers Refresh");
-  assert.deepEqual(publishedReads, [], "what the agent published is not read before Refresh");
   await act(async () => refresh.click());
   await settle();
-  assert.deepEqual(publishedReads, [AGENT.id], "what names the tab and its pin is read again");
   assert.deepEqual(words(tab, ".pull-request-check-name"), ["refreshed"]);
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations weekly #42",
   );
   assert.equal(tab.querySelectorAll(".pull-request-entry").length, 1);
+});
+
+test("a pull request renamed on GitHub renames its tab once Refresh is pressed, as it does its header", async () => {
+  const renamed = { ...PULL_REQUEST, title: "Expire invitations weekly" };
+  const answer = (title: string) => ({
+    repository: "acme/relay",
+    branch: PULL_REQUEST.head,
+    pullRequest: { ...published(PULL_REQUEST_STATE.OPEN), title },
+  });
+  const tab = await drawn(
+    createElement(Named, {
+      control: controlAnswering({
+        pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+          { pullRequest: PULL_REQUEST },
+          { pullRequest: renamed },
+        ),
+      }),
+      reader: inTurn<CodingAgentPullRequestAnswerView>(
+        answer(PULL_REQUEST.title),
+        answer(renamed.title),
+      ),
+    }),
+  );
+  const name = () => tab.querySelector("[data-tab-name]")?.textContent;
+  assert.equal(name(), "#42 Expire invitations");
+
+  const more =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+    assert.fail("the bar has a ⋯");
+  act(() => more.click());
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations weekly #42",
+  );
+  assert.equal(name(), "#42 Expire invitations weekly");
 });
 
 test("where nothing of the pull request is held and its reads fail, each part says so with its own Retry, and Files changed still reads on its own", async () => {
