@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -64,6 +65,42 @@ const markdownHtmlParserOnDemand = {
     build.onResolve({ filter: /^rehype-raw$/ }, (args) =>
       args.importer === MARKDOWN_HTML_PARSER ? undefined : { path: MARKDOWN_HTML_PARSER },
     );
+  },
+};
+
+// The whole of Lucide's icons, which a section's icon picker draws every one
+// of (`src/renderer/desktop/section-icon-picker.tsx`), loaded on demand: its
+// `import("lucide-react")` is answered with a module of `icons` alone, read
+// from Lucide's CommonJS build, one file the panel's own named imports never
+// reach. Note that the ES build would not do, because its barrel, which
+// every window's bundle imports a few dozen glyphs through, names each of
+// some two thousand icon modules, and a module the splitting below can reach
+// from the window's entry through any import is loaded with it, so all of
+// them would be. The CommonJS file is read in a namespace of its own, so the
+// resolver never takes it for the package and keeps answering the named
+// imports with the ES build.
+const LUCIDE_WHOLE = createRequire(path.join(appRoot, "package.json")).resolve("lucide-react");
+const LUCIDE_WHOLE_FILE = "lucide-whole-file";
+const lucideWholeOnDemand = {
+  name: "lucide-whole-on-demand",
+  setup(build) {
+    build.onResolve({ filter: /^lucide-react$/ }, (args) =>
+      args.kind === "dynamic-import" ? { path: "icons", namespace: "lucide-whole" } : undefined,
+    );
+    build.onLoad({ filter: /.*/, namespace: "lucide-whole" }, () => ({
+      contents: `export { icons } from "${LUCIDE_WHOLE_FILE}";`,
+      loader: "js",
+      resolveDir: appRoot,
+    }));
+    build.onResolve({ filter: new RegExp(`^${LUCIDE_WHOLE_FILE}$`) }, () => ({
+      path: LUCIDE_WHOLE,
+      namespace: LUCIDE_WHOLE_FILE,
+    }));
+    build.onLoad({ filter: /.*/, namespace: LUCIDE_WHOLE_FILE }, async (args) => ({
+      contents: await fs.readFile(args.path, "utf8"),
+      loader: "js",
+      resolveDir: path.dirname(args.path),
+    }));
   },
 };
 
@@ -178,7 +215,7 @@ const rendererBuild = build({
   target: "chrome140",
   jsx: "automatic",
   minify: true,
-  plugins: [markdownHtmlParserOnDemand, ...sentryPlugins()],
+  plugins: [markdownHtmlParserOnDemand, lucideWholeOnDemand, ...sentryPlugins()],
   sourcemap: true,
   logLevel: "info",
   define: {
