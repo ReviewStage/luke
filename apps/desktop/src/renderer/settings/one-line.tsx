@@ -15,8 +15,8 @@ export function OneLine({
   as: Element,
   text,
 }: {
-  /** The row's name (`strong`) or the detail under it (`small`). */
-  as: "strong" | "small";
+  /** The row's name (`strong`, or `span` in a shared row's label) or the detail under it (`small`). */
+  as: "strong" | "span" | "small";
   text: string;
 }): React.JSX.Element {
   const [line, clipped] = useClipped();
