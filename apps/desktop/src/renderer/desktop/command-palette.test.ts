@@ -83,7 +83,7 @@ function WindowPalette({
   );
 }
 
-/** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
+/** The palette over a window on its Tasks tab, opened by ⌘K's command, every page it opens recorded. */
 function openPalette(
   tasks: TasksControl = tasksControl(),
   readFiles: (taskId: string) => Promise<TasksTreeAnswer> = () =>

@@ -18,7 +18,7 @@ import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**
  * pull-request-mark.test.ts -- a pull request reads the same wherever the
- * window draws it: a sidebar plan's card, its agent's chip, the row a
+ * window draws it: a sidebar task's card, its agent's chip, the row a
  * transcript ends on, and its Changes tab's card each wear one mark saying
  * the words a reader who cannot see it hears.
  */

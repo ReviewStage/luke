@@ -1,4 +1,4 @@
-/** What a conversation is to the agent: its main one, an observed session's, a child's, a named plan's, or a coding agent's own. */
+/** What a conversation is to the agent: its main one, an observed session's, a child's, a named task's, or a coding agent's own. */
 export const CONVERSATION_KIND = {
   MAIN: "main",
   OBSERVED: "observed",

@@ -144,6 +144,6 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   assert.ok(recording.includes("styles.css"), "the stylesheet's address");
   assert.ok(recording.includes("#file-icon-ts"), "the icon's symbol");
   // And none of its words, in a text node, an attribute, a link's address, an input's value, or
-  // an editor's words and chips (the agent's message box, `planning/composer-field.tsx`).
+  // an editor's words and chips (the agent's message box, `tasks/composer-field.tsx`).
   for (const word of WORDS) assert.ok(!recording.includes(word), word);
 });

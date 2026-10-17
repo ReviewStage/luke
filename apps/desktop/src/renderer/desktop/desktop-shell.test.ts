@@ -159,7 +159,7 @@ function shellProps(
 
 /**
  * The window's shell on the home page with the sidebar folded, the Inbox
- * open over it or not, New plan opening its dialog and Cancel putting it
+ * open over it or not, New task opening its dialog and Cancel putting it
  * away as the tab does.
  */
 function mount(
@@ -613,10 +613,10 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   assert.deepEqual(closed, ["closed"]);
 });
 
-/** The plan the call in progress is about, which none of the places below shows with its call bar. */
+/** The task the call in progress is about, which none of the places below shows with its call bar. */
 const CALL_TASK_NAME = "Checkout redesign";
 
-/** Every place in the window the developer can stand while a call goes on about another plan, as the shell is handed it. */
+/** Every place in the window the developer can stand while a call goes on about another task, as the shell is handed it. */
 const PLACE = {
   HOME: "home",
   OTHER_TASK: "another plan",
@@ -632,7 +632,7 @@ const PLACE = {
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
 
-/** The column at the window's left in each place: the plans' sidebar, which folds, or a column of the place's own, which does not. */
+/** The column at the window's left in each place: the tasks' sidebar, which folds, or a column of the place's own, which does not. */
 const LEFT_COLUMN = {
   [PLACE.HOME]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.OTHER_TASK]: { selector: "aside.desktop-sidebar", folds: true },
@@ -646,7 +646,7 @@ const LEFT_COLUMN = {
   [PLACE.VERSION_HISTORY]: { selector: 'nav[aria-label="Versions"]', folds: false },
 } as const satisfies Record<Place, { selector: string; folds: boolean }>;
 
-/** The tab and the plans' state that stand the window in a place. */
+/** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
   const control = tasksControl();
   const onTask = {
@@ -674,7 +674,7 @@ function placed(place: Place) {
   };
 }
 
-/** The shell standing in a place with a call in progress about another plan, its card's presses sent as `App` sends them. */
+/** The shell standing in a place with a call in progress about another task, its card's presses sent as `App` sends them. */
 function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
   const { tell } = useAct();
   const { tab, tasks } = placed(place);
@@ -755,7 +755,7 @@ function cardStanding(page: HTMLElement, place: Place) {
   };
 }
 
-/** Presses the card's way back to the call's plan. */
+/** Presses the card's way back to the call's task. */
 function pressReturn(page: HTMLElement): void {
   const button = page.querySelector<HTMLButtonElement>(
     `section.call-card button[aria-label="Open ${CALL_TASK_NAME}"]`,

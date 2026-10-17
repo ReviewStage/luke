@@ -132,7 +132,7 @@ under stands only once the account is gone. One made as "Personal" on
 2026-10-15 holds its owner's name too
 (`migrations/20261015131300_personal_workspace_owner_name`), because Better
 Auth's own invitation read says the name the organization holds. `tests/workspace-store.test.ts` holds the three. Beyond its name, that row is only how a
-plan start or a repository listing that names no workspace finds the
+task start or a repository listing that names no workspace finds the
 account's default; the workspace is otherwise one like any other, but that
 it is never renamed: it takes
 invitations, its members are read, removed, and left, and it connects GitHub,
@@ -140,19 +140,19 @@ on the same rules as every workspace. The user row's cascade takes the
 `personal_workspace` row and the account's `member` rows and leaves the
 organization standing, as it leaves every workspace the account owned.
 
-Every plan belongs to one workspace: `plan.organization_id`, not null and
+Every task belongs to one workspace: `task.organization_id`, not null and
 cascading with the organization (`20261013231728_plan_organization` adds the
 column nullable, the custom `20261013231735_plan_organization_backfill` after
-it moves every plan standing into its starter's first workspace, and
-`20261013231809_plan_organization_not_null` then sets the column not null). A plan's summary on the wire names it as `workspaceId`.
+it moves every task standing into its starter's first workspace, and
+`20261013231809_plan_organization_not_null` then sets the column not null). A task's summary on the wire names it as `workspaceId`.
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
-statement joins into its own where clause. A plan is read and written by
+statement joins into its own where clause. A task is read and written by
 every member of its workspace, whichever of them started it:
-`taskReachableBy` and `reachableTask` gate every plan statement in
+`taskReachableBy` and `reachableTask` gate every task statement in
 `task-store.ts`, `board-store.ts`, `plan-pages.ts`, `transcript-store.ts`,
 and `plan-revisions.ts`, and the voice door's `heldTask`, on the caller's
-membership of the plan's workspace rather than on the plan's starter. Past
-that gate a shared plan's transcript and a new call's earlier calls are
+membership of the task's workspace rather than on the task's starter. Past
+that gate a shared task's transcript and a new call's earlier calls are
 every member's calls about it.
 
 A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
@@ -168,24 +168,24 @@ picture by its address (`@luke/features/plan-attachment-link`), which
 `savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
 deletes, a day on, a picture no save stamped.
 
-A plan's conversation keeps the member who opened it as its `user_id`, the
+A task's conversation keeps the member who opened it as its `user_id`, the
 address its messages, turns, and asks are written under, and is reached by
-every member of the plan's workspace: `conversationReachableBy` in
+every member of the task's workspace: `conversationReachableBy` in
 `packages/database/src/models/recorded-session.ts` admits a member of the
-workspace of the plan or coding agent naming the conversation, or naming its
+workspace of the task or coding agent naming the conversation, or naming its
 standing parent one hop up (a subagent's session), and the opener alone for a
-conversation no plan or agent names, so a member who leaves the workspace
+conversation no task or agent names, so a member who leaves the workspace
 leaves its conversations with it. The eve doors
 (`brain-host/door.ts`), the two hosts' admission (`brain-host/conversation.ts`,
 which answers the caller beside the conversation's owner), and the ask door
 all read it, so a member speaks into the session a teammate opened. From
-there the caller and the owner are two ids: the planning brain's inference
+there the caller and the owner are two ids: the brain's inference
 and research are metered to the caller, not the conversation's owner, and
-the plan, the board, every tool binding, an integration's grant, and a
+the task, the board, every tool binding, an integration's grant, and a
 worker's title are read, written, and metered as the caller, while the
 writer, the seed, and the relay address the owner's rows.
 A voice call is the caller's `voice_sessions` row and meter, landing in the
-plan's one conversation, which `openTaskConversation` answers with its
+task's one conversation, which `openTaskConversation` answers with its
 opener. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
@@ -419,7 +419,7 @@ where a statement is one expression. It takes no `relations` config, because not
 Drizzle's relational queries: a statement is the `db.select()` builder, never
 `db.query`, as the `drizzle` skill has it. The tables a statement names are
 named imports from their own module
-(`import { plan } from "@luke/database/schemas/task"`), never the barrel,
+(`import { task } from "@luke/database/schemas/task"`), never the barrel,
 which is what makes a renamed column a type error at the call site.
 
 The builder hands back the statement's rows, not a guarantee about them, so a
@@ -429,16 +429,16 @@ is declared as a `Schema` already. `SqlSchema`'s `execute` takes the statement
 as the Effect the driver's builder already is, read off the service:
 
 ```ts
-const findPlans = SqlSchema.findAll({
+const findTasks = SqlSchema.findAll({
   Request: Schema.String,
-  Result: PlanRowSchema,
+  Result: TaskRowSchema,
   execute: (userId) =>
     Database.use((db) =>
       db
-        .select(PLAN_COLUMNS)
-        .from(plan)
-        .where(eq(plan.userId, userId))
-        .orderBy(desc(plan.createdAt), desc(plan.id)),
+        .select(TASK_COLUMNS)
+        .from(task)
+        .where(eq(task.userId, userId))
+        .orderBy(desc(task.createdAt), desc(task.id)),
     ),
 });
 ```
@@ -479,7 +479,7 @@ release before it serves the migrated database all that while. So the first
 deployment teaches every read to decode both the old shape and the new one,
 and the second, once the first is live, carries the migration that rewrites
 the rows. `0082_plan_template_teammate` shipped in one step, and the release
-still serving refused every plan until its own build went live. Each read
+still serving refused every task until its own build went live. Each read
 projects only the columns it answers (`task-store.ts`'s list reads no part of
 the document), so a rewrite reaches only the reads of what it rewrote.
 
@@ -580,7 +580,7 @@ requirements a route's own handler has travel as request markers the handler
 provides per request from the context `runWeb` read. The auth group, the
 events and maintenance groups below, the account group's
 `server/routes/account/delete.ts`, `preferences.ts`, and `plan-template.ts`,
-the plans group's four, and the dashboard's five behind the admin group are
+the tasks group's four, and the dashboard's five behind the admin group are
 converted this way; the voice route alone exports something else, the
 `http.Server` described under "Hosted voice service".
 

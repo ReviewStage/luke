@@ -14,8 +14,8 @@ import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 
 /**
- * New plan as the developer meets it: a card over the window holding the
- * plan's name, the repository chip, Cancel, and Create plan. Each test
+ * New task as the developer meets it: a card over the window holding the
+ * task's name, the repository chip, Cancel, and Create task. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
  * does, so closing is read as the card leaving the window.
  */

@@ -10,9 +10,9 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
  * A workspace is drawn one way wherever it is named, as a person is
  * (`actor-ref.tsx`): its tile (`workspace-tile.tsx`) and its name as one
  * object, so a reader knows the square at a glance in a crumb, a chip, a
- * dialog's row, a search result, and a plan's banner alike. A row may hang a
+ * dialog's row, a search result, and a task's banner alike. A row may hang a
  * quieter line under the name, who shares the workspace or why it cannot
- * take a plan, which turns the name and the line into a column beside the
+ * take a task, which turns the name and the line into a column beside the
  * tile. Named in a sentence it may hang the workspace's card: its tile at a
  * card's size, its name, and who shares it. The name is text, never an
  * attribute, because the session recording masks text and nothing else.

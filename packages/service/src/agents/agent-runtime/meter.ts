@@ -2,7 +2,7 @@
  * meter.ts -- the account's daily meter in front of every model Luke pays for.
  *
  * Every inference that runs on Luke's own key is counted on the account's
- * daily meter before it runs, whichever agent asked: the planning model and
+ * daily meter before it runs, whichever agent asked: the brain and
  * its workers, a coding agent and its workers on Luke's key, and a title
  * generated for any of them. A step on the account's own key is the
  * account's to pay for and is never counted. eve makes one model call per

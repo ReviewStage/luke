@@ -66,11 +66,11 @@ export interface Admission {
   bearer: string;
 }
 
-/** The account a device's handshake resolved to, its plan admitted and a session counted, or the reason it is refused. */
+/** The account a device's handshake resolved to, its task admitted and a session counted, or the reason it is refused. */
 type AdmittedAccount =
   | {
       accountId: string;
-      /** The plan the call is about, read as the account holds it. */
+      /** The task the call is about, read as the account holds it. */
       task: Task;
     }
   | Refusal;
@@ -86,7 +86,7 @@ type Opened =
       sessionId: string;
       /** The account the session is billed to. */
       accountId: string;
-      /** The plan the call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row. */
+      /** The task the call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row. */
       taskId: string;
       /** This connection's own name on the session's row, which a detach it writes must still match. */
       attachId: string;
@@ -157,12 +157,12 @@ const EARLIER_CALLS_MARKER = "[earlier calls]";
 const TASK_SEED_FLOOR_TOKENS = 5_000;
 
 /**
- * The plan a planning call is about, as one developer message: its name and
+ * The task a call is about, as one developer message: its name and
  * the saved document as the developer sees it. Note that the voice otherwise
  * opens knowing no plan at all and reads its role as a new task. The first
- * line says whether the plan has just been started, is under way, or is
- * under way with earlier calls about it, because a voice told every plan
- * continues one opened a brand-new plan by looking for the progress it was
+ * line says whether the task has just been started, is under way, or is
+ * under way with earlier calls about it, because a voice told every task
+ * continues one opened a brand-new task by looking for the progress it was
  * told stood.
  */
 function taskSeedText(task: Task, talkedAbout: boolean): string {
@@ -330,10 +330,10 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
 
   /**
    * A handshake as an account, in the order the refusals are cheapest: the
-   * bearer resolved, the plan it named read from the plans the account
-   * holds, and only then a session counted. A plan the account does not hold
-   * is refused before the count, so a claim on someone else's plan counts
-   * nothing and creates nothing, and so is an archived plan, which no call is
+   * bearer resolved, the task it named read from the tasks the account
+   * holds, and only then a session counted. A task the account does not hold
+   * is refused before the count, so a claim on someone else's task counts
+   * nothing and creates nothing, and so is an archived task, which no call is
    * about until it is brought back.
    */
   const admitAccount = (
@@ -429,9 +429,9 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * A fresh connection to a session that stands: the bearer's account, and
    * only when the session named was created for that very account. A session
    * this deployment never created, or another account's, is refused as the
-   * bearer's own failure rather than as a hint that the id exists. The plan
+   * bearer's own failure rather than as a hint that the id exists. The task
    * the call is bound to is read off the same row, so the re-attached
-   * exchange lands in the plan the session was created about; a plan
+   * exchange lands in the task the session was created about; a task
    * archived since takes the call back no more.
    */
   const openAttached = (
@@ -447,7 +447,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if (Option.isNone(account) || owned === undefined) {
         return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       }
-      // A session no plan was bound to is no call this service still runs.
+      // A session no task was bound to is no call this service still runs.
       if (owned.taskId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const accountId = account.value;
       const task = yield* record.heldTask({ userId: accountId, taskId: owned.taskId });

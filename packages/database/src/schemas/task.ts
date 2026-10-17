@@ -10,7 +10,7 @@ import { conversations } from "./storage.js";
 /**
  * task.ts -- a named task and its plan, its one current document.
  *
- * One row per plan, keyed by a UUID of the service's own and owned by the
+ * One row per task, keyed by a UUID of the service's own and owned by the
  * account that started it, in the workspace it was started in: its name, whether it is archived (a pin is each member's own, `plan-pin.ts`), its
  * one document, a free Markdown text, and the journal of the saves coding
  * agents made on it. A save replaces the
@@ -20,8 +20,8 @@ import { conversations } from "./storage.js";
  * like the conversation, readable by an operator and kept the developer's
  * own by the account it is keyed by.
  *
- * The conversation a plan resumes in is the one row it names, attached once
- * the planning model opens it, and a purged conversation leaves the plan
+ * The conversation a task resumes in is the one row it names, attached once
+ * the brain opens it, and a purged conversation leaves the task
  * standing with none. The row cascades with its account, so deleting an
  * account is still one statement, and with its workspace.
  */
@@ -32,7 +32,7 @@ export const task = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The workspace the plan belongs to: a Better Auth `organization`, the starter's personal one unless another was named. */
+    /** The workspace the task belongs to: a Better Auth `organization`, the starter's personal one unless another was named. */
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -45,10 +45,10 @@ export const task = pgTable(
     /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@luke/features/plan-document`). */
     document: text("document").notNull(),
     /**
-     * The GitHub repository the plan is about, `owner/name` as GitHub spells
+     * The GitHub repository the task is about, `owner/name` as GitHub spells
      * it, confirmed reachable through the Luke GitHub App by the account
      * before it was written; null until one is chosen, which is where every
-     * plan from before repositories stands and is no error.
+     * task from before repositories stands and is no error.
      */
     repository: text("repository"),
     /**
@@ -65,7 +65,7 @@ export const task = pgTable(
      * until no running build reads it, then a later migration drops it.
      */
     pinnedAt: timestamptz("pinned_at"),
-    /** When the plan was archived, which the list leaves out unless asked for it; null while it is not. */
+    /** When the task was archived, which the list leaves out unless asked for it; null while it is not. */
     archivedAt: timestamptz("archived_at"),
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
@@ -75,22 +75,22 @@ export const task = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // The plan list reads one account's plans, newest started first.
+    // The task list reads one account's tasks, newest started first.
     index("task_user_created").on(table.userId, table.createdAt),
-    // A workspace's plans, newest started first.
+    // A workspace's tasks, newest started first.
     index("task_organization_created").on(table.organizationId, table.createdAt),
   ],
 );
 
 /**
- * A plan's whiteboard: the Excalidraw scene the Plans tab shows, with the
+ * A task's whiteboard: the Excalidraw scene the Tasks tab shows, with the
  * number of Luke's drawing it holds, and Luke's latest drawing with its own
- * number. A plan has no row until its board is first drawn on, and reads as
+ * number. A task has no row until its board is first drawn on, and reads as
  * an empty board until then. Beside them stands the scene as the Mac drew it,
  * a PNG, from the first save that held each new drawing of Luke's, which is
- * what the planning model looks at (`look_at_board`). The Mac writes the scene and Luke writes the
+ * what the brain looks at (`look_at_board`). The Mac writes the scene and Luke writes the
  * drawing, each whole and each the last write winning (`board-store.ts`).
- * The row goes with its plan.
+ * The row goes with its task.
  */
 export const taskBoard = pgTable("task_board", {
   taskId: uuid("task_id")

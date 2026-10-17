@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 /**
- * The plan open, its side panel on the Code tab holding the file's code,
+ * The task open, its side panel on the Code tab holding the file's code,
  * and the file's own tab open beside it, read at `commit` where it names
  * one; each file opened recorded.
  */

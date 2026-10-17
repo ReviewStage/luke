@@ -12,7 +12,7 @@
  * image's own; pnpm and Python are added where absent. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words
  * rather than escape codes it has to strip. Every session starts from the
- * snapshot `prepare` made, so the larger image costs a planning session
+ * snapshot `prepare` made, so the larger image costs a brain session
  * nothing at open.
  *
  * Each root's `sandbox.ts` exports this one environment object, which is
@@ -139,7 +139,7 @@ interface SandboxLifecycle {
  * The coding agent's sandbox lives the platform's maximum, so a long run is
  * never cut off mid-turn, and is stopped the moment a turn ends rather than
  * waiting that out. Its size is enough memory for the repository's own lint,
- * chosen at open, so a stopped sandbox resumes at it. A planning sandbox
+ * chosen at open, so a stopped sandbox resumes at it. A brain sandbox
  * opens at the defaults and is never stopped by Luke: Vercel stops it for
  * idleness, and it resumes from its snapshot with the checkout intact.
  */

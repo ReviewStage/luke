@@ -24,11 +24,11 @@ import { logStoreFailure } from "../http/store-failure.js";
 import { isSecretFile } from "./shown-file.js";
 
 /**
- * page-tool.ts -- `show_page`, every agent's one tool for a page: an interactive HTML document written for the plan and shown in the developer's side panel.
+ * page-tool.ts -- `show_page`, every agent's one tool for a page: an interactive HTML document written for the task and shown in the developer's side panel.
  *
  * A page is one self-contained HTML document, its scripts and styles inline
  * or from cdnjs, which the Mac draws in a sandbox that reaches no network
- * (`apps/desktop/src/main/window/page-protocol.ts`). The planning model
+ * (`apps/desktop/src/main/window/page-protocol.ts`). The brain
  * writes it in the call as `html`; a coding agent, which builds pages as
  * files, names one in its sandbox as `path`, read here through the same door
  * its own file tools reach the sandbox by, bounded and never read whole past
@@ -38,8 +38,8 @@ import { isSecretFile } from "./shown-file.js";
  * mention ready to write (`../agents/written-mentions.ts`), and never the
  * HTML, which the model wrote and need not read again.
  *
- * Note that the account and plan are the binding the service built from
- * the conversation's plan, never an argument, exactly as `draw_on_board`'s
+ * Note that the account and task are the binding the service built from
+ * the conversation's task, never an argument, exactly as `draw_on_board`'s
  * are. Every outcome is a result the model reads, never a failure of the
  * call, and a refusal says how to mend the call.
  */
@@ -47,7 +47,7 @@ import { isSecretFile } from "./shown-file.js";
 /** A sandbox as the tool reads a page from it: one file read as a stream of bytes, or nothing where there is no file. */
 type PageSandbox = Pick<SandboxSession, "readFile">;
 
-/** Where a call's page is written: the account and plan the service bound, and, for an agent with one, its sandbox, opened on first use, and the checkout a relative path is read from. */
+/** Where a call's page is written: the account and task the service bound, and, for an agent with one, its sandbox, opened on first use, and the checkout a relative path is read from. */
 export interface PageToolBinding {
   readonly userId: string;
   readonly taskId: string;
@@ -210,7 +210,7 @@ const pageMentionOf = (binding: PageToolBinding, pageId: string, title: string) 
     ),
   );
 
-/** One call of `show_page` under the plan the service bound, by who makes it, Luke or a coding agent, answered as the result the model reads. */
+/** One call of `show_page` under the task the service bound, by who makes it, Luke or a coding agent, answered as the result the model reads. */
 export function runShowPage(
   binding: PageToolBinding,
   input: UnparsedWireValue,

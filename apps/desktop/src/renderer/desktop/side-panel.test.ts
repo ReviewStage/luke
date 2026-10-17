@@ -22,7 +22,7 @@ import { changesOffers, changesTabOf, showPullRequest } from "./side-panel";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** An agent at rest on the plan, named by its title. */
+/** An agent at rest on the task, named by its title. */
 function agent(id: string, title: string, createdAt: number): CodingAgentSummary {
   return {
     id,
@@ -54,7 +54,7 @@ const FIRST = agent("8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", "Invite flow", 1);
 const SECOND = agent("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32", "Invite fixes", 2);
 const THIRD = agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c", "Expiry job", 3);
 
-/** The plan's agents, the first two on one pull request and the third on its own. */
+/** The task's agents, the first two on one pull request and the third on its own. */
 function agents(): CodingAgentsControl {
   const shared = pullRequest(41, "Teammate invitations");
   return {

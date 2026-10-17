@@ -119,11 +119,11 @@ export interface FactoryShipped {
 
 /** What the board is read from. */
 export interface FactoryInput {
-  /** The plans the sidebar lists. */
+  /** The tasks the sidebar lists. */
   readonly plans: readonly TaskSummary[];
   /** What waits, by plan: every member's open items, as the Inbox reads them (`factoryWaiting`). */
   readonly waiting: readonly AppInboxTask[];
-  /** The plan on this Mac's call, or none. */
+  /** The task on this Mac's call, or none. */
   readonly callTaskId: string | undefined;
   /** The listed workspace's agents with no task that stand, not archived (chain D's plan list). */
   readonly oneOff: readonly TasklessAgent[];

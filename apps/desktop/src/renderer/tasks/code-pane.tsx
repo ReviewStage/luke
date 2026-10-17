@@ -26,12 +26,12 @@ import { useMentionLink } from "./plan-mentions";
 import { useOpenLink } from "./use-open-link";
 
 /**
- * code-pane.tsx -- the code Luke put on screen on a plan's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
+ * code-pane.tsx -- the code Luke put on screen on a task's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
  *
- * Luke names a file of the plan's repository and the lines that matter as he
+ * Luke names a file of the task's repository and the lines that matter as he
  * starts to speak about them; the service reads them from its checkout of
  * the repository, and the host keeps the lines pointed at with a few of the
- * file around them and colours them (`plan-code.ts`). The tab draws each
+ * file around them and colours them (`task-code.ts`). The tab draws each
  * as a card: the file's path, Luke's note on why he showed them, those
  * lines numbered from where they sit in the file, and a copy of the lines
  * pointed at, so the feed reads as a walkthrough, a step a card. Two
@@ -274,7 +274,7 @@ function CodeCardContent({
  * A card, drawn again only for another call's code. Note that the call is
  * the whole comparison, because a `show_code` call's lines never change once
  * it has answered, while the view carrying them arrives anew with every
- * word of the call's activity: a plan with hundreds of snippets would
+ * word of the call's activity: a task with hundreds of snippets would
  * otherwise redraw each of them several times a second. Its opening of a
  * file is the panel's own, which is the same door from one draw to the next.
  */
@@ -304,7 +304,7 @@ function CodeFeedRun({
 }
 
 /**
- * The tab: every code shown on the plan, under its call, kept scrolled to
+ * The tab: every code shown on the task, under its call, kept scrolled to
  * the newest while the developer has not scrolled away, or to the card a
  * File tab's note asked to be shown.
  */
@@ -316,7 +316,7 @@ export function CodePane({
   onRevealed,
 }: {
   shown: readonly TaskCodeShowing[];
-  /** The plan's calls as the Call tab draws them, which the code is grouped under. */
+  /** The task's calls as the Call tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
