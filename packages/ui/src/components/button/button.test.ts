@@ -3,12 +3,14 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { BUTTON_VARIANT, ButtonLink } from "./button.js";
+import { BUTTON_VARIANT, Button, ButtonLink, IconButton } from "./button.js";
 
 /**
  * button.test.ts -- a ButtonLink is a link a reader finds by its words,
  * going where its address says, and its press is heard before the browser
- * follows it.
+ * follows it. A button that is not tabbable is left out of the tab order,
+ * yet takes the focus a roving group hands it and is pressed as any other;
+ * an ordinary button stays a Tab stop.
  */
 
 const roots: Root[] = [];
@@ -62,4 +64,30 @@ test("a press on a ButtonLink is heard, and the link is still followed", () => {
   act(() => link?.click());
 
   expect(presses).toEqual([false]);
+});
+
+test("a button that is not tabbable is skipped by Tab, yet takes the focus handed to it and its press", () => {
+  const pressed: string[] = [];
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(Button, { onClick: () => pressed.push("Save"), children: "Save" }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Section actions",
+        tabbable: false,
+        onClick: () => pressed.push("Section actions"),
+      }),
+    ),
+  );
+  const [save, more] = Array.from(container.querySelectorAll("button"));
+
+  expect(save?.tabIndex).toBe(0);
+  expect(more?.tabIndex).toBe(-1);
+
+  act(() => more?.focus());
+  expect(document.activeElement).toBe(more);
+  act(() => more?.click());
+  expect(pressed).toEqual(["Section actions"]);
 });

@@ -2,8 +2,8 @@ import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ConfirmDialog, useConfirmDialog, useMenu } from "@luke/ui";
-import { ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { ConfirmDialog, EllipsisIcon, IconButton, useConfirmDialog, useMenu } from "@luke/ui";
+import { ChevronRightIcon, ListTodoIcon } from "lucide-react";
 import { useRef } from "react";
 import { ActorRef } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
@@ -82,14 +82,7 @@ function DetailToolbar({
       </div>
       <div className="desktop-toolbar-actions">
         <Tooltip label={ISSUE_ACTIONS_LABEL}>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={ISSUE_ACTIONS_LABEL}
-            {...menu.trigger()}
-          >
-            <EllipsisIcon className="icon-button-glyph" />
-          </button>
+          <IconButton icon={<EllipsisIcon />} label={ISSUE_ACTIONS_LABEL} {...menu.trigger()} />
         </Tooltip>
         {menu.drawn === undefined ? null : (
           <ActionMenu

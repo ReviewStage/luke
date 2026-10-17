@@ -1,5 +1,5 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, useMenu } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardNote, IconButton, useMenu } from "@luke/ui";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -291,21 +291,15 @@ export function SummaryButton({
   const pins = layout.wide && layout.card === undefined;
   const label = pins ? "Toggle pinned summary" : "Toggle summary";
   const state = pins
-    ? { "aria-pressed": layout.mode === SUMMARY_MODE.COLUMN }
+    ? { pressed: layout.mode === SUMMARY_MODE.COLUMN }
     : cardControl(layout, cardId);
+  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button summary-toggle"
-        aria-label={label}
-        {...state}
-        data-summary-opener={CARD_FROM.TOOLBAR}
-        onClick={layout.onToggle}
-      >
-        <ListIcon />
-      </button>
-    </Tooltip>
+    <span className="summary-toggle" data-summary-opener={CARD_FROM.TOOLBAR}>
+      <Tooltip label={label}>
+        <IconButton icon={<ListIcon />} label={label} {...state} onClick={layout.onToggle} />
+      </Tooltip>
+    </span>
   );
 }
 
@@ -684,7 +678,8 @@ function SummaryCard({
   const collapse = useCallback(() => {
     const opener = document.querySelector<HTMLElement>(`[data-summary-opener="${from}"]`);
     onDismiss();
-    opener?.focus({ preventScroll: true });
+    // The toolbar's opener is a box around its button, which takes the focus back.
+    (opener?.querySelector<HTMLElement>("button") ?? opener)?.focus({ preventScroll: true });
   }, [from, onDismiss]);
   useEffect(() => {
     if (leaving) return;

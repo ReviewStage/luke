@@ -80,11 +80,11 @@
 .issue-byline {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4) var(--space-16);
-  margin: 0 0 var(--space-12);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: normal;
+  gap: var(--luke-space-4) var(--luke-space-16);
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .issue-description-empty {

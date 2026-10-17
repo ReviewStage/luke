@@ -11,6 +11,10 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
  * the profile it is drawn at, and owns its insides: it takes no class or
  * style, and its outer spacing is its container's.
  *
+ * A button that is not `tabbable` is out of the tab order but takes the
+ * focus when it is handed it, for a roving stop: one of a group the
+ * keyboard enters at one place and moves through by its own keys.
+ *
  * A button unavailable is out of the tab order, unless it is
  * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
  * why, and refuses its press instead. A busy button keeps its width, its
@@ -79,6 +83,8 @@ type ButtonBase = BusyProps &
     disabled?: boolean | undefined;
     /** Whether an unavailable button stays in the tab order, so a hint can say why it is unavailable. */
     focusableWhenDisabled?: boolean | undefined;
+    /** Whether Tab stops on it; one that is not still takes the focus a roving group hands it. */
+    tabbable?: boolean | undefined;
     id?: string | undefined;
     ref?: Ref<HTMLButtonElement> | undefined;
     /** The id of the words that say more of what it does. */
@@ -103,6 +109,7 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     id: props.id,
     ref: props.ref,
     disabled: props.disabled === true && props.focusableWhenDisabled !== true,
+    tabIndex: props.tabbable === false ? -1 : undefined,
     "aria-disabled": refusing ? true : undefined,
     "aria-busy": props.busy === true ? true : undefined,
     "aria-label": busyName ?? name,

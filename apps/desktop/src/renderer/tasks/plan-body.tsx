@@ -8,7 +8,7 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
-import { EllipsisIcon, useMenu } from "@luke/ui";
+import { Button, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -291,9 +291,7 @@ function ChangedLine({
         )}
       </span>
       <span aria-hidden="true">·</span>
-      <button type="button" className="toolbar-button quiet-button" onClick={looks.dismiss}>
-        Dismiss
-      </button>
+      <Button onClick={looks.dismiss}>Dismiss</Button>
     </p>
   );
 }
@@ -565,22 +563,22 @@ function UnitMenu({
   const trigger = menu.trigger();
   return (
     <>
-      <Tooltip label={label}>
-        <button
-          type="button"
-          className="icon-button plan-unit-more"
-          aria-label={label}
-          tabIndex={tabbable ? 0 : -1}
-          {...trigger}
-          onClick={(event) => {
-            // Note that the press stops here, because a click into a section opens its editor.
-            event.stopPropagation();
-            trigger.onClick(event);
-          }}
-        >
-          <EllipsisIcon />
-        </button>
-      </Tooltip>
+      {/* The box shows the ⋯ while the pointer or the keyboard is on its unit. */}
+      <span className="plan-unit-more">
+        <Tooltip label={label}>
+          <IconButton
+            icon={<EllipsisIcon />}
+            label={label}
+            tabbable={tabbable}
+            {...trigger}
+            onClick={(event) => {
+              // Note that the press stops here, because a click into a section opens its editor.
+              event.stopPropagation();
+              trigger.onClick(event);
+            }}
+          />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
