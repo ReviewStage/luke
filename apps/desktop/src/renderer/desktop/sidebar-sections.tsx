@@ -62,7 +62,8 @@ import { useRowDrag } from "./use-row-drag";
  * folded and kept as a repository's
  * fold is, with Edit section and Delete section on its ⋯ and a right-click.
  * Its tasks stand in the order dragged, and a row is dragged within its
- * section, into another, or onto Tasks, which takes it out of every section
+ * section, into another, onto Tasks, which takes it out of every section,
+ * or onto Pinned, which pins it there and takes it out of every section too
  * (`use-row-drag.ts`'s drop zones); a section is dragged among the others
  * by its header. Every change is drawn at once and kept on the account
  * (`TasksControl.onWriteSections`). Deleting a section asks first, though
@@ -71,6 +72,9 @@ import { useRowDrag } from "./use-row-drag";
 
 /** The zone Tasks is as a drop zone, which takes a task out of every section; a section's is its id. */
 export const TASKS_DROP_ZONE = "tasks";
+
+/** The zone Pinned is as a drop zone, which pins a task where it is let go and takes it out of every section. */
+export const PINNED_DROP_ZONE = "pinned";
 
 /** What a press must land in to drag a section rather than one of its tasks. */
 const SECTION_HANDLE = ".sidebar-repository-header";
@@ -290,7 +294,10 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
           disabled={confirm.busy}
           onChange={(event) => {
             setTitle(event.target.value);
-            confirm.clear();
+            // Note that a refused answer has settled, so the refusal alone holds
+            // the card up: the question is asked again rather than cleared, or
+            // the first key typed after it would close the card.
+            if (confirm.rejection !== undefined) confirm.ask();
           }}
         />
         {/* Keyed by what was asked, so each opening starts its typed emoji from the icon it opened with. */}
@@ -393,7 +400,7 @@ interface SectionContext {
   readonly onToggle: (sectionId: string) => void;
   /** A task's row, as it stands in any list of the sidebar. */
   readonly row: (task: TaskSummary) => React.JSX.Element;
-  /** Hears a task let go over another zone: a section by its id, or Tasks. */
+  /** Hears a task let go over another zone: a section by its id, Tasks, or Pinned. */
   readonly onDropTask: (taskId: string, zone: string, at: number) => void;
 }
 

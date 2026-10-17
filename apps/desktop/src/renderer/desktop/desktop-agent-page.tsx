@@ -3,7 +3,7 @@ import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { EllipsisIcon, ErrorState, useMenu } from "@luke/ui";
+import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -29,6 +29,7 @@ import { SkillFiles } from "../tasks/skill-chip";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
 import { WordsWorkspace } from "../tasks/use-link-standing";
+import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link";
 import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
@@ -275,6 +276,8 @@ export function DesktopAgentPage({
     showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
   const openPullRequest = (published: string) =>
     showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
+  // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task.
+  const openHere = openPullRequestsHere(control, openPullRequest);
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,
@@ -328,9 +331,9 @@ export function DesktopAgentPage({
         {agents.listMissing ? (
           <NotFound thing={NOT_FOUND_THING.AGENT} />
         ) : agents.listFailed ? (
-          <div className="agent-page-note">
-            <ErrorState onRetry={agents.onRetryList}>{NOT_READ}</ErrorState>
-          </div>
+          <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {NOT_READ}
+          </ErrorState>
         ) : (
           <Spinner label="Loading agent" size={SPINNER_SIZE.INLINE} />
         )}
@@ -350,54 +353,64 @@ export function DesktopAgentPage({
           >
             <SkillFiles source={control.readSkills} onOpen={openSkill}>
               <AgentMentions value={mentions}>
-                <div ref={onArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
-                  {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
-                  <section className="agent-page" aria-label="Agent" hidden={sidePanel.fullScreen}>
-                    {toolbar}
-                    <FindScope
-                      className="desktop-task-column"
-                      active={tasks.shown && !sideFocused}
-                      subject={tab}
+                <OpenHereProvider value={openHere}>
+                  <div
+                    ref={onArea}
+                    className="desktop-task"
+                    data-panel-open={String(sidePanel.open)}
+                  >
+                    {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
+                    <section
+                      className="agent-page"
+                      aria-label="Agent"
+                      hidden={sidePanel.fullScreen}
                     >
-                      <AgentPane
-                        label={agentTabLabel(agent, control.models)}
-                        tabbed={false}
-                        tab={tab}
+                      {toolbar}
+                      <FindScope
+                        className="desktop-task-column"
+                        active={tasks.shown && !sideFocused}
+                        subject={tab}
+                      >
+                        <AgentPane
+                          label={agentTabLabel(agent, control.models)}
+                          tabbed={false}
+                          tab={tab}
+                          agents={control}
+                          shown={shown}
+                          views={views}
+                          onOpenDelegation={openDelegation}
+                          onOpenChanges={openChanges}
+                          onOpenPullRequest={openPullRequest}
+                          onOpenTarget={openTarget}
+                          cards={cards}
+                        />
+                      </FindScope>
+                    </section>
+                    {drawing.panel ? (
+                      <SidePanel
+                        {...drawing}
+                        panel={drawing.panel}
+                        unread={NO_UNREAD}
+                        holder={SIDE_PANEL_HOLDER.AGENT}
+                        planId={agentId}
+                        repository={agentRepository ?? null}
+                        board={undefined}
+                        shownCode={undefined}
+                        pages={undefined}
+                        transcript={NO_CALLS}
+                        work={work}
                         agents={control}
-                        shown={shown}
+                        openAgents={openAgents}
+                        shownAgent={shown ? agentId : undefined}
                         views={views}
-                        onOpenDelegation={openDelegation}
-                        onOpenChanges={openChanges}
-                        onOpenPullRequest={openPullRequest}
+                        shown={tasks.shown}
+                        focused={sideFocused}
                         onOpenTarget={openTarget}
                         cards={cards}
                       />
-                    </FindScope>
-                  </section>
-                  {drawing.panel ? (
-                    <SidePanel
-                      {...drawing}
-                      panel={drawing.panel}
-                      unread={NO_UNREAD}
-                      holder={SIDE_PANEL_HOLDER.AGENT}
-                      planId={agentId}
-                      repository={agentRepository ?? null}
-                      board={undefined}
-                      shownCode={undefined}
-                      pages={undefined}
-                      transcript={NO_CALLS}
-                      work={work}
-                      agents={control}
-                      openAgents={openAgents}
-                      shownAgent={shown ? agentId : undefined}
-                      views={views}
-                      shown={tasks.shown}
-                      focused={sideFocused}
-                      onOpenTarget={openTarget}
-                      cards={cards}
-                    />
-                  ) : null}
-                </div>
+                    ) : null}
+                  </div>
+                </OpenHereProvider>
               </AgentMentions>
             </SkillFiles>
           </AutomationDirectory>

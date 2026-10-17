@@ -15,7 +15,7 @@ import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon, riseAboveEnd, useMenu 
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -268,6 +268,7 @@ export function AgentComposer({
   skills,
   replyDoor,
   sendsEmpty = false,
+  closedRemedy,
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
@@ -301,6 +302,8 @@ export function AgentComposer({
   replyDoor?: RefObject<((words: string) => void) | undefined> | undefined;
   /** Whether an empty box sends too, as a fork's draft does, which needs no words of its own. */
   sendsEmpty?: boolean;
+  /** What mends a box closed for good, drawn after its note: Continue in new agent (`continue-agent.tsx`); none where nothing does. */
+  closedRemedy?: ReactNode;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
@@ -677,7 +680,9 @@ export function AgentComposer({
           className="error-message agent-composer-note"
           onRetry={retries ? composer.retry : undefined}
           onRemedy={remedy}
-        />
+        >
+          {closed ? closedRemedy : null}
+        </FailureNote>
       ) : null}
     </div>
   );

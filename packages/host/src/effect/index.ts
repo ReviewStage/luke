@@ -6,6 +6,7 @@ export { hostKernelLayer } from "./kernel.js";
 export {
   AppIdentity,
   Environment,
+  HostSockets,
   IdSource,
   RunMode,
   reporterLayer,

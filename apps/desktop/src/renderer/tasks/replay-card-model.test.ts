@@ -11,8 +11,10 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { CALL_KIND } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
+import { TOOL_STATE } from "../ai-elements/tool";
 import { messageFileChips } from "./attached-file-chips";
 import { messageWords } from "./coding-agent-model";
 import {
@@ -22,7 +24,9 @@ import {
   replayCount,
   replayOpening,
   replayVerb,
+  STEP_VIEW,
   stepLine,
+  stepView,
 } from "./replay-card-model";
 
 /**
@@ -173,4 +177,61 @@ test("an agent continued from an automation's run, at any remove, is drawn from 
   assert.equal(briefAgent(fromPlan, [planned, fromPlan]), fromPlan);
   // A source the list does not hold leaves the agent as it is.
   assert.equal(briefAgent(continued, []), continued);
+});
+
+test("a call's step is drawn as the row its call wears in a transcript: its kind by its verb, its subject, its input and result, failed or running as its words say", () => {
+  const call = (summary: string, words: string) =>
+    stepView({ kind: REPLAY_STEP_KIND.TOOL, summary, words });
+  assert.deepEqual(
+    call("Read: src/invite.ts", 'Input: {"filePath":"src/invite.ts"}\nResult: 42 lines'),
+    {
+      kind: STEP_VIEW.CALL,
+      call: CALL_KIND.READ_FILE,
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      subject: "src/invite.ts",
+      input: '{"filePath":"src/invite.ts"}',
+      output: "42 lines",
+      errorText: undefined,
+    },
+  );
+  assert.deepEqual(
+    call("Ran: pnpm test", 'Input: {"command":"pnpm test"}\nResult: Failed: exit 1'),
+    {
+      kind: STEP_VIEW.CALL,
+      call: CALL_KIND.COMMAND,
+      state: TOOL_STATE.OUTPUT_ERROR,
+      subject: "pnpm test",
+      input: '{"command":"pnpm test"}',
+      output: undefined,
+      errorText: "exit 1",
+    },
+  );
+  const running = call("Searched: invite (running)", "Input: {}\nResult: (no result)");
+  assert.equal(running.kind === STEP_VIEW.CALL && running.state, TOOL_STATE.INPUT_AVAILABLE);
+  assert.equal(running.kind === STEP_VIEW.CALL && running.subject, "invite");
+  // A verb no transcript row says is another call's.
+  const used = call("Used: list_tasks", "Input: {}\nResult: []");
+  assert.equal(used.kind === STEP_VIEW.CALL && used.call, CALL_KIND.OTHER);
+});
+
+test("a line's step is drawn as a sent message under its sender, and the agent's words as its words whole", () => {
+  assert.deepEqual(
+    stepView({
+      kind: REPLAY_STEP_KIND.LINE,
+      summary: "Luke: Use seven days.",
+      words: "Use seven days.",
+    }),
+    {
+      kind: STEP_VIEW.LINE,
+      sender: "Luke",
+      words: "Use seven days.",
+    },
+  );
+  assert.deepEqual(
+    stepView({ kind: REPLAY_STEP_KIND.SAID, summary: "Said: Done.", words: "Done.\n\nAll green." }),
+    {
+      kind: STEP_VIEW.SAID,
+      words: "Done.\n\nAll green.",
+    },
+  );
 });

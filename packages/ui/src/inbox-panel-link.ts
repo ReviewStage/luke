@@ -1,5 +1,6 @@
 import { LINK_PLACE, readLink } from "@luke/features/luke-link";
 import { decodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
+import { type OpenedPullRequest, pullRequestAgentOf } from "./pull-request-link.js";
 
 /**
  * inbox-panel-link.ts -- which links pressed on an Inbox item open in the panel beside it, and as what.
@@ -37,16 +38,7 @@ export type InboxPanelTarget =
 export interface InboxPanelPlace {
   readonly taskId: string | undefined;
   readonly repository: string | null;
-  readonly pullRequests: readonly { readonly agentId: string; readonly url: string }[];
-}
-
-/** A page's address without its fragment, its query, or a trailing slash, as two spellings of one pull request's page compare. */
-function pageAddress(href: string): string {
-  const cuts = [href.indexOf("#"), href.indexOf("?")].filter((at) => at >= 0);
-  let address = cuts.length === 0 ? href : href.slice(0, Math.min(...cuts));
-  // Note that the slashes are taken off one at a time rather than by a pattern, since a pattern anchored at the end backtracks over a long run of them.
-  while (address.endsWith("/")) address = address.slice(0, -1);
-  return address;
+  readonly pullRequests: readonly OpenedPullRequest[];
 }
 
 /**
@@ -72,10 +64,9 @@ export function inboxPanelTarget(
     }
     return undefined;
   }
-  const address = pageAddress(href);
-  const opened = place.pullRequests.find((each) => pageAddress(each.url) === address);
-  if (opened !== undefined) {
-    return { kind: INBOX_PANEL_TARGET.PULL_REQUEST, agentId: opened.agentId };
+  const agentId = pullRequestAgentOf(href, place.pullRequests);
+  if (agentId !== undefined) {
+    return { kind: INBOX_PANEL_TARGET.PULL_REQUEST, agentId };
   }
   if (place.taskId === undefined || place.repository === null) return undefined;
   const mention = decodeMention(href, place.repository);
