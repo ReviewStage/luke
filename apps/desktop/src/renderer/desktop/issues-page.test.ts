@@ -1372,20 +1372,22 @@ function pointer(type: string, x: number, y: number): PointerEvent {
   return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
 }
 
+/** What the board showed with a dragged card held over a point: the column marked as where it lands, and whether a copy of it was carried. */
+interface HeldDrag {
+  marked: string | undefined;
+  carried: boolean;
+}
+
 /**
  * Presses a card, drags it to a point, and lets it go there, answering
  * what the board showed with the pointer held there: the column marked as
  * the one it would land in, and whether a copy of the card was carried.
  */
-function dragCard(
-  page: HTMLElement,
-  issueId: string,
-  to: { x: number; y: number },
-): { marked: string | undefined; carried: boolean } {
+function dragCard(page: HTMLElement, issueId: string, to: { x: number; y: number }): HeldDrag {
   const card = cardOf(page, issueId);
   const box = card.closest("li")?.getBoundingClientRect() ?? assert.fail("the card stands");
   const from = { x: box.x + 20, y: box.y + 20 };
-  let held = { marked: undefined as string | undefined, carried: false };
+  let held: HeldDrag = { marked: undefined, carried: false };
   act(() => {
     card.dispatchEvent(pointer("pointerdown", from.x, from.y));
     window.dispatchEvent(pointer("pointermove", from.x + 10, from.y));
