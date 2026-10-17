@@ -82,6 +82,7 @@ import { FileView } from "../tasks/file-view";
 import { MacTerminalTab } from "../tasks/mac-terminal-tab";
 import { PageCard } from "../tasks/page-card";
 import { PagePane } from "../tasks/page-pane";
+import { PlanCommentsTab } from "../tasks/plan-comments";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look";
 import { TaskBoard } from "../tasks/task-board";
 import { TaskCall } from "../tasks/task-call";
@@ -1484,6 +1485,19 @@ function TabContent({
           models={agents.models}
           reveal={transcript.reveal ?? work.reveal}
           video={<CallTabVideo planId={taskId} />}
+        />
+      );
+    case SIDE_PANEL_TAB.COMMENTS:
+      return (
+        <PlanCommentsTab
+          doors={{
+            agents: {
+              control: agents,
+              onOpen: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
+            },
+            me: agents.me,
+          }}
+          onShowPlan={() => onOpenTarget({ kind: TOOL_TARGET.PLAN })}
         />
       );
   }

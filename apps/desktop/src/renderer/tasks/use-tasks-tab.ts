@@ -531,6 +531,10 @@ export interface TasksControl {
   sectionReveal: { readonly taskId: string; readonly reveal: SectionReveal } | undefined;
   /** The task's page showed the section an ask named, so a later visit to the task does not show it again. */
   onSectionRevealed: (ask: number) => void;
+  /** The last ask to open one of a task's comment threads, as a link to it asks, under the task it was asked of; counted so each ask is its own. */
+  commentReveal:
+    | { readonly planId: string; readonly thread: string; readonly ask: number }
+    | undefined;
   /** Opens a task on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
   onShowInbox: (taskId: string) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
@@ -1035,6 +1039,7 @@ export function useTasksTab(input: {
   const [reveal, setReveal] = useState<SourceReveal | undefined>(undefined);
   const [sectionReveal, setSectionReveal] = useState<TasksControl["sectionReveal"]>(undefined);
   const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
+  const [commentReveal, setCommentReveal] = useState<TasksControl["commentReveal"]>(undefined);
   const messageAsks = useRef(0);
   /** The asks to show a section made so far, so each is its own even after the last was let go. */
   const sectionAsks = useRef(0);
@@ -2247,6 +2252,14 @@ export function useTasksTab(input: {
       case LINK_PLACE.SECTION:
         showMention({ kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor });
         return;
+      case LINK_PLACE.COMMENT:
+        showColumnTab(place.planId, MAIN_TAB.PLAN);
+        setCommentReveal((last) => ({
+          planId: place.planId,
+          thread: place.threadId,
+          ask: (last?.ask ?? 0) + 1,
+        }));
+        return;
       case LINK_PLACE.VERSION:
         openHistory({
           taskId: place.planId,
@@ -2812,6 +2825,7 @@ export function useTasksTab(input: {
     // Only the ask answered is let go; a newer one stands until its agent's tab answers it.
     onMessageRevealed: (ask) => setMessageReveal((last) => (last?.ask === ask ? undefined : last)),
     sectionReveal,
+    commentReveal,
     // Only the ask shown is let go; a newer one stands until its own task shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),

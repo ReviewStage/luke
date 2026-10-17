@@ -257,6 +257,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     messageReveal: undefined,
     onMessageRevealed: ignore,
     sectionReveal: undefined,
+    commentReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
     secondCall: {

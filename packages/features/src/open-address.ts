@@ -5,8 +5,9 @@ import { appLinkOf, type LinkPlaceKind, readLink } from "./luke-link.js";
  * open-address.ts -- what the "Open in Luke" page reads off its address: the place it is a link to, spelled in the desktop's own scheme.
  *
  * The page is served at every place's address, `/<workspace>/<kind>/…`, on
- * Luke's home and on a preview alike, so its path and fragment are read as
- * the path and fragment of a link on the home, whatever host served it, a
+ * Luke's home and on a preview alike, so its path, its query (which names a
+ * comment thread of a task), and its fragment are read as those of a link
+ * on the home, whatever host served it, a
  * slash after it let go as the route lets it, and written again in the
  * desktop's scheme by the one module that knows a link's form
  * (`@luke/features/luke-link`). A picture's address,
@@ -21,8 +22,8 @@ export interface OpenTarget {
 }
 
 /** The place the page's address names, and the link that opens it in the desktop app; nothing where the address names no place. */
-export function openTargetOf(pathname: string, hash: string): OpenTarget | undefined {
-  const address = `${LINK_ORIGIN}${pathname.replace(/\/$/u, "")}${hash}`;
+export function openTargetOf(pathname: string, hash: string, search = ""): OpenTarget | undefined {
+  const address = `${LINK_ORIGIN}${pathname.replace(/\/$/u, "")}${search}${hash}`;
   const read = readLink(address);
   const appLink = appLinkOf(address);
   return read === undefined || appLink === undefined

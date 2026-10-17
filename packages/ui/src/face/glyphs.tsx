@@ -615,6 +615,19 @@ export function CallIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * A speech bubble, for a plan's comments: the side panel's Comments tab and
+ * the summary's row. Its path is Lucide's `message-square` (ISC licence),
+ * drawn in our stroke.
+ */
+export function CommentsIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M21 16a2 2 0 0 1-2 2H7.83a2 2 0 0 0-1.414.586l-2.2 2.2A.71.71 0 0 1 3 20.286V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </Glyph>
+  );
+}
+
 /** Points into a submenu beside a menu row, in the chevron's own stroke. */
 export function ChevronRightIcon(): React.JSX.Element {
   return (
