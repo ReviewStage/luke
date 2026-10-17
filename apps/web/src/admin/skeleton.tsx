@@ -130,9 +130,7 @@ function SkeletonStatCard({ grouped }: { grouped: boolean }): React.JSX.Element 
 /** Only the sign-in methods chart has no trend across from its heading. */
 function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
   return (
-    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false}>
-      <Skeleton className={`w-full ${plot}`} />
-    </ChartFrameSkeleton>
+    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false} plot={plot} />
   );
 }
 
@@ -141,11 +139,7 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
  * and seven day rows with the grid's own gaps.
  */
 function SkeletonCalendarCard(): React.JSX.Element {
-  return (
-    <ChartFrameSkeleton aside={false} legend>
-      <Skeleton className="h-[156px] w-full" />
-    </ChartFrameSkeleton>
-  );
+  return <ChartFrameSkeleton aside={false} legend plot="h-[156px]" />;
 }
 
 function SkeletonAccountsTable({

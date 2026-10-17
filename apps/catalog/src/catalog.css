@@ -392,7 +392,13 @@ body {
   height: 120px;
 }
 
-/* Room a placeholder stands in, as wide as what it stands for. */
+/* Room a placeholder stands in, as wide as what it stands for; a block's
+   room is a plot's whole box. */
+.catalog-skeleton-block {
+  width: 240px;
+  height: 96px;
+}
+
 .catalog-skeleton-line {
   width: 160px;
 }
