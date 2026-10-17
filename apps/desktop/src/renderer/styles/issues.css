@@ -197,6 +197,7 @@
 
 /* The issue page's Status and Priority chips are sized to their words, as
    the new issue's card draws them, rather than to a settings row's field. */
-.issue-properties .settings-picker-chip {
+.issue-properties .settings-picker-chip,
+.issue-properties .settings-picker > .luke-chip {
   width: auto;
 }

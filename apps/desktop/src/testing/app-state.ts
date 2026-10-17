@@ -12,6 +12,7 @@ import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { fakeAppBridge, fakeAppBridgeCalls } from "./app-bridge";
 
 /** Main's document for a signed-in account in a panel, idle, its experiments as given. */
 function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
@@ -76,12 +77,9 @@ export function handState(
   patch: Partial<AppStateSnapshot> = {},
 ): void {
   const snapshot = stateWith(experiments, patch);
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(snapshot),
-    },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(snapshot),
   });
 }

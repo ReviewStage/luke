@@ -52,8 +52,8 @@ const FOUNDERS: readonly Founder[] = [
 export function AboutPage(): React.JSX.Element {
   return (
     <PublicPage
-      banner={<SiteNavigation current={SITE_PAGE.ABOUT} />}
-      footer={<SiteFooterLinks current={SITE_PAGE.ABOUT} />}
+      banner={<SiteNavigation current={{ page: SITE_PAGE.ABOUT }} />}
+      footer={<SiteFooterLinks current={{ page: SITE_PAGE.ABOUT }} />}
       title="About"
     >
       <PublicSection>

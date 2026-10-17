@@ -1,38 +1,5 @@
 /* The settings tab: pages of rows, credentials, and the controls that write them. */
 
-/* Scrolls on the same terms as the session list: contained, never chaining out
-   to the root, with the tab bar left outside the scrolling box. */
-.settings {
-  /* Named because the pinned header's dissolve band below must span exactly
-     this: the two drifting apart is what would leave a passing row sliced
-     against the header's edge, or the resting page reading faded. */
-  --settings-gap: 14px;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--settings-gap);
-  overflow-x: clip;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  /* Its rows answer the page's width (`@container settings` below), which
-     every card spans, rather than the window's: the column beside the page
-     list is as narrow at a wide nav as a small window makes it. */
-  container: settings / inline-size;
-}
-
-/* A page's own name, at the head of its column: the page list says where
-   Settings is, and this says which page the column holds. Its line is a
-   control tall, so a head with Reset is no taller than one without. */
-.settings-page-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: var(--control-height);
-}
-
 /* A group of a page (`settings-group.tsx`): its name above the card, small
    and muted, as macOS and Linear head a group, and the card holding the rows
    with a hairline between each and the next, edge to edge. The card's corner
@@ -84,7 +51,7 @@
   padding: 0 var(--space-16) var(--space-12);
 }
 
-.settings-card > :is(.settings-row, .api-key-form) + .error-message {
+.settings-card > .settings-row + .error-message {
   margin-top: calc(-1 * var(--space-4));
   border-top: 0;
 }
@@ -173,6 +140,7 @@
    wrap well, ending in an ellipsis where they are cut short, the pointer
    resting on them reading them whole (`one-line.tsx`). */
 .settings-one-line {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -270,11 +238,14 @@
   align-items: center;
 }
 
-/* The chip is the field chip (`chip.tsx`), a row button's face at a form's
-   type, so a picker and the buttons beside it read as one set of controls;
-   only its width, the column's, is the picker's own. */
-.settings-picker-chip {
-  width: 200px;
+/* The chip is the field chip (`@luke/ui`'s `Chip`), a row button's face at
+   a form's type, so a picker and the buttons beside it read as one set of
+   controls; only its width, the column a settings row's pop-ups share, is
+   the picker's own. The class is the repository and server chips', which
+   still draw a picker's face of their own. */
+.settings-picker-chip,
+.settings-picker > .luke-chip {
+  width: var(--luke-select-field-width);
 }
 
 /* The menu hangs from the chip's trailing edge, where the column is, and
@@ -340,7 +311,7 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   white-space: nowrap;
 }
 
@@ -417,23 +388,35 @@
 }
 
 /* Settings › Coding agents › API keys: a key being added or edited grows its
-   row a field, Cancel, and Save, under the row's words and inside its rule.
+   row a field, Cancel, and Save, under the row's words and inside its rule,
+   and a refused save says why under them. The field takes the line's room.
    The hint is the key's own characters, so it reads in the code face. */
-.settings-card > .api-key-form {
+.api-key,
+.workspace-identity,
+.workspace-member {
   display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  margin-top: calc(-1 * var(--space-4));
-  padding: 0 var(--space-16) var(--space-12) calc(var(--space-16) + 20px + var(--space-12));
-  border-top: 0;
+  flex-direction: column;
 }
 
-.api-key-form .settings-input {
+.api-key-form {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  margin-top: calc(-1 * var(--luke-space-4));
+  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block)
+    calc(var(--luke-settings-row-inline) + 20px + var(--luke-space-12));
+}
+
+.api-key-form > :first-child {
   min-width: 0;
-  height: var(--control-height);
   flex: 1;
-  padding: 0 var(--space-8);
-  border-radius: var(--control-radius);
+}
+
+.api-key > .error-message,
+.workspace-identity > .error-message,
+.workspace-member > .error-message {
+  margin-top: calc(-1 * var(--luke-space-4));
+  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
 }
 
 .api-key-hint {
@@ -458,11 +441,14 @@
   justify-content: space-between;
 }
 
-/* The workspace's name, renamed in place on the name's own line in the
-   page's first row, the field's words where the name's stood. */
+/* Settings › Workspace's first row (`.workspace-identity`, its refusal
+   standing under it as API keys' does): the workspace's name, renamed in
+   place on the name's own line, the field's words where the name's stood
+   and the field standing in the label's 18px line, so the row keeps its height. */
 .workspace-name-input {
+  display: block;
   height: 24px;
-  margin: -3px 0 -1px -9px;
+  margin: -3px 0 -3px -9px;
   padding: 0 8px;
   border-radius: var(--control-radius);
   font-size: 13px;
@@ -470,21 +456,23 @@
   letter-spacing: 0;
 }
 
-/* A row's value standing in a column of its own at the row's end, in the
-   value's ink at the row's size, as the Keyboard shortcuts page sets a
-   chord: a member's role. */
+/* Settings › Workspace › Members (`.workspace-member`, a role change's
+   refusal standing under it as API keys' does): a member's role standing in
+   a column of its own at the row's end, in the value's ink at the body's
+   size, as the Keyboard shortcuts page sets a chord. */
 .settings-row-value {
   min-width: 64px;
   flex: none;
-  color: var(--text-secondary);
-  font-size: 13px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   text-align: right;
 }
 
 /* The ⋯'s room on a row with none, in a list where other rows have one, so
    every row's value ends in one column. */
 .settings-act-slot {
-  width: var(--control-height);
+  width: var(--luke-control-height);
   flex: none;
 }
 
@@ -644,7 +632,7 @@
   content: "";
 }
 
-.settings-copy .settings-state[data-state="attention"] {
+.settings-state[data-state="attention"] {
   color: var(--state-attention);
 }
 
@@ -770,7 +758,8 @@
    first line whole, its chip and its press under it. */
 @container settings (max-width: 379px) {
   .settings-row:has(> .settings-copy),
-  .settings-card > :is(.workspace-invite, .api-key-form) {
+  .settings-card > .workspace-invite,
+  .api-key-form {
     flex-wrap: wrap;
     justify-content: flex-end;
     row-gap: var(--space-8);
@@ -780,7 +769,8 @@
     min-width: 60%;
   }
 
-  :is(.workspace-invite, .api-key-form) .settings-input {
+  .workspace-invite .settings-input,
+  .api-key-form > :first-child {
     flex-basis: 100%;
   }
 }

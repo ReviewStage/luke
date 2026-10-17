@@ -25,6 +25,7 @@ import {
   openWorkspace,
   startTask,
 } from "@luke/database/testing";
+import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -70,7 +71,6 @@ import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import type { CoderHostSeams } from "./production.js";
-import { START_NOTE_HEADING } from "./start.js";
 import { STEER_OUTCOME } from "./steer.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 

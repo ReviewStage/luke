@@ -1,6 +1,4 @@
-import path from "node:path";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@luke/gateway";
-import { type AgentId, DEFAULT_AGENT_ID } from "@luke/runtime/vocabulary";
 import type { WireValue } from "@luke/wire";
 import { Effect } from "effect";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
@@ -25,17 +23,6 @@ export interface HostSeams {
    * hears nothing.
    */
   onShutdownRequested?: () => void;
-}
-
-/**
- * The agent's own directory under Luke's application data, one per agent:
- * where earlier builds kept the local brain's store and workspace, and what a
- * launch still looks under to remove the retired store.
- */
-const AGENTS_DIRECTORY = "agents";
-
-function agentRootPath(stateRoot: string, agentId: AgentId = DEFAULT_AGENT_ID): string {
-  return path.join(stateRoot, AGENTS_DIRECTORY, agentId);
 }
 
 /**
@@ -71,8 +58,6 @@ export interface HostKernel {
    */
   openExternalThroughNode: (url: string) => Promise<void>;
   reportOpenFailure: (error: Error) => void;
-  /** The agent's own directory under the state root. */
-  agentRootPath: () => string;
 }
 
 /**
@@ -142,6 +127,5 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
     reportOpenFailure: (error) => {
       report(`An address could not be opened: ${error.message}`);
     },
-    agentRootPath: () => agentRootPath(stateRoot),
   };
 }

@@ -5,20 +5,19 @@ import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
-import { BackIcon, EllipsisIcon } from "@luke/ui";
+import { BackIcon, EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
@@ -51,7 +50,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -200,7 +199,7 @@ function RevisionRow({
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const groups = [
     [
@@ -329,7 +328,7 @@ function SectionRow({
   source: SourceDoor | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   return (
     <li>
       <button
@@ -561,11 +560,9 @@ function VersionPage({
       <div className="desktop-drag-strip" />
       <div className="desktop-empty">
         {list.kind === HISTORY_READ.FAILED ? (
-          <ReadFailure
-            line="The history could not be read."
-            onRetry={versions.onRetry}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
+          <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            The history could not be read.
+          </ErrorState>
         ) : (
           <p>{NO_HISTORY_LINE}</p>
         )}

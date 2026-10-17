@@ -4,6 +4,7 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxBlock,
@@ -19,26 +20,25 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { BackIcon, ChevronRightIcon } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { BackIcon, ChevronRightIcon, ErrorState } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
+import { useClipped } from "@luke/ui/use-clipped";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { useAutomation } from "../automation-directory";
 import { TaskRef } from "../desktop/task-card";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
-import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import {
   AgentActorRef,
   AgentCard,
@@ -46,11 +46,13 @@ import {
   agentSubject,
   NOTHING_HELD,
 } from "./agent-ref";
+import { AttachedFileChips } from "./attached-file-chips";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import { InboxAnswerBox } from "./inbox-answer-box";
 import {
+  answerFileChips,
   CODE_READ,
   CODE_READ_FAILED,
   type CodeRead,
@@ -144,6 +146,9 @@ const INBOX_FAILED_LINE = "The inbox could not be read.";
 
 /** What a card says of an image whose read did not answer. */
 const IMAGE_FAILED_LINE = "The image could not be read.";
+
+/** What an answer says of the files whose read did not answer. */
+const FILES_FAILED_LINE = "Some files could not be read.";
 
 /** What a card says of a block or a response this build does not know. */
 const NEWER_LUKE = {
@@ -257,7 +262,7 @@ function CodeBlock({
       ) : (
         <div className="file-tab-notice border-b-0">
           {shown.again ? (
-            <ReadFailure line={shown.line} onRetry={() => setAsked((was) => was + 1)} />
+            <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
           ) : (
             <p className="m-0" role="alert">
               {shown.line}
@@ -303,7 +308,9 @@ function ImageBlock({
   if ("failed" in image) {
     return (
       <div data-inbox-image-failed="">
-        <ReadFailure line={IMAGE_FAILED_LINE} onRetry={() => onRetryImage(block.attachmentId)} />
+        <ErrorState onRetry={() => onRetryImage(block.attachmentId)}>
+          {IMAGE_FAILED_LINE}
+        </ErrorState>
       </div>
     );
   }
@@ -644,7 +651,10 @@ function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
 /** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
 function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
   // Note that an answered item the wire carries without its answer was heard where it asked to be.
-  const heard = item.answer === undefined ? item.needsReply : inboxAnswerHeard(item, item.answer);
+  const heard =
+    item.answer === undefined
+      ? item.needsReply
+      : inboxAnswerHeard(item, item.answer, item.answerFiles);
   if (!heard) return <>Saved for the agent to read</>;
   return (
     <ActorLine>
@@ -783,21 +793,78 @@ function pickOf(item: InboxItem, did: string, words: string | undefined): string
   return words === undefined ? sentenceCased(did) : undefined;
 }
 
-/** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip and what they wrote. */
+/**
+ * The files the developer's answer carried, as the agent's tab draws a sent
+ * message's (`attached-file-chips.tsx`): each asks for its bytes as it is
+ * first drawn, through the same read an image block's picture takes, and is
+ * drawn by its name alone until they land; where a read did not answer, a
+ * line under the files says so with Retry, as an image block's does.
+ */
+function AnswerFiles({
+  item,
+  images,
+  onImage,
+  onRetryImage,
+}: {
+  item: InboxItem;
+  images: TaskInboxControl["images"];
+  onImage: TaskInboxControl["onImage"];
+  onRetryImage: TaskInboxControl["onRetryImage"];
+}): React.ReactNode {
+  const files = item.answerFiles ?? [];
+  useEffect(() => {
+    for (const file of files) {
+      if (!images.has(file.attachmentId)) onImage(item.id, file.attachmentId);
+    }
+  }, [files, images, item.id, onImage]);
+  const failed = files.filter((file) => {
+    const read = images.get(file.attachmentId);
+    return read !== undefined && "failed" in read;
+  });
+  return (
+    <>
+      <AttachedFileChips files={answerFileChips(item, images)} />
+      {failed.length === 0 ? null : (
+        <div data-inbox-files-failed="">
+          <ErrorState
+            onRetry={() => {
+              for (const file of failed) onRetryImage(file.attachmentId);
+            }}
+          >
+            {FILES_FAILED_LINE}
+          </ErrorState>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip, the files they attached, and what they wrote. */
 function Answered({
   item,
   by,
   now,
+  images,
+  onImage,
+  onRetryImage,
 }: {
   item: InboxItem;
   by: ItemAgent;
   now: number;
+  images: TaskInboxControl["images"];
+  onImage: TaskInboxControl["onImage"];
+  onRetryImage: TaskInboxControl["onRetryImage"];
 }): React.JSX.Element | null {
   const answerer = usePerson(item.answeredBy);
   const settled = settlementOf(item);
   if (settled === undefined) return null;
   if (settled.by === SETTLED_BY.AGENT) return null;
-  const pick = pickOf(item, settled.did, settled.values ?? settled.note);
+  // Files alone are the developer's own words where they wrote none, so no "Answered it" chip stands over them.
+  const filesSay =
+    (item.answerFiles ?? []).length > 0 && item.answer?.reply === INBOX_REPLY.ANSWERED
+      ? ""
+      : undefined;
+  const pick = pickOf(item, settled.did, settled.values ?? settled.note ?? filesSay);
   return (
     <Comment
       kind={COMMENT.ANSWERED}
@@ -823,6 +890,7 @@ function Answered({
       {settled.values === undefined ? null : (
         <p className="m-0 whitespace-pre-line select-text">{settled.values}</p>
       )}
+      <AnswerFiles item={item} images={images} onImage={onImage} onRetryImage={onRetryImage} />
       {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
       {settled.note === undefined ? null : (
         <div className="select-text" data-inbox-note="">
@@ -1217,12 +1285,19 @@ export function InboxPane({
                   <Offered key={item.id} item={item} />
                 )}
               </Comment>
-              <Answered item={item} by={by} now={now} />
+              <Answered
+                item={item}
+                by={by}
+                now={now}
+                images={control.images}
+                onImage={control.onImage}
+                onRetryImage={control.onRetryImage}
+              />
               <Withdrawn item={item} by={by} now={now} />
             </ol>
           </WordsWorkspace>
           {control.failed ? (
-            <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
+            <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
           ) : null}
         </div>
         {open ? (

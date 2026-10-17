@@ -3,13 +3,12 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { ProviderMark } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardRule, ProviderMark } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
-import { CardHead, CardRule, HoverCard } from "../hover-card";
 import { useCreator, useMemberDirectory } from "../member-directory";
 import { useActorDoor } from "../person-door";
 import { RepositoryPicture } from "../repository-picture";
@@ -317,7 +316,7 @@ export function TaskCard({
   const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
   return (
     <HoverCard data-task-card="">
-      <CardHead
+      <HoverCardHead
         name={task.name}
         corner={<RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />}
       />
@@ -340,7 +339,7 @@ export function TaskCard({
       )}
       {focus === undefined ? null : (
         <>
-          <CardRule />
+          <HoverCardRule />
           <span className="task-card-line" data-task-card-focus="">
             <span className="task-card-glyph">{focus.glyph}</span>
             <span className="task-card-label">{focus.words}</span>
@@ -349,7 +348,7 @@ export function TaskCard({
       )}
       {focus !== undefined || agents === undefined || agentRows.length === 0 ? null : (
         <>
-          <CardRule />
+          <HoverCardRule />
           <ul className="task-card-rows" aria-label="Agents">
             {agentRows.map((agent) => (
               <AgentLine
@@ -365,7 +364,7 @@ export function TaskCard({
       )}
       {focus !== undefined || agents === undefined || pullRequestRows.length === 0 ? null : (
         <>
-          <CardRule />
+          <HoverCardRule />
           <ul className="task-card-rows" aria-label="Pull requests">
             {pullRequestRows.map((pullRequest) => (
               <PullRequestLine

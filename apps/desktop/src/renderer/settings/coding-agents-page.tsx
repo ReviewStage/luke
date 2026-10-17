@@ -180,12 +180,7 @@ function DefaultRows({
     <>
       <PickerRow
         label="Model"
-        copy={
-          <>
-            <strong>Model</strong>
-            {note === undefined ? null : <small>{note}</small>}
-          </>
-        }
+        detail={note}
         value={read.base}
         valueLabel={modelLabel(read.base, models)}
         valueIcon={listed !== undefined ? <HarnessMark provider={listed.provider} /> : null}
@@ -225,6 +220,7 @@ function DefaultRows({
                 <>
                   {" "}
                   <a
+                    className="settings-detail-act"
                     href={FAST_ACCESS_URL}
                     onClick={(event) => {
                       event.preventDefault();

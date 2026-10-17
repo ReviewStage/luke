@@ -275,6 +275,11 @@ function fixture() {
           if (html === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
           return { page: { id: params.pageId, title: "Invite funnel", version: 2, at: 0, html } };
         }),
+      tasksPages: (params) =>
+        Effect.sync(() => {
+          asked.push(`pages:${params.taskId}`);
+          return { pages: [{ id: "page-1", title: "Invite funnel", version: 2, at: 0 }] };
+        }),
       githubConnect: () =>
         Effect.sync((): TasksGitHubPageAnswer => {
           asked.push("github-connect");

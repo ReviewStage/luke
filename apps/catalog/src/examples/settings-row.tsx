@@ -1,6 +1,9 @@
 import {
+  AVATAR_SIZE,
+  Avatar,
   BUTTON_VARIANT,
   Button,
+  SETTINGS_ROW_DENSITY,
   SettingsRow,
   type SettingsRowControl,
   SettingsSection,
@@ -11,10 +14,11 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * settings-row.tsx -- a settings row with a switch, with a button and no
- * description, with a failed write, and with long words, each at a settings
- * page's measure and in a column narrower than the 380px its controls drop
- * below its words under.
+ * settings-row.tsx -- a settings row with a switch, led by an account's face,
+ * with a button and no description, with a failed write, and with long
+ * words, each at a settings page's measure and in a column narrower than the
+ * 380px its controls drop below its words under; and compact rows in a
+ * popover narrower than that, whose controls stay beside their words.
  */
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
@@ -37,8 +41,15 @@ function Rows(): React.JSX.Element {
       <SettingsRow label="Launch at login" description="Luke opens with the Mac, in the menu bar.">
         {(control) => <HeldSwitch label="Launch at login" control={control} />}
       </SettingsRow>
-      <SettingsRow label="Sign out">
+      <SettingsRow
+        label="ada.lovelace@analytical-engine.example"
+        description="Signed in with GitHub"
+        leading={<Avatar name="Ada Lovelace" size={AVATAR_SIZE.ACCOUNT} decorative />}
+      >
         {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Sign out</Button>}
+      </SettingsRow>
+      <SettingsRow label="Delete account">
+        {() => <Button variant={BUTTON_VARIANT.DANGER_OUTLINE}>Delete account</Button>}
       </SettingsRow>
       <SettingsRow
         label="Show captions"
@@ -61,6 +72,31 @@ function Rows(): React.JSX.Element {
   );
 }
 
+/** Compact rows, bare in a popover that insets them, as a pane's view settings stand. */
+function CompactRows(): React.JSX.Element {
+  return (
+    <div className="catalog-popover catalog-settings-narrow">
+      <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label="Wrapping">
+        {(control) => <HeldSwitch label="Wrapping" control={control} />}
+      </SettingsRow>
+      <SettingsRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Minimize inline comments"
+        description="Comments fold to a mark beside their line."
+      >
+        {(control) => <HeldSwitch label="Minimize inline comments" control={control} />}
+      </SettingsRow>
+      <SettingsRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Line numbers"
+        error="The setting could not be saved. Try again."
+      >
+        {(control) => <HeldSwitch label="Line numbers" control={control} />}
+      </SettingsRow>
+    </div>
+  );
+}
+
 function SettingsRows(): React.JSX.Element {
   return (
     <>
@@ -73,6 +109,9 @@ function SettingsRows(): React.JSX.Element {
         <div className="catalog-settings catalog-settings-narrow">
           <Rows />
         </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-compact" title="Compact, in a popover">
+        <CompactRows />
       </CatalogSection>
     </>
   );

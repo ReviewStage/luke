@@ -6,13 +6,14 @@ import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { StripTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
@@ -84,22 +85,18 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   // Main answers how each agent's sandbox stands: the working agent's runs, the other's is stopped.
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.TERMINAL_LIST) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        const running = request.payload.agentId === WORKING.id;
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: running
-            ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
-            : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
-        });
-      },
-      onMenuCommand: () => () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.TERMINAL_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
+      const running = request.payload.agentId === WORKING.id;
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: running
+          ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
+          : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
+      });
     },
   });
 });
@@ -275,7 +272,9 @@ test("the panel's + lists each agent's terminal under Terminal, says how it stan
     side: SIDE_PANEL_TAB.BOARD,
     lastTerminal: DONE.id,
   });
-  const add = document.querySelector<HTMLButtonElement>(".side-panel-tabs button.tab-add");
+  const add = document.querySelector<HTMLButtonElement>(
+    '.side-panel-tabs button[aria-label="Open a tab"]',
+  );
   assert.ok(add, "the panel's +");
   await act(async () => add.click());
   await settle();
@@ -302,11 +301,11 @@ function menuItem(label: string) {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".task-menu-label")?.textContent === label,
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
   );
   assert.ok(item, `the menu offers ${label}`);
   return {
-    hint: item.querySelector(".menu-item-hint")?.textContent,
+    hint: item.querySelector(".luke-menu-item-hint")?.textContent,
     press: async () => {
       await act(async () => item.click());
       await settle();

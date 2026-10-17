@@ -80,8 +80,8 @@ function settingsStore() {
       directory: () => directory,
       cipher: {
         isAvailable: () => true,
-        encrypt: (text) => Buffer.from(text),
-        decrypt: (bytes) => bytes.toString(),
+        encrypt: (text) => new TextEncoder().encode(text),
+        decrypt: (bytes) => new TextDecoder().decode(bytes),
       },
       overrides: { voice: undefined },
       fileSystem: yield* FileSystem.FileSystem,

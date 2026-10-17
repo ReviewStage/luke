@@ -62,3 +62,24 @@ test("an archived task's agent's composer row is named by its words and carries 
   press(note, "Stop");
   press(note, "Unarchive");
 });
+
+test("an archived task's agent's Stop is named Stopping and unavailable until the service answers", async () => {
+  let answer: () => void = () => undefined;
+  const note = drawn(
+    createElement(ArchivedComposerNote, {
+      onUnarchive: () => undefined,
+      stop: () => {
+        return new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+      },
+    }),
+  );
+  const stop = press(note, "Stop");
+  act(() => stop.click());
+  assert.equal(stop.getAttribute("aria-label"), "Stopping");
+  assert.equal(stop.getAttribute("aria-disabled"), "true");
+  await act(async () => answer());
+  assert.equal(stop.getAttribute("aria-label"), null);
+  assert.equal(stop.getAttribute("aria-disabled"), null);
+});
