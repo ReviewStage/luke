@@ -67,6 +67,8 @@ export function Select<Value extends string>(
     onChange: (value: Value) => void;
     /** The id of the why drawn beside it, which describes the field. */
     describedBy?: string | undefined;
+    /** Whether the field's last change was refused, as its row says under it. */
+    "aria-invalid"?: true | undefined;
     disabled?: boolean | undefined;
     /** The field's edge the menu hangs from; the leading one where none is named. */
     align?: SelectAlign | undefined;
@@ -80,6 +82,7 @@ export function Select<Value extends string>(
     value,
     onChange,
     describedBy,
+    "aria-invalid": invalid,
     disabled: unavailable = false,
     align = SELECT_ALIGN.START,
     width = SELECT_WIDTH.FIT,
@@ -104,6 +107,7 @@ export function Select<Value extends string>(
         chevron
         aria-label={`${label}: ${words}`}
         aria-describedby={describedBy}
+        aria-invalid={invalid}
         disabled={disabled}
       >
         {chosen?.icon}

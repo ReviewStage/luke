@@ -119,6 +119,7 @@ function SchemaChoiceRow({
             options={options}
             value={value}
             describedBy={control["aria-describedby"]}
+            aria-invalid={control["aria-invalid"]}
             disabled={busy}
             align={SELECT_ALIGN.END}
             width={SELECT_WIDTH.FIELD}
@@ -129,6 +130,7 @@ function SchemaChoiceRow({
             id={id}
             label={label}
             describedBy={control["aria-describedby"]}
+            invalid={control["aria-invalid"]}
             value={value}
             options={options}
             search={search}
@@ -146,6 +148,7 @@ function SearchedChoice({
   id,
   label,
   describedBy,
+  invalid,
   value,
   options,
   search,
@@ -155,6 +158,7 @@ function SearchedChoice({
   id: string;
   label: string;
   describedBy: string | undefined;
+  invalid: true | undefined;
   value: string;
   options: readonly SettingOption[];
   search: string | undefined;
@@ -170,6 +174,7 @@ function SearchedChoice({
     <Picker
       label={label}
       describedBy={describedBy}
+      invalid={invalid}
       value={value}
       valueLabel={chosen?.label ?? value}
       valueIcon={pictured && chosen !== undefined ? face(chosen, ACTOR_SIZE.INLINE) : undefined}

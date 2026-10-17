@@ -1,3 +1,4 @@
+// schema-rows.test.ts -- a schema row's control, its write, and its refusal, as a reader meets them.
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
@@ -109,4 +110,33 @@ test("a switch the store refuses says why under its own row, stays as it stood, 
   act(() => login.click());
   await settle();
   assert.equal(page.textContent?.includes(REFUSED), false);
+});
+
+test("a choice the store refuses says why under its own row and marks its pop-up invalid until a choice is kept", async () => {
+  const page = mount();
+  answer = { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED };
+  const choose = (words: string) => {
+    act(() => control(page, "Zoom: 100%").click());
+    const item =
+      [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
+        (each) => each.textContent === words,
+      ) ?? assert.fail(`the menu offers ${words}`);
+    act(() => item.click());
+  };
+
+  choose("125%");
+  await settle();
+  const zoom = control(page, "Zoom: 100%");
+  assert.equal(zoom.getAttribute("aria-invalid"), "true");
+  assert.equal(describedAs(zoom).endsWith(REFUSED), true);
+  assert.equal(zoom.disabled, false);
+
+  answer = { status: ACTION_RESULT_STATUS.ACCEPTED };
+  choose("90%");
+  await settle();
+  assert.equal(control(page, "Zoom: 100%").getAttribute("aria-invalid"), null);
+  assert.deepEqual(written, [
+    ["zoom", 125],
+    ["zoom", 90],
+  ]);
 });
