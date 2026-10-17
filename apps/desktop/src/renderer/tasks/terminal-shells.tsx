@@ -3,7 +3,14 @@ import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalSummary } from "@luke/features/terminal-wire";
-import { CloseIcon, ConfirmDialog, PlusIcon, useConfirmDialog, useMenu } from "@luke/ui";
+import {
+  CloseIcon,
+  ConfirmDialog,
+  IconButton,
+  PlusIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu";
@@ -103,16 +110,13 @@ function ShellRow({
           <span className="terminal-shell-running" role="img" aria-label="Running" />
         ) : null}
       </span>
-      <Tooltip label={kill}>
-        <button
-          type="button"
-          className="icon-button terminal-shell-kill"
-          aria-label={kill}
-          onClick={ending.ask}
-        >
-          <CloseIcon />
-        </button>
-      </Tooltip>
+      {/* Note that the × stands in a box of its own, because the box is what
+          the stylesheet lays over the mark and a barrel button wears no mark. */}
+      <span className="terminal-shell-kill">
+        <Tooltip label={kill}>
+          <IconButton icon={<CloseIcon />} label={kill} onClick={ending.ask} />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={shell.title}
@@ -186,17 +190,14 @@ export function TerminalShells({
       onKeyDown={float.onKeyDown}
     >
       <div className="terminal-shells-head">
-        Shells
+        <span className="terminal-shells-title">Shells</span>
         <Tooltip label="New shell">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="New shell"
+          <IconButton
+            icon={<PlusIcon />}
+            label="New shell"
             disabled={listed?.sandbox !== SANDBOX_STATE.RUNNING}
             onClick={session.onCreate}
-          >
-            <PlusIcon />
-          </button>
+          />
         </Tooltip>
       </div>
       {listed === undefined ? null : shells.length === 0 ? (
