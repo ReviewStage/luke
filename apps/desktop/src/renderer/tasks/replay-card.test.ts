@@ -201,7 +201,7 @@ function headOf(container: Element): string {
 }
 
 /** The line under the replay card as a reader reads it: whom it names, if anyone, and the moment its time stands for. */
-function cardMeta(container: Element): { sender: string | undefined; at: string | undefined } {
+function cardMeta(container: Element) {
   const meta = container.querySelector("[data-replay-card] ~ .message-meta");
   assert.ok(meta !== null);
   return {
