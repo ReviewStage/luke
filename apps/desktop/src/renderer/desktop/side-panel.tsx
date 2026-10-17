@@ -66,12 +66,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card";
 import { CodePane, centreWithin } from "../tasks/code-pane";
-import {
-  agentGlyphState,
-  agentStateWords,
-  agentTabLabel,
-  pullRequestNumberLabel,
-} from "../tasks/coding-agent-model";
+import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { snippetOf } from "../tasks/file-tab-model";
 import { FileView } from "../tasks/file-view";
@@ -405,9 +400,9 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * no row says it is open; a file not open opens through the panel's one
  * door for a file on the newest snippet of it. Then, under Pull requests,
  * each agent's pull request (`changesOffers`), named as its Pull request tab
- * is (a kind still spelled `changes`, as the tab of its files alone was),
- * with the pull request's number beside it, found by its title and number
- * too, which opens the agent's Pull request tab. The task's coding agents are opened
+ * is, by its number and title (a kind still spelled `changes`, as the tab
+ * of its files alone was), with the agent whose it is beside it, found by
+ * the agent's name too, which opens the agent's Pull request tab. The task's coding agents are opened
  * from the task's column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
@@ -456,14 +451,13 @@ export function panelEntries(input: {
   // Note that a pull request's row is named by its page, because an agent's
   // id already names the agent's own row in the task's summary.
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
-    const look = tabLook({ kind: TAB_KIND.CHANGES, agentName: label, pullRequest });
-    const number = pullRequestNumberLabel(pullRequest);
+    const look = tabLook({ kind: TAB_KIND.CHANGES, pullRequest });
     return {
       row: {
         id: pullRequest.url,
         ...look,
-        detail: number,
-        terms: [look.label, pullRequest.title, number],
+        detail: label,
+        terms: [look.label, label],
         section: ADD_SECTION.PULL_REQUESTS,
       },
       onPick: () => panel.onChoose({ changes: agentId }),
@@ -502,15 +496,9 @@ export function taskWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
   });
 }
 
-/** An agent's Pull request tab's look, named for the agent as the task's agents last read it, wearing its pull request's mark for where it stands. */
+/** An agent's Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
 function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
-  const agent = agents.agents?.find((each) => each.id === agentId);
-  const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
-  return tabLook({
-    kind: TAB_KIND.CHANGES,
-    agentName,
-    pullRequest: agents.pullRequests.get(agentId),
-  });
+  return tabLook({ kind: TAB_KIND.CHANGES, pullRequest: agents.pullRequests.get(agentId) });
 }
 
 /**

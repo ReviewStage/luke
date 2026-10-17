@@ -39,6 +39,7 @@ import {
   isPageTab,
   isSubagentTab,
   isTerminalTab,
+  pullRequestLabelOf,
   type StripTab,
   sameTab,
 } from "@luke/ui/tab-strip-model";
@@ -1275,15 +1276,22 @@ export function useTasksTab(input: {
     pageAgents === undefined ? pages : NO_IDS,
     pageAgents ?? agents.agentIds,
   );
-  // An agent pinned to the sidebar is named there as its tab is named now,
-  // so a pin made before the agent had its title, or before a rename,
-  // catches up while its task is open.
+  // An agent, or its Pull request, pinned to the sidebar is named there as
+  // its tab is named now, so a pin made before the agent had its title or its
+  // pull request was read, or before a rename, catches up while its task is open.
   const pinLabels = useMemo(
-    () =>
-      new Map(
+    () => ({
+      agents: new Map(
         (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
       ),
-    [agents.agents, agents.models],
+      pullRequests: new Map(
+        [...agents.pullRequests].map(([agentId, pullRequest]) => [
+          agentId,
+          pullRequestLabelOf(pullRequest),
+        ]),
+      ),
+    }),
+    [agents.agents, agents.models, agents.pullRequests],
   );
   const { onRenamePins } = sidePanel;
   useEffect(() => {

@@ -478,9 +478,9 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
   await settle();
   assert.ok(
     [...shown.querySelectorAll("[role='tab']")].some((tab) =>
-      (tab.textContent ?? "").includes("Pull request"),
+      (tab.textContent ?? "").includes("#2911 Await the payment mock"),
     ),
-    "the Pull request tab stands in the panel",
+    "the Pull request tab stands in the panel, named by its number and title",
   );
 });
 
@@ -517,7 +517,7 @@ test("an archived agent's pull request, picked from the panel's +, opens in a Pu
   );
 
   assert.ok(
-    tabs.some((label) => label.includes("Pull request")),
+    tabs.some((label) => label.includes("#2911 Await the payment mock")),
     `the Pull request tab stands in the panel: ${tabs.join(", ")}`,
   );
 });
