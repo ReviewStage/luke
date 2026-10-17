@@ -29,6 +29,7 @@ import {
   channelNamed,
   channelOf,
   channelsOf,
+  chatHead,
   chatPast,
   ensureGeneral,
   ensureMember,
@@ -38,11 +39,13 @@ import {
   leave,
   markNoticed,
   memberNamed,
+  messageAt,
   openAsksOf,
   openTopicChannel,
   peekUnread,
   postAsk,
   postMessage,
+  readAllTo,
   readAttachment,
   readThrough,
   readTo,
@@ -730,6 +733,59 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
   );
 
   it.effect(
+    "a message is read at its place by a reader who sees it, and a person's cursor moves on to a place, never back or past the head, letting go of the notice it passes",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const posted = yield* room.posted(room.first, "In the channel.");
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.ada.id),
+        );
+        const private_ = yield* room.posted(room.first, "To Ada alone.", { channelId: dm.id });
+        const at = (reader: ChatMemberRow, seq: number) =>
+          Effect.map(
+            messageAt(room.owner, room.workspace, reader.id, seq),
+            Option.map((message) => message.id),
+          );
+        assert.deepEqual(yield* at(room.ada, posted.seq), Option.some(posted.id));
+        assert.deepEqual(yield* at(room.ada, private_.seq), Option.some(private_.id));
+        assert.deepEqual(yield* at(room.second, private_.seq), Option.none());
+        assert.deepEqual(yield* at(room.ada, 999), Option.none());
+
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.ada.id, room.channel.id, posted.seq),
+          true,
+        );
+        assert.deepEqual(
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, posted.seq),
+          Option.some(posted.seq),
+        );
+        // The notice it passed is let go, so the next one is told.
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.ada.id, dm.id, private_.seq),
+          true,
+        );
+        assert.deepEqual(
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, 0),
+          Option.some(posted.seq),
+        );
+        assert.deepEqual(
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, 999),
+          Option.some(private_.seq),
+        );
+        // A person moves no other person's cursor.
+        assert.deepEqual(
+          yield* readAllTo(room.teammate, room.workspace, room.ada.id, private_.seq),
+          Option.none(),
+        );
+        assert.deepEqual(
+          yield* readAllTo(yield* openAccount(), room.workspace, room.ada.id, 1),
+          Option.none(),
+        );
+      }),
+  );
+
+  it.effect(
     "an account not in the workspace posts, reads, and is told nothing of it, and one in it posts as no other person",
     () =>
       Effect.gen(function* () {
@@ -1157,6 +1213,29 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "the workspace's head is the last place handed out, which a post, an answer, a withdrawal, and a resolve each move, and an account not in it reads none",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const head = Effect.map(chatHead(room.owner, room.workspace), Option.getOrThrow);
+        assert.equal(yield* head, 0);
+        const posted = yield* ask(room, room.first, "invite-expiry", "Which expiry?");
+        assert.equal(yield* head, posted.message.seq);
+        const key = randomUUID();
+        Result.getOrThrow(yield* answer(room, room.ada, posted.message.seq, 1, key));
+        const answered = yield* head;
+        assert.ok(answered > posted.message.seq);
+        yield* withdrawAnswer(room.owner, room.workspace, room.ada.id, posted.message.seq, key);
+        const withdrawn = yield* head;
+        assert.ok(withdrawn > answered);
+        yield* resolveAsk(room.owner, room.workspace, room.first.id, "invite-expiry", "Settled.");
+        assert.ok((yield* head) > withdrawn);
+        assert.deepEqual(yield* chatHead(yield* openAccount(), room.workspace), Option.none());
+      }),
+  );
+
   it.effect(
     "two posts of one new ask racing land as one ask at the second revision, an ask stays where it was first posted, and a key a plain message holds is no ask's",
     () =>

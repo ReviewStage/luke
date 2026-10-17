@@ -107,6 +107,14 @@ const NO_KEYWORDS: readonly string[] = [];
  * summary keeps folded away with an Unarchive on each. The agent the
  * service answers moves between the two at once, and a toast offers Undo,
  * as an archived task's does.
+ *
+ * An agent may be continued in a new one, which is a Start on the task
+ * `from` that agent on its whole transcript, with the developer's words, where
+ * they wrote some, as its note. Each agent continued holds a key of its own
+ * until its Start lands, so a press asked again after the service did not
+ * answer opens the agent the first press made; words or files of another
+ * press are another request under a key of its own. Its tab opens as a
+ * Start's does.
  */
 
 /** Who an agent's pull request names, as its Changes tab last read them, and the pull request's page they were read for. */
@@ -203,6 +211,8 @@ export interface CodingAgentsControl {
   ) => Promise<Failure | undefined>;
   /** Brings the open task back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
+  /** Continues one agent in a new one on its whole transcript, the developer's words and files as its note, its tab opening as a Start's does; present exactly while a Start could run. */
+  continueAgent: AgentContinuer | undefined;
   start: {
     /** Whether a Start could run now: the task names a repository and is not archived. */
     available: boolean;
@@ -319,6 +329,29 @@ interface PendingStart {
   choice: ModelChoice | undefined;
 }
 
+/** Starts a new agent on the open task from one of its agents' whole transcript, with the developer's words and the files attached to them as its note where given; answers why it did not start, or nothing once it did. */
+export type AgentContinuer = (
+  agentId: string,
+  note?: string,
+  attachments?: readonly CodingAgentAttachment[],
+) => Promise<Failure | undefined>;
+
+/** A continue on its way or asked again: the task, the key the press minted, and the note and files it carried. */
+interface PendingContinue {
+  taskId: string;
+  key: string;
+  note: string | undefined;
+  attachments: readonly CodingAgentAttachment[];
+}
+
+/** Whether two presses carry the same files, the same ones in the same order. */
+function sameFiles(
+  a: readonly CodingAgentAttachment[],
+  b: readonly CodingAgentAttachment[],
+): boolean {
+  return a.length === b.length && a.every((file, index) => file === b[index]);
+}
+
 /** Why a Start cannot run on the open task, while it cannot: an archive first, since unarchiving is what would be asked before any repository. */
 function startReason(
   taskId: string | undefined,
@@ -431,6 +464,8 @@ export function useCodingAgents(input: {
   const [note, setNote] = useState<{ planId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
+  // Each agent continued's press, by the agent's id, held until its Start lands.
+  const continues = useRef(new Map<string, PendingContinue>());
   const toast = useToast();
   const failed = useCallback(
     (words: string) => toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
@@ -593,6 +628,40 @@ export function useCodingAgents(input: {
       pending.current = undefined;
       landed(taskId, answer.agent);
     });
+  };
+
+  // Note that a press carries the key its agent's last press minted while the
+  // service has not answered it and the words and files are the same, so a
+  // press asked again opens the agent the first may already have started.
+  const continueAgent: AgentContinuer = async (sourceId, note, attachments = []) => {
+    if (taskId === undefined || repository === null || archived) return undefined;
+    const held = continues.current.get(sourceId);
+    const carried = note !== undefined || attachments.length > 0 ? (note ?? "") : undefined;
+    const key =
+      held !== undefined &&
+      held.taskId === taskId &&
+      held.note === carried &&
+      sameFiles(held.attachments, attachments)
+        ? held.key
+        : mintKey();
+    continues.current.set(sourceId, { taskId, key, note: carried, attachments });
+    const answer = await askStart(taskId, {
+      idempotencyKey: key,
+      from: { agentId: sourceId },
+      ...(carried === undefined ? undefined : { note: carried }),
+      ...(attachments.length === 0 ? undefined : { attachments }),
+    });
+    if ("failure" in answer) {
+      // Only a service that never answered is asked again under the same key.
+      if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) {
+        continues.current.delete(sourceId);
+      }
+      if (latest.current.taskId !== taskId) failed(START_FAILED_AWAY);
+      return startFailureNote(answer, taskId);
+    }
+    continues.current.delete(sourceId);
+    landed(taskId, answer.agent);
+    return undefined;
   };
 
   /** The drafts with the plan's key and chips set to `next`, or let go where it is nothing. */
@@ -1040,6 +1109,8 @@ export function useCodingAgents(input: {
     readDefault,
     writeDefault,
     onUnarchive: taskId !== undefined && archived ? input.onUnarchive : undefined,
+    continueAgent:
+      taskId !== undefined && repository !== null && !archived ? continueAgent : undefined,
     start: {
       available: taskId !== undefined && repository !== null && !archived,
       reason: startReason(taskId, repository, archived),

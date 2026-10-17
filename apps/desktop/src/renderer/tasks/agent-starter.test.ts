@@ -20,6 +20,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { MemberDirectory } from "../member-directory";
@@ -87,17 +88,14 @@ const PULL_REQUEST: CodingAgentPullRequest = {
 let root: Root | undefined;
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." },
-        ),
-    },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." },
+      ),
   });
 });
 

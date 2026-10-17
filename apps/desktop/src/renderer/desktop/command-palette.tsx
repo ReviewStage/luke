@@ -49,6 +49,8 @@ import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
+  CHIP_LOOK,
+  Chip,
   GearIcon,
   PinIcon,
   SearchIcon,
@@ -825,10 +827,9 @@ function FilterChips({
   return (
     <fieldset className="command-palette-filters" aria-label="Filter">
       {PALETTE_FILTERS.map((each) => (
-        <button
+        <Chip
           key={each}
-          type="button"
-          className="command-palette-filter"
+          look={CHIP_LOOK.FILTER}
           aria-pressed={each === filter}
           // Note that a chip takes no focus, because the caret belongs in the
           // field and Return there opens the row chosen, not the chip.
@@ -837,7 +838,7 @@ function FilterChips({
           onClick={() => onFilter(each)}
         >
           {FILTER_LABEL[each]}
-        </button>
+        </Chip>
       ))}
     </fieldset>
   );

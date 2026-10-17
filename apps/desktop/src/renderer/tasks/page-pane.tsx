@@ -156,11 +156,9 @@ function PageSource({
   if (read.kind === SOURCE_READ.READING) return <SpinnerRegion label="Loading source" />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
-      <div className="side-panel-empty">
-        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          The page's source could not be read.
-        </ErrorState>
-      </div>
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        The page's source could not be read.
+      </ErrorState>
     );
   }
   return (

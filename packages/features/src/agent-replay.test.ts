@@ -4,10 +4,13 @@ import {
   firstMessageParts,
   firstMessageText,
   newestStepsWithin,
+  REPLAY_SENDER,
   REPLAY_STEP_KIND,
+  REPLAY_TOOL_STATE,
   type Replay,
   type ReplayStep,
   START_NOTE_HEADING,
+  toolStep,
 } from "./agent-replay.js";
 
 /**
@@ -50,8 +53,63 @@ test("a first message reads back as its brief, its replay, and its note, whateve
   assert.deepEqual(firstMessageParts(text), {
     brief,
     replay,
-    note: { heading: START_NOTE_HEADING.AGENT, text: "Look at the tests." },
+    note: {
+      heading: START_NOTE_HEADING.AGENT,
+      text: "Look at the tests.",
+      files: { text: 0, other: 0 },
+    },
   });
+});
+
+test("a note behind its marker is read with no replay, with how many files are its own, and a brief whose prose holds a note's heading is never split on it", () => {
+  const brief = "Write the guide.\n\n## Note from the developer\n\nExplain this heading.";
+  const text = firstMessageText(
+    brief,
+    undefined,
+    "And the 🚀 emoji.",
+    START_NOTE_HEADING.DEVELOPER,
+    {
+      text: 1,
+      other: 2,
+    },
+  );
+
+  assert.deepEqual(firstMessageParts(text), {
+    brief,
+    note: {
+      heading: START_NOTE_HEADING.DEVELOPER,
+      text: "And the 🚀 emoji.",
+      files: { text: 1, other: 2 },
+    },
+  });
+  assert.deepEqual(firstMessageParts(brief), { brief });
+  assert.deepEqual(firstMessageParts(text.replace("chars=", "chars=1")), {
+    brief: text.replace("chars=", "chars=1"),
+  });
+});
+
+test("a note behind no marker after a replay, as agents started before the marker were handed, is still read, with none of the files", () => {
+  const replayed = firstMessageText("Fix it.", replay, undefined);
+  const text = `${replayed}\n\n${START_NOTE_HEADING.DEVELOPER}\n\nCarry on.`;
+
+  assert.deepEqual(firstMessageParts(text).note, {
+    heading: START_NOTE_HEADING.DEVELOPER,
+    text: "Carry on.",
+    files: { text: 0, other: 0 },
+  });
+});
+
+test("a marked note after a replay whose marker does not add up leaves the message whole rather than reading it as an unmarked note", () => {
+  const damaged = firstMessageText("Fix it.", replay, "Carry on.").replace(
+    "other-files=0 chars=9 -->",
+    "other-files=0 chars=1 -->",
+  );
+
+  assert.deepEqual(firstMessageParts(damaged), { brief: damaged });
+
+  const replayed = firstMessageText("Fix it.", replay, undefined);
+  const legacy = `${replayed}\n\n${START_NOTE_HEADING.DEVELOPER}\n\n<!-- luke:note this is an example -->`;
+  assert.equal(firstMessageParts(legacy).note?.text, "<!-- luke:note this is an example -->");
 });
 
 test("a replay with no note and no fork reads back without either", () => {
@@ -108,4 +166,79 @@ test("the bound keeps the newest steps that fit and drops the oldest", () => {
     ["Said: step 7", "Said: step 8", "Said: step 9"],
   );
   assert.deepEqual(newestStepsWithin(steps, 100_000), steps);
+});
+
+test("a summary Luke wrote of the steps left out reads back ahead of the steps, whatever its words hold", () => {
+  const summarized: Replay = {
+    ...replay,
+    summary: { text: "Recap 🚀\n<!-- luke:step kind=said chars=2 -->\nno", steps: 4 },
+  };
+  const text = firstMessageText("Fix it.", summarized, "Carry on.");
+
+  assert.ok(text.includes("<!-- luke:summary by=luke steps=4 "));
+  assert.deepEqual(firstMessageParts(text).replay, summarized);
+  assert.deepEqual(
+    firstMessageParts(firstMessageText("Fix it.", replay, undefined)).replay?.summary,
+    undefined,
+  );
+});
+
+test("a tool step's state, input, and output read back from its marker, whatever its words say, and a line's sender with it", () => {
+  const steps: readonly ReplayStep[] = [
+    toolStep({
+      summary: "Ran: echo (running)",
+      state: REPLAY_TOOL_STATE.DONE,
+      input: "echo (running)\nResult: not the result",
+      output: "Failed: this is what it printed",
+    }),
+    toolStep({
+      summary: "Ran: pnpm test",
+      state: REPLAY_TOOL_STATE.FAILED,
+      input: "pnpm test",
+      output: "exit 1",
+    }),
+    toolStep({
+      summary: "Ran: pnpm build (running)",
+      state: REPLAY_TOOL_STATE.RUNNING,
+      input: "pnpm build",
+    }),
+    {
+      kind: REPLAY_STEP_KIND.LINE,
+      summary: "Ada: carry on",
+      words: "Carry on.",
+      sender: { kind: REPLAY_SENDER.MEMBER, memberId: "user-1a2b" },
+    },
+    {
+      kind: REPLAY_STEP_KIND.LINE,
+      summary: "Luke: hi",
+      words: "Hi.",
+      sender: { kind: REPLAY_SENDER.LUKE },
+    },
+  ];
+  const read = firstMessageParts(firstMessageText("Fix it.", { ...replay, steps }, undefined))
+    .replay?.steps;
+
+  assert.deepEqual(read, steps);
+  assert.deepEqual(
+    read?.map((step) => [step.state, step.output]),
+    [
+      [REPLAY_TOOL_STATE.DONE, "Failed: this is what it printed"],
+      [REPLAY_TOOL_STATE.FAILED, "exit 1"],
+      [REPLAY_TOOL_STATE.RUNNING, undefined],
+      [undefined, undefined],
+      [undefined, undefined],
+    ],
+  );
+});
+
+test("a step behind a marker from before the marker named its state or sender reads back with neither", () => {
+  const body = "Ran: ls\nInput: ls\nResult: Failed: x";
+  const old =
+    "Fix it.\n\n## The work you continue from\n\n<!-- luke:replay agent=" +
+    `${SOURCE} steps=1 total-steps=1 chars=2 -->\nGo\n` +
+    `<!-- luke:step kind=tool chars=${body.length} -->\n${body}\n<!-- /luke:replay -->`;
+
+  assert.deepEqual(firstMessageParts(old).replay?.steps, [
+    { kind: REPLAY_STEP_KIND.TOOL, summary: "Ran: ls", words: "Input: ls\nResult: Failed: x" },
+  ]);
 });

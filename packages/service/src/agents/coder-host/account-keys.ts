@@ -124,3 +124,29 @@ export function anthropicFastAccess(
     return yield* catalog.lukeFastAccess;
   });
 }
+
+/**
+ * The key a call beside the account's steps spends on for one provider, as
+ * a step would choose it: the account's own where it holds a row, and
+ * Luke's where it holds none, with whether it is Luke's, which is counted on
+ * the account's meter; nothing where neither stands or the account's row
+ * cannot be opened, which leaves the call unmade rather than spend Luke's.
+ */
+export function spendingKeyOf(
+  userId: string,
+  provider: ProviderKeyProvider,
+  luke: LukeKeys,
+  ring: Redacted.Redacted | undefined,
+): TaskStoreEffect<{ readonly key: Redacted.Redacted; readonly lukes: boolean } | undefined> {
+  return Effect.map(listProviderKeyRows(userId), (rows) => {
+    const row = rows.find((each) => each.provider === provider);
+    if (row === undefined) {
+      const lukes = provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? luke.anthropic : luke.openAi;
+      return lukes === undefined ? undefined : { key: lukes, lukes: true };
+    }
+    const parsed = ring === undefined ? undefined : parseKeyRing(ring);
+    if (parsed === undefined || Result.isFailure(parsed)) return undefined;
+    const opened = openProviderKey(parsed.success, { userId, provider }, row);
+    return Result.isFailure(opened) ? undefined : { key: opened.success, lukes: false };
+  });
+}

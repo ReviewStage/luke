@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { firstMessageText, REPLAY_STEP_KIND, type Replay } from "@luke/features/agent-replay";
+import {
+  firstMessageText,
+  REPLAY_SENDER,
+  REPLAY_STEP_KIND,
+  type Replay,
+} from "@luke/features/agent-replay";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
@@ -70,7 +75,7 @@ const STEPS: Replay["steps"] = [
   {
     kind: REPLAY_STEP_KIND.TOOL,
     summary: "Read: src/invite.ts",
-    words: 'read_file("src/invite.ts")\n→ 42 lines (result trimmed)',
+    words: 'Input: {"filePath":"src/invite.ts"}\nResult: export const INVITE_DAYS = 7;',
   },
   { kind: REPLAY_STEP_KIND.SAID, summary: "Said: Seven days it is.", words: "Seven days it is." },
 ];
@@ -224,7 +229,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   assert.equal(container.querySelector("[data-replay-step]"), null);
 });
 
-test("opened, the card says what it holds, a row per step naming who, each opening onto its words exactly, and a continuation's transcript opens on the source's tab", async () => {
+test("opened, the card draws each step as a transcript does, a line as a sent message under its sender, the agent's words as words, and a call as a call's row opening onto its input and result, and a continuation's transcript opens on the source's tab", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: CODING_AGENT_BRIEF.PLAN,
@@ -243,20 +248,25 @@ test("opened, the card says what it holds, a row per step naming who, each openi
   );
   assert.match(body?.textContent ?? "", /Builds on luke\/start-from/u);
   assert.doesNotMatch(body?.textContent ?? "", /left out/u);
-  const rows = [...container.querySelectorAll("[data-replay-step] > summary")].map((row) =>
-    [...row.children].map((each) => each.textContent),
+  const steps = [...container.querySelectorAll("[data-replay-step]")];
+  assert.deepEqual(
+    steps.map((step) => step.getAttribute("data-replay-step")),
+    ["line", "tool", "said"],
   );
-  // A line is named by whoever sent it, Charles here though Dean started the source.
-  assert.deepEqual(rows, [
-    ["Charles Pan", "Use seven days."],
-    ["Agent", "Read: src/invite.ts"],
-    ["Agent", "Seven days it is."],
-  ]);
-  press(container.querySelectorAll("[data-replay-step] > summary")[1]);
-  assert.equal(
-    container.querySelector("[data-replay-step] pre")?.textContent,
-    'read_file("src/invite.ts")\n→ 42 lines (result trimmed)',
-  );
+  // A line is a sent message, named by whoever sent it, Charles here though Dean started the source.
+  const [line, call, said] = steps;
+  assert.ok(line?.classList.contains("is-user"));
+  assert.match(line?.textContent ?? "", /Use seven days\./u);
+  assert.equal(line?.querySelector(".message-sender")?.textContent, "Charles Pan");
+  assert.match(said?.textContent ?? "", /Seven days it is\./u);
+  // A call is a call's row, its verb and subject on the line, folded until opened.
+  const head = call?.querySelector("summary");
+  assert.match(head?.textContent ?? "", /Read/u);
+  assert.match(head?.textContent ?? "", /src\/invite\.ts/u);
+  assert.doesNotMatch(call?.textContent ?? "", /INVITE_DAYS/u);
+  press(head);
+  assert.match(call?.textContent ?? "", /"filePath":"src\/invite\.ts"/u);
+  assert.match(call?.textContent ?? "", /export const INVITE_DAYS = 7;/u);
 
   press(container.querySelector("[data-replay-open]"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
@@ -350,4 +360,81 @@ test("on an agent's own page, which lists no source, the card names the source a
   press(container.querySelector("[data-replay-card] > summary .actor-ref"));
   assert.deepEqual(opened, []);
   assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: PLAN_ID, agentId: SOURCE.id }]);
+});
+
+test("a replay holding Luke's summary of the oldest steps opens on one folded row naming it as his, which opens onto the summary", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const { container } = await drawn(
+    agent,
+    firstMessageText(
+      "# Invite flow",
+      replay({
+        summary: { text: "Read the invite code and its tests.", steps: 174 },
+        totalSteps: 177,
+      }),
+      undefined,
+    ),
+  );
+  assert.equal(headOf(container), "Continued from Wire the start from field · 3 of 177 steps");
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+  const row = container.querySelector("[data-replay-summary]");
+  assert.equal(row?.textContent, "Summary of 174 earlier steps (written by Luke)");
+  // The summary stands for the steps it summarized, so none is said to be left out.
+  assert.doesNotMatch(
+    container.querySelector("[data-replay-card] .disclosure-body")?.textContent ?? "",
+    /left out/u,
+  );
+  // It stands ahead of the steps.
+  const first = container.querySelector("[data-replay-step]");
+  assert.ok(row !== null && first !== null);
+  assert.ok(row.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING);
+  press(row.querySelector("summary"));
+  assert.match(row.textContent ?? "", /Read the invite code and its tests\./u);
+});
+
+test("a replayed line is named under its sender as a transcript names one: Luke, an automation, and GitHub by their own marks, the developer as the reader, and a line from before senders were marked by its name", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const line = (summary: string, sender?: NonNullable<Replay["steps"][number]["sender"]>) => ({
+    kind: REPLAY_STEP_KIND.LINE,
+    summary,
+    words: "Go.",
+    ...(sender === undefined ? undefined : { sender }),
+  });
+  const steps: Replay["steps"] = [
+    line("Luke: Go.", { kind: REPLAY_SENDER.LUKE }),
+    line("Nightly: deploy: Go.", { kind: REPLAY_SENDER.AUTOMATION }),
+    line("octocat: Go.", { kind: REPLAY_SENDER.GITHUB }),
+    line("The developer: Go.", { kind: REPLAY_SENDER.DEVELOPER }),
+    // A member the window cannot tell from the reader, with no reader known, keeps their name.
+    line("Ana Ruiz: Go.", { kind: REPLAY_SENDER.MEMBER, memberId: "user-ana" }),
+    line("Charles Pan: Go."),
+  ];
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay({ steps, totalSteps: steps.length }), undefined),
+  );
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+  const senders = [...container.querySelectorAll("[data-replay-step] .message-sender")].map(
+    (sender) => {
+      const ref = sender.querySelector<HTMLElement>(".actor-ref");
+      const name = ref?.querySelector(".actor-ref-name")?.textContent ?? sender.textContent;
+      return [ref?.dataset.kind ?? "", name ?? ""];
+    },
+  );
+  assert.deepEqual(senders, [
+    [ACTOR_KIND.LUKE, "Luke"],
+    [ACTOR_KIND.AUTOMATION, "Nightly: deploy"],
+    [ACTOR_KIND.GITHUB, "octocat"],
+    ["", "You"],
+    ["", "Ana Ruiz"],
+    ["", "Charles Pan"],
+  ]);
 });

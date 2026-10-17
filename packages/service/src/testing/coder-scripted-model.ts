@@ -13,6 +13,7 @@ import {
 } from "eve/evals";
 import type { AgentSkill } from "../agents/agent-runtime/skills.js";
 import { CODER_MODEL_FIXTURE } from "../agents/coder-host/bounds.js";
+import { CHAT_DIGEST_HEADING } from "../agents/coder-host/chat.js";
 import { CODER_TOOL } from "../agents/coder-host/tool-set.js";
 
 /**
@@ -28,8 +29,9 @@ import { CODER_TOOL } from "../agents/coder-host/tool-set.js";
  * in progress, and says so. Offered the fixture's skill and told its
  * `/name`, it loads it and repeats the body's last line. Told to post in
  * chat, it posts the words in its plan's channel and names the message's
- * number; told to read the chat, it reads what it has not read and repeats
- * the first message with who said it. It is
+ * number; told to read the chat, it repeats the first line of the turn's
+ * digest of what it had not read where the turn opened with one, and reads
+ * the chat and repeats the first message with who said it where not. It is
  * selected only by the fixture's own environment variable and a deployment
  * never names it.
  */
@@ -53,7 +55,7 @@ export const SCRIPTED_CHAT_POST = "Post in chat: ";
 export const SCRIPTED_CHAT_POSTED = "Posted in chat as m";
 /** What a developer's words are when they ask the scripted agent to read the chat. */
 export const SCRIPTED_CHAT_READ = "Read the chat.";
-/** The reply once the chat is read: who said the first message unread, and its words, follow. */
+/** The reply once the chat is read: the first message unread, with who said it, follows. */
 export const SCRIPTED_CHAT_HEARD = "The chat says:";
 
 /** What the scripted agent says once it has loaded a skill: the skill's last line follows. */
@@ -166,6 +168,12 @@ function chatResponse(request: MockModelRequest): MockModelResponse | undefined 
     };
   }
   const words = request.lastUserMessage ?? "";
+  // Note that eve may join a turn's instruction to others in one message, so the digest's heading is looked for on a line of its own anywhere.
+  const lines = request.messages.flatMap((message) => message.text.split("\n"));
+  const heading = lines.indexOf(CHAT_DIGEST_HEADING);
+  if (words === SCRIPTED_CHAT_READ && heading !== -1) {
+    return { text: `${SCRIPTED_CHAT_HEARD} ${lines[heading + 1] ?? ""}` };
+  }
   if (words.startsWith(SCRIPTED_CHAT_POST)) {
     const text = words.slice(SCRIPTED_CHAT_POST.length);
     return { toolCalls: [{ name: CODER_TOOL.POST_CHAT, input: { text } }] };

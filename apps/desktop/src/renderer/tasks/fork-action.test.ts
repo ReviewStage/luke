@@ -17,6 +17,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab";
 import { agentForkDoors, ForkProvider } from "./fork-action";
@@ -40,7 +41,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });
 
 function summary(id: string, extra: Partial<CodingAgentSummary> = {}): CodingAgentSummary {
@@ -200,12 +201,9 @@ async function forkedAtInTab(
   status: CodingAgentStatus,
   messages: readonly CodingAgentMessage[],
 ): Promise<readonly (string | null)[]> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   const agent = summary(SOURCE, { status, brief: CODING_AGENT_BRIEF.PROMPT });
   // Note that only the first read answers, because a read past the cursor waits on the service.
