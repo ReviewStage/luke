@@ -20,6 +20,7 @@ import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
+import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SELECT_EXAMPLE } from "./examples/select";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
@@ -73,6 +74,7 @@ export const EXAMPLES: readonly Example[] = [
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
+  SEARCH_FIELDS_EXAMPLE,
   SEGMENTED_EXAMPLE,
   SELECT_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
