@@ -16,9 +16,10 @@ import type { FieldControl } from "../form-field/form-field.js";
  * changes reach `onChange` as they come, as any other typing does, but the
  * Enter that commits a composition is the input method's, not the
  * caller's, so a TextField's `onEnter` answers only an Enter pressed while
- * nothing is being composed. An `onEscape` keeps its press likewise: the
- * Escape that cancels a composition is the input method's, and one pressed
- * otherwise is the field's, kept from whatever stands around it.
+ * nothing is being composed. A field given an `onEscape` marks every
+ * Escape taken, but answers only one pressed while nothing is being
+ * composed: the Escape that cancels a composition is the input method's,
+ * and must not close the page the field stands on either.
  */
 
 /** What a one-line field holds: words, a search, an address, a secret, or a time of day. */
@@ -82,7 +83,7 @@ type TextEntryProps = Named & {
   maxLength?: number | undefined;
   /** Whether the system's spell check marks the words; off for a name, an identifier, or code. */
   spellCheck?: boolean | undefined;
-  /** What an Escape does, pressed while no input method is composing; the press is marked taken, so a page Escape would close passes it by. */
+  /** What an Escape does, pressed while no input method is composing; every Escape is marked taken, so the page's Escape passes it by. */
   onEscape?: (() => void) | undefined;
   /** The face its words are set in; the body's where none is named. */
   font?: TextFieldFont | undefined;
@@ -116,11 +117,18 @@ function composing(event: KeyboardEvent): boolean {
   return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
-/** Answers an Escape with `onEscape`, keeping the press, where one is given and nothing is composing. */
+/**
+ * Marks an Escape taken where `onEscape` is given, and answers it unless an
+ * input method is composing. Note that the press still reaches the window,
+ * because the app's own Escape, stopping a live call, comes before any
+ * field's; the page's Escape passes a taken press by. A composing press is
+ * the input method's already when the page hears it, so marking it takes
+ * nothing from the input method.
+ */
 function answerEscape(event: KeyboardEvent, onEscape: (() => void) | undefined): void {
-  if (event.key !== "Escape" || onEscape === undefined || composing(event)) return;
+  if (event.key !== "Escape" || onEscape === undefined) return;
   event.preventDefault();
-  onEscape();
+  if (!composing(event)) onEscape();
 }
 
 /** One line of text, answering Enter with `onEnter` where it is given. */

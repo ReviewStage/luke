@@ -4,19 +4,24 @@ import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { useConfirmDialog } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
   type DiagramAppearance,
   type DiagramDrawing,
-} from "./diagram/contract";
+  type DiagramModule,
+} from "@luke/ui/diagram-contract";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, type ReactElement, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { onRegistry } from "#testing/copy-feedback";
+import { DOCUMENT_TASK } from "#testing/document-task";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
+import type { SideBundles } from "./bundle-loader";
 import { MarkdownMessage } from "./markdown-message";
 import { PlanBody } from "./tasks/plan-body";
 import { HISTORY_READ } from "./tasks/use-plan-history";
@@ -29,7 +34,7 @@ import { VersionView } from "./tasks/version-view";
  * whose code a version changed is drawn as its code with the changes marked;
  * and every other fence, and every fence where the words are not a plan's,
  * stays code. Mermaid cannot lay out under jsdom, so the bundle stands in at
- * its one boundary, `window.lukeDiagram`, answering a picture named by the
+ * its one boundary, the bundle's importer, answering a picture named by the
  * code and the appearance it was asked in. Synthetic plan.
  */
 
@@ -47,10 +52,17 @@ function pictureOf(code: string, appearance: DiagramAppearance): string {
   return `data:image/svg+xml,${encodeURIComponent(`${appearance}:${code}`)}`;
 }
 
-// The bundle already loaded, as it is once a diagram has been shown in this window.
-window.lukeDiagram = {
+/** The diagram bundle's stand-in. */
+const STAND_IN: DiagramModule = {
   draw: (code, appearance) => Promise.resolve(stoodInDrawing(code, appearance)),
 };
+
+let bundles: SideBundles;
+
+// The bundle already landed, as it is once a diagram has been shown in this window.
+beforeAll(async () => {
+  bundles = await Effect.runPromise(landedBundles({ diagram: () => Promise.resolve(STAND_IN) }));
+});
 
 /** Whether the window is in its dark appearance, and who hears it flip. */
 const appearance = { dark: false, listeners: new Set<() => void>() };
@@ -70,13 +82,9 @@ beforeEach(() => {
         appearance.listeners.delete(listener),
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
 });
 
@@ -96,7 +104,7 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), node)));
+  act(() => root.render(onRegistry(AtomRegistry.make(), onSideBundles(bundles, node))));
   await settle();
   return container;
 }

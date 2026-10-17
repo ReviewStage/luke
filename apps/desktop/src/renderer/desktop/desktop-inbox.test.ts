@@ -32,6 +32,7 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -41,11 +42,12 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -56,6 +58,7 @@ import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
+import { appBridge } from "../app-bridge";
 import { runAppCommand, useAppKeymap } from "../app-commands";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
@@ -195,8 +198,8 @@ let pageAgents = new Map<string, CodingAgentSummary>();
 /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
 let imageReads: (() => void)[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -220,98 +223,88 @@ beforeEach(() => {
   listedWorkspace = undefined;
   automations = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   pageAgents = new Map();
   imageReads = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
-          Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
-          return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
-          const agent = pageAgents.get(request.payload.agentId);
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value:
-              agent === undefined
-                ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
-                : {
-                    agent: {
-                      id: agent.id,
-                      planId: null,
-                      model: agent.model,
-                      effort: agent.effort,
-                      title: agent.title,
-                      createdAt: agent.createdAt,
-                      status: agent.status,
-                      turnId: null,
-                      automationId: null,
-                      workspaceId: "workspace-acme",
-                      repository: "acme/relay",
-                    },
+  fakeAppBridge({
+    act: (request: Act) => {
+      const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
+        Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+        return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+        const agent = pageAgents.get(request.payload.agentId);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value:
+            agent === undefined
+              ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
+              : {
+                  agent: {
+                    id: agent.id,
+                    planId: null,
+                    model: agent.model,
+                    effort: agent.effort,
+                    title: agent.title,
+                    createdAt: agent.createdAt,
+                    status: agent.status,
+                    turnId: null,
+                    automationId: null,
+                    workspaceId: "workspace-acme",
+                    repository: "acme/relay",
                   },
-          });
-        }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        if (request.kind === ACT_KIND.TASKS_TREE) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: {
-              folder: {
-                path: "",
-                repository: "acme/relay",
-                branch: "main",
-                entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
-                truncated: false,
-              },
+                },
+        });
+      }
+      if (request.kind === ACT_KIND.TASKS_TREE) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            folder: {
+              path: "",
+              repository: "acme/relay",
+              branch: "main",
+              entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
+              truncated: false,
             },
-          });
-        }
-        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+          },
+        });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+        return new Promise((resolve) =>
+          imageReads.push(() =>
+            resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+            }),
+          ),
+        );
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+        const { agentId, after } = request.payload;
+        if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
+        agentReads.push(agentId);
+        if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        const items = agentInboxes.get(agentId) ?? [];
+        const hold = holdAgentRead;
+        if (hold !== undefined) {
           return new Promise((resolve) =>
-            imageReads.push(() =>
-              resolve({
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
-              }),
-            ),
+            hold(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } })),
           );
         }
-        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-          const { agentId, after } = request.payload;
-          if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
-          agentReads.push(agentId);
-          if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-          const items = agentInboxes.get(agentId) ?? [];
-          const hold = holdAgentRead;
-          if (hold !== undefined) {
-            return new Promise((resolve) =>
-              hold(() =>
-                resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } }),
-              ),
-            );
-          }
-          return done({ items, cursor: "1" });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
-          const { taskId, after } = request.payload;
-          // A read past the cursor is held open while nothing changes, as the service holds it.
-          if (after !== INBOX_CURSOR_START) return heldRead(taskId);
-          return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        return done({ items, cursor: "1" });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
+        const { taskId, after } = request.payload;
+        // A read past the cursor is held open while nothing changes, as the service holds it.
+        if (after !== INBOX_CURSOR_START) return heldRead(taskId);
+        return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -1506,16 +1499,13 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
 /** Every answer the pane sends, written down and left unanswered, so the box stays as it was. */
 function heldAnswers(): CodingAgentInboxAnswerParams[] {
   const sent: CodingAgentInboxAnswerParams[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
-        sent.push(request.payload);
-        return new Promise(() => undefined);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
+      sent.push(request.payload);
+      return new Promise(() => undefined);
     },
   });
   return sent;
@@ -1674,20 +1664,17 @@ test("an answer file whose read failed says so under the files, and Retry reads 
   };
   inboxes = new Map([[BILLING.id, [answered]]]);
   let failing = true;
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: failing
-            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-            : { contentType: "application/pdf", base64: "JVBERg==" },
-        });
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: failing
+          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          : { contentType: "application/pdf", base64: "JVBERg==" },
+      });
     },
   });
   const { page } = mount();
@@ -1831,16 +1818,13 @@ test("what an item's box said of a dictation that failed stays with that item, a
       removeEventListener: () => undefined,
     }),
   });
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) =>
-        request.kind === ACT_KIND.MICROPHONE_REQUEST
-          ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
-          : bridge.act(request),
-    },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) =>
+      request.kind === ACT_KIND.MICROPHONE_REQUEST
+        ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
+        : bridge.act(request),
   });
   const { page } = mount();
   await settle();
@@ -1865,29 +1849,26 @@ test("what an item's box said of a dictation that failed stays with that item, a
 /** The repository's one skill read for the box, and every GitHub page a press opened, written down. */
 function skillReads(): string[] {
   const opened: string[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.TASKS_SKILLS) {
-          const release = {
-            name: "release",
-            description: "Use to cut a release.",
-            path: ".agents/skills/release/SKILL.md",
-          };
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
-          });
-        }
-        if (request.kind === ACT_KIND.GITHUB_OPEN) {
-          opened.push(request.payload.url);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        return bridge.act(request);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.TASKS_SKILLS) {
+        const release = {
+          name: "release",
+          description: "Use to cut a release.",
+          path: ".agents/skills/release/SKILL.md",
+        };
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
+        });
+      }
+      if (request.kind === ACT_KIND.GITHUB_OPEN) {
+        opened.push(request.payload.url);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
+      return bridge.act(request);
     },
   });
   return opened;
@@ -2045,23 +2026,20 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
   const { page } = mount();
   await settle();
   const listReads: Act[] = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
-          const asked = request.payload.itemId === noted.id ? noted : bare;
-          const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { item: answered, taken: true },
-          });
-        }
-        return bridge.act(request);
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+        const asked = request.payload.itemId === noted.id ? noted : bare;
+        const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { item: answered, taken: true },
+        });
+      }
+      return bridge.act(request);
     },
   });
   const press = (name: string) =>

@@ -78,7 +78,7 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOfReached(conversationIds));
   return (conversationId) => ({
     turn: turns.get(conversationId),
-    lineAwaits: awaiting.has(conversationId),
+    awaitingLineAt: awaiting.get(conversationId),
   });
 });
 

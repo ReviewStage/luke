@@ -25,6 +25,7 @@ import {
   postAsk,
   postMessage,
   readAttachment,
+  readTo,
   roster,
   unreadFor,
 } from "@luke/database/models/chat-store";
@@ -62,7 +63,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
+import { ACCOUNT_CHAT_REASON, accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
   firstMessageText,
@@ -216,8 +217,15 @@ import {
   resolveAsAgent,
 } from "./coder-host/chat.js";
 import { ASK_REFUSAL } from "./coder-host/chat-ask.js";
-import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
+import {
+  CHAT_DOORS,
+  type ChatTelling,
+  HELD_DOORS,
+  postChat,
+  tellMessage,
+} from "./coder-host/chat-notify.js";
 import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
+import { accountInboxPast } from "./coder-host/inbox-page.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -1967,6 +1975,53 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a line no turn ever took reads its agent running for the line's grace and failed past it, alike on its page, in its task's list, and on its transcript",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, agent, ask, transcript, sent } = yield* startedAgent(fakeEve(), {
+          running: false,
+        });
+        // The session takes the line and then fails with the store's hooks, so no turn row is written for it.
+        yield* TestClock.adjust(Duration.seconds(1));
+        assert.equal(
+          (yield* sent("Rename the subject line too.")).agent.status,
+          CODING_AGENT_STATUS.RUNNING,
+        );
+        const statuses = () =>
+          Effect.gen(function* () {
+            const page = readAnswer(
+              codingAgentPageAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(AGENT, owner, { id: agent.id })),
+            );
+            const listed = readAnswer(
+              codingAgentListAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
+            );
+            return {
+              page: page.agent.status,
+              list: listed.agents.find((each) => each.id === agent.id)?.status,
+              transcript: (yield* transcript()).status,
+            };
+          });
+
+        yield* TestClock.adjust(CODER.LINE_GRACE);
+        assert.deepEqual(yield* statuses(), {
+          page: CODING_AGENT_STATUS.RUNNING,
+          list: CODING_AGENT_STATUS.RUNNING,
+          transcript: CODING_AGENT_STATUS.RUNNING,
+        });
+        yield* TestClock.adjust(Duration.millis(1));
+        assert.deepEqual(yield* statuses(), {
+          page: CODING_AGENT_STATUS.FAILED,
+          list: CODING_AGENT_STATUS.FAILED,
+          transcript: CODING_AGENT_STATUS.FAILED,
+        });
+      }),
+  );
+
+  it.effect(
     "the plan list a teammate reads names the member who started each of the plan's agents, by the name their account holds now",
     () =>
       Effect.gen(function* () {
@@ -3378,6 +3433,90 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const told = yield* chat.post(chat.first.member, "Done now.", { channelId: dm.id });
         assert.deepEqual(told.receipt.told, ["agent-2"]);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "an account with Chat off reads nothing waiting in chat, a message addressed to its person among it",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openChat();
+        yield* chooseChat(chat.owner, false);
+        const telling = { ...chat.telling, doors: CHAT_DOORS };
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+        );
+        const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        yield* postChat(telling, {
+          authorMemberId: chat.first.member.id,
+          to: { channelId: dm.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
+          mentions: [],
+          clientKey: randomUUID(),
+        }).pipe(Effect.provide(chat.github.layer));
+        const after = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        assert.deepEqual(after.chat, []);
+        assert.equal(after.cursor, before.cursor, "nothing in chat moves the read");
+      }),
+  );
+
+  it.effect(
+    "a person a message addresses is told through their account's read once, a second before they read is held, and the read carries who and where until they read past it, with none of its words",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openChat();
+        yield* chooseChat(chat.owner, true);
+        const telling = { ...chat.telling, doors: CHAT_DOORS };
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+        );
+        const say = (text: string) =>
+          postChat(telling, {
+            authorMemberId: chat.first.member.id,
+            to: { channelId: dm.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            mentions: [],
+            clientKey: randomUUID(),
+          }).pipe(Effect.provide(chat.github.layer));
+        const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        assert.deepEqual(before.chat, []);
+
+        const first = yield* say("Can I take the invite file too?");
+        assert.deepEqual(first.receipt.told, [chat.person.handle]);
+        const second = yield* say("Or should I wait for #214?");
+        assert.deepEqual(second.receipt.held, [chat.person.handle]);
+
+        const waiting = yield* accountInboxPast(chat.owner, before.cursor);
+        assert.notEqual(waiting.cursor, before.cursor);
+        assert.deepEqual(
+          waiting.chat?.map(({ seq, reason, from, workspaceId }) => ({
+            seq,
+            reason,
+            from,
+            workspaceId,
+          })),
+          [
+            {
+              seq: first.message.seq,
+              reason: ACCOUNT_CHAT_REASON.DIRECT,
+              from: "agent-1",
+              workspaceId: chat.workspace,
+            },
+          ],
+        );
+        assert.ok(!JSON.stringify(waiting.chat).includes("invite file"));
+
+        yield* readTo(
+          chat.owner,
+          chat.workspace,
+          chat.person.id,
+          second.message.channelId,
+          second.message.seq,
+        );
+        const read = yield* accountInboxPast(chat.owner, waiting.cursor);
+        assert.deepEqual(read.chat, []);
+        const third = yield* say("Going ahead.");
+        assert.deepEqual(third.receipt.told, [chat.person.handle]);
       }),
   );
 
@@ -5542,11 +5681,6 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           readSeq: asked.message.seq,
         });
         assert.deepEqual(yield* chat.wrote({ readTo: 0 }), { readSeq: asked.message.seq });
-        // One channel's read is refused while the store keeps one cursor per member.
-        assert.deepEqual(
-          yield* chat.write({ readTo: asked.message.seq, channelId: chat.channel.id }),
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
         assert.equal((yield* chat.read).readSeq, asked.message.seq);
 
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
@@ -5566,6 +5700,35 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.deepEqual(
           yield* chat.write({ readTo: 1 }, "no-such-bearer"),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+      }),
+  );
+
+  it.effect(
+    "a read naming the channel shown moves that channel's own cursor alone, which the write's answer and the chat's read both carry, and a channel the person may not see is refused",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        // The window's read moves its cursor to the head, so the ask comes after it.
+        const floor = (yield* chat.read).readSeq;
+        const asked = yield* chat.agentAsks("Ship it?");
+        const { channelId, seq } = asked.message;
+
+        assert.deepEqual(yield* chat.wrote({ readTo: seq, channelId }), {
+          readSeq: floor,
+          reads: [{ channelId, readSeq: seq }],
+        });
+        const read = yield* chat.read;
+        assert.equal(read.readSeq, floor, "the cursor everywhere stays where it was");
+        assert.deepEqual(read.reads, [{ channelId, readSeq: seq }]);
+
+        // Every channel read past it leaves no channel's own cursor ahead to say.
+        assert.deepEqual(yield* chat.wrote({ readTo: seq }), { readSeq: seq });
+        assert.equal((yield* chat.read).reads, undefined);
+
+        assert.deepEqual(
+          yield* chat.write({ readTo: seq, channelId: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
       }),
   );

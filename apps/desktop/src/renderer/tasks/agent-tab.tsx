@@ -31,6 +31,7 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/task";
 import { TOOL_STATE } from "../ai-elements/tool";
+import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
@@ -98,11 +99,12 @@ import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
+import { SentTime } from "./sent-time";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
-import { callHeading, useMinute } from "./task-time";
+import { useMinute } from "./task-time";
 import {
   calledAgent,
   cardTitle,
@@ -597,7 +599,10 @@ function AgentPartView({
       }
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
-      const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      // A chat call opens Chat only while the window offers it; otherwise its row folds open as any call's does.
+      const called = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      const target =
+        called?.kind === TOOL_TARGET.CHAT && delegation?.chatOn !== true ? undefined : called;
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
         return (
@@ -899,17 +904,6 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   return (
     <span className="message-sender">
       <ActorRef actor={actor} />
-    </span>
-  );
-}
-
-/** When one of the developer's lines was sent, in the words a finished turn's line ends on (`WorkedFor`), after who sent it where anyone is named. */
-function SentTime({ at, named }: { at: number; named: boolean }): React.JSX.Element {
-  const now = useMinute();
-  return (
-    <span className="message-sent-at">
-      {named ? <span aria-hidden="true">·</span> : null}
-      <time dateTime={new Date(at).toISOString()}>{callHeading(at, now)}</time>
     </span>
   );
 }
@@ -1240,7 +1234,12 @@ function AgentTranscriptView({
               />
               {message === first && opening !== undefined && replay !== undefined ? (
                 <>
-                  <ReplayCard replay={opening.replay} place={replay} planId={planId} />
+                  <ReplayCard
+                    replay={opening.replay}
+                    sentAt={first.sentAt}
+                    place={replay}
+                    planId={planId}
+                  />
                   {opening.note === undefined ? null : (
                     <AgentMessage
                       message={opening.note}
@@ -1590,7 +1589,7 @@ export function AgentTab({
     read: control.readPullRequest,
   });
   const copyWithToast = useCopyToast();
-  const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  const openGitHub = (url: string) => appPlatform().openGitHub(url);
   // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
   const toast = useToast();
   useMessageReveal({
