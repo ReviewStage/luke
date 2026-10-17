@@ -56,8 +56,8 @@ import {
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { EVE_MOUNT, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
 import {
+  CHAT_DOORS,
   type ChatTelling,
-  HELD_DOORS,
   HOSTED_OF_CHAT_REFUSAL,
   postChat,
   tellMessage,
@@ -217,7 +217,7 @@ const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     writer: storeWriter({ tools: CODER_TOOL_SET }),
     userId: writer.userId,
     organizationId: writer.organizationId,
-    doors: HELD_DOORS,
+    doors: CHAT_DOORS,
   };
 });
 

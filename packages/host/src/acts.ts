@@ -735,6 +735,17 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
 const exactId = exactText(512);
 
 /**
+ * The Chat the panel has on screen: a workspace's whole Chat, where the
+ * plan is none, or one task's Chat tab, which shows only its plan's channel.
+ */
+const chatShownSchema = EffectSchema.Struct({
+  workspaceId: exactId,
+  planId: EffectSchema.NullOr(exactId),
+});
+
+export type ChatShown = typeof chatShownSchema.Type;
+
+/**
  * The longest fenced block a transcript asks main to colour. Note that a
  * longer one is drawn plain rather than cut, because colouring costs main
  * a pass over every character and a block that long is a log, not a snippet.
@@ -1258,6 +1269,8 @@ export const ACT = {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
       inboxTaskId: EffectSchema.NullOr(exactId),
+      /** The Chat on screen: a workspace's whole Chat, the plan none, or a task's Chat tab on its plan's channel; none where no Chat is. */
+      chatShown: EffectSchema.optionalKey(EffectSchema.NullOr(chatShownSchema)),
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",

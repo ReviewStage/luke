@@ -330,6 +330,19 @@ export const BRIDGE = {
     ),
   }),
   /**
+   * A chat notification clicked: the panel is to open the Chat of the
+   * workspace its message waits in. An event, as an inbox notification's
+   * click is, because it is an ask the window answers once.
+   */
+  onShowChat: entry({
+    kind: "subscribe",
+    channel: "app:show-chat",
+    args: noArgs,
+    result: result<{ workspaceId: string }>(
+      (value) => isRecord(value) && isWireString(value.workspaceId),
+    ),
+  }),
+  /**
    * The floating call window moved under a pointer that did not: a drag of
    * its own. The page is told so the hover its buttons were left with is not
    * believed, since the engine keeps the hover the pointer had before.
@@ -467,6 +480,31 @@ export const BRIDGE = {
         isWireString(value.automationId) &&
         isWireString(value.runId) &&
         isWireString(value.workspaceId) &&
+        isWireString(value.words) &&
+        isWireString(value.detail),
+    ),
+  }),
+  /**
+   * A chat message came to wait while the window was focused away from its
+   * Chat: the panel says so in its toast, whose View opens Chat. An event,
+   * as an opened inbox item is.
+   */
+  onChatMessageWaiting: entry({
+    kind: "subscribe",
+    channel: "app:chat-message-waiting",
+    args: noArgs,
+    result: result<{
+      messageId: string;
+      workspaceId: string;
+      planId: string | null;
+      words: string;
+      detail: string;
+    }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.messageId) &&
+        isWireString(value.workspaceId) &&
+        (value.planId === null || isWireString(value.planId)) &&
         isWireString(value.words) &&
         isWireString(value.detail),
     ),

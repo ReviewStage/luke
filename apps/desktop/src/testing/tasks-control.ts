@@ -275,6 +275,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     inbox: [],
     inboxShown: null,
+    chatShown: null,
     inboxTasks: [],
     inboxView: {
       open: false,

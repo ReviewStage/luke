@@ -92,7 +92,7 @@ import {
   readAsAgent,
   resolveAsAgent,
 } from "./chat.js";
-import { HELD_DOORS } from "./chat-notify.js";
+import { CHAT_DOORS } from "./chat-notify.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -861,7 +861,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           secret === undefined || origin === undefined
             ? EVE_UNREACHED
             : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
-        const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
+        const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
         const { clientKey, postsInTurn, sandbox } = call;
         return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
           clientKey,

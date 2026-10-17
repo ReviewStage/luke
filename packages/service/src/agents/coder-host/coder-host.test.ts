@@ -26,8 +26,10 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -63,6 +65,7 @@ import { CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
+import { accountInboxPast } from "./inbox-page.js";
 import type { ProviderKeys } from "./model.js";
 import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
@@ -1108,6 +1111,35 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           yield* post(onArchivedTask.admitted),
           refused,
           "brought back, it posts",
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent's post mentioning a person tells them through their account's read, which carries who and why",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        yield* chatOn(userId);
+        const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+        const person = Option.getOrThrow(
+          yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
+        );
+        const posted = yield* host
+          .chat(admitted, {
+            tool: CHAT_TOOL.POST,
+            input: unparsedWire({ text: `@${person.handle} the invite table is yours.` }),
+            clientKey: "call-mention",
+            postsInTurn: 0,
+            sandbox: () => Promise.reject(new Error("the sandbox was opened")),
+          })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* accountInboxPast(userId, INBOX_CURSOR_START);
+        assert.deepEqual(
+          read.chat?.map(({ reason, workspaceId }) => ({ reason, workspaceId })),
+          [{ reason: ACCOUNT_CHAT_REASON.MENTION, workspaceId: workspace }],
         );
       }),
   );

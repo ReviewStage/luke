@@ -89,6 +89,11 @@ const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
     agentId: Schema.NullOr(Schema.String),
     inboxTaskId: Schema.NullOr(Schema.String),
+    chatShown: Schema.optionalKey(
+      Schema.NullOr(
+        Schema.Struct({ workspaceId: Schema.String, planId: Schema.NullOr(Schema.String) }),
+      ),
+    ),
   }),
 );
 
@@ -130,6 +135,8 @@ function mount(
   const shownAgents: (string | null)[] = [];
   /** Which task's Inbox main was told is shown, each time it was told. */
   const shownInboxes: (string | null)[] = [];
+  /** Which Chat main was told is on screen, each time it was told. */
+  const shownChats: ({ workspaceId: string; planId: string | null } | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
@@ -176,6 +183,7 @@ function mount(
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
             shownInboxes.push(shown.inboxTaskId);
+            shownChats.push(shown.chatShown ?? null);
           }
           const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
@@ -215,6 +223,7 @@ function mount(
     agentActs,
     shownAgents,
     shownInboxes,
+    shownChats,
     voiceCommands,
     payloads,
     /** Every Settings link the tab followed, in order. */
@@ -2382,6 +2391,18 @@ test("a channel chosen in Chat is the listed workspace's, so another workspace l
   assert.deepEqual(tab.control().chatView.place, FOR_YOU);
 });
 
+test("a chat notification's click, listing the workspace its message waits in and opening Chat in one press, stands on that workspace's Chat", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  act(() => {
+    tab.control().onChooseWorkspace(ACME.id);
+    tab.control().chatView.onOpen();
+  });
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.equal(tab.control().chatView.open, true);
+  assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, planId: null });
+});
+
 test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only while the account has Chat on", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
@@ -2394,6 +2415,23 @@ test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only
   await settle();
   act(() => off.control().onShowChat(TASK.id));
   assert.ok(!off.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+});
+
+test("main is told a task's Chat tab on screen shows only its plan's channel, where the window's Chat shows the whole workspace's", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {},
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().onShowChat(TASK.id));
+  const onTab = tab.shownChats.at(-1);
+  act(() => tab.control().chatView.onOpen());
+
+  assert.deepEqual(onTab, { workspaceId: PERSONAL.id, planId: TASK.id });
+  assert.deepEqual(tab.shownChats.at(-1), { workspaceId: PERSONAL.id, planId: null });
+  assert.deepEqual(tab.control().chatShown, tab.shownChats.at(-1));
 });
 
 test("the task's Chat tab on screen marks the task's plan channel read, as the window's Chat on that channel does", async () => {

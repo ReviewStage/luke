@@ -292,7 +292,13 @@ read, up to 20 messages, sent to the model provider with the rest of the
 turn.
 Deleting a plan deletes its channel with its messages, deleting your account
 deletes your messages (others' replies to them stay), and deleting the
-workspace deletes its chat.
+workspace deletes its chat. While you are signed in, the same read that keeps
+your waiting inbox items carries what waits on you in chat: every open ask
+someone else posted, and the last direct message or mention of you that you
+have not read, each named only by who posted it, its plan, and its place,
+never its words. While Luke's window is behind, a Mac notification says no
+more than that, such as "@agent-2 messaged you" under the plan's name,
+unless you turn notifications off in Settings › Coding agents.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,

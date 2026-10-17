@@ -112,6 +112,9 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
       shownInbox: (taskId) => {
         noted.push(`inbox:${taskId}`);
       },
+      shownChat: (shown) => {
+        noted.push(`chat:${shown}`);
+      },
     },
     host: {
       codingAgentWorkspaceList: (params) =>

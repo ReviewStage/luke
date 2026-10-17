@@ -777,6 +777,18 @@ const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 const CHAT_TARGET: ToolTarget = { kind: TOOL_TARGET.CHAT };
 
+/**
+ * A post into the poster's plan channel, where its plan's Chat tab shows it:
+ * one naming neither a `to` nor a message it replies to. Note that a post
+ * elsewhere, a read, and a resolve open nothing and fold open instead,
+ * because the channel each reaches is named in words the window cannot
+ * place on a channel, or not named at all.
+ */
+function plansOwnPost(call: TargetedCall): ToolTarget | undefined {
+  if (!isRecord(call.input) || "to" in call.input || "replyTo" in call.input) return undefined;
+  return CHAT_TARGET;
+}
+
 /** The agent a call names in its input, as a read of or a message to one does. */
 function namedAgent(call: TargetedCall): ToolTarget | undefined {
   const agent = stringAt(call.input, "agentId");
@@ -862,9 +874,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
   [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
-  [CHAT_TOOL.POST, () => CHAT_TARGET],
-  [CHAT_TOOL.READ, () => CHAT_TARGET],
-  [CHAT_TOOL.RESOLVE, () => CHAT_TARGET],
+  [CHAT_TOOL.POST, plansOwnPost],
 ]);
 
 /**
