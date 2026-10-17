@@ -1021,24 +1021,10 @@ button.sidebar-section-head-name:hover {
   color: var(--voice-luke);
 }
 
-/* A person's picture keeps its edge on a ground of its own colour, a GitHub user's too. */
-.actor-mark:is(
-  [data-kind="person"],
-  [data-kind="github"]:not([data-bot="true"]),
-  [data-left="true"]
-)::after {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
-  content: "";
-  pointer-events: none;
-}
-
 .actor-mark[data-kind="someone"] {
   background: none;
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
-  color: var(--text-tertiary);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
+  color: var(--luke-color-text-subtle);
 }
 
 /* A member who left keeps their own face, their picture or their letter on
@@ -1065,8 +1051,6 @@ button.sidebar-section-head-name:hover {
   place-items: center;
   overflow: hidden;
   border-radius: inherit;
-  font-size: calc(var(--actor-size) * 0.5);
-  font-weight: 650;
   line-height: 1;
 }
 
@@ -1082,34 +1066,8 @@ button.sidebar-section-head-name:hover {
   color: inherit;
 }
 
-.actor-face[data-hue] {
-  color: var(--workspace-tile-ink);
-}
-
-.actor-face[data-hue="1"] {
-  background: var(--workspace-hue-1);
-}
-
-.actor-face[data-hue="2"] {
-  background: var(--workspace-hue-2);
-}
-
-.actor-face[data-hue="3"] {
-  background: var(--workspace-hue-3);
-}
-
-.actor-face[data-hue="4"] {
-  background: var(--workspace-hue-4);
-}
-
-.actor-face[data-hue="5"] {
-  background: var(--workspace-hue-5);
-}
-
-.actor-face[data-hue="6"] {
-  background: var(--workspace-hue-6);
-}
-
+/* An App's bot's avatar, hidden rather than absent until it has loaded, so
+   its robot stands while it loads and where it fails. */
 .actor-picture {
   position: absolute;
   inset: 0;
@@ -1155,9 +1113,9 @@ button.sidebar-section-head-name:hover {
 }
 
 .actor-ref:hover {
-  background: var(--raised);
-  box-shadow: 0 0 0 3px var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  box-shadow: 0 0 0 3px var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 /* A line that names an actor: its words and the actor in one row centred on
@@ -1187,7 +1145,7 @@ ul.actor-stack {
 
 .actor-stack > :is(.actor-mark, .actor-stack-more, .actor-stack-face) {
   margin-left: -5px; /* off-scale: each face overlaps the one before it */
-  box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+  box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--luke-color-ground));
 }
 
 .actor-stack > :first-child {
@@ -1197,8 +1155,8 @@ ul.actor-stack {
 /* Someone unnamed keeps their outline inside the ring that cuts them from the ground. */
 .actor-stack > .actor-mark[data-kind="someone"] {
   box-shadow:
-    inset 0 0 0 1px var(--hairline-strong),
-    0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+    inset 0 0 0 1px var(--luke-color-border-strong),
+    0 0 0 2px var(--actor-stack-ground, var(--luke-color-ground));
 }
 
 /* A face that hangs its card holds its mark and, at its corner, its badge,
@@ -1212,7 +1170,7 @@ ul.actor-stack {
 
 /* A pile whose faces wear badges stands them apart, so each badge reads clear of the next face. */
 .actor-stack:has(.actor-stack-badge) > .actor-stack-face {
-  margin-left: var(--space-4);
+  margin-left: var(--luke-space-4);
 }
 
 .actor-stack:has(.actor-stack-badge) > .actor-stack-face:first-child {
@@ -1220,7 +1178,7 @@ ul.actor-stack {
 }
 
 .actor-stack-face > .actor-mark {
-  box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+  box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--luke-color-ground));
 }
 
 /* Note that a square no face overlaps stands bare in the pile as in a line,
@@ -1247,7 +1205,7 @@ ul.actor-stack {
   height: 10px;
   place-items: center;
   border-radius: 50%;
-  background: var(--actor-stack-ground, var(--desktop-ground));
+  background: var(--actor-stack-ground, var(--luke-color-ground));
 }
 
 .actor-stack-badge svg {
@@ -1262,7 +1220,7 @@ ul.actor-stack {
   display: flex;
   max-height: min(240px, 40vh);
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
   overflow-y: auto;
@@ -1272,7 +1230,7 @@ ul.actor-stack {
 .actor-more-row {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 /* A row's words wrap within the card, a long login anywhere, and a bot's
@@ -1297,7 +1255,7 @@ ul.actor-stack {
   place-items: center;
   border-radius: 9px;
   background: var(--actor-tile);
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 10px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1307,7 +1265,7 @@ ul.actor-stack {
 .actor-card-head {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .actor-card-head > .luke-hover-card-head {
@@ -1318,7 +1276,7 @@ ul.actor-stack {
 .actor-card-name {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 /* Words naming an actor inside a line of their own, a card's note or a
@@ -1341,8 +1299,8 @@ ul.actor-stack {
   flex-shrink: 0;
   padding: 0 5px; /* off-scale */
   border-radius: 4px;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text-muted);
   font-size: 10.5px;
   font-weight: 500;
   line-height: 16px;
@@ -7719,8 +7677,8 @@ button.automation-run:hover {
 }
 
 .card-name-link:hover {
-  background: var(--raised);
-  box-shadow: 0 0 0 3px var(--raised);
+  background: var(--luke-color-fill-hover);
+  box-shadow: 0 0 0 3px var(--luke-color-fill-hover);
 }
 
 /* Renamed in place, the label gives way to a field in the same type,

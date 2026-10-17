@@ -15,9 +15,11 @@ import { UserIcon } from "../../face/glyphs.js";
  * stands beside it, where it is `decorative` and said once, or is blank.
  */
 
-/** How large the disc is drawn: in a line of words, a list row's, the account's, a card head's, or a page's head. */
+/** How large the disc is drawn: a mark at a row's time, in a line of words, in a facepile, a list row's, the account's, a card head's, or a page's head. */
 export const AVATAR_SIZE = {
+  MARK: "mark",
   INLINE: "inline",
+  STACK: "stack",
   ROW: "row",
   ACCOUNT: "account",
   CARD: "card",
