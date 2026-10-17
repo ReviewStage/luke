@@ -72,7 +72,7 @@ export const TASKS_DROP_ZONE = "tasks";
 const SECTION_HANDLE = ".sidebar-repository-header";
 
 /** Each glyph a section may wear, by its name on the wire, and what the dialog calls it. */
-const GLYPHS: Readonly<Record<TaskSectionGlyph, { icon: LucideIcon; label: string }>> = {
+const GLYPHS = {
   [TASK_SECTION_GLYPH.FOLDER]: { icon: FolderIcon, label: "Folder" },
   [TASK_SECTION_GLYPH.STAR]: { icon: StarIcon, label: "Star" },
   [TASK_SECTION_GLYPH.BOOKMARK]: { icon: BookmarkIcon, label: "Bookmark" },
@@ -85,7 +85,7 @@ const GLYPHS: Readonly<Record<TaskSectionGlyph, { icon: LucideIcon; label: strin
   [TASK_SECTION_GLYPH.LAYERS]: { icon: LayersIcon, label: "Layers" },
   [TASK_SECTION_GLYPH.HEART]: { icon: HeartIcon, label: "Heart" },
   [TASK_SECTION_GLYPH.CIRCLE]: { icon: CircleIcon, label: "Circle" },
-};
+} as const satisfies Record<TaskSectionGlyph, { icon: LucideIcon; label: string }>;
 
 /** The emoji the dialog offers at a press; any other is typed or picked with the system's own picker. */
 const OFFERED_EMOJI = ["🚀", "🔥", "⭐", "🐛", "🎯", "💡", "🧪", "📌"] as const;
@@ -191,14 +191,14 @@ type SectionAsk =
   | {
       readonly kind: typeof TASK_SECTION_WRITE.CREATE;
       readonly workspaceId: string;
-      readonly then: ((sectionId: string) => readonly TaskSectionWrite[]) | undefined;
+      readonly after: ((sectionId: string) => readonly TaskSectionWrite[]) | undefined;
     }
   | { readonly kind: typeof TASK_SECTION_WRITE.EDIT; readonly section: TaskSection };
 
 /** The section dialogs' doors, and the cards they open. */
 export interface SectionDialogs {
-  /** Opens New section in a workspace; `then` is what to write with the section once made, a task moved into it. */
-  askNew: (workspaceId: string, then?: (sectionId: string) => readonly TaskSectionWrite[]) => void;
+  /** Opens New section in a workspace; `after` is what to write with the section once made, a task moved into it. */
+  askNew: (workspaceId: string, after?: (sectionId: string) => readonly TaskSectionWrite[]) => void;
   askEdit: (section: TaskSection) => void;
   askDelete: (section: TaskSection) => void;
   dialog: React.JSX.Element;
@@ -217,7 +217,7 @@ function answerWrites(ask: SectionAsk, title: string, icon: TaskSectionIcon | un
     title,
     ...(icon === undefined ? undefined : { icon }),
   };
-  return [made, ...(ask.then?.(id) ?? [])];
+  return [made, ...(ask.after?.(id) ?? [])];
 }
 
 /**
@@ -300,8 +300,8 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
     </>
   );
   return {
-    askNew: (workspaceId, then) =>
-      open({ kind: TASK_SECTION_WRITE.CREATE, workspaceId, then }, "", undefined),
+    askNew: (workspaceId, after) =>
+      open({ kind: TASK_SECTION_WRITE.CREATE, workspaceId, after }, "", undefined),
     askEdit: (section) =>
       open({ kind: TASK_SECTION_WRITE.EDIT, section }, section.title, section.icon),
     askDelete: (section) => {

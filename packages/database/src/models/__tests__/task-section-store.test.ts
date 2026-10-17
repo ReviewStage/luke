@@ -67,7 +67,7 @@ const place = (taskId: string, sectionId: string | null, position?: string): Tas
   kind: TASK_SECTION_WRITE.PLACE,
   taskId,
   sectionId,
-  ...(position === undefined ? {} : { position }),
+  ...(position === undefined ? undefined : { position }),
 });
 
 it.layer(getTestDB())("an account's task sections", (it) => {

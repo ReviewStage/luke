@@ -98,7 +98,7 @@ export function applySectionWrite(
           return {
             ...rest,
             title: write.title,
-            ...(write.icon === null ? {} : { icon: write.icon }),
+            ...(write.icon === null ? undefined : { icon: write.icon }),
           };
         }),
       };
