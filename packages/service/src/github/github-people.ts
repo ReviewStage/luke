@@ -18,12 +18,12 @@
  * overview's two reads that name anyone, the pull request itself and its
  * conversation, are each named on their own, so neither waits on the other.
  * The pull requests of the stack the overview's pull request stands in are
- * named by the agent of its workspace whose branch is each one's head, read
- * from the agents' own rows, so naming them asks GitHub nothing.
+ * named by the agent of its workspace that published each, read from the
+ * agents' own rows, so naming them asks GitHub nothing.
  */
 
 import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
+import { listCodingAgentsOnPullRequest } from "@luke/database/models/coding-agent-store";
 import { account, member } from "@luke/database/schemas/auth";
 import type {
   CodingAgentAuthor,
@@ -193,41 +193,59 @@ const overviewNamer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return (held) => personOf(held, linked);
 });
 
-/** How many agents on a stack's branches are read for each pull request of it: enough that one of another workspace, or archived, leaves room for the one that names it. */
+/** How many agents are read for each pull request of a stack: enough that one of another workspace, or archived, leaves room for the one that names it. */
 const AGENTS_PER_STACK_ENTRY = 4;
+
+/** How many of a stack's pull requests are looked up at once. */
+const STACK_LOOKUPS = 4;
+
+/**
+ * The agent of the workspace whose pull request, as GitHub last answered
+ * it, is the one numbered: the newest not archived; none where no such
+ * agent stands. Note that a lookup that fails names none, said once in the
+ * log, because the pull request still opens on GitHub.
+ */
+const stackOwnerOf = (
+  agent: { readonly organizationId: string; readonly repository: string },
+  number: number,
+) =>
+  listCodingAgentsOnPullRequest(agent.repository, number, AGENTS_PER_STACK_ENTRY).pipe(
+    Effect.map((owned) => {
+      const owner = owned.find(
+        ({ agent: each }) =>
+          each.organizationId === agent.organizationId && each.archivedAt === null,
+      )?.agent;
+      return owner === undefined ? undefined : { id: owner.id, taskId: owner.taskId };
+    }),
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `the agent of stacked pull request ${number} was not read: ${failure._tag}`,
+        ),
+        undefined,
+      ),
+    ),
+  );
 
 /**
  * The stack's pull requests as the wire carries them, each named by the
- * newest agent of the workspace, not archived, whose branch is its head.
- * Note that a lookup that fails names no agent, said once in the log,
- * because each pull request still opens on GitHub.
+ * agent of the workspace that published it (`stackOwnerOf`), so a press on
+ * one opens the tab that draws that very pull request.
  */
-const namedStack = /* @__PURE__ */ Effect.fnUntraced(function* (
+const namedStack = (
   agent: { readonly organizationId: string; readonly repository: string },
   stack: readonly StackEntry[],
-) {
-  if (stack.length === 0) return [];
-  const heads = [...new Set(stack.map((entry) => entry.head))];
-  const agents = yield* listCodingAgentsOnBranches(
-    agent.repository,
-    heads,
-    heads.length * AGENTS_PER_STACK_ENTRY,
-  ).pipe(
-    Effect.catch((failure) =>
-      Effect.as(Effect.logWarning(`the stack's agents were not read: ${failure._tag}`), []),
-    ),
+) =>
+  Effect.forEach(
+    stack,
+    (entry) =>
+      Effect.map(
+        stackOwnerOf(agent, entry.number),
+        (owner): PullRequestStackEntry =>
+          owner === undefined ? entry : { ...entry, agent: owner },
+      ),
+    { concurrency: STACK_LOOKUPS },
   );
-  const owners = new Map<string, { readonly id: string; readonly taskId: string | null }>();
-  for (const { agent: each } of agents) {
-    const mine = each.organizationId === agent.organizationId && each.archivedAt === null;
-    if (!mine || each.branch === null || owners.has(each.branch)) continue;
-    owners.set(each.branch, { id: each.id, taskId: each.taskId });
-  }
-  return stack.map(({ head, ...entry }): PullRequestStackEntry => {
-    const owner = owners.get(head);
-    return owner === undefined ? entry : { ...entry, agent: owner };
-  });
-});
 
 /**
  * A pull request itself as the wire carries it for its overview, who opened

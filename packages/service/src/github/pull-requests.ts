@@ -837,7 +837,16 @@ const OverviewPullSchema = Schema.Struct({
   ...PullRequestSchema.fields,
   body: Schema.NullOr(Schema.String),
   body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  base: Schema.Struct({ ref: Schema.String }),
+  // Note that a head's repository is null where its fork was deleted, which no pull request here stands on.
+  head: Schema.Struct({
+    ref: Schema.String,
+    sha: Schema.String,
+    repo: Schema.optionalKey(Schema.NullOr(Schema.Struct({ id: Schema.Number }))),
+  }),
+  base: Schema.Struct({
+    ref: Schema.String,
+    repo: Schema.optionalKey(Schema.NullOr(Schema.Struct({ id: Schema.Number }))),
+  }),
   created_at: Schema.String,
   merged_at: Schema.NullOr(Schema.String),
   mergeable_state: Schema.optionalKey(Schema.String),
@@ -1171,8 +1180,11 @@ const REVIEW_THREADS_QUERY = `query ReviewThreads($owner: String!, $name: String
 
 const GRAPHQL_PATH = "/graphql";
 
-/** How many of the repository's open pull requests a stack is worked out from: one page, GitHub's most, the most recently updated. */
+/** How many of the repository's open pull requests one page of a stack's read lists: GitHub's most. */
 const STACK_CANDIDATES = 100;
+
+/** The most pages of open pull requests a stack is read to; a repository holding more stands in no stack. */
+const STACK_PAGES = 5;
 
 /** GitHub's GraphQL word for an App's bot, and for the left side of a diff. */
 const GRAPHQL_BOT = "Bot";
@@ -1443,14 +1455,15 @@ function conversationOf(
 }
 
 /**
- * The repository's open pull requests a stack is worked out from, the most
- * recently updated first up to one page, in one GraphQL read: each by its
- * number, words, and branches, and whether its head is a fork's.
+ * The repository's open pull requests a stack is worked out from, a page
+ * at a time in GraphQL reads: each by its number, words, and branches, and
+ * whether its head is a fork's, and where the next page starts.
  */
-const OPEN_PULL_REQUESTS_QUERY = `query OpenPullRequests($owner: String!, $name: String!) {
+const OPEN_PULL_REQUESTS_QUERY = `query OpenPullRequests($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: ${STACK_CANDIDATES}, orderBy: { field: UPDATED_AT, direction: DESC }) {
+    pullRequests(states: OPEN, first: ${STACK_CANDIDATES}, after: $after) {
       nodes { number title url isDraft headRefName baseRefName isCrossRepository }
+      pageInfo { hasNextPage endCursor }
     }
   }
 }`;
@@ -1475,6 +1488,10 @@ const OpenPullRequestsAnswerSchema = Schema.Struct({
                   }),
                 ),
               ),
+              pageInfo: Schema.Struct({
+                hasNextPage: Schema.Boolean,
+                endCursor: Schema.NullOr(Schema.String),
+              }),
             }),
           }),
         ),
@@ -1484,56 +1501,87 @@ const OpenPullRequestsAnswerSchema = Schema.Struct({
   errors: Schema.optionalKey(Schema.Array(Schema.Unknown)),
 });
 
+type OpenPullRequestNodes = NonNullable<
+  NonNullable<NonNullable<typeof OpenPullRequestsAnswerSchema.Type.data>["repository"]>
+>["pullRequests"]["nodes"];
+
+/** The open pull requests a page lists, as a stack is worked out from them. */
+function candidatesOf(nodes: OpenPullRequestNodes): readonly StackCandidate[] {
+  return nodes.flatMap((node) =>
+    node === null
+      ? []
+      : [
+          {
+            number: node.number,
+            title: node.title,
+            url: node.url,
+            draft: node.isDraft,
+            head: node.headRefName,
+            base: node.baseRefName,
+            crossRepository: node.isCrossRepository,
+          },
+        ],
+  );
+}
+
 /**
- * The repository's open pull requests, as a stack is worked out from them.
- * Note that a read that fails, or that GitHub answers only with errors,
- * lists none, said once in the log, because the header stands without its
- * stack.
+ * The repository's every open pull request, page after page up to the
+ * bound, as a stack is worked out from them; none where they could not all
+ * be read. Note that a listing cut short is none rather than what it got
+ * to, because a pull request it left out could be the second on a branch,
+ * which unmakes an edge the rest would make; and that a read that fails, or
+ * that GitHub answers only with errors, is none too, said once in the log,
+ * because the header stands without its stack.
  */
 function openPullRequestsOf(
   token: Redacted.Redacted,
   fullName: string,
-): Effect.Effect<readonly StackCandidate[], never, HttpClient.HttpClient> {
+): Effect.Effect<readonly StackCandidate[] | undefined, never, HttpClient.HttpClient> {
   const [owner = "", name = ""] = fullName.split("/");
-  const request = githubPost(GRAPHQL_PATH, token, {
-    query: OPEN_PULL_REQUESTS_QUERY,
-    variables: { owner, name },
-  });
-  return Effect.scoped(
-    Effect.flatMap(send(request), (response) => readBody(response, OpenPullRequestsAnswerSchema)),
-  ).pipe(
-    Effect.flatMap((answer) => {
-      const nodes = answer.data?.repository?.pullRequests.nodes;
-      if (nodes === undefined) {
-        return Effect.as(
-          Effect.logWarning(
-            `GitHub answered no open pull requests of the repository (${answer.errors?.length ?? 0} errors)`,
-          ),
-          [],
-        );
-      }
-      return Effect.succeed(
-        nodes.flatMap((node) =>
-          node === null
-            ? []
-            : [
-                {
-                  number: node.number,
-                  title: node.title,
-                  url: node.url,
-                  draft: node.isDraft,
-                  head: node.headRefName,
-                  base: node.baseRefName,
-                  crossRepository: node.isCrossRepository,
-                },
-              ],
-        ),
-      );
-    }),
+  const page = (
+    after: string | null,
+    held: readonly StackCandidate[],
+    pages: number,
+  ): Effect.Effect<
+    readonly StackCandidate[] | undefined,
+    PullRequestReadFailure,
+    HttpClient.HttpClient
+  > => {
+    const request = githubPost(GRAPHQL_PATH, token, {
+      query: OPEN_PULL_REQUESTS_QUERY,
+      variables: { owner, name, after },
+    });
+    return Effect.scoped(
+      Effect.flatMap(send(request), (response) => readBody(response, OpenPullRequestsAnswerSchema)),
+    ).pipe(
+      Effect.flatMap((answer) => {
+        const listed = answer.data?.repository?.pullRequests;
+        if (listed === undefined) {
+          return Effect.as(
+            Effect.logWarning(
+              `GitHub answered no open pull requests of the repository (${answer.errors?.length ?? 0} errors)`,
+            ),
+            undefined,
+          );
+        }
+        const read = [...held, ...candidatesOf(listed.nodes)];
+        const { hasNextPage, endCursor } = listed.pageInfo;
+        if (!hasNextPage || endCursor === null) return Effect.succeed(read);
+        if (pages + 1 >= STACK_PAGES) {
+          return Effect.as(
+            Effect.logWarning(`the repository holds more open pull requests than a stack reads`),
+            undefined,
+          );
+        }
+        return page(endCursor, read, pages + 1);
+      }),
+    );
+  };
+  return page(null, [], 0).pipe(
     Effect.catch((failure) =>
       Effect.as(
         Effect.logWarning(`the repository's open pull requests were not read: ${failure._tag}`),
-        [],
+        undefined,
       ),
     ),
   );
@@ -1562,7 +1610,7 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
   const [read, open] = yield* Effect.all(
     [
       readOptional(withRendering(githubRead(path, token)), OverviewPullSchema),
-      stacked ? openPullRequestsOf(token, fullName) : Effect.succeed([]),
+      stacked ? openPullRequestsOf(token, fullName) : Effect.succeed(undefined),
     ],
     { concurrency: "unbounded" },
   );
@@ -1576,7 +1624,7 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     draft: pullRequest.state === PULL_REQUEST_STATE.DRAFT,
     head: pull.head.ref,
     base: pull.base.ref,
-    crossRepository: false,
+    crossRepository: pull.head.repo?.id !== pull.base.repo?.id,
   };
   const stands =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
@@ -1591,7 +1639,7 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     author: pull.user === null ? undefined : accountOf(pull.user),
     requested: distinctAccounts((pull.requested_reviewers ?? []).map(accountOf)),
     labels: (pull.labels ?? []).slice(0, OVERVIEW_BOUNDS.MAX_LABELS),
-    stack: stands ? stackOf(current, open) : [],
+    stack: stands && open !== undefined ? stackOf(current, open) : [],
   });
 });
 

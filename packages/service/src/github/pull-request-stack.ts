@@ -6,7 +6,9 @@
  * pull request based on that branch, so a branch many target (`main`, a
  * release branch) makes no stack of them. A head two open pull requests
  * share names neither, a pull request from a fork stacks on nothing, and a
- * chain that loops back on itself is no stack. A pull request no other one
+ * chain that loops back on itself is no stack. The listing is the
+ * repository's every open pull request, since one left out could be the
+ * second on a branch that makes an edge no edge. A pull request no other one
  * stands on or under stands in none, which reads as no stack at all.
  */
 
@@ -25,7 +27,7 @@ export interface StackCandidate {
 }
 
 /** One pull request of a stack, as its header lists it. */
-export type StackEntry = Omit<StackCandidate, "base" | "crossRepository">;
+export type StackEntry = Omit<StackCandidate, "head" | "base" | "crossRepository">;
 
 /** The candidates by a branch of theirs, each branch's in the order given. */
 function byBranch(
@@ -48,7 +50,8 @@ function sole(list: readonly StackCandidate[] | undefined): StackCandidate | und
 
 /**
  * The stack `current` stands in, base first, `current` among it; none where
- * nothing stands on or under it, or the chain loops. `current` is counted
+ * nothing stands on or under it, the chain loops, or `current` is from a
+ * fork, which stacks on nothing either way. `current` is counted
  * whether or not `open` lists it, since a listing bounded to the newest may
  * leave out the very pull request it is read for. The chain is walked out
  * from `current` up to the bound each way.
@@ -57,6 +60,7 @@ export function stackOf(
   current: StackCandidate,
   open: readonly StackCandidate[],
 ): readonly StackEntry[] {
+  if (current.crossRepository) return [];
   const candidates = [
     current,
     ...open.filter((each) => each.number !== current.number && !each.crossRepository),
@@ -85,5 +89,5 @@ export function stackOf(
     chain.push(node);
   }
   if (chain.length < 2) return [];
-  return chain.map(({ number, title, url, draft, head }) => ({ number, title, url, draft, head }));
+  return chain.map(({ number, title, url, draft }) => ({ number, title, url, draft }));
 }
