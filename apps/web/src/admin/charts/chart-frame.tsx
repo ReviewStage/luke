@@ -69,7 +69,9 @@ export function ChartEmpty({ children }: { children: React.ReactNode }): React.J
 
 /**
  * A chart's card: `title` over `children`, with `aside` across from the
- * title and `legend` under the plot where they are given. The card is
+ * title and `legend` under the plot where they are given. A chart the
+ * page's section heading already names, the retention grid, takes no
+ * title, and its card holds the plot alone. The card is
  * positioned, so `overlay`, a chart's own tooltip, stands on it outside the
  * column the rest is set in, which would otherwise squeeze it; `ref` is the
  * card, which such a tooltip measures against.
@@ -82,7 +84,7 @@ export function ChartFrame({
   ref,
   children,
 }: {
-  title: string;
+  title?: string;
   aside?: React.ReactNode;
   legend?: React.ReactNode;
   overlay?: React.ReactNode;
@@ -92,16 +94,18 @@ export function ChartFrame({
   return (
     <div ref={ref} className={CHART_CARD}>
       <Stack gap={GAP.FIELD}>
-        <Inline justify={JUSTIFY.BETWEEN} align={ALIGN.BASELINE}>
-          <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
-            {title}
-          </Text>
-          {aside === undefined ? null : (
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {aside}
+        {title === undefined ? null : (
+          <Inline justify={JUSTIFY.BETWEEN} align={ALIGN.BASELINE}>
+            <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
+              {title}
             </Text>
-          )}
-        </Inline>
+            {aside === undefined ? null : (
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                {aside}
+              </Text>
+            )}
+          </Inline>
+        )}
         {children}
         {legend === undefined ? null : (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
