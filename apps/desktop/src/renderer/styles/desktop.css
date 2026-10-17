@@ -5173,31 +5173,30 @@ button.integration-tool-head:hover,
   gap: var(--space-4);
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-reach);
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .automation-crumbs > svg {
-  width: 13px;
+  width: 13px; /* off-scale: the crumbs' separator, a size under a control's glyph */
   height: 13px;
   flex: none;
 }
 
+/* The automation's name in the dialog heading role, the size a toolbar's
+   title stands at. */
 .automation-crumb {
   overflow: hidden;
-  color: var(--text-primary);
-  font-weight: 600;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
+  line-height: var(--luke-type-dialog-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Where the draft stands, in the caption role (`Text`), kept on one line. */
 .automation-editor-status {
-  color: var(--text-tertiary);
-  font-size: 12px;
   white-space: nowrap;
-}
-
-.automation-editor-status[data-dirty="true"] {
-  color: var(--text-secondary);
 }
 
 /* The editor's toolbar holds its crumbs and its acts in a box of their own,
@@ -5235,21 +5234,22 @@ button.integration-tool-head:hover,
   gap: var(--space-12);
 }
 
-/* Its name is written where a Settings page's title stands, at that title's
-   size and weight. */
+/* Its name is written where a Settings page's title stands, in the page
+   title role. */
 .automation-editor-name {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-primary);
-  font-size: 22px;
-  font-weight: 700;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-title-size);
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.015em;
+  line-height: var(--luke-type-title-leading);
   outline: none; /* no ring: the caret in the title's own words shows focus */
 }
 
 .automation-editor-name::placeholder {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* The form, drawn as a Settings page: each group's name over a card of
@@ -5345,11 +5345,12 @@ button.integration-tool-head:hover,
 }
 
 /* What stops a save stands under its row inside the card, as a Settings
-   row's refusal does. */
+   row's refusal does, in the caption role. */
 .automation-save-refusal,
 .automation-form-problem {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* Choose a model hangs its menu from itself, as the agent box's model chip does. */
@@ -7233,10 +7234,6 @@ button.automation-run:hover {
     inset 0 0 0 1px var(--hairline),
     0 6px 16px var(--shadow-soft);
   translate: -50% 0;
-}
-
-.side-panel-toggle[data-open="true"] {
-  color: var(--text-primary);
 }
 
 /* Tabs ------------------------------------------------------------------------ */

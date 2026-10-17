@@ -65,11 +65,18 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   AnchoredPopover,
   BUTTON_VARIANT,
+  Button,
   ConfirmDialog,
   EllipsisIcon,
+  IconButton,
   POPOVER_ALIGN,
   ProviderMark,
   SidePanelIcon,
+  Switch,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
@@ -91,8 +98,7 @@ import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
 import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
-import { BusyLabel, Spinner } from "../spinner";
-import { Switch } from "../switch";
+import { Spinner } from "../spinner";
 import { AgentModelChip } from "../tasks/agent-model-chip";
 import { AgentServersButton } from "../tasks/agent-servers";
 import { ModelMenu } from "../tasks/model-menu";
@@ -568,14 +574,7 @@ function AutomationActions({
   return (
     <>
       <Tooltip label={ACTIONS_LABEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={ACTIONS_LABEL}
-          {...menu.trigger()}
-        >
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -649,8 +648,14 @@ function EditorToolbar({
         </div>
         <div className="desktop-toolbar-actions">
           <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
-          <span className="automation-editor-status" data-dirty={String(dirty)}>
-            {status}
+          <span className="automation-editor-status">
+            <Text
+              variant={TEXT_VARIANT.CAPTION}
+              tone={dirty ? TEXT_TONE.MUTED : TEXT_TONE.SUBTLE}
+              as={TEXT_ELEMENT.SPAN}
+            >
+              {status}
+            </Text>
           </span>
           {automation === undefined ? null : (
             <FoldingButton
@@ -661,16 +666,15 @@ function EditorToolbar({
               onClick={onRunNow}
             />
           )}
-          <button
-            type="button"
-            className="primary-button"
-            disabled={saving || !(automation === undefined || dirty)}
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            busy={saving}
+            busyLabel="Saving"
+            disabled={!(automation === undefined || dirty)}
             onClick={onSave}
           >
-            <BusyLabel busy={saving} label="Saving">
-              {automation === undefined ? "Create" : "Save"}
-            </BusyLabel>
-          </button>
+            {automation === undefined ? "Create" : "Save"}
+          </Button>
           {automation === undefined ? null : (
             <>
               <Switch
@@ -685,16 +689,12 @@ function EditorToolbar({
           )}
           {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right. */}
           <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
-            <button
-              type="button"
-              className="icon-button side-panel-toggle"
-              aria-label={runsLabel}
+            <IconButton
+              icon={<SidePanelIcon />}
+              label={runsLabel}
               aria-expanded={runsPanel.open}
-              data-open={String(runsPanel.open)}
               onClick={runsPanel.onToggle}
-            >
-              <SidePanelIcon />
-            </button>
+            />
           </Tooltip>
         </div>
       </div>
