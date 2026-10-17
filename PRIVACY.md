@@ -242,7 +242,12 @@ picture goes when the item stops naming it. Your answer, and any note, is
 stored with the item under the account of whichever member gave it, which
 every member of the task's workspace sees by name beside the answer, and,
 where the agent asked to hear back, handed to it as one of your messages,
-kept in its transcript. While you are signed in, Luke
+kept in its transcript. You can attach files to an answer as you can to a
+message, on the same terms and bounds (see "Files you attach to a coding
+agent"): an answer carrying one is always handed to the agent, and our
+service also keeps each file, with its name, in our database beside the item,
+where every member of the task's workspace can open it, until the answer is
+taken back or the agent posts the item again. While you are signed in, Luke
 on your Mac keeps a read open to our service for every item waiting in your
 workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on

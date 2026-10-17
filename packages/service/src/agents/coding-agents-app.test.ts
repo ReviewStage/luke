@@ -77,6 +77,7 @@ import {
 } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
@@ -98,6 +99,7 @@ import {
   INBOX_RESPONSE,
   type InboxImageBlock,
   type InboxPost,
+  inboxAnsweredSchema,
   inboxAnswerSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -2899,6 +2901,76 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
         assert.ok(handed.includes("Done, and on preview too."), "it carries the note");
       }),
+  );
+
+  it.effect(
+    "an answer carrying a file and no note reaches the agent with the file, even from an item that asks nothing back, and the item names the file it kept",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { post, answer, read } = yield* openInbox(eve);
+        const todo = yield* post({
+          key: "flag-file",
+          title: "Turn on the agent-mail flag in staging",
+          response: { type: INBOX_RESPONSE.TODO },
+          needsReply: false,
+        });
+        assert.ok(Result.isSuccess(todo));
+        const before = eve.sent.length;
+        const trace = {
+          name: "flag-trace.txt",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          data: Buffer.from("flag on in staging\n").toString("base64"),
+        };
+
+        const sent = yield* answer(todo.success.id, {
+          revision: todo.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+          attachments: [trace],
+        });
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(eve.sent.length, before + 1, "a file reaches the agent as a note does");
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
+        assert.ok(handed.includes("flag on in staging"), "it carries the file");
+        const kept = (yield* read()).items.find((item) => item.key === "flag-file");
+        assert.deepEqual(
+          kept?.answerFiles?.map((file) => [file.name, file.mediaType]),
+          [[trace.name, trace.mediaType]],
+        );
+      }),
+  );
+
+  it.effect("an answer in the developer's own words may be a file alone", () =>
+    Effect.gen(function* () {
+      const { post, answer } = yield* openInbox();
+      const asked = yield* post(QUESTION);
+      assert.ok(Result.isSuccess(asked));
+      const shot = {
+        name: "invite.png",
+        mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+        data: Buffer.from(PNG).toString("base64"),
+      };
+      const answered = (attachments?: readonly (typeof shot)[]) =>
+        answer(asked.success.id, {
+          revision: asked.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.ANSWERED,
+          ...(attachments === undefined ? undefined : { attachments }),
+        });
+
+      assert.deepEqual(
+        yield* answered(),
+        refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+      );
+      const taken = readAnswer(inboxAnsweredSchema, HOSTED_HTTP_STATUS.OK, yield* answered([shot]));
+      assert.equal(taken.taken, true);
+      assert.deepEqual(
+        taken.item.answerFiles?.map((file) => file.name),
+        [shot.name],
+      );
+    }),
   );
 
   it.effect(

@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
@@ -20,12 +21,7 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
-import {
-  inboxAnsweredSchema,
-  inboxAnswerRequestSchema,
-  inboxAnswerSchema,
-  inboxImageTypeSchema,
-} from "./inbox-wire.js";
+import { inboxAnsweredSchema, inboxAnswerRequestSchema, inboxAnswerSchema } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -467,14 +463,15 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
 
 /**
- * The image, as the window hears it: its bytes in base64 under the media
- * type the service sniffed and kept, which the window draws from a `data:`
- * URL of its own making, or why there is none. The host fetched it under
+ * The image, or the file an inbox answer carried, as the window hears it:
+ * its bytes in base64 under the media type the service sniffed and kept, or
+ * the type the file travelled as, which the window draws or opens from a
+ * `data:` URL of its own making, or why there is none. The host fetched it under
  * the account, so the window holds no bearer and no address.
  */
 export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: inboxImageTypeSchema,
+    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
     base64: EffectSchema.String,
   }),
   failed,
