@@ -132,7 +132,9 @@ it.layer(getTestDB())("the terminal lease sweep", (it) => {
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
-        yield* TestClock.setTime(NOW.getTime());
+        // Note that the clock is moved only by adjustment from where the test clock starts, because a jump of years fires every timer the Postgres client armed in between.
+        const start = yield* Clock.currentTimeMillis;
+        const hourAgo = new Date(start - 60 * 60_000);
         const stopped = yield* openAgent();
         const working = yield* openAgent();
         const turnIds = { stopped: randomUUID(), working: randomUUID() };
@@ -146,15 +148,15 @@ it.layer(getTestDB())("the terminal lease sweep", (it) => {
             conversationId: agent.conversationId,
             origin: TURN_ORIGIN.TYPED,
             status: TURN_STATUS.RUNNING,
-            queuedAt: minutesBefore(60),
-            startedAt: minutesBefore(60),
+            queuedAt: hourAgo,
+            startedAt: hourAgo,
           });
-          yield* holdSandbox(agent.conversationId, minutesBefore(10));
+          yield* holdSandbox(agent.conversationId, new Date(start - 10 * 60_000));
         }
         // The Stop a Continue asks of its source, whose session died in a deploy, so no end follows.
         yield* db
           .update(turns)
-          .set({ cancelRequestedAt: NOW })
+          .set({ cancelRequestedAt: new Date(start) })
           .where(eq(turns.id, turnIds.stopped));
         const vercel = scriptedSandboxes();
 
