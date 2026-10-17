@@ -3991,7 +3991,8 @@ button.skill-chip:hover,
    the queries below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯
    stands only once the card is too narrow for every press. */
 .agent-composer-attach,
-.agent-servers-button {
+.agent-servers-button,
+.dictate-button {
   display: flex;
 }
 
@@ -4141,28 +4142,28 @@ button.skill-chip:hover,
   display: flex;
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: var(--luke-control-height);
   align-items: center;
-  gap: var(--space-8);
-  color: var(--text-secondary);
+  gap: var(--luke-control-gap);
+  color: var(--luke-color-text-muted);
 }
 
 .dictation-wave {
   display: flex;
   flex: 1;
   min-width: 0;
-  height: 20px;
+  height: var(--luke-space-20);
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
+  gap: var(--luke-space-2);
   overflow: clip;
 }
 
 .dictation-wave-bar {
   flex: none;
-  width: 2px;
+  width: var(--luke-space-2);
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: currentColor;
   transform: scaleY(0.08);
 }
@@ -4170,8 +4171,8 @@ button.skill-chip:hover,
 .dictation-clock {
   flex: none;
   min-width: 34px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -4181,8 +4182,7 @@ button.skill-chip:hover,
   flex: 1;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
-  font-size: 12.5px;
+  gap: var(--luke-icon-gap);
 }
 
 /* Files dragged over the box: the card's edge brightens as it does under
