@@ -2429,14 +2429,7 @@ ul.actor-stack {
    `@luke/ui/styles.css`. What stays here is the window's own: the marks it
    holds a size under the control's glyph, its menu's chevron at the size a
    menu draws it (restated, since `.settings-chevron`'s own rule here would
-   otherwise win over the shared layer), and the words its callers still mark
-   `.chip-name`, cut short rather than pushing past the row. */
-.chip-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+   otherwise win over the shared layer). */
 .luke-chip :is(.repository-picture, .provider-mark, .harness-mark) {
   width: 14px;
   height: 14px;

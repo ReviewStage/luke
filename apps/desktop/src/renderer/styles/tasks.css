@@ -4031,11 +4031,11 @@ button.skill-chip:hover,
 /* Too narrow for the published chips' words: each draws its mark alone,
    its label and hint still naming it. */
 @container composer (max-width: 519px) {
-  .agent-composer :is(.agent-published-chip, .agent-changes-chip) {
-    padding: 0 var(--space-8);
+  .agent-composer :is(.agent-published-chip, .agent-changes-chip) > .luke-chip {
+    padding: 0 var(--luke-space-8);
   }
 
-  .agent-composer :is(.agent-published-chip, .agent-changes-chip) .chip-name {
+  .agent-composer :is(.agent-published-chip, .agent-changes-chip) .luke-chip-name {
     display: none;
   }
 }
@@ -5344,8 +5344,14 @@ button.agent-ref:hover .agent-ref-name {
   --context-part: var(--text-secondary);
 }
 
-.agent-published-chip {
-  flex: 0 1 auto;
+/* The published chips' boxes (agent-published.tsx) draw no box of their
+   own, so each chip stands in the composer's row as the row's own. */
+.agent-published-chip,
+.agent-changes-chip {
+  display: contents;
+}
+
+.agent-published-chip > .luke-chip {
   font-variant-numeric: tabular-nums;
 }
 
@@ -5407,23 +5413,24 @@ button.agent-ref:hover .agent-ref-name {
   color: var(--text-tertiary);
 }
 
-.agent-published-chip[data-pull-request-state] {
+.agent-published-chip[data-pull-request-state] > .luke-chip {
   border-color: color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
   background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
-  color: var(--pull-request-tone);
-  font-weight: 600;
+  --luke-chip-ink: var(--pull-request-tone);
+  font-weight: var(--luke-weight-semibold);
 }
 
-.agent-published-chip[data-pull-request-state]:hover,
-.agent-published-chip[data-pull-request-state][data-menu-open="true"] {
+.agent-published-chip[data-pull-request-state] > .luke-chip:hover,
+.agent-published-chip[data-pull-request-state][data-menu-open="true"] > .luke-chip {
   background: color-mix(in srgb, var(--pull-request-tone) 22%, transparent);
-  color: var(--pull-request-tone);
+  --luke-chip-ink: var(--pull-request-tone);
 }
 
-.agent-branch-name {
+/* A branch reads in the code face, as a terminal would print it. */
+.agent-published-chip[data-branch] .luke-chip-name {
   max-width: 180px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--luke-font-mono);
+  font-size: 11.5px; /* off-scale: a branch's name in the code face */
 }
 
 /* The pull request's row at a finished transcript's end: a boxed line, the
@@ -5439,22 +5446,22 @@ button.agent-ref:hover .agent-ref-name {
   display: flex;
   width: 100%;
   min-width: 0;
-  height: 36px;
+  height: 36px; /* off-scale: a transcript's boxed row */
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 12.5px; /* off-scale: a transcript's call line */
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
 .agent-published-row:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 /* The number, never cut, then the title, which gives way first. */
@@ -5493,14 +5500,14 @@ button.agent-ref:hover .agent-ref-name {
 
 .agent-published-state {
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* The one word the checks still get: said, in the danger red, only once
    they have failed, since that is the one result that asks for a look. */
 .agent-published-checks {
   flex: 0 0 auto;
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 .agent-published-lines {
@@ -5510,11 +5517,11 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .agent-published-added {
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
 }
 
 .agent-published-removed {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 /* The Work tab's own ----------------------------------------------------- */
