@@ -385,7 +385,8 @@ export function AgentComposer({
           repositoryRemedy(note, () => {
             if (latest.current.note === note) latest.current.retry();
           });
-  const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
+  // Note that a closed box asks for nothing, since it takes nothing.
+  const placeholder = closed ? "" : followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
   // Note that a held box gives up the caret, because a field that takes no
   // words, and a Send disabled under the press, can hold none; a send made
@@ -526,6 +527,7 @@ export function AgentComposer({
       className="agent-composer"
       data-status={status}
       data-dropping={dropping ? "" : undefined}
+      data-closed={closed ? "" : undefined}
       onDragOver={(event) => {
         if (!carriesFiles(event) || held) return;
         event.preventDefault();

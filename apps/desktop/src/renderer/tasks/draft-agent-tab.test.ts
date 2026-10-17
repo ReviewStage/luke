@@ -509,3 +509,64 @@ test("a fork's draft names its source and the message over the box, starts on th
   await tab.press("Drop the fork");
   assert.equal(dropped, 1);
 });
+
+test("a continue's draft names its source alone over the box, stands on a working line copying the source's work while its Start is out, and gives way to the new agent as it lands, or to the note and Retry with the words kept", async () => {
+  const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const fork = { agentId: SOURCE, opening: "" };
+  const source: CodingAgentSummary = {
+    id: SOURCE,
+    planId: TASK_ID,
+    model: "openai/gpt-6.1-sol",
+    effort: "xhigh",
+    title: "Queue the invite email",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.FAILED,
+    turnId: null,
+  };
+  const answers: ((failed: Failure | undefined) => void)[] = [];
+  const forks: unknown[] = [];
+  let dropped = 0;
+  const tab = mount(
+    [],
+    { ...DRAFT, prompt: "Now add the dark variant.", fork },
+    {
+      agents: [source],
+      startFork: (_draftId, forked, words) => {
+        forks.push({ forked, words });
+        return new Promise((resolve) => answers.push(resolve));
+      },
+      onDropFork: () => {
+        dropped += 1;
+      },
+    },
+  );
+  await settle();
+  const working = () => document.querySelector("[data-working]")?.textContent ?? undefined;
+
+  const chip = document.querySelector("[data-fork-chip]");
+  assert.equal(chip?.textContent?.replace(/\s+/gu, " "), "Continue ofQueue the invite email");
+  assert.equal(working(), undefined, "nothing works before the send");
+
+  await tab.send();
+  assert.deepEqual(forks, [{ forked: fork, words: "Now add the dark variant." }]);
+  assert.match(working() ?? "", /^Copying Queue the invite email's work…/u);
+  assert.equal(tab.button("Send")?.disabled, true, "the box is held while the Start is out");
+
+  await act(async () =>
+    answers.shift()?.(startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID)),
+  );
+  await settle();
+  assert.equal(working(), undefined, "a Start that did not land leaves the line");
+  assert.match(tab.note() ?? "", /could not be started/u);
+  assert.equal(tab.draft(), "Now add the dark variant.", "the words are kept");
+
+  await tab.press("Retry");
+  assert.equal(forks.length, 2);
+  assert.match(working() ?? "", /^Copying/u);
+  await act(async () => answers.shift()?.(undefined));
+  await settle();
+  assert.equal(working(), undefined, "the line gives way once the new agent landed");
+
+  await tab.press("Drop the continue");
+  assert.equal(dropped, 1);
+});

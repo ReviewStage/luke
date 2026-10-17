@@ -132,6 +132,7 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
+import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
@@ -1021,6 +1022,7 @@ export function AgentMessage({
             </SentToAgent>
           </MessageContent>
         )}
+        <UndeliveredMark messageId={message.id} />
         {words === "" && named === null && sentAt === undefined ? null : (
           <div className="message-meta">
             {words === "" ? null : (
@@ -1182,6 +1184,7 @@ function AgentTranscriptView({
   endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
+  const undelivered = useUndeliveredLines();
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
@@ -1189,7 +1192,10 @@ function AgentTranscriptView({
     // any other is, but where something sent it, an automation, when it is
     // that sender's card; the rest the developer sent since.
     const first = messages.find(
-      (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+      (message) =>
+        message.role === MESSAGE_ROLE.USER &&
+        chatNoticeOf(message) === undefined &&
+        !undelivered.has(message.id),
     );
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
@@ -1387,6 +1393,9 @@ function AgentTabView({
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
   const steering = new Set(composer.sent.filter((line) => line.steers).map((line) => line.id));
+  const undelivered = new Set(
+    composer.sent.filter((line) => line.undelivered === true).map((line) => line.id),
+  );
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
   const { members, former } = useMemberDirectory();
@@ -1411,42 +1420,44 @@ function AgentTabView({
       <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId, former)}>
         <AgentPicturesProvider value={pictures}>
           <MentionedServers value={{ disabled: servers.disabled, steering }}>
-            <AgentTranscriptView
-              messages={lines}
-              brief={agent.brief}
-              briefSender={starter === undefined ? undefined : starterActor}
-              origin={origin}
-              readerId={readerId}
-              planId={agent.planId ?? undefined}
-              replay={replay}
-              delegation={{
-                models,
-                own: { model: agent.model, effort: agent.effort },
-                starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                onOpen: onOpenSubagent,
-                onOpenTarget,
-                cards,
-                standings: transcript.subagents,
-                chat,
-                chatOn,
-              }}
-              reading={transcript.reading}
-              failed={transcript.failed}
-              working={working}
-              sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-              startedAt={startedAt}
-              ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
-              endReason={endLineReason(transcript.failure, starter)}
-              onOpenApiKeys={onOpenApiKeys}
-              endTrail={endTrail}
-              onRetry={transcript.onRetry}
-              footer={
-                showsPublishedRow(agent.status, published) ? (
-                  <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-                ) : null
-              }
-              overComposer
-            />
+            <UndeliveredLines value={undelivered}>
+              <AgentTranscriptView
+                messages={lines}
+                brief={agent.brief}
+                briefSender={starter === undefined ? undefined : starterActor}
+                origin={origin}
+                readerId={readerId}
+                planId={agent.planId ?? undefined}
+                replay={replay}
+                delegation={{
+                  models,
+                  own: { model: agent.model, effort: agent.effort },
+                  starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                  onOpen: onOpenSubagent,
+                  onOpenTarget,
+                  cards,
+                  standings: transcript.subagents,
+                  chat,
+                  chatOn,
+                }}
+                reading={transcript.reading}
+                failed={transcript.failed}
+                working={working}
+                sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                startedAt={startedAt}
+                ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+                endReason={endLineReason(transcript.failure, starter)}
+                onOpenApiKeys={onOpenApiKeys}
+                endTrail={endTrail}
+                onRetry={transcript.onRetry}
+                footer={
+                  showsPublishedRow(agent.status, published) ? (
+                    <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+                  ) : null
+                }
+                overComposer
+              />
+            </UndeliveredLines>
           </MentionedServers>
         </AgentPicturesProvider>
       </MacOwnerProvider>
@@ -1663,8 +1674,8 @@ export function AgentTab({
             control={control}
             onOpenAgent={openAgent}
             carry={{
-              words: composer.draft,
-              attachments: composer.attachments,
+              words: composer.unsent.words,
+              attachments: composer.unsent.attachments,
               planId: agent.planId,
             }}
           />
