@@ -391,7 +391,8 @@
    row a field, Cancel, and Save, under the row's words and inside its rule,
    and a refused save says why under them. The field takes the line's room.
    The hint is the key's own characters, so it reads in the code face. */
-.api-key {
+.api-key,
+.workspace-identity {
   display: flex;
   flex-direction: column;
 }
@@ -410,7 +411,8 @@
   flex: 1;
 }
 
-.api-key > .error-message {
+.api-key > .error-message,
+.workspace-identity > .error-message {
   margin-top: calc(-1 * var(--luke-space-4));
   padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
 }
@@ -437,11 +439,14 @@
   justify-content: space-between;
 }
 
-/* The workspace's name, renamed in place on the name's own line in the
-   page's first row, the field's words where the name's stood. */
+/* Settings › Workspace's first row (`.workspace-identity`, its refusal
+   standing under it as API keys' does): the workspace's name, renamed in
+   place on the name's own line, the field's words where the name's stood
+   and the field standing in the label's 18px line, so the row keeps its height. */
 .workspace-name-input {
+  display: block;
   height: 24px;
-  margin: -3px 0 -1px -9px;
+  margin: -3px 0 -3px -9px;
   padding: 0 8px;
   border-radius: var(--control-radius);
   font-size: 13px;
