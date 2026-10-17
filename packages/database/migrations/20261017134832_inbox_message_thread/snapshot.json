@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "d5111632-c260-4497-8d2f-b6a5a08f9ca1",
-  "prevIds": ["34cb0d36-98ce-43f7-9c02-aebb81368759", "86140e0b-e825-4025-8b49-660207288765"],
+  "id": "4a1a9204-cc3b-48ac-a06f-665a87105cfb",
+  "prevIds": ["efc374cc-05d0-489c-9c22-a5f2db270b0d"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -4056,6 +4056,19 @@
       "generated": null,
       "identity": null,
       "name": "branch",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "start_branch",
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent"
