@@ -4,26 +4,33 @@ import assert from "node:assert/strict";
 import {
   CHANGED_FILE_STATUS,
   CODING_AGENT_STATUS,
+  type CodingAgentChangedFile,
   type CodingAgentSummary,
   DIFF_SIDE,
+  PATCH_OMITTED,
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { handSettings } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
+import { useAppCommand, useAppKeymap } from "../app-commands";
+import type { DiffListProps, DiffViewModule } from "../diff-view/contract";
 import type { ChangesThreads } from "./agent-changes-tab";
 
 /**
  * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
- * each file's patch, headed as git writes one, and how the File tabs'
- * settings draw it: unified with its changed words marked until told
+ * every file as one list, in the tree's order, each file's patch headed as
+ * git writes one, a filter narrowing it, deleted files and lockfiles
+ * folded, each fold and all of them turned by its controls and stage-cli's
+ * keys, which J and K step through only inside the view; and how the File
+ * tabs' settings draw it: unified with its changed words marked until told
  * otherwise, split once Split view is chosen in its ⋯, tinted whole once
  * Highlight changed words is turned off, each choice kept for the next
  * view; a diff too narrow to split is drawn unified, Split view dimmed, the
@@ -55,6 +62,26 @@ const PATCH = [
 
 const PAGE = "https://github.com/acme/relay/pull/7";
 
+/** A changed file of the pull request, modified with the seats patch unless told otherwise. */
+function changed(
+  path: string,
+  overrides: Partial<CodingAgentChangedFile> = {},
+): CodingAgentChangedFile {
+  return {
+    path,
+    previousPath: null,
+    status: CHANGED_FILE_STATUS.MODIFIED,
+    additions: 2,
+    deletions: 1,
+    omitted: null,
+    patch: PATCH,
+    ...overrides,
+  };
+}
+
+/** The pull request's files, in the order GitHub lists them, which is not the tree's. */
+let files: CodingAgentChangedFile[] = [changed("src/seats.ts")];
+
 const control = codingAgentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
@@ -64,17 +91,7 @@ const control = codingAgentsControl({
       pullRequest: {
         url: "https://github.com/acme/relay/pull/7",
         truncated: false,
-        files: [
-          {
-            path: "src/seats.ts",
-            previousPath: null,
-            status: CHANGED_FILE_STATUS.MODIFIED,
-            additions: 2,
-            deletions: 1,
-            omitted: null,
-            patch: PATCH,
-          },
-        ],
+        files,
         reviewers: [],
         commitAuthors: [],
         comments: [],
@@ -83,20 +100,29 @@ const control = codingAgentsControl({
 });
 
 /** What the stand-in bundle was handed, mount first, each draw after it. */
-let drawn: DiffViewProps[] = [];
+let drawn: DiffListProps[] = [];
+/** The files the list was scrolled to, in order. */
+let revealed: string[] = [];
 /** How wide the box the diff is drawn in lays out, in pixels. */
 let boxWidth = 900;
 let root: Root | undefined;
 
 const standIn: DiffViewModule = {
-  mount: (_host, props) => {
+  mount: () => ({ update: () => undefined, unmount: () => undefined }),
+  mountList: (_host, props) => {
     drawn.push(props);
-    return { update: (next) => drawn.push(next), unmount: () => undefined };
+    return {
+      update: (next) => drawn.push(next),
+      reveal: (path) => revealed.push(path),
+      unmount: () => undefined,
+    };
   },
 };
 
 beforeEach(() => {
   drawn = [];
+  revealed = [];
+  files = [changed("src/seats.ts")];
   boxWidth = 900;
   window.lukeDiffView = standIn;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -120,36 +146,85 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws the agent's Files changed view, its read landed, and answers what the diff was last drawn with. */
-async function drawTab(threads?: ChangesThreads): Promise<DiffViewProps> {
+/** The window's keymap with the Inbox's J offered, as the Inbox offers it while it stands, counting each run. */
+function InboxBeside({ onNext }: { onNext: () => void }): null {
+  useAppKeymap(true);
+  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, onNext);
+  return null;
+}
+
+/** One registry for the tests' draws, so a draw again keeps the view's state as the panel would. */
+let registry = AtomRegistry.make();
+
+/** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
+async function redraw(
+  options: { threads?: ChangesThreads; treeOpen?: boolean; beside?: ReactElement } = {},
+): Promise<DiffListProps> {
   const { AgentChangesTab } = await import("./agent-changes-tab");
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(AgentChangesTab, {
-          agentId: AGENT.id,
-          control,
-          shown: true,
-          repository: "acme/relay",
-          tree: { open: false, onToggle: () => undefined },
-          threads,
-        }),
-      ),
-    ),
-  );
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  const tab = createElement(AgentChangesTab, {
+    agentId: AGENT.id,
+    control,
+    shown: true,
+    repository: "acme/relay",
+    tree: { open: options.treeOpen ?? false, onToggle: () => undefined },
+    threads: options.threads,
   });
+  act(() =>
+    root?.render(onRegistry(registry, createElement("div", null, tab, options.beside ?? null))),
+  );
+  await flush();
   return lastDrawn();
 }
 
-function lastDrawn(): DiffViewProps {
-  return drawn.at(-1) ?? assert.fail("the diff is drawn");
+/** Draws the agent's Files changed view afresh, its read landed, and answers what the list was last drawn with. */
+async function drawTab(
+  options: { threads?: ChangesThreads; treeOpen?: boolean; beside?: ReactElement } = {},
+): Promise<DiffListProps> {
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  registry = AtomRegistry.make();
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  return redraw(options);
+}
+
+function lastDrawn(): DiffListProps {
+  return drawn.at(-1) ?? assert.fail("the files are drawn");
+}
+
+/** The paths the list was last drawn with, each marked folded or not. */
+function folds(): Array<[string, boolean]> {
+  return lastDrawn().files.map((file) => [file.path, file.collapsed]);
+}
+
+/** Presses a key on `target`, answering whether something took it. */
+function press(target: Element, init: KeyboardEventInit): boolean {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  act(() => target.dispatchEvent(event));
+  return event.defaultPrevented;
+}
+
+/** The box the list is drawn in, inside the view. */
+function listBox(): HTMLElement {
+  return document.querySelector<HTMLElement>(".diff-list") ?? assert.fail("the list is drawn");
+}
+
+/** The header the view drew for a file, as the bundle stands it at the head of the file. */
+function header(path: string): HTMLElement {
+  const slot = lastDrawn().renderHeader(path);
+  return slot.querySelector<HTMLElement>(".diff-list-head") ?? assert.fail(`${path} has a header`);
+}
+
+/** Types into the tree's search field as the developer would. */
+function typeSearch(words: string): void {
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search stands");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 }
 
 /** The ⋯'s item of a label, the menu opened. */
@@ -209,14 +284,147 @@ function settingControl(popover: HTMLElement, selector: string, name: string): H
   return found ?? assert.fail(`the settings offer ${name}`);
 }
 
-test("a diff is handed over whole as git writes it, drawn as today's File tab look until told otherwise", async () => {
+test("every file is handed over whole as git writes it, in the tree's order, drawn as today's File tab look until told otherwise", async () => {
+  files = [changed("src/seats.ts"), changed("README.md"), changed("src/billing/plan.ts")];
   const props = await drawTab();
 
+  assert.deepEqual(
+    props.files.map((file) => file.path),
+    ["src/billing/plan.ts", "src/seats.ts", "README.md"],
+  );
   assert.equal(
-    props.patch,
+    props.files[1]?.patch,
     `diff --git a/src/seats.ts b/src/seats.ts\n--- a/src/seats.ts\n+++ b/src/seats.ts\n${PATCH}\n`,
   );
   assert.deepEqual(props.look, DEFAULT_LOOK);
+});
+
+test("a file with no hunks to draw stands in the list under its header, which says why", async () => {
+  files = [
+    changed("logo.png", { omitted: PATCH_OMITTED.BINARY, patch: null, additions: 0, deletions: 0 }),
+  ];
+  const props = await drawTab();
+
+  assert.equal(
+    props.files[0]?.patch,
+    "diff --git a/logo.png b/logo.png\n--- a/logo.png\n+++ b/logo.png\n",
+  );
+  assert.equal(
+    header("logo.png").querySelector(".diff-list-notice")?.textContent,
+    "Binary file not shown.",
+  );
+});
+
+test("deleted files and lockfiles start folded, and a file's fold and Collapse all turn them", async () => {
+  files = [
+    changed("src/seats.ts"),
+    changed("src/old.ts", { status: CHANGED_FILE_STATUS.DELETED }),
+    changed("pnpm-lock.yaml"),
+  ];
+  await drawTab();
+  assert.deepEqual(folds(), [
+    ["src/old.ts", true],
+    ["src/seats.ts", false],
+    ["pnpm-lock.yaml", true],
+  ]);
+
+  act(() =>
+    header("src/old.ts")
+      .querySelector<HTMLButtonElement>('button[aria-label="Expand file"]')
+      ?.click(),
+  );
+  await flush();
+  assert.deepEqual(folds()[0], ["src/old.ts", false]);
+
+  const foldAll = () =>
+    document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Collapse all files"], button[aria-label="Expand all files"]',
+    ) ?? assert.fail("the bar offers Collapse all");
+  assert.equal(foldAll().getAttribute("aria-label"), "Collapse all files");
+  act(() => foldAll().click());
+  await flush();
+  assert.ok(folds().every(([, collapsed]) => collapsed));
+
+  assert.equal(foldAll().getAttribute("aria-label"), "Expand all files");
+  act(() => foldAll().click());
+  await flush();
+  assert.ok(folds().every(([, collapsed]) => !collapsed));
+});
+
+test("the tree's search narrows the list, said over it while the tree is hidden, until cleared", async () => {
+  files = [changed("src/seats.ts"), changed("src/billing/plan.ts"), changed("README.md")];
+  await drawTab({ treeOpen: true });
+
+  typeSearch("BILLING");
+  await flush();
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/billing/plan.ts"],
+  );
+
+  await redraw({ treeOpen: false });
+  const notice = [...document.querySelectorAll(".file-tab-notice")].find((each) =>
+    each.textContent?.includes("Only files whose path holds"),
+  );
+  assert.match(notice?.textContent ?? "", /BILLING/u);
+  act(() => notice?.querySelector("button")?.click());
+  await flush();
+  assert.equal(lastDrawn().files.length, 3);
+});
+
+test("J and K step through the files inside the view, ; and ⇧; fold, and Escape lets go of the file", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  const box = listBox();
+
+  assert.ok(press(box, { key: "j" }), "J is the view's");
+  assert.deepEqual(revealed, ["a.ts"], "a first press stands on the file at the top");
+  press(box, { key: "j" });
+  press(box, { key: "j" });
+  press(box, { key: "k" });
+  assert.deepEqual(revealed, ["a.ts", "b.ts", "c.ts", "b.ts"]);
+  assert.ok(header("b.ts").hasAttribute("data-standing"));
+  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /b\.ts/u);
+
+  press(box, { key: ";", code: "Semicolon" });
+  await flush();
+  assert.deepEqual(folds(), [
+    ["a.ts", false],
+    ["b.ts", true],
+    ["c.ts", false],
+  ]);
+  press(box, { key: ":", code: "Semicolon", shiftKey: true });
+  await flush();
+  assert.ok(folds().every(([, collapsed]) => collapsed));
+
+  assert.ok(press(box, { key: "Escape" }), "Escape lets go of the file stood on");
+  assert.equal(header("b.ts").hasAttribute("data-standing"), false);
+  assert.equal(press(box, { key: "Escape" }), false, "with none stood on, Escape is the window's");
+});
+
+test("J outside Files changed is still the Inbox's, and inside it is the view's alone", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  let inboxNext = 0;
+  await drawTab({ beside: createElement(InboxBeside, { onNext: () => (inboxNext += 1) }) });
+
+  press(document.body, { key: "j" });
+  assert.equal(inboxNext, 1, "outside the view J runs the Inbox's next item");
+  assert.deepEqual(revealed, []);
+
+  press(listBox(), { key: "j" });
+  assert.equal(inboxNext, 1, "inside it J goes no further");
+  assert.deepEqual(revealed, ["a.ts"]);
+});
+
+test("a key typed into the tree's search is the field's", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab({ treeOpen: true });
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search stands");
+
+  assert.equal(press(field, { key: "j" }), false);
+  assert.deepEqual(revealed, []);
 });
 
 test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {
@@ -258,7 +466,7 @@ test("with Highlight changed words turned off a changed line is tinted whole, fo
   assert.equal((await drawTab()).look.inlineDiff, "none");
 });
 
-test("a diff too narrow to split is drawn unified with Split view dimmed and its settings saying so, and split again once there is room", async () => {
+test("a list too narrow to split is drawn unified with Split view dimmed and its settings saying so, and split again once there is room", async () => {
   handSettings({ diffLayout: DIFF_LAYOUT.SPLIT });
   await drawTab();
   assert.equal(lastDrawn().look.layout, "split");
@@ -359,29 +567,34 @@ function seatsThread(line: number | null, words: string) {
   };
 }
 
-test("a review thread is drawn under its line in the diff, and one a push outdated stands above the diff", async () => {
+test("a review thread is drawn under its line in its file, and one a push outdated stands above the file's first hunk", async () => {
   const threads: ChangesThreads = {
     list: [seatsThread(2, "why-42"), seatsThread(null, "was-3")],
     draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
   };
-  const props = await drawTab(threads);
+  const props = await drawTab({ threads });
 
-  assert.deepEqual(props.annotations, [{ key: `${PAGE}#why-42`, side: "additions", line: 2 }]);
-  const note = props.renderAnnotation?.(`${PAGE}#why-42`) ?? assert.fail("the note has an element");
-  assert.equal(note.textContent, "why-42");
-  const above =
-    document.querySelector('[aria-label="Comments on lines this diff does not show"]') ??
-    assert.fail("the outdated thread stands above the diff");
-  assert.equal(above.textContent, "was-3");
+  const [outdated, current] = props.files[0]?.annotations ?? [];
+  assert.deepEqual(current, { key: `${PAGE}#why-42`, side: "additions", line: 2 });
+  assert.equal(props.renderAnnotation("src/seats.ts", `${PAGE}#why-42`).textContent, "why-42");
+  assert.equal(outdated?.side, "additions");
+  assert.equal(outdated?.line, 0);
+  const above = props.renderAnnotation("src/seats.ts", outdated?.key ?? "");
+  assert.equal(
+    above.querySelector('[aria-label="Comments on lines this diff does not show"]')?.textContent,
+    "was-3",
+  );
 });
 
 test("Refresh changes reads the review threads again with the files, so the two describe the same push", async () => {
   let threadReads = 0;
   await drawTab({
-    list: [],
-    draw: () => null,
-    refresh: () => {
-      threadReads += 1;
+    threads: {
+      list: [],
+      draw: () => null,
+      refresh: () => {
+        threadReads += 1;
+      },
     },
   });
 
