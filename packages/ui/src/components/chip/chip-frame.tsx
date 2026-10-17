@@ -2,9 +2,8 @@ import type { ComponentPropsWithRef } from "react";
 import { ChevronDownIcon } from "../../face/glyphs.js";
 
 /**
- * chip-frame.tsx -- the one chip's markup, which the barrel's `Chip` and the
- * compatibility door's `CompatChip` both draw, so the two are one control
- * that differ only in whether a caller may add a class of its own.
+ * chip-frame.tsx -- the one chip's markup, which the barrel's `Chip` draws,
+ * and `Select` draws with a width class of its own.
  */
 
 /** The looks a chip comes in, by the place it stands. */
@@ -24,7 +23,7 @@ export type ChipFrameProps = {
   chevron?: boolean;
 } & Omit<ComponentPropsWithRef<"button">, "type" | "style">;
 
-/** A chip's button, wearing `extraClass` beside its own where a caller still passes one. */
+/** A chip's button, wearing `className` beside its own where `Select` passes one. */
 export function ChipFrame({
   look,
   chevron = false,

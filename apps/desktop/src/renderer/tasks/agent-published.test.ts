@@ -51,7 +51,7 @@ function drawChip(withPanel: boolean) {
   root = createRoot(container);
   act(() => root?.render(createElement(PublishedChip, { published: PUBLISHED, doors })));
   const chip =
-    container.querySelector<HTMLButtonElement>(".agent-published-chip") ??
+    container.querySelector<HTMLButtonElement>("button") ??
     assert.fail("the pull request's chip stands");
   return { chip, asked };
 }

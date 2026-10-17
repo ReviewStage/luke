@@ -9,7 +9,6 @@
  * deleted when the last one has.
  */
 
-export { ChipFrame as CompatChip } from "./components/chip/chip-frame.js";
 export { DialogFrame as CompatDialog } from "./components/dialog/dialog-frame.js";
 export {
   SkeletonFrame as CompatSkeleton,
