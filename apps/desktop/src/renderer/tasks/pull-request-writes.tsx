@@ -49,7 +49,8 @@ import { PullRequestMark } from "./pull-request-mark";
  *
  * The pill opens a menu of what may be done from where the pull request
  * stands, as stage-cli's status pill does: Ready for review for a draft and
- * Convert to draft for one open, each with Close pull request, Reopen pull
+ * Convert to draft for one open, each with Close pull request, neutral as
+ * GitHub draws it, Reopen pull
  * request for one closed, and nothing once it is merged. The title is
  * edited in place, as stage-cli's is: its pencil opens a field over it,
  * Enter or the check keeps the words, and Escape or the cross keeps the
@@ -234,7 +235,6 @@ export function PullRequestStateMenu({
   const items: MenuAction[] = actions.map((action) => ({
     label: ACTION_WORDS[action],
     icon: ACTION_GLYPHS[action],
-    danger: action === PULL_REQUEST_ACTION.CLOSE,
     disabled: writes.pending !== undefined,
     onSelect: () => void writes.write({ action }),
   }));
