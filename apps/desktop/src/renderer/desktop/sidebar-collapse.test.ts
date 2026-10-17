@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -13,7 +14,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand } from "../app-commands";
@@ -49,6 +51,7 @@ const SETTINGS: SettingsPanelProps = {
     onOpenSettings: ignore,
     onTest: ignore,
   },
+  capabilities: DESKTOP_CAPABILITIES,
   updates: {
     update: {
       status: UPDATE_STATUS.IDLE,
@@ -88,13 +91,8 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
 });
 

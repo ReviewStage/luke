@@ -8,6 +8,7 @@ import {
   jsonResponse,
 } from "@luke/wire/testing";
 import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
+import { loopbackConsent } from "../loopback-consent.js";
 import { AccountClient, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
@@ -114,6 +115,8 @@ function manager(options: {
       openExternal: async (url) => {
         opened.push(url);
       },
+      openConsent: loopbackConsent,
+      report: () => undefined,
       startCapabilities:
         options.startCapabilities ??
         Effect.sync(() => {

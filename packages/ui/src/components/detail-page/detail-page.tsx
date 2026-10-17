@@ -1,4 +1,5 @@
 import { type ReactNode, useId } from "react";
+import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
 
 /**
  * detail-page.tsx -- the page one thing is drawn on: its title and acts, its main content, and an optional secondary column beside it.
@@ -12,6 +13,11 @@ import { type ReactNode, useId } from "react";
  * reaches the page's edge on its own side, so the wheel works anywhere
  * over the column it moves. In a pane too narrow for two columns, the
  * secondary column follows the main content in the one scroll.
+ *
+ * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
+ * header: the toolbar stands still above the columns, and the page is named
+ * by the toolbar's title. Content that scrolls sideways stands across the
+ * whole room (`PAGE_WIDTH.FULL`) rather than at the measure.
  *
  * The secondary column is a complementary landmark named by its `label`.
  * The page names itself by its title and takes no class or style.
@@ -29,39 +35,45 @@ function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
-/** One thing's page: `title` and `actions` over the main content and an optional `secondary` column. */
+/** One thing's page: its heading over the main content and an optional `secondary` column. */
 export function DetailPage({
-  title,
-  description,
-  actions,
   secondary,
   children,
-}: {
-  /** What the thing is called, which names the page. */
-  title: ReactNode;
-  description?: ReactNode;
-  /** The page's own acts at the header's end (a Button to edit, a menu of the rest). */
-  actions?: ReactNode;
+  ...heading
+}: PageHeading & {
   secondary?: DetailSecondary | undefined;
   /** The main content (sections, a document, a transcript). */
   children: ReactNode;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
+  const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
   return (
-    <section className="luke-detail-page" aria-labelledby={titleId}>
-      <div className="luke-detail-page-top">
-        <header className="luke-detail-page-header">
-          <div className="luke-detail-page-heading">
-            <h1 className="luke-detail-page-title" id={titleId}>
-              {title}
-            </h1>
-            {said(description) ? (
-              <p className="luke-detail-page-description">{description}</p>
+    <section
+      className="luke-detail-page"
+      data-frame={heading.frame ?? PAGE_FRAME.PAGE}
+      data-width={heading.width ?? PAGE_WIDTH.MEASURE}
+      aria-labelledby={underToolbar ? undefined : titleId}
+      aria-label={underToolbar ? heading.label : undefined}
+    >
+      {underToolbar ? (
+        heading.toolbar
+      ) : (
+        <div className="luke-detail-page-top">
+          <header className="luke-detail-page-header">
+            <div className="luke-detail-page-heading">
+              <h1 className="luke-detail-page-title" id={titleId}>
+                {heading.title}
+              </h1>
+              {said(heading.description) ? (
+                <p className="luke-detail-page-description">{heading.description}</p>
+              ) : null}
+            </div>
+            {said(heading.actions) ? (
+              <div className="luke-detail-page-actions">{heading.actions}</div>
             ) : null}
-          </div>
-          {said(actions) ? <div className="luke-detail-page-actions">{actions}</div> : null}
-        </header>
-      </div>
+          </header>
+        </div>
+      )}
       <div className="luke-detail-page-body">
         {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a column scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by. */}
         <div className="luke-detail-page-main" tabIndex={0}>

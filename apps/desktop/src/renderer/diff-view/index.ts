@@ -7,8 +7,8 @@ import { adoptShadowStyles } from "./inline-styles";
 /**
  * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.
  *
- * Built on its own as `diff-view.js` (`scripts/build.mjs`), an ES module
- * split into chunks, and loaded by the first diff shown, so the bundle every
+ * An entry of the renderer's build (`scripts/build.mjs`), imported by the
+ * first diff shown (`../bundle-loader.ts`), so the bundle every
  * window parses never carries Pierre or Shiki; each language's grammar and
  * each syntax theme is a chunk of its own, fetched the first time it is
  * drawn. Shiki colours the code in the theme chosen for each appearance,
@@ -185,6 +185,4 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   };
 }
 
-const module: DiffViewModule = { mount };
-
-window.lukeDiffView = module;
+export const diffView: DiffViewModule = { mount };

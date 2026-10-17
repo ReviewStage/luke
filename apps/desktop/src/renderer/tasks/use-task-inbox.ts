@@ -5,6 +5,8 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
+  type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
@@ -19,13 +21,14 @@ import {
 } from "@luke/features/inbox-wire";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DRAFT_PLACE, useDraftWriter, useInboxDrafts } from "../composer-drafts";
+import { DRAFT_PLACE, type InboxPlace, useDraftWriter, useInboxDrafts } from "../composer-drafts";
 import { messageFailureWords } from "./coding-agent-model";
 import {
   EMPTY_INBOX_DRAFT,
   type InboxBoardView,
   type InboxDraft,
   inboxBoard,
+  inboxMessageOf,
   inboxReply,
 } from "./inbox-model";
 
@@ -50,6 +53,14 @@ import {
  * reached it as one of the developer's messages, which may have started
  * its turn again, so the task's agents are read again for where they stand.
  *
+ * A message on an item's thread goes the same way, open or settled, under
+ * a key of its own kept with its words, and comes back as the item with
+ * its thread, which replaces the one held; a message never answers the
+ * item, nor changes where it stands. It reaches the agent as one of the
+ * developer's messages, which may wake it, so the agents are read again
+ * too. A message refused leaves nothing on the thread, and the box says
+ * why.
+ *
  * An image block names an attachment the service keeps, and so does each
  * file an answer carried, and their bytes are read apart from the inbox, once per attachment while the task is open,
  * as a card first draws the block: the host fetches them under the account
@@ -70,9 +81,10 @@ import {
  * it waits through a look at another tab, task, or page, the Inbox's and the
  * plan's tab reading the same one, and its words outlast a relaunch; the
  * files attached to it are held in this window's memory alone, as a
- * message's are, and go with the answer apart from it. A read of the
- * inbox lets go of the drafts of items no longer open at their revision,
- * and an answer taken lets go of its own.
+ * message's are, and go with the answer apart from it. A settled item's
+ * box keeps the message being written the same way. A read of the inbox
+ * lets go of the drafts of items it no longer holds at their revision, and
+ * an answer taken or a message written lets go of its own.
  */
 
 /** How one read is asked: the task and the cursor to read past, answered as the view hears it. */
@@ -82,6 +94,11 @@ export type InboxReader = (params: CodingAgentInboxParams) => Promise<CodingAgen
 export type InboxAnswerer = (
   params: CodingAgentInboxAnswerParams,
 ) => Promise<CodingAgentInboxAnsweredView>;
+
+/** How one message on an item's thread is sent: the item, the words and files, and the key the send is known by. */
+export type InboxMessenger = (
+  params: CodingAgentInboxMessageParams,
+) => Promise<CodingAgentInboxMessagedView>;
 
 /** How one image is read: the item and the attachment its block names, answered as the view hears it. */
 export type InboxImageReader = (
@@ -116,6 +133,8 @@ export interface TaskInboxControl {
   ) => void;
   /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
+  /** Sends the box's words and files as a message on the item's thread, open or settled; nothing where it holds neither or a send is out. */
+  readonly onMessage: (item: InboxItem, draft: InboxDraft) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
   readonly images: ReadonlyMap<string, InboxImage>;
   /** Asks for an image a card draws, where it is neither held nor on its way. */
@@ -165,7 +184,7 @@ function fresh(taskId: string | undefined): Held {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** Every attachment the items name: their blocks' pictures, and the files their answers carried. */
+/** Every attachment the items name: their blocks' pictures, and the files their answers and their threads' messages carried. */
 function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
   const named = new Set<string>();
   for (const item of items) {
@@ -173,6 +192,9 @@ function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
       if (knownBlock(block) && block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
     }
     for (const file of item.answerFiles ?? []) named.add(file.attachmentId);
+    for (const message of item.messages ?? []) {
+      for (const file of message.files ?? []) named.add(file.attachmentId);
+    }
   }
   return named;
 }
@@ -184,6 +206,31 @@ function imagesNamed(
 ): ReadonlyMap<string, InboxImage> {
   if ([...images.keys()].every((attachmentId) => named.has(attachmentId))) return images;
   return new Map([...images].filter(([attachmentId]) => named.has(attachmentId)));
+}
+
+/**
+ * Where an item's card keeps its draft: the answer while the item is open,
+ * and a message on its thread once it is settled, apart, so an answer left
+ * unsent when another member settles the item never becomes a message.
+ */
+function draftPlace(item: InboxItem, planId: string | null): InboxPlace {
+  const place: InboxPlace = {
+    kind: DRAFT_PLACE.INBOX,
+    planId,
+    agentId: item.agentId,
+    itemId: item.id,
+    revision: item.revision,
+  };
+  return item.status === INBOX_STATUS.OPEN ? place : { ...place, thread: true };
+}
+
+/** Whether a kept draft is the one the item's card reads as it now stands. */
+function draftOfItem(place: InboxPlace, item: InboxItem): boolean {
+  return (
+    place.itemId === item.id &&
+    place.revision === item.revision &&
+    (place.thread === true) === (item.status !== INBOX_STATUS.OPEN)
+  );
 }
 
 /** The items with one replaced by the service's newer word on it. */
@@ -207,6 +254,7 @@ export function useTaskInbox(input: {
     readonly heldIds: readonly string[] | undefined;
     readonly readInbox: InboxReader;
     readonly answerInbox: InboxAnswerer;
+    readonly messageInbox: InboxMessenger;
     readonly readInboxImage: InboxImageReader;
     /** Reads the task's agents again, for where an agent an answer reached stands now. */
     readonly onRetryList: () => void;
@@ -334,6 +382,51 @@ export function useTaskInbox(input: {
     [sending, note, taskId, writer],
   );
 
+  const onMessage = useCallback(
+    (item: InboxItem, draft: InboxDraft) => {
+      const message = inboxMessageOf(draft);
+      if (message === undefined || sending.has(item.id)) return;
+      const { text, attachments } = message;
+      const words = JSON.stringify([text, attachments]);
+      const was = attempts.current.get(item.id);
+      const key = was?.words === words ? was.key : crypto.randomUUID();
+      attempts.current.set(item.id, { key, words });
+      setSending((standing) => new Set(standing).add(item.id));
+      note(item.id, undefined);
+      const askedOn = taskId;
+      latest.current
+        .messageInbox({
+          itemId: item.id,
+          text,
+          ...(attachments.length === 0 ? undefined : { attachments }),
+          clientKey: key,
+        })
+        .catch((): CodingAgentInboxMessagedView => UNANSWERED)
+        .then((answer) => {
+          setSending((standing) => {
+            const next = new Set(standing);
+            next.delete(item.id);
+            return next;
+          });
+          if ("failure" in answer) {
+            note(item.id, messageFailureWords(answer.failure));
+            return;
+          }
+          setHeld((standing) =>
+            standing.taskId === askedOn
+              ? { ...standing, items: withItem(standing.items, answer.item) }
+              : standing,
+          );
+          writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
+          // Note that the key is let go with the words, because the same words written again are a new message, which the service refuses under a key already spent.
+          attempts.current.delete(item.id);
+          // Note that a message reaches the agent as one of the developer's, which may wake it, so the agents are read again.
+          latest.current.onRetryList();
+        });
+    },
+    [sending, note, taskId, writer],
+  );
+
   // An item of an agent the list has not read yet, one started from another
   // window, has the list read again, once for each such agent.
   const asked = useRef(new Set<string>());
@@ -386,20 +479,16 @@ export function useTaskInbox(input: {
     });
   }, []);
 
-  // A read lets go of the drafts of the items it covers that are no longer open at the revision
-  // they were written against: a plan's, or, for an agent with no plan, that agent's alone.
+  // A read lets go of the drafts of the items it covers that it no longer holds as they were
+  // written for: a plan's, or, for an agent with no plan, that agent's alone. Note that a settled
+  // item keeps its thread's draft, and an answer left unsent on an item settled since is let go.
   const { drop } = writer;
   useEffect(() => {
     if (!held.read || (ownPlan === undefined && readAgent === undefined)) return;
     const stale = drafts.filter(
       (kept) =>
         (ownPlan !== undefined || kept.place.agentId === readAgent) &&
-        !held.items.some(
-          (item) =>
-            item.id === kept.place.itemId &&
-            item.revision === kept.place.revision &&
-            item.status === INBOX_STATUS.OPEN,
-        ),
+        !held.items.some((item) => draftOfItem(kept.place, item)),
     );
     if (stale.length === 0) return;
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
@@ -408,9 +497,7 @@ export function useTaskInbox(input: {
   const board = useMemo(() => inboxBoard(held.items), [held.items]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
-      const kept = drafts.find(
-        (each) => each.place.itemId === item.id && each.place.revision === item.revision,
-      );
+      const kept = drafts.find((each) => draftOfItem(each.place, item));
       return kept === undefined
         ? EMPTY_INBOX_DRAFT
         : {
@@ -424,22 +511,13 @@ export function useTaskInbox(input: {
   );
   const onDraft = useCallback(
     (item: InboxItem, draft: InboxDraft) =>
-      writer.update(
-        {
-          kind: DRAFT_PLACE.INBOX,
-          planId: draftsOn,
-          agentId: item.agentId,
-          itemId: item.id,
-          revision: item.revision,
-        },
-        (was) => ({
-          ...was,
-          text: draft.note,
-          choices: draft.choices,
-          values: draft.values,
-          attachments: draft.attachments,
-        }),
-      ),
+      writer.update(draftPlace(item, draftsOn), (was) => ({
+        ...was,
+        text: draft.note,
+        choices: draft.choices,
+        values: draft.values,
+        attachments: draft.attachments,
+      })),
     [writer, draftsOn],
   );
 
@@ -448,16 +526,10 @@ export function useTaskInbox(input: {
       item: InboxItem,
       next: (was: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
     ) =>
-      writer.update(
-        {
-          kind: DRAFT_PLACE.INBOX,
-          planId: draftsOn,
-          agentId: item.agentId,
-          itemId: item.id,
-          revision: item.revision,
-        },
-        (was) => ({ ...was, attachments: next(was.attachments) }),
-      ),
+      writer.update(draftPlace(item, draftsOn), (was) => ({
+        ...was,
+        attachments: next(was.attachments),
+      })),
     [writer, draftsOn],
   );
 
@@ -473,6 +545,7 @@ export function useTaskInbox(input: {
     sending,
     notes,
     onAnswer,
+    onMessage,
     images,
     onImage,
     onRetryImage,
