@@ -105,7 +105,8 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
  * after either, on the model and effort named or else the member's default,
- * checked against the catalog, whose choices the refusal lists. An agent a
+ * checked against the catalog, whose choices the refusal lists, with its
+ * checkout cloned at the branch named where one is, which GitHub must hold. An agent a
  * coding agent starts is told in that note which agent started it and how
  * to report back, and its choice leaves the member's default as it stood.
  * An archive takes the rule the Archive agent menu's does for the member
@@ -213,11 +214,18 @@ export const START_CODING_AGENT_REFUSAL = {
   UNREADABLE:
     "Not started: give a prompt as text of at most " +
     `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, a note ` +
-    "bounded the same or none, and a model with its effort, both or neither.",
+    "bounded the same or none, a branch as one git branch name or none, and a model with its " +
+    "effort, both or neither.",
   NO_TASK: `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
+  NO_BRANCH:
+    "Not started: the task's repository has no such branch on GitHub. Push it first, or name a " +
+    "branch that exists there, such as the head branch of the pull request to build on; leave " +
+    "branch out to start on the default branch.",
+  GITHUB_UNANSWERED:
+    "Not started: GitHub did not answer whether the branch exists. The call may be made again.",
   NOT_REACHABLE:
     "Not started: the GitHub installation connected to the task's workspace does not reach the task's repository.",
   UNAVAILABLE:
@@ -228,6 +236,8 @@ export const START_CODING_AGENT_REFUSAL = {
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.NO_REPOSITORY, START_CODING_AGENT_REFUSAL.NO_REPOSITORY],
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND, START_CODING_AGENT_REFUSAL.NO_BRANCH],
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_CODING_AGENT_REFUSAL.GITHUB_UNANSWERED],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
   [HOSTED_API_ERROR.TASK_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
 ]);
@@ -295,9 +305,17 @@ const START_PROMPT = Schema.Trim.check(
   Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
 );
 
+/** A branch a start may name: one git ref's name as GitHub holds it, with no whitespace, which GitHub then confirms. */
+const START_BRANCH = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(255),
+  Schema.isPattern(/^[^\s~^:?*[\\]+$/u),
+);
+
 /**
- * A start names a prompt at most, a note at most, and a model with its
- * effort or neither; the catalog decides whether the two name anything.
+ * A start names a prompt at most, a note at most, a branch at most, and a
+ * model with its effort or neither; the catalog decides whether the two
+ * name anything, and GitHub whether the branch does.
  * Note that the note is what lets one start carry everything: without it a
  * start on the plan had no room for what was said beyond the plan, so the
  * caller started the agent and then messaged it the rest.
@@ -323,6 +341,14 @@ const START_AGENT_INPUT = Schema.Struct({
       "Everything else the agent should hear as it starts (what to start with, what to watch out " +
         "for, what to leave alone), handed to it after the plan or the prompt in the same first " +
         "message; leave it out where there is nothing beyond the plan.",
+    ),
+  ),
+  branch: Schema.optionalKey(
+    describeWire(
+      START_BRANCH,
+      "The branch of the task's repository to clone the agent's checkout at and cut its own " +
+        "branch from, such as the head branch of a pull request it builds on; it must already be " +
+        "on GitHub. Leave it out for the repository's default branch.",
     ),
   ),
   model: Schema.optionalKey(
@@ -412,7 +438,9 @@ export const START_AGENT_TOOL = {
     "would: on the task's plan itself with no prompt, or on the prompt given in the plan's " +
     "place, with the note after either. This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
-    "the agent it started; message it only when there is something new to say. It runs on the " +
+    "the agent it started; message it only when there is something new to say. Its checkout is " +
+    "the repository's default branch, or the branch named, which must already be on GitHub. " +
+    "It runs on the " +
     "model and effort named, or on the member's default with neither. Answers `accepted` with " +
     "the agent's id, model, the model's name to say it by, effort, status, and mention once its session " +
     "is open, or `rejected` and why nothing was started; a rejected model or effort lists the " +
@@ -999,6 +1027,7 @@ export function runStartAgent(
         choice,
         prompt,
         note,
+        branch: asked.success.branch,
         ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {

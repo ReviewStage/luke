@@ -31,6 +31,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: HOSTED_HTTP_STATUS.BAD_GATEWAY,
   [HOSTED_API_ERROR.NO_REPOSITORY]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -87,6 +88,8 @@ export const HOSTED_REFUSAL = {
   GITHUB_UNANSWERED: { error: HOSTED_API_ERROR.GITHUB_UNANSWERED },
   /** The plan names no repository, so no coding agent can be started on it; nothing was written. */
   NO_REPOSITORY: { error: HOSTED_API_ERROR.NO_REPOSITORY },
+  /** The branch a coding agent was asked to start on is none of the repository's; nothing was written. */
+  BRANCH_NOT_FOUND: { error: HOSTED_API_ERROR.BRANCH_NOT_FOUND },
   /** The message to a coding agent spells more than the wire's bound; nothing was sent. */
   MESSAGE_TOO_LONG: { error: HOSTED_API_ERROR.MESSAGE_TOO_LONG },
   /** The agent's session is still coming up; the same message a moment later is taken. */

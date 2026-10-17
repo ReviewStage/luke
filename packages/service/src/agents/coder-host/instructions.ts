@@ -151,12 +151,39 @@ function authorshipRule(coAuthor: string | undefined): string {
     : `Your commits are the developer's, with Luke as co-author: the checkout's git identity is already set to the developer's own GitHub account, so never change \`user.name\` or \`user.email\`, pass \`--author\`, or rewrite who a commit is by, and end every commit message with a blank line and then this trailer, exactly as written: \`${coAuthor}\`. The service opens your pull request as the developer too.`;
 }
 
+/** What the instructions say of the branch the checkout stands at. */
+interface BranchWords {
+  /** Where the checkout stands, as the checkout's section says it. */
+  readonly checkout: string;
+  /** What the agent's branch is cut from, and which branches it never pushes. */
+  readonly cut: string;
+}
+
+/**
+ * Where the checkout stands and what the agent's branch is cut from: the
+ * default branch, or the branch its starter named, such as a stacked pull
+ * request's, which it cuts from and leaves alone like the default branch.
+ */
+function branchWords(startBranch: string | null): BranchWords {
+  if (startBranch === null) {
+    return {
+      checkout: "at its current default branch",
+      cut: "cut from the default branch. Never commit to or push the default branch.",
+    };
+  }
+  return {
+    checkout: `at \`${startBranch}\`, the branch you were started on, rather than the default branch`,
+    cut: `cut from \`${startBranch}\`, the branch you were started on, not from the default branch. Never commit to or push \`${startBranch}\` or the default branch.`,
+  };
+}
+
 /**
  * The instructions for one agent, on the repository its row names, worded
  * for what it was handed, for whether its token reads the repository's CI,
  * for the link of the task it works on, null for an agent on none, and for
  * whose its commits are: the developer's where the co-author trailer is
- * handed, the App's otherwise.
+ * handed, the App's otherwise; and for the branch it was started on, null
+ * for the default branch.
  */
 export function coderInstructions(
   repository: string,
@@ -164,20 +191,22 @@ export function coderInstructions(
   ciReadable: boolean,
   taskLink: string | null,
   coAuthor: string | undefined = undefined,
+  startBranch: string | null = null,
 ): string {
   const words = BRIEF_WORDS[brief];
+  const branch = branchWords(startBranch);
   const place = taskLink === null ? TASK_PLACE_WORDS.taskless : TASK_PLACE_WORDS.onTask;
   return `You are Luke's coding agent. Your job is to ${words.job}, in the GitHub repository \`${repository}\`, and to decide whether the result is worth publishing as a pull request.
 
 ## The checkout
 
-The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current default branch. Work there. Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, \`grep\`, and \`apply_patch\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.
+The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, ${branch.checkout}. Work there. Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, \`grep\`, and \`apply_patch\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.
 
 ## How to work
 
 1. Read the repository's \`AGENTS.md\` and \`CLAUDE.md\` at the root and in every directory you touch, and its package files, before anything else. They say how this repository is built, tested, and reviewed, and they outrank these instructions where the two meet.
 2. ${words.reread}
-3. Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, cut from the default branch. Never commit to or push the default branch.
+3. Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, ${branch.cut}
 4. ${authorshipRule(coAuthor)}
 5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
 6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.

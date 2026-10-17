@@ -157,6 +157,8 @@ export interface CodingAgent {
   readonly repository: string;
   /** The branch checked out in the sandbox as the last turn ended; null before one ends or where the checkout stood detached. */
   readonly branch: string | null;
+  /** The branch the agent's checkout is cloned at, as its starter named it; null for the repository's default branch. */
+  readonly startBranch: string | null;
   /** The agent's title as its tab shows it; null falls back to the model's name. */
   readonly title: string | null;
   /** When the developer archived the agent; null while it is not. */
@@ -227,6 +229,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   /** The model's whole window, the long one, where the Start names none. */
   readonly contextWindow?: ContextWindow | undefined;
   readonly repository: string;
+  /** The branch the agent's checkout is cloned at; none for the repository's default branch. */
+  readonly startBranch?: string | undefined;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
   readonly disabledServers?: readonly string[] | undefined;
   /** The MCP servers the prompt mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
@@ -249,6 +253,7 @@ const CODING_AGENT_COLUMNS = {
   prompt: codingAgent.prompt,
   repository: codingAgent.repository,
   branch: codingAgent.branch,
+  startBranch: codingAgent.startBranch,
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
   archivedBy: codingAgent.archivedBy,
@@ -318,6 +323,7 @@ const CodingAgentRowSchema = Schema.Struct({
   prompt: Schema.NullOr(Schema.String),
   repository: Schema.String,
   branch: Schema.NullOr(Schema.String),
+  startBranch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   archivedBy: ArchivedByColumnSchema,
@@ -436,6 +442,7 @@ const insertAgent = SqlSchema.findOne({
     planSnapshot: Schema.NullOr(Schema.String),
     prompt: Schema.NullOr(Schema.String),
     repository: Schema.String,
+    startBranch: Schema.NullOr(Schema.String),
     disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     now: Schema.Date,
@@ -460,6 +467,7 @@ const insertAgent = SqlSchema.findOne({
           prompt: write.prompt,
           repository: write.repository,
           repositories: [write.repository],
+          startBranch: write.startBranch,
           disabledServers: write.disabledServers,
           mentionedServers: write.mentionedServers,
           idempotencyKey: write.idempotencyKey,
@@ -1084,6 +1092,7 @@ export function createCodingAgent(
           planSnapshot: started.planSnapshot,
           prompt: started.prompt,
           repository: started.repository,
+          startBranch: started.startBranch ?? null,
           disabledServers: storedServers(started.disabledServers ?? []),
           mentionedServers: storedServers(started.mentionedServers ?? []),
           now,

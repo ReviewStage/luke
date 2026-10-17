@@ -255,12 +255,14 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
 });
 
 /**
- * The agent's repository checked out whole, at its current default branch,
- * into the sandbox, with its commit identity set in it; answers the token
+ * The agent's repository checked out whole, at the branch it was started on
+ * where its row names one and at the current default branch otherwise, into
+ * the sandbox, with its commit identity set in it; answers the token
  * minted for it, for the caller to set at the firewall for the commands
  * that follow. The checkout is recorded under the name the agent's row
  * holds. Note that the identity is read ahead of the clone, so a bot GitHub
- * cannot name costs no clone.
+ * cannot name costs no clone; and that a start branch deleted since the
+ * start fails the clone, which says so in git's own words.
  */
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
@@ -277,7 +279,7 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
       sandbox,
       {
         fullName: minted.fullName,
-        defaultBranch: minted.defaultBranch,
+        defaultBranch: agent.startBranch ?? minted.defaultBranch,
         recordedAs: agent.repository,
       },
       minted.token,

@@ -103,7 +103,7 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
   VARIABLE: {
     /** The repository the call is about, `owner/name`, read by the probe and the checkout. */
     REPOSITORY: "LUKE_REPOSITORY",
-    /** The default branch the checkout is of. */
+    /** The branch the checkout is of: the default branch, or the one a coding agent was started on. */
     BRANCH: "LUKE_BRANCH",
     /** The clone's URL, which carries no credential; its presence is what makes a run the checkout. */
     URL: "LUKE_CLONE_URL",
@@ -264,7 +264,7 @@ export class RepositoryRefusal extends Data.TaggedError("RepositoryRefusal")<{
 /** The planning checkout is one commit deep: it is read and never pushed from. */
 const BRAIN_CLONE_DEPTH = "1";
 
-/** A repository as the checkout clones it: the full name as GitHub spells it, the branch the clone is of, and the name the checkout's record keeps where a caller spells it otherwise. */
+/** A repository as the checkout clones it: the full name as GitHub spells it, the branch the clone is of (the default branch, or a coding agent's start branch), and the name the checkout's record keeps where a caller spells it otherwise. */
 export interface CheckoutRepository {
   readonly fullName: string;
   readonly defaultBranch: string;
