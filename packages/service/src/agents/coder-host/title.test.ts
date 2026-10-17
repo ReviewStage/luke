@@ -162,7 +162,8 @@ it.layer(getTestDB())("an agent's title", (it) => {
           started.agent,
         );
 
-        assert.equal(asked.length, 1);
+        const titled = Option.getOrThrow(yield* readCodingAgent(owner, started.agent.id));
+        assert.equal(titled.title, "Expire invitations with a reminder");
         assert.match(asked[0] ?? "", /Expire teammate invitations after a week/u);
         assert.match(asked[0] ?? "", /Also send a reminder the day before/u);
         assert.doesNotMatch(asked[0] ?? "", /billing|luke:replay|You continue the work/u);

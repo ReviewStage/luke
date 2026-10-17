@@ -10,6 +10,7 @@ import {
   type CodingAgentPlace,
   createCodingAgent,
   discardCodingAgent,
+  readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
@@ -311,6 +312,15 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
+  // Note that a retry from another agent is answered before its source is read, because the source
+  // may be gone since the first Start made the agent its key names.
+  if (ask.taskId !== null && ask.from !== undefined) {
+    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    if (Option.isSome(made) && made.value.taskId === ask.taskId) {
+      const reached = yield* hostedStoreOrUnavailable(readTask(userId, ask.taskId));
+      if (Option.isSome(reached)) return { agent: made.value, created: false };
+    }
+  }
   const from =
     ask.taskId === null || ask.from === undefined
       ? undefined

@@ -350,7 +350,7 @@ function filesOf(
   return { attachments, unkept };
 }
 
-/** Every row of the source's conversation, oldest first, each as it now stands, read under the member who started it; none where a page does not read. */
+/** Every row of the source's conversation, oldest first, each as it now stands, read under the member who started it; nothing where a page does not read, which the Start answers as unavailable. */
 const recordsOf = (source: CodingAgent) =>
   Effect.gen(function* () {
     const rows = new Map<string, StoredMessageRecord>();
@@ -363,7 +363,8 @@ const recordsOf = (source: CodingAgent) =>
         cursor,
         PAGE_ROWS,
       );
-      if (!past.read.ok) return [];
+      // Note that a page that does not read answers nothing rather than less, because a replay missing rows would pass for the whole.
+      if (!past.read.ok) return undefined;
       for (const record of past.read.value) rows.set(record.id, record);
       if (past.read.value.length < PAGE_ROWS) break;
       cursor = past.cursor;
@@ -459,6 +460,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const { agent: source, published } = found;
   const records = yield* hostedStoreOrUnavailable(recordsOf(source));
+  if (records === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const lines = records.filter((record) => record.message.role === MESSAGE_ROLE.USER);
   const senders = yield* hostedStoreOrUnavailable(
     lineSendersOf(

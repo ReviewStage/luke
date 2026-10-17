@@ -29,6 +29,7 @@ import {
 import {
   archiveCodingAgent,
   createCodingAgent,
+  discardCodingAgent,
   lineSendersOf,
   readCodingAgent,
   readCodingAgentByKey,
@@ -4530,6 +4531,39 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             JSON.stringify(Object.keys(body)),
           );
         }
+        assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  it.effect(
+    "a retry from another agent answers the agent its key made though the source has gone since, and a source whose transcript does not read is answered as unavailable rather than as an empty replay",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
+        const body = { idempotencyKey: randomUUID(), from: { agentId: source.id } };
+        const first = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, body)),
+        ).agent;
+
+        yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
+        const opened = eve.opened.length;
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.equal(eve.opened.length, opened);
+
+        yield* discardCodingAgent(owner, source.id);
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(startAs(owner, task.id, body)),
+        ).agent;
+        assert.equal(again.id, first.id);
         assert.equal(eve.opened.length, opened);
       }),
   );
