@@ -4901,30 +4901,23 @@ button.integration-tool-head:hover,
 .factory-summary {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
-  padding: var(--space-12) 0;
-  color: var(--text-secondary);
-  font-size: 13px;
+  padding: var(--luke-space-12) 0;
 }
 
-/* What waits on the developer leads the line in full ink, its dot before it. */
+/* What waits on the developer leads the line in the label's full ink, its
+   dot before it. */
 .factory-needs {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-6);
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.factory-sep {
-  color: var(--text-tertiary);
+  gap: var(--luke-space-6);
 }
 
 .factory-line-up {
   display: flex;
   align-items: stretch;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .factory-step {
@@ -4932,9 +4925,9 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  padding: var(--space-8) var(--space-4) var(--space-6);
+  padding: var(--luke-space-8) var(--luke-space-4) var(--luke-space-6);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--control-radius);
+  border-radius: var(--luke-control-radius);
   background: var(--section-fill);
 }
 
@@ -4949,47 +4942,41 @@ button.integration-tool-head:hover,
   display: flex;
   flex: none;
   align-self: start;
-  margin-top: var(--space-12);
-  color: var(--text-tertiary);
+  margin-top: var(--luke-space-12);
+  color: var(--luke-color-text-subtle);
 }
 
 .factory-arrow svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
+/* A station's head: its glyph, its name, and how many rows it holds. The
+   name takes what the line leaves, cut short rather than wrapped, so the
+   count ends the line. */
 .factory-head {
   display: flex;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   min-height: 24px;
   margin: 0;
   padding: 0 var(--row-inset);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .factory-glyph {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
-.factory-name {
+.factory-glyph + .luke-text {
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.factory-count {
-  margin-left: auto;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
 }
 
 .factory-head-dot {
@@ -4999,12 +4986,9 @@ button.integration-tool-head:hover,
   transform: none;
 }
 
-/* A station with nothing in it says so in one muted line. */
-.factory-idle {
-  margin: 0;
-  padding: var(--space-2) var(--row-inset) var(--space-6);
-  color: var(--text-secondary);
-  font-size: 12px;
+/* A station with nothing in it says so in one quiet line. */
+.factory-step > p.luke-text {
+  padding: var(--luke-space-2) var(--row-inset) var(--luke-space-6);
 }
 
 .factory-rows {
@@ -5015,8 +4999,8 @@ button.integration-tool-head:hover,
 
 /* What waits on the developer stands apart from the work after it. */
 .factory-rows[data-needs] + .factory-rows {
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
+  margin-top: var(--luke-space-4);
+  padding-top: var(--luke-space-4);
   border-top: 1px solid var(--hairline);
 }
 
@@ -5031,14 +5015,14 @@ button.integration-tool-head:hover,
 .factory-external {
   display: inline-flex;
   flex: none;
-  margin-left: calc(-1 * var(--space-6));
-  color: var(--text-tertiary);
+  margin-left: calc(-1 * var(--luke-space-6));
+  color: var(--luke-color-text-subtle);
 }
 
 @container factory (width < 960px) {
   .factory-line-up {
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--luke-space-6);
   }
 
   .factory-step {
@@ -5050,7 +5034,7 @@ button.integration-tool-head:hover,
     align-items: center;
   }
 
-  .factory-step[data-idle] .factory-idle {
+  .factory-step[data-idle] > p.luke-text {
     padding: 0 var(--row-inset);
   }
 
