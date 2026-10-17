@@ -1,0 +1,2385 @@
+<!doctype html>
+<!-- Factory as a campus of buildings: a design exploration, not a feature. One self-contained page that fetches nothing; every task, agent, Inbox item, and pull request on it is illustrative, shaped as the fields the window already holds. Open it in a browser. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luke · Factory as a campus (design exploration)</title>
+<style>
+/* Tokens, copied from the renderer's base.css, desktop.css, and the generated
+   motion tokens so the mockup wears the app's own ground, ink, and timing. */
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --spring: linear(0, 0.0285, 0.0993, 0.1943, 0.3005, 0.4083, 0.5115, 0.6061, 0.69, 0.7623, 0.8229, 0.8727, 0.9125, 0.9437, 0.9674, 0.9848, 0.9972, 1.0056, 1.0109, 1.0138, 1.015, 1.015, 1.0142, 1.0129, 1.0114, 1.0098, 1);
+  --duration-fast: 280ms;
+  --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
+  --duration-shape: 460ms;
+  --duration-exit: 90ms;
+  --duration-quick: 140ms;
+  --duration-hover: 70ms;
+  --duration-pane: 240ms;
+  --motion-pane: cubic-bezier(0.2, 0, 0, 1);
+  --row-stagger: 32ms;
+  --loop-motion: running;
+
+  --space-2: 2px; --space-4: 4px; --space-6: 6px; --space-8: 8px; --space-12: 12px;
+  --space-16: 16px; --space-20: 20px; --space-24: 24px; --space-32: 32px; --space-40: 40px;
+  --column-inset: var(--space-12);
+  --row-inset: var(--space-8);
+  --content-inset: calc(var(--column-inset) + var(--row-inset));
+  --glyph-gap: var(--space-8);
+  --control-gap: var(--space-8);
+  --list-gap: var(--space-2);
+  --section-gap: var(--space-16);
+  --control-height: 30px;
+  --control-radius: 8px;
+  --control-glyph: 15px;
+  --menu-inset: var(--space-4);
+  --menu-row-height: 32px;
+  --menu-row-radius: 6px;
+  --menu-radius: calc(var(--menu-row-radius) + var(--menu-inset));
+  --sidebar-width: 264px;
+  --desktop-bar-height: 51px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+}
+
+/* Dark, the default; data-theme on <html> takes a choice from the page's own switch. */
+:root, :root[data-theme="dark"] {
+  color-scheme: dark;
+  --state-working: #5cd5ff;
+  --state-attention: #ffa049;
+  --state-complete: #6fdca4;
+  --state-merged: #c3a0ff;
+  --voice-developer: #7fe0ac;
+  --message-sent: #0071e3;
+  --danger: #ff7e7e;
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --text-body: rgba(255, 255, 255, 0.86);
+  --raised: rgba(255, 255, 255, 0.05);
+  --raised-strong: rgba(255, 255, 255, 0.09);
+  --selected: rgba(255, 255, 255, 0.2);
+  --pressed: rgba(255, 255, 255, 0.26);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+  --on-accent: #fff;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --shadow-deep: rgba(0, 0, 0, 0.6);
+  --section-fill: rgba(255, 255, 255, 0.022);
+  --desktop-ground: #0c0c0e;
+  --desktop-sidebar: #111114;
+  --desktop-well: #0f0f12;
+  --sidebar-ink: rgba(255, 255, 255, 0.7);
+  --surface-popover: #111114;
+  --attention-mark-ground: #c4620c;
+  --workspace-hue-1: #4f63b8;
+  --actor-tile: #2a2a30;
+  --focus-ring: var(--message-sent);
+  --page-ground: #050506;
+  --page-ink: rgba(255, 255, 255, 0.6);
+  --stage-sky: radial-gradient(120% 90% at 50% 30%, #15161c 0%, #0c0c0e 70%);
+  --label-ground: rgba(17, 17, 20, 0.92);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --state-working: #0a72a8;
+  --state-attention: #a65400;
+  --state-complete: #18794e;
+  --state-merged: #8250df;
+  --voice-developer: #17784a;
+  --danger: #e0383e;
+  --text-primary: rgba(0, 0, 0, 0.88);
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --text-tertiary: rgba(0, 0, 0, 0.56);
+  --text-body: rgba(0, 0, 0, 0.8);
+  --raised: rgba(0, 0, 0, 0.035);
+  --raised-strong: rgba(0, 0, 0, 0.06);
+  --selected: rgba(0, 0, 0, 0.07);
+  --pressed: rgba(0, 0, 0, 0.11);
+  --hairline: rgba(0, 0, 0, 0.08);
+  --hairline-strong: rgba(0, 0, 0, 0.1);
+  --shadow: rgba(0, 0, 0, 0.12);
+  --shadow-deep: rgba(0, 0, 0, 0.2);
+  --section-fill: #fff;
+  --desktop-ground: #fcfcfc;
+  --desktop-sidebar: #f3f3f4;
+  --desktop-well: #f8f8f9;
+  --sidebar-ink: rgba(0, 0, 0, 0.68);
+  --surface-popover: #fff;
+  --attention-mark-ground: #a65400;
+  --workspace-hue-1: #4a5fc0;
+  --actor-tile: #e8e8ec;
+  --page-ground: #e4e4e8;
+  --page-ink: rgba(0, 0, 0, 0.6);
+  --stage-sky: radial-gradient(120% 90% at 50% 30%, #ffffff 0%, #f4f4f6 70%);
+  --label-ground: rgba(255, 255, 255, 0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --loop-motion: paused;
+    --duration-fast: 0ms; --duration-shape: 0ms; --duration-exit: 0ms;
+    --duration-quick: 0ms; --duration-hover: 0ms; --duration-pane: 0ms; --row-stagger: 0ms;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--page-ground);
+  color: var(--text-primary);
+  font-size: 13px;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; border: 0; background: none; cursor: default; }
+svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+:focus { outline: none; }
+:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+
+/* The page around the mockup: what this is, and the appearance switch. */
+.show-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-24);
+  color: var(--page-ink);
+  font-size: 12px;
+}
+.show-head strong { color: var(--text-primary); font-weight: 600; font-size: 13px; }
+.show-chip {
+  padding: var(--space-2) var(--space-8);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.show-chip[data-tone="illustrative"] { color: var(--state-attention); border-color: currentColor; }
+.show-head .spacer { flex: 1; }
+.sim-label { color: var(--page-ink); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sim-label span { color: var(--text-tertiary); font-weight: 500; }
+.segmented {
+  display: inline-flex;
+  margin: 0;
+  border: 0;
+  padding: var(--space-2);
+  border-radius: var(--control-radius);
+  background: var(--raised-strong);
+}
+.segmented button {
+  height: 24px;
+  padding: 0 var(--space-12);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.segmented button[aria-pressed="true"] { background: var(--desktop-ground); color: var(--text-primary); box-shadow: 0 1px 2px var(--shadow); }
+
+/* The window. */
+.window-wrap { flex: 1; min-height: 0; display: flex; padding: 0 var(--space-24) var(--space-24); }
+.window {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  overflow: clip;
+  background: var(--desktop-ground);
+  box-shadow: 0 24px 64px var(--shadow-deep);
+}
+.traffic { position: absolute; top: 18px; left: 18px; display: flex; gap: 8px; z-index: 5; }
+.traffic i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.traffic i:nth-child(2) { background: #febc2e; }
+.traffic i:nth-child(3) { background: #28c840; }
+
+/* Sidebar, drawn as desktop-sidebar.tsx draws it. */
+.sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0 var(--column-inset) var(--column-inset);
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+.sidebar-top { height: var(--desktop-bar-height); display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.sidebar-top .icon-button { color: var(--text-tertiary); }
+.switcher {
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  height: 36px; padding: 0 var(--row-inset); margin-bottom: var(--space-8);
+  border-radius: 9px; font-size: 14px; font-weight: 650; letter-spacing: -0.01em;
+}
+.switcher:hover { background: var(--raised); }
+.workspace-tile {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px;
+  background: var(--workspace-hue-1); color: #fff; font-size: 10px; font-weight: 650;
+}
+.switcher .chev { margin-left: auto; color: var(--text-tertiary); }
+.side-row {
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  height: var(--control-height); margin: 0 0 var(--list-gap); padding: 0 var(--row-inset);
+  border-radius: 9px; color: var(--sidebar-ink); font-size: 13px; text-align: left; width: 100%;
+  transition: background-color var(--duration-hover) ease, color var(--duration-hover) ease;
+}
+.side-row:hover { color: var(--text-primary); }
+.side-row[aria-current="page"] { background: var(--raised-strong); color: var(--text-primary); }
+.side-row .end { margin-left: auto; color: var(--text-tertiary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.kbd { display: inline-flex; gap: 1px; color: var(--text-tertiary); font-size: 11.5px; }
+.sidebar-rule { height: 1px; margin: var(--space-8) var(--row-inset); border: 0; background: var(--hairline); }
+.section-head {
+  display: flex; align-items: center; height: 28px; padding: 0 var(--row-inset);
+  color: var(--text-tertiary); font-size: 11.5px; font-weight: 600;
+}
+.task-row {
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  width: 100%; min-height: var(--control-height); padding: var(--space-6) var(--row-inset);
+  border-radius: 9px; color: var(--sidebar-ink); text-align: left; font-size: 13px;
+}
+.task-row:hover { color: var(--text-primary); background: var(--raised); }
+.task-row[aria-current="true"] { background: var(--raised-strong); color: var(--text-primary); }
+.task-row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--tone, var(--text-tertiary)); }
+.dot[data-pulse] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 25%, transparent); }
+.sidebar-scroll { flex: 1; min-height: 0; overflow: auto; margin: 0 calc(-1 * var(--space-4)); padding: 0 var(--space-4); }
+.sidebar-foot { padding-top: var(--space-8); border-top: 1px solid var(--hairline); }
+
+/* The work column: a toolbar over the campus, and the inspector pane beside it. */
+.main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+.toolbar {
+  display: flex; align-items: center; gap: var(--control-gap);
+  min-height: var(--desktop-bar-height); padding: var(--space-8) var(--content-inset);
+  border-bottom: 1px solid var(--hairline);
+}
+.toolbar-title { display: flex; align-items: center; gap: var(--glyph-gap); font-size: 13px; font-weight: 600; }
+.toolbar-title .sub { color: var(--text-tertiary); font-weight: 500; }
+.toolbar .spacer { flex: 1; }
+.toolbar-button, .icon-button, .primary-button {
+  --button-fill: transparent;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--glyph-gap);
+  height: var(--control-height); padding: 0 var(--space-12);
+  border-radius: var(--control-radius); background: var(--button-fill);
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  transition: background-color var(--duration-hover) ease, color var(--duration-hover) ease, filter var(--duration-hover) ease;
+}
+.icon-button { width: var(--control-height); padding: 0; color: var(--text-secondary); }
+.toolbar-button:hover, .icon-button:hover, .toolbar-button[aria-pressed="true"], .icon-button[aria-pressed="true"] { background: var(--selected); color: var(--text-primary); }
+.toolbar-button:active, .icon-button:active { background: var(--pressed); }
+.primary-button { --button-fill: var(--message-sent); color: var(--on-accent); }
+.primary-button:hover { filter: brightness(1.1); }
+.toolbar-button[data-tone="attention"] { color: var(--state-attention); }
+.attention-mark {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--attention-mark-ground); color: #fff; font-size: 11px; font-weight: 800; line-height: 1;
+}
+
+.work { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 0; }
+.stage {
+  position: relative; min-width: 0; min-height: 0; overflow: clip;
+  background: var(--stage-sky);
+  touch-action: none;
+}
+.stage svg.scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage[data-dragging] { cursor: grabbing; }
+#camera { transform-origin: 0 0; transition: transform var(--duration-shape) var(--spring); }
+.stage[data-dragging] #camera, #camera[data-instant] { transition: none; }
+
+/* The campus. */
+.bldg, .crate, .yard-hit { cursor: pointer; transition: opacity var(--duration-fast) ease; }
+.bldg:focus-visible, .crate:focus-visible, .yard-hit:focus-visible { outline: none; } /* no ring: the plot's or the crate's own outline takes the ring's colour */
+.scene[data-focused] .bldg:not([data-open]), .scene[data-focused] .crate:not([data-mine]) { opacity: 0.45; }
+.bldg .lift { transition: transform var(--duration-hover) ease; }
+.bldg:hover .lift { transform: translateY(-3px); }
+.bldg .shell, .bldg .upper, .bldg .cut, .bldg .fx-roof { transition: opacity var(--duration-fast) ease, transform var(--duration-shape) var(--spring); }
+.bldg .cut { opacity: 0; pointer-events: none; }
+.bldg[data-open] .shell { opacity: 0; }
+.bldg[data-open] .upper { opacity: 0; transform: translateY(-48px); }
+.bldg[data-open] .fx-roof { opacity: 0; }
+.bldg[data-open] .cut { opacity: 1; }
+.plot-edge, .crate-edge, .yard-edge { fill: none; stroke: var(--text-primary); stroke-width: 1.4; opacity: 0; transition: opacity var(--duration-hover) ease; vector-effect: non-scaling-stroke; }
+.plot[data-hover] .plot-edge, .crate:hover .crate-edge, .yard-hit:hover .yard-edge { opacity: 0.4; }
+.plot[data-open] .plot-edge, .crate[data-hot] .crate-edge, .yard-hit[data-open] .yard-edge { opacity: 0.7; }
+.plot[data-focus] .plot-edge, .crate:focus-visible .crate-edge, .yard-hit:focus-visible .yard-edge { opacity: 1; stroke: var(--focus-ring); stroke-width: 2; }
+.new-plot { cursor: pointer; }
+.new-plot .plot-dash { fill: none; stroke: var(--text-tertiary); stroke-width: 1.2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.new-plot:hover .plot-dash { stroke: var(--text-primary); }
+.new-plot:focus-visible { outline: none; } /* no ring: the dashed edge takes the ring's colour and weight */
+.new-plot:focus-visible .plot-dash { stroke: var(--focus-ring); stroke-width: 2; }
+.route { fill: none; stroke-width: 1.6; stroke-dasharray: 4 3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.win-lit { filter: url(#glow); }
+:root[data-theme="light"] .win-lit { filter: none; }
+
+/* Loops, only while something is happening. Each answers --loop-motion. */
+.loop { animation-play-state: var(--loop-motion); transform-box: fill-box; transform-origin: center; }
+.smoke { animation: smoke 4.8s linear infinite; }
+@keyframes smoke { 0% { transform: translate(0, 0) scale(0.5); opacity: 0; } 12% { opacity: 0.7; } 100% { transform: translate(-22px, -64px) scale(2.1); opacity: 0; } }
+.beacon-ring { animation: beacon 1.6s ease-out infinite; }
+@keyframes beacon { 0% { transform: scale(0.4); opacity: 0.9; } 100% { transform: scale(2.6); opacity: 0; } }
+.pulse { animation: blink 1.6s ease-in-out infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.wave { animation: wave 2.4s ease-out infinite; }
+@keyframes wave { 0% { transform: scale(0.3); opacity: 0; } 15% { opacity: 0.9; } 100% { transform: scale(1.8); opacity: 0; } }
+.flag { animation: flag 2.2s ease-in-out infinite; transform-origin: left center; }
+@keyframes flag { 0%, 100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(-6deg) scaleX(0.92); } }
+.bubble { animation: bob 2.8s ease-in-out infinite; }
+.belt { animation: belt 0.6s linear infinite; }
+@keyframes belt { to { stroke-dashoffset: -6; } }
+/* One-shot arrivals for what just happened: a building rising, a container set down, a ring from a plot, sparks at a merge. */
+.bldg[data-fresh="rise"] .lift { transform-box: fill-box; transform-origin: 50% 100%; animation: rise calc(var(--duration-shape) * 2) var(--spring) backwards; }
+@keyframes rise { from { transform: scaleY(0.04); opacity: 0.2; } }
+.crate[data-fresh="drop"] { animation: drop var(--duration-shape) var(--spring) backwards; }
+@keyframes drop { from { transform: translateY(-26px); opacity: 0; } }
+.ping { transform-box: fill-box; transform-origin: center; animation: ping calc(var(--duration-shape) * 2.6) ease-out forwards; pointer-events: none; }
+@keyframes ping { from { transform: scale(0.5); opacity: 0.9; } to { transform: scale(1.4); opacity: 0; } }
+.spark { animation: spark calc(var(--duration-shape) * 2.6) ease-out forwards; }
+@keyframes spark { from { transform: translate(0, 0); opacity: 1; } to { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* Names float over the campus at a constant size. */
+.tag { pointer-events: none; transition: opacity var(--duration-quick) ease; }
+.tag rect { fill: var(--label-ground); stroke: var(--hairline-strong); }
+.tag text { font-size: 12px; font-weight: 500; fill: var(--text-primary); }
+.tag[data-dim] { opacity: 0.3; }
+.tag[data-hide] { opacity: 0; }
+.agent-tag text { font-size: 7px; font-weight: 600; fill: var(--text-primary); }
+.agent-tag rect { fill: var(--label-ground); stroke: var(--hairline-strong); }
+
+/* What floats over the stage: the map's controls and its key, a crate's card, a notice. */
+.map-controls {
+  position: absolute; right: var(--space-16); top: var(--space-16);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-4); border: 1px solid var(--hairline-strong); border-radius: var(--menu-radius);
+  background: var(--surface-popover); box-shadow: 0 12px 32px var(--shadow);
+}
+.map-controls hr { width: 100%; height: 1px; margin: var(--space-2) 0; border: 0; background: var(--hairline); }
+.key {
+  position: absolute; right: 64px; top: var(--space-16); width: 250px;
+  padding: var(--space-8) var(--space-4) var(--space-4);
+  border: 1px solid var(--hairline-strong); border-radius: var(--menu-radius);
+  background: var(--surface-popover); box-shadow: 0 12px 32px var(--shadow);
+  transition: opacity var(--duration-quick) ease, transform var(--duration-shape) var(--spring);
+}
+.key[data-hidden] { opacity: 0; transform: translateY(8px); pointer-events: none; }
+.key-row { display: flex; align-items: center; gap: var(--glyph-gap); padding: var(--space-4) var(--space-8); color: var(--text-secondary); font-size: 11.5px; line-height: 1.35; }
+.key-row svg { width: 22px; height: 18px; flex: 0 0 auto; overflow: visible; }
+.key-row b { color: var(--text-primary); font-weight: 600; }
+/* ---- The app's own components, copied from the renderer's stylesheets so the pane, the cards, the rows and the notices read as Luke. ---- */
+
+/* Hover cards (desktop.css .tooltip-card / .card-*, tooltip.css). */
+.tooltip {
+  position: fixed; z-index: 30; top: 0; left: 0;
+  display: flex; align-items: center; gap: var(--glyph-gap);
+  padding: var(--space-4) var(--row-inset); border: 1px solid var(--hairline-strong); border-radius: 7px;
+  font-size: 12px; font-weight: 500; line-height: 16px;
+  animation: tooltip-fade var(--duration-quick) var(--motion-exit) both, tooltip-grow var(--duration-fast) var(--spring-fast, var(--spring)) both;
+}
+.tooltip[hidden] { display: none; }
+@keyframes tooltip-fade { from { visibility: hidden; opacity: 0; } }
+@keyframes tooltip-grow { from { transform: scale(0.96); } }
+.tooltip-card {
+  display: flex; width: 280px; flex-direction: column; align-items: stretch; gap: var(--space-4);
+  padding: var(--space-6) calc(var(--menu-inset) + var(--row-inset));
+  border-color: var(--hairline-strong); border-radius: var(--menu-radius);
+  background: var(--surface-popover); box-shadow: 0 12px 32px var(--shadow);
+  color: var(--text-primary); font-weight: 400; white-space: normal; transform-origin: top left;
+}
+.card { display: flex; flex-direction: column; gap: var(--space-4); }
+.card-head { display: flex; align-items: baseline; gap: var(--glyph-gap); }
+.card-glyph { display: inline-flex; width: 16px; height: 1lh; flex: none; align-self: flex-start; align-items: center; justify-content: center; }
+.card-glyph > svg { width: 14px; height: 14px; }
+.card-title { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-2); }
+.card-name { display: -webkit-box; overflow: hidden; font-size: 12.5px; font-weight: 500; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.card-sub { display: flex; min-width: 0; align-items: center; gap: var(--space-4); color: var(--text-secondary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.card-corner { flex: none; color: var(--text-tertiary); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.card-note { display: -webkit-box; margin: 0; overflow: hidden; color: var(--text-secondary); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.card-rule { width: 100%; height: 1px; flex: none; margin: 0; border: 0; background: var(--hairline); }
+.card-line { display: flex; align-items: center; gap: var(--glyph-gap); min-height: 24px; font-size: 12px; }
+.card-line > span:not(.end, .summary-glyph, .attention-mark, .dot) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-line .end { flex: none; margin-left: auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+
+/* Passing notices (desktop.css .toast-stack / .toast), here in the window's corner. */
+.toast-stack { position: absolute; z-index: 31; right: var(--space-16); bottom: var(--space-16); width: 340px; pointer-events: none; }
+.toast-stack > ol { display: flex; flex-direction: column; gap: var(--space-8); margin: 0; padding: 0; list-style: none; }
+.toast {
+  --toast-line: 18px; --toast-row: 24px; --toast-glyph: 16px;
+  position: relative; display: flex; align-items: flex-start; gap: var(--glyph-gap);
+  padding: var(--space-8) var(--space-12); border: 1px solid var(--hairline-strong); border-radius: 12px;
+  background: var(--surface-popover); box-shadow: 0 1px 2px var(--shadow-soft, var(--shadow)), 0 12px 36px var(--shadow);
+  color: var(--text-primary); font-size: 13px; line-height: var(--toast-line);
+  animation: toast-fade var(--duration-quick) var(--motion-exit), toast-rise var(--duration-fast) var(--spring);
+  transition: opacity var(--duration-exit) var(--motion-exit), transform var(--duration-exit) var(--motion-exit);
+}
+@keyframes toast-fade { from { opacity: 0; } }
+@keyframes toast-rise { from { transform: translateY(8px); } }
+.toast[data-leaving="true"] { opacity: 0; transform: translateX(var(--space-8)); }
+.toast > svg { width: var(--toast-glyph); height: var(--toast-glyph); flex: none; margin-top: calc((var(--toast-row) - var(--toast-glyph)) / 2); color: var(--tone, var(--state-complete)); }
+.toast-text { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-2); padding-block: calc((var(--toast-row) - var(--toast-line)) / 2); }
+.toast-words { font-weight: 600; }
+.toast-detail { color: var(--text-secondary); font-size: 12.5px; line-height: 16px; }
+
+/* The side panel (desktop.css .side-panel, its bar and its tab). */
+.inspector { width: 0; overflow: clip; border-left: 0 solid var(--hairline); background: var(--desktop-well); display: flex; flex-direction: column; min-height: 0; }
+.inspector[data-open] { width: 380px; border-left-width: 1px; }
+.side-panel-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--control-gap); min-height: var(--desktop-bar-height); padding: var(--space-8) var(--column-inset); border-bottom: 1px solid var(--hairline); width: 380px; }
+.side-panel-tabs { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: var(--list-gap); }
+.tab { position: relative; display: flex; max-width: 260px; min-width: 0; align-items: center; border-radius: 8px; color: var(--text-secondary); font-size: 13px; font-weight: 560; }
+.tab[data-selected="true"] { background: var(--raised-strong); color: var(--text-primary); }
+.tab-button { display: flex; min-width: 0; align-items: center; gap: var(--glyph-gap); height: var(--control-height); padding: 0 32px 0 var(--row-inset); background: none; color: inherit; font-weight: inherit; }
+.tab-icon { display: flex; color: var(--text-secondary); }
+.tab-icon svg { width: 15px; height: 15px; }
+.tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-close { position: absolute; right: 4px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; color: var(--text-tertiary); }
+.tab-close:hover { color: var(--text-primary); }
+.tab-close svg { width: 13px; height: 13px; }
+.inspector-body { width: 380px; flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--space-16); padding: var(--space-12) var(--column-inset) var(--space-24); }
+.inspector-body > * { animation: arrive var(--duration-shape) var(--spring) backwards; animation-delay: calc(var(--i, 0) * var(--row-stagger)); }
+@keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
+.panel-sub { padding: 0 var(--row-inset); color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11.5px; }
+/* Headed sections and their rows (desktop.css .section-heading, .plan-summary-row). */
+.section { display: flex; flex-direction: column; }
+.section-heading { display: flex; align-items: baseline; gap: var(--space-6); margin: 0 0 var(--space-4); padding: 0 var(--row-inset); color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.section-heading .count { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.rows { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.summary-row { display: flex; width: 100%; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 8px; color: var(--text-primary); font-size: 13px; text-align: left; }
+button.summary-row:hover { background: var(--raised); }
+.summary-row .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.summary-row .time { flex: none; color: var(--text-tertiary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.summary-row[data-unknown] { color: var(--text-tertiary); font-size: 12.5px; }
+.summary-glyph { display: inline-grid; width: 16px; height: 16px; flex: none; place-items: center; color: var(--text-secondary); }
+.summary-glyph svg { width: 14px; height: 14px; }
+.model-label { font-weight: 400; }
+.model-label-detail { margin-left: var(--space-4); color: var(--text-secondary); }
+.failed-mark { display: inline-flex; width: 14px; height: 14px; color: var(--danger); }
+.failed-mark svg { width: 14px; height: 14px; }
+svg.harness-mark { width: 14px; height: 14px; }
+/* The working mark (base.css .working-mark): two pixels lapping a faint 3×3 track. */
+svg.working-mark { display: block; width: 12px; height: 12px; flex: none; fill: currentColor; color: var(--text-secondary); }
+.working-mark-track { opacity: 0.16; }
+.working-mark-dot { animation: working-lap 1.6s step-end infinite; animation-play-state: var(--loop-motion); }
+.working-mark-dot[data-dot="lead"] { animation-delay: -1.9s; }
+.working-mark-dot[data-dot="lead-tail"] { opacity: 0.45; animation-delay: -1.7s; }
+.working-mark-dot[data-dot="trail"] { animation-delay: -1.1s; }
+.working-mark-dot[data-dot="trail-tail"] { opacity: 0.45; animation-delay: -0.9s; }
+@keyframes working-lap { 0%, 100% { transform: none; } 12.5% { transform: translate(4px, 0); } 25% { transform: translate(8px, 0); } 37.5% { transform: translate(8px, 4px); } 50% { transform: translate(8px, 8px); } 62.5% { transform: translate(4px, 8px); } 75% { transform: translate(0, 8px); } 87.5% { transform: translate(0, 4px); } }
+/* An agent's chip (actor-ref.tsx). */
+.actor-ref { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; white-space: nowrap; font-weight: 500; }
+.actor-ref:hover { background: var(--raised); box-shadow: 0 0 0 3px var(--raised); color: var(--text-primary); }
+.actor-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; }
+.actor-mark svg { width: 13px; height: 13px; }
+/* A pull request's row (agent-published.tsx, planning.css). */
+[data-pull-request-state="open"] { --pull-request-tone: var(--state-complete); }
+[data-pull-request-state="draft"] { --pull-request-tone: var(--text-tertiary); }
+[data-pull-request-state="merged"] { --pull-request-tone: var(--state-merged); }
+[data-pull-request-state="closed"] { --pull-request-tone: var(--danger); }
+.pull-request-mark { width: 13px; height: 13px; flex: none; color: var(--pull-request-tone); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pull-request-mark[data-failing="true"] { color: var(--danger); }
+.published-row { display: flex; width: 100%; height: 36px; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--hairline); border-radius: 8px; color: var(--text-primary); font-size: 12.5px; text-align: left; }
+.published-row:hover { background: var(--raised); }
+.published-row[data-hot] { background: var(--raised-strong); }
+.published-name { display: flex; min-width: 0; flex: 1; gap: var(--space-4); white-space: nowrap; }
+.published-name > span:first-child { flex: none; }
+.published-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.published-sub { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; color: var(--text-tertiary); }
+.published-checks { flex: none; color: var(--text-tertiary); white-space: nowrap; }
+.published-checks[data-failing="true"] { color: var(--danger); }
+.published-lines { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.published-added { color: var(--state-complete); }
+.published-removed { color: var(--danger); }
+.published-rows { display: flex; flex-direction: column; gap: var(--space-4); }
+/* The Inbox's question (inbox-pane.tsx, planning.css). */
+.inbox-item { display: flex; flex-direction: column; gap: var(--space-4); padding: 0 var(--row-inset); }
+.inbox-byline { display: flex; align-items: center; gap: var(--space-8); color: var(--text-secondary); font-size: 12.5px; }
+.inbox-byline .actor-ref { color: var(--text-primary); }
+.inbox-indent { display: flex; flex-direction: column; gap: var(--space-8); padding-left: 21px; font-size: 13px; line-height: 1.625; }
+.inbox-indent h3 { margin: 0; font-size: 13px; font-weight: 500; }
+.inbox-options { display: flex; flex-direction: column; gap: var(--space-4); }
+.inbox-option { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-6) var(--space-12); border-radius: 8px; background: var(--raised); color: var(--text-primary); font-weight: 500; text-align: left; }
+.inbox-option:hover { background: var(--raised-strong); }
+.attention-mark { display: inline-grid; width: 14px; height: 14px; flex: none; place-items: center; border-radius: 50%; background: var(--attention-mark-ground); color: #fff; }
+.attention-mark svg { width: 12px; height: 12px; }
+.call-row { color: var(--voice-developer); font-weight: 500; }
+.panel-foot { padding: 0 var(--row-inset); color: var(--text-tertiary); font-size: 11.5px; line-height: 1.45; }
+.panel-total { display: flex; align-items: baseline; gap: var(--space-8); padding: 0 var(--row-inset); font-size: 13px; }
+.panel-total b { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+/* The sidebar's task rows (desktop.css .sidebar-plan). */
+.task-list { display: flex; flex-direction: column; gap: var(--list-gap); margin: 0; padding: 0; list-style: none; }
+.sidebar-plan { display: flex; width: 100%; height: 30px; align-items: center; padding: 0 var(--row-inset); border-radius: 9px; background: none; text-align: left; }
+.sidebar-plan:hover { background: var(--raised); }
+.sidebar-plan[aria-current="true"] { background: var(--raised-strong); }
+.sidebar-plan-line { display: flex; flex: 1; align-items: center; gap: var(--space-8); min-width: 0; }
+.sidebar-plan-name { min-width: 0; flex: 1; overflow: hidden; color: var(--sidebar-ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-plan[aria-current="true"] .sidebar-plan-name, .sidebar-plan:hover .sidebar-plan-name { color: var(--text-primary); }
+.sidebar-plan-time { flex: none; display: inline-flex; align-items: center; gap: var(--space-4); color: var(--text-tertiary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.sidebar-plan-time svg.working-mark { color: var(--text-secondary); }
+.diffstat { font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
+.diffstat .add { color: var(--state-complete); }
+.diffstat .del { color: var(--danger); }
+.meter { display: inline-flex; align-items: center; gap: 2px; height: 14px; }
+.meter i { width: 2px; height: 4px; border-radius: 1px; background: var(--voice-developer); animation: meter 0.9s ease-in-out infinite; animation-play-state: var(--loop-motion); }
+.meter i:nth-child(2) { animation-delay: 0.15s; } .meter i:nth-child(3) { animation-delay: 0.3s; } .meter i:nth-child(4) { animation-delay: 0.45s; }
+@keyframes meter { 0%, 100% { height: 4px; } 50% { height: 13px; } }
+.toolbar-button[hidden] { display: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<header class="show-head">
+  <strong>Factory · campus of buildings</strong>
+  <span class="show-chip">Design exploration</span>
+  <span class="show-chip" data-tone="illustrative">Illustrative data · nothing is live</span>
+  <span class="spacer"></span>
+  <span class="sim-label">Tasks</span>
+  <div class="segmented" id="town-size">
+    <button type="button" data-town="few">3</button>
+    <button type="button" data-town="sample" aria-pressed="true">7</button>
+    <button type="button" data-town="many">16</button>
+    <button type="button" data-town="lots">30</button>
+  </div>
+  <span class="sim-label">Inside</span>
+  <div class="segmented" id="inside-style">
+    <button type="button" data-inside="desks" aria-pressed="true">Desks</button>
+    <button type="button" data-inside="line">Line</button>
+  </div>
+  <span class="sim-label">Events <span id="sim-step"></span></span>
+  <div class="segmented">
+    <button type="button" id="sim-toggle" aria-pressed="true">Pause events</button>
+    <button type="button" id="sim-restart">Restart</button>
+  </div>
+  <fieldset class="segmented">
+    <legend class="sr-only">Appearance</legend>
+    <button type="button" data-theme-choice="dark">Night</button>
+    <button type="button" data-theme-choice="light">Day</button>
+  </fieldset>
+</header>
+
+<div class="window-wrap">
+<div class="window" id="window">
+  <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <aside class="sidebar" aria-label="Sidebar">
+    <div class="sidebar-top">
+      <button type="button" class="icon-button" aria-label="Back" data-g="chevron-left"></button>
+      <button type="button" class="icon-button" aria-label="Forward" data-g="chevron-right"></button>
+    </div>
+    <button type="button" class="switcher"><span class="workspace-tile">R</span>ReviewStage<span class="chev" data-g="chevrons"></span></button>
+    <button type="button" class="side-row" data-g-lead="square-pen">New task<span class="end kbd">⌘N</span></button>
+    <button type="button" class="side-row" data-g-lead="search">Search<span class="end kbd">⌘K</span></button>
+    <button type="button" class="side-row" data-g-lead="house">Home</button>
+    <button type="button" class="side-row" data-g-lead="inbox">Inbox<span class="end" id="inbox-count"></span></button>
+    <button type="button" class="side-row" data-g-lead="factory" aria-current="page">Factory</button>
+    <button type="button" class="side-row" data-g-lead="zap">Automations</button>
+    <hr class="sidebar-rule">
+    <div class="sidebar-scroll">
+      <div class="section-head">Tasks</div>
+      <nav id="task-list" aria-label="Tasks"></nav>
+    </div>
+    <div class="sidebar-foot">
+      <button type="button" class="side-row" data-g-lead="settings">Settings</button>
+    </div>
+  </aside>
+
+  <section class="main" aria-label="Factory">
+    <div class="toolbar">
+      <div class="toolbar-title"><span data-g="factory"></span>Factory</div>
+      <span class="show-chip" data-tone="illustrative" title="Every task, agent, and pull request here is made up">Illustrative</span>
+      <span class="spacer"></span>
+      <button type="button" class="toolbar-button" id="needs-you" data-tone="attention"></button>
+    </div>
+    <div class="work">
+      <div class="stage" id="stage">
+        <svg class="scene" id="scene" aria-hidden="false">
+          <title>Campus</title>
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <radialGradient id="pool"><stop offset="0" stop-color="#ffd9a0" stop-opacity="0.3"/><stop offset="1" stop-color="#ffd9a0" stop-opacity="0"/></radialGradient>
+          </defs>
+          <g id="camera">
+            <g id="layer-ground"></g>
+            <g id="layer-plots"></g>
+            <g id="layer-shadows"></g>
+            <g id="layer-routes"></g>
+            <g id="layer-objects"></g>
+            <g id="layer-tags"></g>
+          </g>
+        </svg>
+        <section class="key" id="key" aria-label="Key" data-hidden></section>
+        <div class="map-controls" role="toolbar" aria-label="Campus view">
+          <button type="button" class="icon-button" id="zoom-in" aria-label="Zoom in" data-g="plus"></button>
+          <button type="button" class="icon-button" id="zoom-out" aria-label="Zoom out" data-g="minus"></button>
+          <hr>
+          <button type="button" class="icon-button" id="rotate" aria-label="Turn the campus" data-g="rotate-cw"></button>
+          <button type="button" class="icon-button" id="fit" aria-label="Show the whole campus" data-g="scan"></button>
+          <button type="button" class="icon-button" id="key-toggle" aria-label="Key" aria-pressed="false" data-g="circle-help"></button>
+        </div>
+      </div>
+      <aside class="inspector side-panel" id="inspector" aria-label="Side panel">
+        <div class="side-panel-bar">
+          <div class="side-panel-tabs" role="tablist">
+            <div class="tab" data-selected="true">
+              <button type="button" role="tab" class="tab-button" aria-selected="true"><span class="tab-icon" id="insp-tab-icon"></span><span class="tab-label" id="insp-tab-label"></span></button>
+              <button type="button" class="tab-close" id="insp-close" aria-label="Close tab" data-g="x"></button>
+            </div>
+          </div>
+        </div>
+        <div class="inspector-body" id="inspector-body"></div>
+      </aside>
+    </div>
+  </section>
+  <div class="toast-stack" aria-live="polite"><ol id="toasts"></ol></div>
+  <div class="tooltip tooltip-card" id="hovercard" role="tooltip" hidden></div>
+</div>
+</div>
+
+<script>
+"use strict";
+/* ------------------------------------------------------------------------
+   Glyphs: lucide's paths, as the renderer draws them, in a 24 box.
+   ------------------------------------------------------------------------ */
+const GLYPH = {
+  "chevron-left": '<path d="m15 18-6-6 6-6"/>',
+  "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+  chevrons: '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
+  "square-pen": '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  factory: '<path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  settings: '<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  minus: '<path d="M5 12h14"/>',
+  "rotate-cw": '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
+  "circle-help": '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  pr: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/>',
+  merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
+  question: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  "circle-alert": '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
+  "pr-draft": '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M18 6V5"/><path d="M18 11v-1"/><line x1="6" x2="6" y1="9" y2="21"/>',
+  "pr-closed": '<circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="m21 3-6 6"/><path d="m21 9-6-6"/><path d="M18 11.5V15"/><circle cx="18" cy="18" r="3"/>',
+  "exclamation": '<path d="M12 6v7"/><path d="M12 17h.01"/>',
+  open: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+};
+const glyph = (name) => `<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">${GLYPH[name] || ""}</svg>`;
+/* The harness marks and the working mark, drawn as the renderer draws them (harness-marks.tsx, working-mark.tsx). */
+const harnessMark = () => `<svg class="harness-mark" viewBox="0 0 47 38" aria-hidden="true"><path fill="#D97757" d="M5.08191 10.0769V0.938461H9.37422V10.0769H5.08191ZM9.23305 10.0769V0.938461H13.5254V10.0769H9.23305ZM13.3842 10.0769V0.938461H17.6765V10.0769H13.3842ZM17.5353 10.0769V0.938461H21.8276V10.0769H17.5353ZM21.6865 10.0769V0.938461H25.9788V10.0769H21.6865ZM25.8376 10.0769V0.938461H30.1299V10.0769H25.8376ZM29.9888 10.0769V0.938461H34.2811V10.0769H29.9888ZM34.1399 10.0769V0.938461H38.4322V10.0769H34.1399ZM38.291 10.0769V0.938461H42.5834V10.0769H38.291ZM0.930769 19.0769V9.93846H5.22308V19.0769H0.930769ZM5.08191 19.0769V9.93846H9.37422V19.0769H5.08191ZM9.23305 19.0769V14.5077H13.5254V19.0769H9.23305ZM13.3842 19.0769V9.93846H17.6765V19.0769H13.3842ZM17.5353 19.0769V9.93846H21.8276V19.0769H17.5353ZM21.6865 19.0769V9.93846H25.9788V19.0769H21.6865ZM25.8376 19.0769V9.93846H30.1299V19.0769H25.8376ZM29.9888 19.0769V9.93846H34.2811V19.0769H29.9888ZM34.1399 19.0769V14.5077H38.4322V19.0769H34.1399ZM38.291 19.0769V9.93846H42.5834V19.0769H38.291ZM42.4422 19.0769V9.93846H46.7345V19.0769H42.4422ZM5.08191 28.0769V18.9385H9.37422V28.0769H5.08191ZM9.23305 28.0769V18.9385H13.5254V28.0769H9.23305ZM13.3842 28.0769V18.9385H17.6765V28.0769H13.3842ZM17.5353 28.0769V18.9385H21.8276V28.0769H17.5353ZM21.6865 28.0769V18.9385H25.9788V28.0769H21.6865ZM25.8376 28.0769V18.9385H30.1299V28.0769H25.8376ZM29.9888 28.0769V18.9385H34.2811V28.0769H29.9888ZM34.1399 28.0769V18.9385H38.4322V28.0769H34.1399ZM38.291 28.0769V18.9385H42.5834V28.0769H38.291ZM5.08191 37.0769V27.9385H9.37422V37.0769H5.08191ZM13.3842 37.0769V27.9385H17.6765V37.0769H13.3842ZM29.9888 37.0769V27.9385H34.2811V37.0769H29.9888ZM38.291 37.0769V27.9385H42.5834V37.0769H38.291Z"/></svg>`;
+const workingMark = () => {
+  const track = [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1]].map(([c, r]) => `<rect x="${1 + c * 4}" y="${1 + r * 4}" width="2" height="2"/>`).join("");
+  const dots = ["lead", "lead-tail", "trail", "trail-tail"].map((d) => `<rect class="working-mark-dot" data-dot="${d}" x="1" y="1" width="2" height="2"/>`).join("");
+  return `<svg class="working-mark" viewBox="0 0 12 12" aria-hidden="true"><g class="working-mark-track">${track}</g>${dots}</svg>`;
+};
+const attentionMark = () => `<span class="attention-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">${GLYPH.exclamation}</svg></span>`;
+const prState = (p) => (p.state === PR.MERGED ? "merged" : p.state === PR.DRAFT ? "draft" : p.state === PR.CLOSED ? "closed" : "open");
+const prMark = (p) => `<svg class="pull-request-mark" viewBox="0 0 24 24" data-pull-request-state="${prState(p)}" data-failing="${p.state === PR.OPEN && p.checks === CHECKS.FAILING}" aria-hidden="true">${GLYPH[{ merged: "merge", draft: "pr-draft", closed: "pr-closed", open: "pr" }[prState(p)]]}</svg>`;
+/* What a pull request is waiting on, in the Factory's own words. */
+const prWords = (p) => (p.state === PR.MERGED ? "merged" : p.state === PR.DRAFT ? "draft" : p.state === PR.CLOSED ? "closed" : { passing: "ready to merge", pending: "checks running", failing: "checks failing", none: "open" }[p.checks]);
+const lines = (p) => `<span class="published-lines"><span class="published-added">+${p.additions}</span> <span class="published-removed">−${p.deletions}</span></span>`;
+const modelLabel = (a) => `<span class="model-label">${a.model}<span class="model-label-detail">${a.effort[0].toUpperCase()}${a.effort.slice(1)}</span></span>`;
+for (const el of document.querySelectorAll("[data-g]")) el.insertAdjacentHTML("afterbegin", glyph(el.dataset.g));
+for (const el of document.querySelectorAll("[data-g-lead]")) el.insertAdjacentHTML("afterbegin", glyph(el.dataset.gLead));
+
+/* ------------------------------------------------------------------------
+   The illustrative work, shaped as the window already holds it: the plan
+   list's TaskSummary (name, repository, start, and its agents' summary: a
+   count of all and of those working, at most three named agents, a count of
+   pull requests and at most three named ones with state, one-word checks,
+   additions and deletions), the Inbox's open items, and the task on this
+   Mac's call. Nothing is read from anywhere and nothing is stored.
+   ------------------------------------------------------------------------ */
+const NOW = Date.UTC(2026, 9, 16, 17, 0);
+const MIN = 60_000, HOUR = 60 * MIN, DAY = 24 * HOUR;
+const AGENT = { STARTING: "starting", RUNNING: "running", COMPLETED: "completed", FAILED: "failed", CANCELLED: "cancelled" };
+const PR = { OPEN: "open", DRAFT: "draft", MERGED: "merged", CLOSED: "closed" };
+const CHECKS = { PENDING: "pending", PASSING: "passing", FAILING: "failing", NONE: "none" };
+/* Each task as two reads the window can make. Its plan-list row (TaskSummary)
+   carries a bounded summary of its agents: counts of all and of those
+   working, and at most three of them, plus a count of pull requests and at
+   most three of those (TASK_AGENTS_BOUNDS). Opening the task reads its whole
+   agent list (the per-plan list) and each agent's published pull request.
+   The overview draws from the summary; an opened task from the whole lists. */
+const A = (id, title, model, effort, status, at) => ({ id, title, model, effort, status, at });
+const PRL = (number, title, state, checks, additions, deletions) => ({ number, title, state, checks, additions, deletions });
+const SAMPLE_TASKS = [
+  {
+    id: "switching", name: "Faster workspace switching", repository: "ReviewStage/luke", createdAt: NOW - 9 * DAY,
+    agentList: [
+      A("sw-1", "Profile the switcher", "Sonnet", "medium", AGENT.COMPLETED, NOW - 3 * HOUR),
+      A("sw-2", "Cache the workspace list", "Sonnet", "medium", AGENT.COMPLETED, NOW - 5 * HOUR),
+      A("sw-3", "Drop the second read", "Opus", "high", AGENT.COMPLETED, NOW - 8 * HOUR),
+      A("sw-4", "Prefetch the next workspace", "Sonnet", "medium", AGENT.COMPLETED, NOW - 2 * DAY),
+      A("sw-5", "Measure the switch", "Opus", "high", AGENT.CANCELLED, NOW - 3 * DAY),
+    ],
+    prList: [
+      PRL(3071, "Faster workspace switching", PR.MERGED, CHECKS.PASSING, 302, 118),
+      PRL(3064, "Cache the workspace list", PR.MERGED, CHECKS.PASSING, 41, 12),
+      PRL(3059, "Drop the switcher's second read", PR.MERGED, CHECKS.PASSING, 18, 66),
+      PRL(3052, "Prefetch the next workspace", PR.MERGED, CHECKS.PASSING, 77, 20),
+    ],
+  },
+  {
+    id: "empty", name: "Polish empty states", repository: "ReviewStage/luke", createdAt: NOW - 7 * DAY,
+    agentList: [A("em-1", "Polish empty states", "Opus", "high", AGENT.COMPLETED, NOW - 26 * HOUR)],
+    prList: [PRL(3068, "Polish empty states", PR.MERGED, CHECKS.PASSING, 156, 47)],
+  },
+  {
+    id: "reconnect", name: "Fix reconnect handling", repository: "ReviewStage/luke", createdAt: NOW - 3 * DAY,
+    agentList: [A("rc-1", "Fix reconnect backoff", "Opus", "high", AGENT.COMPLETED, NOW - 18 * MIN)],
+    prList: [PRL(3081, "Fix reconnect handling", PR.OPEN, CHECKS.PASSING, 84, 31)],
+  },
+  {
+    id: "search", name: "Improve search ranking", repository: "ReviewStage/luke", createdAt: NOW - 2 * DAY,
+    agentList: [A("se-1", "Rank by recency", "Sonnet", "medium", AGENT.RUNNING, NOW - 22 * MIN)],
+    prList: [PRL(3088, "Improve search ranking", PR.OPEN, CHECKS.FAILING, 212, 48)],
+  },
+  {
+    id: "shortcuts", name: "Keyboard shortcuts", repository: "ReviewStage/luke", createdAt: NOW - DAY,
+    agentList: [A("ks-1", "Shortcut sheet", "Opus", "high", AGENT.RUNNING, NOW - 9 * MIN)],
+    prList: [],
+  },
+  {
+    id: "invite", name: "Invite your teammates", repository: "ReviewStage/luke", createdAt: NOW - 5 * HOUR,
+    agentList: [A("iv-1", "Invite links", "Opus", "high", AGENT.COMPLETED, NOW - 4 * MIN)],
+    prList: [PRL(3090, "Let members invite teammates", PR.OPEN, CHECKS.PENDING, 146, 9)],
+  },
+  {
+    id: "factory-view", name: "Add another Factory view", repository: "ReviewStage/luke", createdAt: NOW - HOUR,
+    agentList: [],
+    prList: [],
+  },
+];
+/* More illustrative tasks, for seeing the town grow: made up from a seed, so the same each time. */
+const MORE_NAMES = ["Billing export", "Webhook signing", "Audit log", "Faster cold start", "Team avatars", "Retry failed webhooks", "Command palette search", "Onboarding checklist", "CSV import", "Rate limit banner", "Plan templates", "Offline mode", "Mention autocomplete", "Usage dashboard", "Slack digest", "Pin repositories", "Keyboard map", "Session timeouts", "Archive old plans", "Reviewer suggestions", "Diff word wrap", "Bulk archive", "Status page link", "Theme sync"];
+function moreTasks(count) {
+  let k = 7;
+  const rnd = () => { k = (k * 9301 + 49297) % 233280; return k / 233280; };
+  const list = [];
+  for (let i = 0; i < count; i++) {
+    const name = MORE_NAMES[i % MORE_NAMES.length];
+    const id = `more-${i}`;
+    const old = i % 2 === 0;
+    const createdAt = NOW - (old ? (12 + i) * DAY : (i + 2) * HOUR);
+    const agents = [];
+    const n = Math.floor(rnd() * 4);
+    for (let j = 0; j < n; j++) {
+      const r = rnd();
+      const status = old ? (r < 0.9 ? AGENT.COMPLETED : AGENT.FAILED) : r < 0.5 ? AGENT.RUNNING : r < 0.9 ? AGENT.COMPLETED : AGENT.FAILED;
+      agents.push(A(`${id}-a${j}`, `${name} ${["part", "fix", "tests"][j % 3]}`, rnd() < 0.5 ? "Opus" : "Sonnet", rnd() < 0.5 ? "high" : "medium", status, createdAt + (j + 1) * HOUR));
+    }
+    const prs = [];
+    const m = n ? Math.floor(rnd() * Math.min(3, n + 1)) : 0;
+    for (let j = 0; j < m; j++) {
+      const r = rnd();
+      const merged = old || r < 0.3;
+      const checks = merged ? CHECKS.PASSING : [CHECKS.PASSING, CHECKS.PENDING, CHECKS.FAILING][Math.floor(rnd() * 3)];
+      prs.push(PRL(2900 + i * 4 + j, `${name}${j ? ` (${j + 1})` : ""}`, merged ? PR.MERGED : PR.OPEN, checks, 20 + Math.floor(rnd() * 360), 4 + Math.floor(rnd() * 120)));
+    }
+    list.push({ id, name, repository: "ReviewStage/luke", createdAt, agentList: agents, prList: prs });
+  }
+  return list;
+}
+/* How many tasks the town shows: a few of the sample, the sample, or the sample and more. */
+const TOWN = {
+  few: () => SAMPLE_TASKS.filter((t) => ["reconnect", "invite", "factory-view"].includes(t.id)),
+  sample: () => SAMPLE_TASKS,
+  many: () => [...SAMPLE_TASKS, ...moreTasks(9)],
+  lots: () => [...SAMPLE_TASKS, ...moreTasks(23)],
+};
+let townSize = "sample";
+const TASKS = JSON.parse(JSON.stringify(TOWN[townSize]()));
+/* The summary a plan-list row carries, worked out from the whole lists as the service does. */
+const isWorking = (a) => a.status === AGENT.RUNNING || a.status === AGENT.STARTING;
+function summarize(t) {
+  const order = [...t.agentList].sort((a, b) => Number(isWorking(b)) - Number(isWorking(a)) || (b.at || 0) - (a.at || 0));
+  t.agents = { total: t.agentList.length, working: t.agentList.filter(isWorking).length, named: order.slice(0, 3) };
+  const prs = [...t.prList].sort((a, b) => b.number - a.number);
+  t.pullRequests = { total: prs.length, named: prs.slice(0, 3) };
+}
+const summarizeAll = () => { for (const t of TASKS) summarize(t); };
+summarizeAll();
+const INBOX = [
+  { id: "ib-1", taskId: "invite", agentId: "iv-1", title: "Should an invite link expire?", postedAt: NOW - 4 * MIN, options: ["After 7 days", "After 30 days", "Never"] },
+];
+const callTaskId = "factory-view";
+
+let byId = Object.fromEntries(TASKS.map((t) => [t.id, t]));
+const reindex = () => { byId = Object.fromEntries(TASKS.map((t) => [t.id, t])); };
+const inboxFor = (t) => INBOX.filter((i) => i.taskId === t.id);
+const allPRs = () => TASKS.flatMap((t) => t.pullRequests.named.map((p) => ({ ...p, taskId: t.id })));
+const prByNumber = (n) => TASKS.flatMap((t) => t.prList).find((p) => p.number === n);
+const linesOf = (p) => p.additions + p.deletions;
+const awaiting = () => allPRs().filter((p) => p.state === PR.OPEN);
+const merged = () => allPRs().filter((p) => p.state === PR.MERGED);
+const readyPRs = () => awaiting().filter((p) => p.checks === CHECKS.PASSING);
+const unnamedPRs = (t) => Math.max(0, t.pullRequests.total - t.pullRequests.named.length);
+const ago = (at) => { const d = NOW - at; if (d < MIN) return "now"; return d < HOUR ? `${Math.round(d / MIN)}m` : d < DAY ? `${Math.round(d / HOUR)}h` : d < 7 * DAY ? `${Math.round(d / DAY)}d` : `${Math.round(d / (7 * DAY))}w`; };
+
+/* What a task shows, read from the fields above. */
+const running = (t) => t.agents.working > 0;
+const asking = (t) => inboxFor(t).length > 0;
+const failed = (t) => t.agents.named.some((a) => a.status === AGENT.FAILED);
+/* Going up: an agent at work and no pull request yet. */
+const underway = (t) => running(t) && t.pullRequests.total === 0;
+/* Shipped: every pull request it names is merged. */
+const shippedAll = (t) => t.pullRequests.named.length > 0 && t.pullRequests.named.every((p) => p.state === PR.MERGED);
+function taskTone(t) {
+  if (asking(t)) return "--state-attention";
+  if (failed(t)) return "--danger";
+  if (t.id === callTaskId) return "--voice-developer";
+  if (running(t)) return "--state-working";
+  if (t.pullRequests.named.some((p) => p.state === PR.OPEN && p.checks === CHECKS.PASSING)) return "--state-complete";
+  if (shippedAll(t)) return "--state-merged";
+  return "--text-tertiary";
+}
+
+/* ------------------------------------------------------------------------
+   The campus: world tiles, N by N, and a shipped lot past its gate.
+   x runs down to the right on screen, y down to the left, z up.
+   ------------------------------------------------------------------------ */
+const N = 20;
+/* How deep the town runs: it grows a row of plots at a time as tasks are added, and draws in as they go. */
+let NY = 20;
+const DX = 22, DY = 11, DZ = 25;
+let rot = 0;
+const near = (a, b) => Math.abs(a - b) < 1e-6;
+function R(x, y) {
+  switch (rot) {
+    case 1: return [NY - y, x];
+    case 2: return [N - x, NY - y];
+    case 3: return [y, N - x];
+    default: return [x, y];
+  }
+}
+const P = (x, y, z) => [(x - y) * DX, (x + y) * DY - z * DZ];
+const PR_ = (x, y, z) => { const [a, b] = R(x, y); return P(a, b, z); };
+const pts = (list) => list.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+const poly = (list, fill, extra = "") => `<polygon points="${pts(list)}" fill="${fill}" ${extra}/>`;
+
+let theme = "dark";
+const PALETTE = {
+  dark: {
+    slab: "#18191e", grass: "#141a17", road: "#1f2026", line: "rgba(255,255,255,0.16)",
+    pad: "#1d1e24", curb: "#26272e", wall: "#3a3c46", wall2: "#45403c", glass: "#1f2a36", roof: "#2c2e36",
+    metal: "#4b4e5a", floor: "#2a2b33", inner: "#24252c", unlit: "#16171c", idle: "#e7d9bd",
+    tree: "#1f3a2d", tree2: "#2a4a39", trunk: "#3a2f28", shadow: "rgba(0,0,0,0.42)", smoke: "#8a8d99",
+    lamp: "#ffd9a0", deskTop: "#4a4c57", crate: "#5a4a36", unknown: "#3b3d45", lot: "#1b1c22", barrier: "#e6e8ee",
+    luke: "#eef0f5", lukeInk: "#16171c",
+  },
+  light: {
+    slab: "#e7e8ec", grass: "#dfe7df", road: "#d3d4da", line: "rgba(255,255,255,0.9)",
+    pad: "#f1f1f4", curb: "#dcdde2", wall: "#f7f7f9", wall2: "#efe7df", glass: "#bfd3e6", roof: "#e3e4ea",
+    metal: "#c4c7d0", floor: "#ececf0", inner: "#dedfe5", unlit: "#c8d2df", idle: "#8b93a3",
+    tree: "#8fb89a", tree2: "#a8cbb0", trunk: "#9b8572", shadow: "rgba(30,30,60,0.16)", smoke: "#c9ccd4",
+    lamp: "#ffd9a0", deskTop: "#d0d2da", crate: "#c9a77a", unknown: "#d6d7dd", lot: "#e4e5ea", barrier: "#ffffff",
+    luke: "#26272d", lukeInk: "#f8fafc",
+  },
+};
+const C = () => PALETTE[theme];
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const L = (() => { const v = [0.38, -0.32, 0.87]; const m = Math.hypot(...v); return v.map((c) => c / m); })();
+function toRgb(c) {
+  if (c.startsWith("#")) { const n = parseInt(c.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  const m = c.match(/[\d.]+/g); return [Number(m[0]), Number(m[1]), Number(m[2])];
+}
+function shade(color, normal) {
+  const d = Math.max(0, normal[0] * L[0] + normal[1] * L[1] + normal[2] * L[2]);
+  const f = (theme === "dark" ? 0.62 : 0.8) + (theme === "dark" ? 0.5 : 0.22) * d;
+  const [r, g, b] = toRgb(color);
+  const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+const TOP = [0, 0, 1], FX = [1, 0, 0], FY = [0, 1, 0];
+
+/* A box with its top's corners at their own heights, so a slope or a gable is a box too. */
+function turnBox(b) {
+  const hs = b.hs || [b.h, b.h, b.h, b.h];
+  const c = [[b.x, b.y, hs[0]], [b.x + b.w, b.y, hs[1]], [b.x + b.w, b.y + b.d, hs[2]], [b.x, b.y + b.d, hs[3]]]
+    .map(([x, y, h]) => { const [a, bb] = R(x, y); return [a, bb, h]; });
+  const xs = c.map((q) => q[0]), ys = c.map((q) => q[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const H = (x, y) => c.find((q) => near(q[0], x) && near(q[1], y))[2];
+  return { x0, x1, y0, y1, z: b.z || 0, h00: H(x0, y0), h10: H(x1, y0), h11: H(x1, y1), h01: H(x0, y1) };
+}
+function normalOf(a, b, c) {
+  const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const m = Math.hypot(...n) || 1;
+  return n.map((q) => q / m);
+}
+function boxSVG(b, mat, opts = {}) {
+  const t = turnBox(b);
+  const { x0, x1, y0, y1, z } = t;
+  const w3 = [[x0, y0, z + t.h00], [x1, y0, z + t.h10], [x1, y1, z + t.h11], [x0, y1, z + t.h01]];
+  const n = normalOf(w3[0], w3[1], w3[3]);
+  const top = w3.map((q) => P(...q));
+  const fx = [P(x1, y0, z), P(x1, y1, z), P(x1, y1, z + t.h11), P(x1, y0, z + t.h10)];
+  const fy = [P(x0, y1, z), P(x1, y1, z), P(x1, y1, z + t.h11), P(x0, y1, z + t.h01)];
+  const base = C()[mat] || mat;
+  const edge = opts.edge || (theme === "dark" ? 'stroke="rgba(255,255,255,0.05)" stroke-width="0.6"' : 'stroke="rgba(0,0,0,0.06)" stroke-width="0.6"');
+  let s = "";
+  if (!opts.noTop) s += poly(top, opts.topFill || shade(base, n[2] < 0 ? TOP : n), edge);
+  s += poly(fx, opts.sideFill || shade(base, FX), edge) + poly(fy, opts.sideFill || shade(base, FY), edge);
+  if (opts.win) s += windowsSVG(t, opts.win);
+  if (opts.stripe) s += stripeSVG(t, opts.stripe);
+  return s;
+}
+function windowsSVG(t, win) {
+  const { x0, x1, y0, y1, z } = t;
+  const hTop = Math.min(t.h00, t.h10, t.h11, t.h01);
+  const rows = win.rows || Math.max(1, Math.floor((hTop - 0.25) / 0.55));
+  const per = win.per || 2;
+  let s = "";
+  let k = win.seed || 1;
+  const rnd = () => { k = (k * 9301 + 49297) % 233280; return k / 233280; };
+  const face = (axis) => {
+    const len = axis === "x" ? y1 - y0 : x1 - x0;
+    const cols = Math.max(1, Math.round(len * per));
+    const cw = len / cols;
+    const rh = (hTop - 0.3) / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const u0 = c * cw + cw * 0.22, u1 = (c + 1) * cw - cw * 0.22;
+        const za = z + 0.18 + r * rh + rh * 0.2, zb = z + 0.18 + (r + 1) * rh - rh * 0.2;
+        const q = axis === "x"
+          ? [P(x1, y0 + u0, za), P(x1, y0 + u1, za), P(x1, y0 + u1, zb), P(x1, y0 + u0, zb)]
+          : [P(x0 + u0, y1, za), P(x0 + u1, y1, za), P(x0 + u1, y1, zb), P(x0 + u0, y1, zb)];
+        const on = win.lit && rnd() < (win.ratio ?? 0.8);
+        if (on) s += poly(q, win.lit, `class="win-lit" opacity="${win.opacity ?? (theme === "dark" ? 0.92 : 0.75)}"`);
+        else s += poly(q, win.band ? shade(C().glass, axis === "x" ? FX : FY) : C().unlit);
+      }
+    }
+  };
+  face("x"); face("y");
+  return s;
+}
+function stripeSVG(t, color) {
+  const { x0, x1, y0, y1, z } = t;
+  const hTop = Math.min(t.h00, t.h10, t.h11, t.h01);
+  const za = z + hTop - 0.12, zb = z + hTop - 0.02;
+  return poly([P(x1, y0, za), P(x1, y1, za), P(x1, y1, zb), P(x1, y0, zb)], color) + poly([P(x0, y1, za), P(x1, y1, za), P(x1, y1, zb), P(x0, y1, zb)], color);
+}
+function flat(x, y, w, d, fill, z = 0, extra = "") {
+  return poly([PR_(x, y, z), PR_(x + w, y, z), PR_(x + w, y + d, z), PR_(x, y + d, z)], fill, extra);
+}
+const gradients = new Set();
+function ensureGradient(id, base) {
+  if (gradients.has(id)) return;
+  gradients.add(id);
+  document.querySelector("#scene defs").insertAdjacentHTML("beforeend", `<linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="${shade(base, FY)}"/><stop offset="0.55" stop-color="${shade(base, [0.6, 0.6, 0.2])}"/><stop offset="1" stop-color="${shade(base, FX)}"/></linearGradient>`);
+}
+function cylSVG(x, y, r, z, h, mat, opts = {}) {
+  const [cx, cy] = R(x, y);
+  const [bx, by] = P(cx, cy, z), [tx, ty] = P(cx, cy, z + h);
+  const rx = r * DX * Math.SQRT2, ry = r * DY * Math.SQRT2;
+  const base = C()[mat] || mat;
+  const id = `cg-${mat.replace(/[^a-z0-9]/gi, "")}-${theme}`;
+  ensureGradient(id, base);
+  let s = `<path d="M${bx - rx},${by} L${tx - rx},${ty} L${tx + rx},${ty} L${bx + rx},${by} A${rx},${ry} 0 0 1 ${bx - rx},${by} Z" fill="url(#${id})"/>`;
+  for (const f of opts.bands || []) {
+    const [, yy] = P(cx, cy, z + h * f);
+    s += `<path d="M${bx - rx},${yy} A${rx},${ry} 0 0 0 ${bx + rx},${yy}" fill="none" stroke="${theme === "dark" ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.1)"}" stroke-width="1"/>`;
+  }
+  s += `<ellipse cx="${tx}" cy="${ty}" rx="${rx}" ry="${ry}" fill="${shade(base, TOP)}"/>`;
+  return s;
+}
+function hull(points) {
+  const p = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = [];
+  for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of p.reverse()) { while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], q) <= 0) hi.pop(); hi.push(q); }
+  return lo.slice(0, -1).concat(hi.slice(0, -1));
+}
+const SHADOW_K = 1.25;
+function shadowSVG(b) {
+  const t = turnBox(b);
+  const h = t.z + Math.max(t.h00, t.h10, t.h11, t.h01);
+  const sx = (-L[0] / L[2]) * h * SHADOW_K, sy = (-L[1] / L[2]) * h * SHADOW_K;
+  const g = [[t.x0, t.y0], [t.x1, t.y0], [t.x1, t.y1], [t.x0, t.y1]];
+  return poly(hull(g.concat(g.map(([x, y]) => [x + sx, y + sy]))).map(([x, y]) => P(x, y, 0.02)), C().shadow);
+}
+function shadowCyl(x, y, r, h) {
+  const [cx, cy] = R(x, y);
+  const sx = (-L[0] / L[2]) * h * SHADOW_K, sy = (-L[1] / L[2]) * h * SHADOW_K;
+  const ring = [];
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; ring.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+  return poly(hull(ring.concat(ring.map(([a, b]) => [a + sx, b + sy]))).map(([a, b]) => P(a, b, 0.02)), C().shadow);
+}
+const depthOf = (x, y) => { const [a, b] = R(x, y); return a + b; };
+
+/* ------------------------------------------------------------------------
+   The master plan: plots, each with its own building, filled in the order
+   tasks started, oldest at the back. A building's shape is art direction
+   and says nothing; what it is doing shows in its light, on its roof, and
+   in its cargo. Worked out on every draw; nothing is stored.
+   ------------------------------------------------------------------------ */
+const SLOTS = [
+  /* A tower. */
+  { plot: [1, 1, 4.2, 4.2], hollow: { x: 1.6, y: 1.6, w: 3, d: 3, h: 3.3, mat: "wall" },
+    parts: (lit) => [
+      { box: { x: 1.6, y: 1.6, w: 3, d: 3, z: 0, h: 3.3 }, mat: "wall", win: { rows: 5, per: 2, ...lit, seed: 13 }, role: "shell" },
+      { box: { x: 2.1, y: 2.1, w: 2, d: 2, z: 3.3, h: 0.5 }, mat: "roof", role: "upper" },
+    ],
+    roof: [3.1, 3.1, 3.8], stack: null, deck: { x: 1.75, y: 4.15, w: 2.7, d: 0.35, z: 3.3 } },
+  /* A low hall with a raised back. */
+  { plot: [5.8, 1, 3, 5.2], hollow: { x: 6.2, y: 1.5, w: 2.2, d: 4.2, h: 1.9, mat: "wall2" },
+    parts: (lit) => [
+      { box: { x: 6.2, y: 1.5, w: 2.2, d: 4.2, z: 0, h: 1.9 }, mat: "wall2", win: { rows: 2, per: 1.6, ...lit, seed: 17 }, role: "shell" },
+      { box: { x: 6.2, y: 1.5, w: 2.2, d: 2, z: 1.9, h: 0.7 }, mat: "wall2", win: { rows: 1, per: 1.6, ...lit, ratio: (lit.ratio ?? 0.8) * 0.4, seed: 2 }, role: "upper" },
+    ],
+    roof: [7.3, 2.5, 2.6], stack: null, deck: { x: 6.35, y: 3.7, w: 1.9, d: 1.8, z: 1.9 } },
+  /* A warehouse. */
+  { plot: [11.6, 0.6, 7.6, 4.2], hollow: { x: 12.2, y: 1.1, w: 6.2, d: 3, h: 1.5, mat: "wall" },
+    parts: (lit) => [
+      { box: { x: 12.2, y: 1.1, w: 6.2, d: 3, z: 0, h: 1.5 }, mat: "wall", win: { rows: 1, per: 1.5, ...lit, seed: 7 }, role: "shell" },
+      { box: { x: 12.1, y: 1, w: 6.4, d: 3.2, z: 1.5, h: 0.14 }, mat: "roof", role: "upper" },
+    ],
+    roof: [17.6, 1.8, 1.64], stack: null, deck: { x: 12.5, y: 1.4, w: 5.6, d: 2.4, z: 1.64 } },
+  /* A sawtooth works with silos and a stack. */
+  { plot: [0.6, 10.9, 8, 4.4], hollow: { x: 1.2, y: 11.5, w: 5, d: 3.2, h: 1.2, mat: "wall" },
+    parts: (lit) => {
+      const list = [{ box: { x: 1.2, y: 11.5, w: 5, d: 3.2, z: 0, h: 1.2 }, mat: "wall", win: { rows: 1, per: 1.6, ...lit, seed: 5 }, stripe: lit.lit, role: "shell" }];
+      for (let i = 0; i < 4; i++) list.push({ box: { x: 1.2 + i * 1.25, y: 11.5, w: 1.25, d: 3.2, z: 1.2, hs: [0.75, 0, 0, 0.75] }, mat: "roof", role: "upper" });
+      list.push({ cyl: [7.1, 12.1, 0.55, 0, 2.2, "metal"], bands: [0.33, 0.66], role: "keep", solid: true });
+      list.push({ cyl: [7.1, 13.6, 0.55, 0, 2.2, "metal"], bands: [0.33, 0.66], role: "keep", solid: true });
+      list.push({ cyl: [5.6, 12.1, 0.22, 1.2, 1.9, "wall2"], bands: [0.85], role: "upper" });
+      return list;
+    },
+    roof: [3.2, 12.6, 2.4], stack: [5.6, 12.1, 3.15], deck: { x: 1.4, y: 13.4, w: 4.6, d: 1.1, z: 1.2 } },
+  /* A block, the one most often going up under a crane. */
+  { plot: [16.8, 11.4, 3, 5], hollow: { x: 17.2, y: 11.9, w: 2.3, d: 3.6, h: 2.2, mat: "wall" },
+    parts: (lit) => [
+      { box: { x: 17.2, y: 11.9, w: 2.3, d: 3.6, z: 0, h: 2.2 }, mat: "wall", win: { rows: 3, per: 1.8, ...lit, seed: 21 }, role: "shell" },
+      { box: { x: 17.25, y: 11.95, w: 2.2, d: 1.6, z: 2.2, h: 0.5 }, mat: "roof", role: "upper" },
+    ],
+    roof: [18.35, 13.7, 2.9], stack: null, deck: { x: 17.35, y: 13.7, w: 2.0, d: 1.7, z: 2.2 }, crane: { at: [19.55, 11.75], h: 3.8, jib: 2.7 } },
+  /* A gabled workshop with a chimney. */
+  { plot: [1, 15.8, 5.6, 3.8], hollow: { x: 1.5, y: 16.3, w: 4.6, d: 2.8, h: 1.35, mat: "wall2" },
+    parts: (lit) => [
+      { box: { x: 1.5, y: 16.3, w: 4.6, d: 2.8, z: 0, h: 1.35 }, mat: "wall2", win: { rows: 1, per: 1.4, ...lit, seed: 11 }, role: "shell" },
+      { box: { x: 1.4, y: 16.2, w: 4.8, d: 1.5, z: 1.35, hs: [0, 0, 0.9, 0.9] }, mat: "roof", role: "upper" },
+      { box: { x: 1.4, y: 17.7, w: 4.8, d: 1.5, z: 1.35, hs: [0.9, 0.9, 0, 0] }, mat: "roof", role: "upper" },
+      { box: { x: 4.6, y: 16.6, w: 0.4, d: 0.4, z: 1.6, h: 0.9 }, mat: "wall", role: "upper" },
+    ],
+    roof: [2.4, 17.7, 2.3], stack: [4.8, 16.8, 2.55], deck: { x: 1.6, y: 17.62, w: 4.4, d: 0.16, z: 2.22 } },
+  /* A glass studio. */
+  { plot: [12, 12, 4.4, 4.4], hollow: { x: 12.6, y: 12.6, w: 3.2, d: 3.2, h: 1.1, mat: "glass" },
+    parts: (lit) => [
+      { box: { x: 12.6, y: 12.6, w: 3.2, d: 3.2, z: 0, h: 1.1 }, mat: "glass", win: { rows: 1, per: 1.6, ...lit, band: true, seed: 3 }, role: "shell" },
+      { box: { x: 12.45, y: 12.45, w: 3.5, d: 3.5, z: 1.1, h: 0.16 }, mat: "roof", role: "upper" },
+      { cyl: [14.2, 14.2, 0.07, 1.26, 1.3, "metal"], role: "upper" },
+    ],
+    roof: [14.2, 14.2, 2.6], stack: null, deck: { x: 12.8, y: 12.8, w: 2.8, d: 2.8, z: 1.26 } },
+  /* A small gabled hall on the last plot, for a task started later. */
+  { plot: [12, 17.4, 4.4, 2.2], hollow: { x: 12.4, y: 17.75, w: 3.0, d: 1.3, h: 1.0, mat: "wall2" },
+    parts: (lit) => [
+      { box: { x: 12.4, y: 17.75, w: 3.0, d: 1.3, z: 0, h: 1.0 }, mat: "wall2", win: { rows: 1, per: 1.6, ...lit, seed: 27 }, role: "shell" },
+      { box: { x: 12.3, y: 17.65, w: 3.2, d: 0.75, z: 1.0, hs: [0, 0, 0.55, 0.55] }, mat: "roof", role: "upper" },
+      { box: { x: 12.3, y: 18.4, w: 3.2, d: 0.75, z: 1.0, hs: [0.55, 0.55, 0, 0] }, mat: "roof", role: "upper" },
+    ],
+    roof: [13.9, 18.4, 1.55], stack: null, crane: { at: [15.95, 17.6], h: 3.0, jib: 2.1 } },
+];
+/* Past the hand-made eight, the town grows rows of four plots, two either side of the avenue, each taking one of the smaller buildings in turn. */
+const ROW0 = 20.6, ROW_STEP = 6.0, CELL_W = 4.4, CELL_D = 5.4;
+const CELL_X = [0.25, 4.55, 11.15, 15.45];
+const EXTRA = [0, 1, 4, 6, 7];
+function shifted(slot, dx, dy) {
+  const mv = (o) => o && { ...o, x: o.x + dx, y: o.y + dy };
+  return {
+    ...slot,
+    plot: [slot.plot[0] + dx, slot.plot[1] + dy, slot.plot[2], slot.plot[3]],
+    hollow: mv(slot.hollow), deck: mv(slot.deck),
+    roof: [slot.roof[0] + dx, slot.roof[1] + dy, slot.roof[2]],
+    stack: slot.stack && [slot.stack[0] + dx, slot.stack[1] + dy, slot.stack[2]],
+    crane: slot.crane && { ...slot.crane, at: [slot.crane.at[0] + dx, slot.crane.at[1] + dy] },
+    parts: (lit) => slot.parts(lit).map((q) => (q.box ? { ...q, box: mv(q.box) } : { ...q, cyl: [q.cyl[0] + dx, q.cyl[1] + dy, ...q.cyl.slice(2)] })),
+  };
+}
+const slotCache = new Map();
+function slotAt(i) {
+  if (i < SLOTS.length) return SLOTS[i];
+  if (slotCache.has(i)) return slotCache.get(i);
+  const k = i - SLOTS.length;
+  const base = SLOTS[EXTRA[k % EXTRA.length]];
+  const x = CELL_X[k % 4] + (CELL_W - base.plot[2]) / 2;
+  const y = ROW0 + Math.floor(k / 4) * ROW_STEP + (CELL_D - base.plot[3]) / 2;
+  const slot = shifted(base, x - base.plot[0], y - base.plot[1]);
+  slotCache.set(i, slot);
+  return slot;
+}
+const extraRows = () => Math.max(0, Math.ceil((TASKS.length + 1 - SLOTS.length) / 4));
+function placed() {
+  return TASKS.slice().sort((a, b) => a.createdAt - b.createdAt).map((task, i) => ({ task, slot: slotAt(i) }));
+}
+/* The town's depth: as far as its last plot (and the next, empty one), never shallower than the gate and the lot. */
+function measureTown() {
+  let bottom = LOT.y + LOT.d + 0.6;
+  for (let i = 0; i <= TASKS.length; i++) { const pl = slotAt(i).plot; bottom = Math.max(bottom, pl[1] + pl[3] + 0.6); }
+  NY = Math.max(13.4, Math.ceil(bottom * 2) / 2);
+}
+const slotOf = (id) => placed().find((p) => p.task.id === id)?.slot;
+
+/* The merge gate's yard, three lanes by checks, ready nearest the gate; the gate on the avenue; the shipped lot past it. */
+const YARD = { x: 12, y: 5.2, w: 6.6, d: 3.7 };
+const LANES = [
+  { checks: CHECKS.FAILING, label: "Checks failing", tone: "--danger", y: 5.3 },
+  { checks: CHECKS.PENDING, label: "Checks running", tone: "--state-attention", y: 6.5 },
+  { checks: CHECKS.PASSING, label: "Ready to merge", tone: "--state-complete", y: 7.7 },
+];
+const LANE_D = 1.2;
+const GATEHOUSE = { x: 18.9, y: 8.1, w: 0.8, d: 0.8 };
+const BARRIER = { x: 19.78, y: 9.0, w: 0.12, d: 1.4 };
+const LOT = { x: 20.4, y: 7.6, w: 4.4, d: 4.8 };
+const TREES = [[1.2, 6.8], [2.4, 7.6], [3.6, 6.7], [4.9, 7.8], [6.3, 7], [7.6, 7.9], [8.2, 6.6], [1.2, 9.4], [17.2, 18.4], [18.6, 17.6], [7.5, 16.6], [8.3, 18.4], [7.2, 19.3], [0.6, 15.4]];
+const LAMPS = [[8.7, 8.7], [11.3, 8.7], [8.7, 11.3], [11.3, 11.3], [8.7, 3], [11.3, 16], [3, 8.7], [16, 11.3], [19.5, 11.3]];
+
+/* One shared scale for every pull request: a container as long as the lines
+   it changes, linear, one tile per 150 lines. */
+const CONTAINER_PER_TILE = 150, CONTAINER_MIN = 0.4, CONTAINER_W = 0.55, CONTAINER_H = 0.5;
+function sizeOf(p) {
+  return { w: p ? Math.max(CONTAINER_MIN, linesOf(p) / CONTAINER_PER_TILE) : 0.6, d: CONTAINER_W, h: CONTAINER_H };
+}
+function cratePositions() {
+  const list = [];
+  const push = (pr, x, y, size, where, extra = {}) => list.push({ pr, x, y, ...size, e: Math.max(size.w, size.d), where, z: 0, ...extra });
+  /* A lane holds a row of containers, then stacks the next on top, as a port does. */
+  for (const lane of LANES) {
+    let x = YARD.x + 0.9, z = 0;
+    for (const p of awaiting().filter((q) => q.checks === lane.checks && !q.moving).sort((a, b) => a.number - b.number)) {
+      const size = sizeOf(p);
+      if (x + size.w > YARD.x + YARD.w - 0.2) { x = YARD.x + 0.9 + z * 0.15; z += 1; }
+      push(p, x + size.w / 2, lane.y + LANE_D / 2, size, "gate", { z: z * CONTAINER_H });
+      x += size.w + 0.25;
+    }
+  }
+  const ship = merged().filter((q) => !q.moving).sort((a, b) => a.number - b.number);
+  {
+    let x = LOT.x + 0.5, y = LOT.y + 0.5, z = 0;
+    for (const p of ship) {
+      const size = sizeOf(p);
+      if (x + size.w > LOT.x + LOT.w - 0.4) { x = LOT.x + 0.5; y += CONTAINER_W + 0.35; }
+      if (y + size.d > LOT.y + LOT.d - 0.3) { y = LOT.y + 0.5; x = LOT.x + 0.5; z += 1; }
+      push(p, x + size.w / 2, y + size.d / 2, size, "shipped", { z: z * CONTAINER_H });
+      x += size.w + 0.3;
+    }
+  }
+  for (const { task, slot } of placed()) {
+    for (let k = 0; k < unnamedPRs(task); k++) {
+      const [x, y, w, d] = slot.plot;
+      const size = sizeOf(null);
+      list.push({ unknown: true, taskId: task.id, k, x: x + w - 0.3 - size.w / 2 - k * (size.w + 0.2), y: y + d - 0.15 - size.d / 2, ...size, e: Math.max(size.w, size.d), z: 0, where: "door" });
+    }
+  }
+  return list;
+}
+
+/* ------------------------------------------------------------------------
+   Simulated events, so the campus can be seen running. A fixed script of
+   things the window would hear about (an agent starting, its turn ending,
+   it being archived, checks changing, a merge, a new task, a question)
+   played on a loop over the illustrative work. Nothing here is real.
+   ------------------------------------------------------------------------ */
+const fresh = new Set();
+let gateOpen = false;
+const movers = [];
+const bursts = [];
+let SNAPSHOT = JSON.stringify({ TASKS, INBOX });
+const ping = (id) => fresh.add(`ping:${id}`);
+function agentOf(id) { for (const t of TASKS) { const a = t.agentList.find((x) => x.id === id); if (a) return [t, a]; } return []; }
+function startAgent(taskId, id, model, effort, title) {
+  const t = byId[taskId];
+  t.agentList.push(A(id, title, model, effort, AGENT.RUNNING, NOW));
+  summarize(t);
+  ping(taskId);
+}
+function endTurn(agentId) {
+  const [t, a] = agentOf(agentId);
+  if (!a || a.status !== AGENT.RUNNING) return;
+  a.status = AGENT.COMPLETED; a.at = NOW; summarize(t);
+  ping(t.id);
+}
+function archive(agentId) {
+  const [t, a] = agentOf(agentId);
+  if (!a) return;
+  t.agentList = t.agentList.filter((x) => x !== a); summarize(t);
+  ping(t.id);
+}
+/* Checks changing: a forklift carries the container to its new lane. */
+function setChecks(n, checks) {
+  const from = cratePositions().find((c) => !c.unknown && c.pr.number === n);
+  const p = prByNumber(n);
+  p.checks = checks;
+  const to = cratePositions().find((c) => !c.unknown && c.pr.number === n);
+  if (!from || !to || reduced.matches) { fresh.add(`drop:${n}`); return; }
+  p.moving = true;
+  const aisle = YARD.x + 0.45;
+  movers.push({ n, kind: "forklift", speed: 1.8, path: [[from.x, from.y], [aisle + 0.3, from.y], [aisle + 0.3, to.y], [to.x, to.y]], seg: 0, x: from.x, y: from.y, done: () => { p.moving = false; refreshAll(); } });
+}
+/* A merge: the container rides a truck out of its lane, through the raised barrier, to the shipped lot. */
+function startMerge(n, done) {
+  const from = cratePositions().find((c) => !c.unknown && c.pr.number === n);
+  const p = prByNumber(n);
+  p.state = PR.MERGED;
+  const to = cratePositions().find((c) => !c.unknown && c.pr.number === n);
+  if (!from || !to || reduced.matches) { done(); return; }
+  p.moving = true;
+  const road = 9.55;
+  movers.push({ n, kind: "truck", speed: 2.6, path: [[from.x, from.y], [from.x, road], [Math.max(to.x, N + 0.6), road], [to.x, road], [to.x, to.y]].filter((q, i, a) => i === 0 || Math.hypot(q[0] - a[i - 1][0], q[1] - a[i - 1][1]) > 0.01), seg: 0, t: 0, x: from.x, y: from.y, done: () => { p.moving = false; bursts.push({ x: to.x, y: to.y, at: performance.now() }); done(); } });
+}
+const EVENTS = [
+  { say: "Sonnet started", icon: "zap", tone: "--state-working", task: "shortcuts", run: () => startAgent("shortcuts", "ks-2", "Sonnet", "medium", "Shortcut settings page") },
+  { say: "Checks running again on #3088", icon: "pr", tone: "--state-attention", task: "search", run: () => setChecks(3088, CHECKS.PENDING) },
+  { say: "Sonnet's turn ended", icon: "check", tone: "--text-tertiary", task: "search", run: () => endTurn("se-1") },
+  { say: "Checks passed on #3088", icon: "check", tone: "--state-complete", task: "search", run: () => setChecks(3088, CHECKS.PASSING) },
+  { say: "#3081 merged", icon: "merge", tone: "--state-merged", task: "reconnect", wait: (done) => startMerge(3081, done) },
+  { say: "Opus archived", icon: "x", tone: "--text-tertiary", task: "reconnect", run: () => archive("rc-1") },
+  { say: "New task", icon: "plus", tone: "--text-secondary", task: "dark-mode", run: () => {
+    if (byId["dark-mode"]) return;
+    TASKS.push({ id: "dark-mode", name: "Dark mode toggle", repository: "ReviewStage/luke", createdAt: NOW + 1, agentList: [], prList: [] });
+    summarize(TASKS[TASKS.length - 1]);
+    reindex(); fresh.add("rise:dark-mode");
+  } },
+  { say: "Opus started", icon: "zap", tone: "--state-working", task: "dark-mode", run: () => startAgent("dark-mode", "dm-1", "Opus", "high", "Theme tokens") },
+  { say: "Opus asked a question", icon: "question", tone: "--state-attention", task: "shortcuts", run: () => {
+    endTurn("ks-1");
+    INBOX.push({ id: "ib-2", taskId: "shortcuts", agentId: "ks-1", title: "Should ⌘K open over a dialog?", postedAt: NOW, options: ["Yes", "No", "Only Search"] });
+    ping("shortcuts");
+  } },
+  { say: "Opus opened #3093", icon: "pr", tone: "--state-complete", task: "dark-mode", run: () => {
+    const t = byId["dark-mode"];
+    t.prList.push(PRL(3093, "Dark mode toggle", PR.OPEN, CHECKS.PENDING, 188, 22));
+    summarize(t);
+    fresh.add("drop:3093"); ping("dark-mode");
+  } },
+  { say: "#3088 merged", icon: "merge", tone: "--state-merged", task: "search", wait: (done) => startMerge(3088, done) },
+  { say: "Sonnet's turn ended", icon: "check", tone: "--text-tertiary", task: "shortcuts", run: () => endTurn("ks-2") },
+];
+const sim = { on: true, i: 0, timer: 0, busy: false };
+const STEP_MS = 3600;
+function schedule(ms) { clearTimeout(sim.timer); if (sim.on) sim.timer = setTimeout(step, ms); }
+function step() {
+  if (!sim.on || sim.busy) return;
+  if (sim.i >= EVENTS.length) { resetWork(); notice("Replaying from the start", "--text-tertiary", "Simulated events", "rotate-cw"); schedule(STEP_MS); return; }
+  let ev = EVENTS[sim.i++];
+  /* A smaller town lacks some of the script's tasks; their events pass it by. */
+  while (ev?.task && ev.task !== "dark-mode" && !byId[ev.task]) ev = EVENTS[sim.i++];
+  if (!ev) { schedule(10); return; }
+  if (ev.task === "dark-mode" && ev.say !== "New task" && !byId["dark-mode"]) { schedule(10); return; }
+  renderSimStatus();
+  notice(ev.say, ev.tone, ev.where || byId[ev.task]?.name || (ev.task === "dark-mode" ? "Dark mode toggle" : ""), ev.icon);
+  if (ev.wait) {
+    sim.busy = true;
+    ev.wait(() => { sim.busy = false; refreshAll(); schedule(STEP_MS); });
+    refreshAll();
+  } else {
+    ev.run();
+    refreshAll();
+    schedule(STEP_MS);
+  }
+}
+function resetWork() {
+  const snap = JSON.parse(SNAPSHOT);
+  TASKS.splice(0, TASKS.length, ...snap.TASKS);
+  summarizeAll();
+  INBOX.splice(0, INBOX.length, ...snap.INBOX);
+  reindex();
+  movers.length = 0; bursts.length = 0; sim.i = 0; sim.busy = false; gateOpen = false;
+  if (openId && !byId[openId] && openId !== "gate" && openId !== "shipped") closeDetails(false);
+  refreshAll();
+  renderSimStatus();
+}
+function renderSimStatus() {
+  $("sim-toggle").textContent = sim.on ? "Pause events" : "Play events";
+  $("sim-toggle").setAttribute("aria-pressed", String(sim.on));
+  $("sim-step").textContent = `${Math.min(sim.i, EVENTS.length)} of ${EVENTS.length}`;
+}
+function drawForklift(m) {
+  const p = prByNumber(m.n);
+  const len = Math.max(CONTAINER_MIN, linesOf(p) / CONTAINER_PER_TILE);
+  /* A small yellow forklift carrying the container a hand's height off the ground, its forks under it. */
+  const lift = boxSVG({ x: m.x + len / 2 - 0.05, y: m.y - 0.22, w: 0.42, d: 0.44, z: 0.05, h: 0.3 }, "#c9a227") +
+    boxSVG({ x: m.x + len / 2 + 0.17, y: m.y - 0.2, w: 0.2, d: 0.4, z: 0.35, h: 0.28 }, theme === "dark" ? "#2a2c33" : "#5b5f6b");
+  const cargo = containerSVG({ pr: p, x: m.x - 0.1, y: m.y, w: len, d: CONTAINER_W, h: CONTAINER_H, z: 0.18, orient: "x" });
+  return cargo + lift;
+}
+function drawTruck(m) {
+  if (m.kind === "forklift") return drawForklift(m);
+  const p = prByNumber(m.n);
+  const [a, b] = [m.path[Math.min(m.seg, m.path.length - 2)], m.path[Math.min(m.seg + 1, m.path.length - 1)]];
+  const along = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) ? "x" : "y";
+  const sign = along === "x" ? Math.sign(b[0] - a[0]) || 1 : Math.sign(b[1] - a[1]) || 1;
+  const len = Math.max(CONTAINER_MIN, linesOf(p) / CONTAINER_PER_TILE);
+  const L = len + 0.55, W = 0.62;
+  const box = along === "x" ? { x: m.x - L / 2, y: m.y - W / 2, w: L, d: W } : { x: m.x - W / 2, y: m.y - L / 2, w: W, d: L };
+  let s = boxSVG({ ...box, z: 0.05, h: 0.14 }, theme === "dark" ? "#2a2c33" : "#5b5f6b");
+  const cab = along === "x"
+    ? { x: sign > 0 ? box.x + L - 0.48 : box.x, y: box.y + 0.03, w: 0.48, d: W - 0.06 }
+    : { x: box.x + 0.03, y: sign > 0 ? box.y + L - 0.48 : box.y, w: W - 0.06, d: 0.48 };
+  const cargo = along === "x"
+    ? { x: (sign > 0 ? box.x + 0.05 : box.x + 0.53) + len / 2, y: m.y, w: len, d: CONTAINER_W, h: CONTAINER_H, z: 0.19, orient: "x" }
+    : { x: m.x, y: (sign > 0 ? box.y + 0.05 : box.y + 0.53) + len / 2, w: CONTAINER_W, d: len, h: CONTAINER_H, z: 0.19, orient: "y" };
+  const cabFirst = (along === "x" ? sign < 0 : sign < 0);
+  const cabSVG = boxSVG({ ...cab, z: 0.19, h: 0.42 }, C().cab || (theme === "dark" ? "#4f63b8" : "#4a5fc0"), { win: { rows: 1, per: 3, lit: theme === "dark" ? "#cfe6ff" : null, ratio: 1, opacity: 0.7, seed: 2 } });
+  const cargoSVG = containerSVG({ pr: { ...p, state: PR.MERGED }, ...cargo });
+  s += cabFirst ? cabSVG + cargoSVG : cargoSVG + cabSVG;
+  return s;
+}
+function drawMovers() {
+  const g = $("movers");
+  if (!g) return;
+  let s = "";
+  for (const m of movers) s += drawTruck(m);
+  const now = performance.now();
+  for (const b of bursts) {
+    const [px, py] = PR_(b.x, b.y, 0.6);
+    const cols = [css("--state-merged"), css("--state-complete"), css("--danger"), "#ffd9a0"];
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      s += `<circle class="spark" style="--dx:${(Math.cos(a) * 26).toFixed(1)}px;--dy:${(Math.sin(a) * 18 - 14).toFixed(1)}px;animation-delay:${((b.at - now) / 1000).toFixed(2)}s" cx="${px}" cy="${py}" r="2" fill="${cols[k % 4]}"/>`;
+    }
+  }
+  g.innerHTML = s;
+  /* Stand among the objects by depth, so a building in front hides the truck. */
+  if (movers.length) {
+    const d = depthOf(movers[0].x, movers[0].y);
+    const layer = $("layer-objects");
+    let before = null;
+    for (const el of layer.children) { if (el !== g && Number(el.dataset.depth) > d) { before = el; break; } }
+    if (g.nextSibling !== before) layer.insertBefore(g, before);
+  }
+}
+const TRUCK_SPEED = 2.6;
+function tickMovers(dt) {
+  if (!movers.length && !bursts.length) return;
+  for (const m of [...movers]) {
+    let left = (m.speed || TRUCK_SPEED) * dt;
+    while (left > 0 && m.seg < m.path.length - 1) {
+      const b = m.path[m.seg + 1];
+      const d = Math.hypot(b[0] - m.x, b[1] - m.y);
+      if (d <= left) { m.x = b[0]; m.y = b[1]; m.seg += 1; left -= d; }
+      else { m.x += ((b[0] - m.x) / d) * left; m.y += ((b[1] - m.y) / d) * left; left = 0; }
+    }
+    if (m.seg >= m.path.length - 1) { movers.splice(movers.indexOf(m), 1); m.done(); }
+  }
+  const open = movers.some((m) => m.x > BARRIER.x - 1.4 && m.x < BARRIER.x + 1.0);
+  if (open !== gateOpen) { gateOpen = open; const g = $("gate"); if (g) g.innerHTML = gateSVG(gateOpen); }
+  const now = performance.now();
+  for (const b of [...bursts]) if (now - b.at > 1600) bursts.splice(bursts.indexOf(b), 1);
+  drawMovers();
+}
+function notice(words, tone, detail, icon) {
+  pushToast({ words, tone, detail, icon: icon || "factory" });
+}
+
+/* ------------------------------------------------------------------------
+   Drawing.
+   ------------------------------------------------------------------------ */
+const $ = (id) => document.getElementById(id);
+let openId = null;      /* a task id, or "gate", or "shipped" */
+let hotPR = null;
+let hoverTask = null;
+let focusTask = null;
+
+function litFor(task) {
+  if (asking(task)) return { lit: css("--state-attention"), ratio: 0.85 };
+  if (failed(task)) return { lit: css("--danger"), ratio: 0.7 };
+  if (task.id === callTaskId) return { lit: css("--voice-developer"), ratio: 0.95 };
+  if (running(task)) return { lit: css("--state-working"), ratio: 0.85 };
+  /* Nobody at work: a few windows left on, in no state's colour. */
+  return { lit: C().idle, ratio: 0.16, opacity: theme === "dark" ? 0.32 : 0.45 };
+}
+
+function renderGround() {
+  const c = C();
+  let s = boxSVG({ x: 0, y: 0, w: N, d: NY, z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
+  s += boxSVG({ x: N, y: LOT.y - 0.3, w: LOT.x + LOT.w - N + 0.3, d: LOT.d + 0.6, z: -0.6, h: 0.6 }, "slab", { topFill: c.lot });
+  s += flat(0, 9, N, 2, c.road, 0.01) + flat(9, 0, 2, NY, c.road, 0.01) + flat(N, 9, LOT.x - N + 0.2, 2, c.road, 0.01);
+  /* A street before each row the town has grown. */
+  for (let r = 0; r < extraRows(); r++) s += flat(0, ROW0 + r * ROW_STEP - 0.75, N, 0.6, c.road, 0.01);
+  for (let i = 0.4; i < NY; i += 1.2) {
+    if (i > 8.6 && i < 11.4) continue;
+    if (i < N) s += flat(i, 9.96, 0.6, 0.08, c.line, 0.02);
+    s += flat(9.96, i, 0.08, 0.6, c.line, 0.02);
+  }
+  s += flat(9, 9, 2, 2, theme === "dark" ? "#24252c" : "#e2e3e8", 0.015);
+  const [px, py] = PR_(10, 10, 0);
+  s += `<ellipse cx="${px}" cy="${py}" rx="${0.55 * DX * Math.SQRT2}" ry="${0.55 * DY * Math.SQRT2}" fill="${theme === "dark" ? "#2d2f38" : "#d6d8df"}"/>`;
+  /* The gate's yard: paved, its three lanes marked only at their heads. */
+  s += flat(YARD.x, YARD.y, YARD.w, YARD.d, theme === "dark" ? "#1c1d23" : "#e9eaee", 0.012);
+  for (const lane of LANES) s += flat(YARD.x + 0.15, lane.y + LANE_D - 0.04, YARD.w - 0.3, 0.04, c.line, 0.02);
+  s += flat(LOT.x + 0.1, LOT.y + 0.1, LOT.w - 0.2, LOT.d - 0.2, theme === "dark" ? "#1f1d27" : "#ebe8f2", 0.012);
+  $("layer-ground").innerHTML = s;
+}
+
+function renderPlots() {
+  const c = C();
+  let s = "";
+  for (const { task, slot } of placed()) {
+    const [x, y, w, d] = slot.plot;
+    const edge = [PR_(x, y, 0.1), PR_(x + w, y, 0.1), PR_(x + w, y + d, 0.1), PR_(x, y + d, 0.1)];
+    s += `<g class="plot" data-plot="${task.id}">${boxSVG({ x, y, w, d, z: 0, h: 0.1 }, "pad", { topFill: c.pad })}<polygon class="plot-edge" points="${pts(edge)}"/></g>`;
+    /* Light spilling from a building where something is happening. */
+    const tone = taskTone(task);
+    if (theme === "dark" && tone !== "--text-tertiary" && tone !== "--state-merged") {
+      const [gx, gy] = PR_(slot.hollow.x + slot.hollow.w / 2, slot.hollow.y + slot.hollow.d / 2, 0.1);
+      s += `<ellipse cx="${gx}" cy="${gy + 6}" rx="${(slot.hollow.w + slot.hollow.d) * DX * 0.62}" ry="${(slot.hollow.w + slot.hollow.d) * DY * 0.62}" fill="${css(tone)}" opacity="0.07" filter="url(#glow)"/>`;
+    }
+  }
+  {
+  const [x, y, w, d] = slotAt(TASKS.length).plot;
+  const edge = [PR_(x, y, 0.03), PR_(x + w, y, 0.03), PR_(x + w, y + d, 0.03), PR_(x, y + d, 0.03)];
+  const [mx, my] = PR_(x + w / 2, y + d / 2, 0.03);
+  s += `<g class="new-plot" id="new-plot" tabindex="0" role="button" aria-label="New task"><polygon points="${pts(edge)}" fill="transparent"/><polygon class="plot-dash" points="${pts(edge)}"/>` +
+    `<text x="${mx}" y="${my + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="${css("--text-tertiary")}">+ New task</text></g>`;
+  }
+  /* A ring spreads from a plot where something just happened. */
+  for (const { task, slot } of placed()) {
+    if (!fresh.has(`ping:${task.id}`)) continue;
+    const [px, py] = PR_(slot.hollow.x + slot.hollow.w / 2, slot.hollow.y + slot.hollow.d / 2, 0.1);
+    s += `<ellipse class="ping" cx="${px}" cy="${py}" rx="${(slot.hollow.w + slot.hollow.d) * DX * 0.7}" ry="${(slot.hollow.w + slot.hollow.d) * DY * 0.7}" fill="none" stroke="${css(taskTone(task))}" stroke-width="2"/>`;
+  }
+  /* The yards answer a click too: the gate's yard and the shipped lot. */
+  const yardEdge = (r, z) => [PR_(r.x, r.y, z), PR_(r.x + r.w, r.y, z), PR_(r.x + r.w, r.y + r.d, z), PR_(r.x, r.y + r.d, z)];
+  s += `<g class="yard-hit" data-yard="gate" data-card="gate" tabindex="0" role="button" aria-label="Merge gate: ${awaiting().length} open pull requests"><polygon points="${pts(yardEdge(YARD, 0.02))}" fill="transparent"/><polygon class="yard-edge" points="${pts(yardEdge(YARD, 0.02))}"/></g>`;
+  s += `<g class="yard-hit" data-yard="shipped" data-card="shipped" tabindex="0" role="button" aria-label="Shipped: ${merged().length} merged pull requests"><polygon points="${pts(yardEdge(LOT, 0.02))}" fill="transparent"/><polygon class="yard-edge" points="${pts(yardEdge(LOT, 0.02))}"/></g>`;
+  $("layer-plots").innerHTML = s;
+}
+
+function renderShadows() {
+  let s = "";
+  for (const { task, slot } of placed()) {
+    for (const p of slot.parts(litFor(task))) {
+      if (p.box && (p.box.z || 0) === 0) s += shadowSVG(p.box);
+      if (p.cyl && p.solid) s += shadowCyl(p.cyl[0], p.cyl[1], p.cyl[2], p.cyl[4]);
+    }
+  }
+  for (const c of cratePositions()) if (!c.z) s += shadowSVG({ x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, d: c.d, z: 0, h: c.h });
+  for (const [x, y] of TREES) if (y < NY - 0.4 && !placed().some(({ slot }) => { const [px, py, pw, pd] = slot.plot; return x > px - 0.3 && x < px + pw + 0.3 && y > py - 0.3 && y < py + pd + 0.3; })) s += shadowCyl(x, y, 0.3, 1.1);
+  s += shadowSVG({ ...GATEHOUSE, z: 0, h: 1 });
+  $("layer-shadows").innerHTML = s;
+}
+
+function treeSVG(x, y) {
+  const c = C();
+  const [bx, by] = PR_(x, y, 0);
+  const [tx, ty] = PR_(x, y, 1.25);
+  const r = 0.34 * DX * Math.SQRT2;
+  return `<line x1="${bx}" y1="${by}" x2="${bx}" y2="${by - 10}" stroke="${c.trunk}" stroke-width="2.4" stroke-linecap="round"/>` +
+    `<path d="M${tx},${ty} L${bx - r},${by - 7} Q${bx},${by - 2} ${bx},${by - 2} Z" fill="${c.tree}"/>` +
+    `<path d="M${tx},${ty} L${bx + r},${by - 7} Q${bx},${by - 2} ${bx},${by - 2} Z" fill="${c.tree2}"/>`;
+}
+function lampSVG(x, y) {
+  const c = C();
+  const [bx, by] = PR_(x, y, 0);
+  const [, ty] = PR_(x, y, 1.1);
+  const pool = theme === "dark" ? `<ellipse cx="${bx}" cy="${by}" rx="${1.3 * DX}" ry="${1.3 * DY}" fill="url(#pool)"/>` : "";
+  return `${pool}<line x1="${bx}" y1="${by}" x2="${bx}" y2="${ty}" stroke="${c.metal}" stroke-width="1.4"/><circle cx="${bx}" cy="${ty}" r="2.4" fill="${theme === "dark" ? c.lamp : c.metal}" ${theme === "dark" ? 'filter="url(#glow)"' : ""}/>`;
+}
+
+/* Inside, with the roof off: a desk for every agent the task counts, with no cap. */
+function figure(x, y, color, dashed) {
+  const [bx, by] = PR_(x, y, 0);
+  const st = dashed ? `fill="none" stroke="${color}" stroke-width="1" stroke-dasharray="2 1.5"` : `fill="${color}"`;
+  return `<ellipse cx="${bx}" cy="${by}" rx="5" ry="2.6" fill="rgba(0,0,0,0.22)"/>` +
+    `<path d="M${bx - 4.2},${by} L${bx - 3.4},${by - 11} Q${bx},${by - 14} ${bx + 3.4},${by - 11} L${bx + 4.2},${by} Q${bx},${by + 2} ${bx - 4.2},${by} Z" ${st}/>` +
+    `<circle cx="${bx}" cy="${by - 17}" r="4.2" ${st}/>`;
+}
+function agentTag(x, y, z, text) {
+  const [px, py] = PR_(x, y, z);
+  const wd = textWidth(text, 7, 600) + 8;
+  return `<g class="agent-tag" transform="translate(${px.toFixed(1)},${py.toFixed(1)})"><rect x="${-wd / 2}" y="-6" width="${wd}" height="11" rx="3.5" stroke-width="0.6"/><text x="0" y="2.2" text-anchor="middle">${text}</text></g>`;
+}
+function agentTone(agent) {
+  if (INBOX.some((i) => i.agentId === agent.id)) return "--state-attention";
+  if (agent.status === AGENT.RUNNING || agent.status === AGENT.STARTING) return "--state-working";
+  if (agent.status === AGENT.FAILED) return "--danger";
+  return null;
+}
+/* Inside, with the roof off: the task's whole agent list, as opening it reads
+   it, in one of two layouts the page's header switches between. */
+let insideStyle = "desks";
+const shortTitle = (a) => { const t = a.title || a.model; return t.length > 22 ? `${t.slice(0, 21)}…` : t; };
+function bubble(x, y, z, dx = 16) {
+  const [qx, qy] = PR_(x, y, z);
+  return `<g class="loop bubble"><circle cx="${qx + dx}" cy="${qy - 4}" r="8" fill="${css("--attention-mark-ground")}"/><text x="${qx + dx}" y="${qy}" text-anchor="middle" font-size="11" font-weight="800" fill="#fff">?</text></g>`;
+}
+function insideSVG(task, slot) {
+  const hb = slot.hollow;
+  if (task.id === callTaskId && task.agentList.length === 0) {
+    const cx = hb.x + hb.w / 2, cy = hb.y + hb.d / 2;
+    return cylSVG(cx, cy, 0.5, 0, 0.3, "deskTop") +
+      figure(cx - 0.6, cy + 0.3, css("--workspace-hue-1")) + agentTag(cx - 0.6, cy + 0.3, 1.05, "You") +
+      figure(cx + 0.6, cy - 0.3, theme === "dark" ? "#e8eaf0" : "#2a2a30") + agentTag(cx + 0.6, cy - 0.3, 1.05, "Luke");
+  }
+  if (!task.agentList.length) return "";
+  return insideStyle === "line" ? lineInside(task, slot) : desksInside(task, slot);
+}
+/* Desks: a desk per agent, its screen saying how the agent stands, and the task's pull requests pinned to the back wall. */
+function desksInside(task, slot) {
+  const c = C();
+  const hb = slot.hollow;
+  const agents = task.agentList;
+  const n = agents.length;
+  let s = "";
+  /* The back wall's board: a card per pull request, in its state's colour. */
+  const t = turnBox({ ...hb, z: 0 });
+  task.prList.slice(0, 6).forEach((p, k) => {
+    const u = 0.25 + k * 0.42;
+    if (u + 0.3 > t.x1 - t.x0) return;
+    const tone = p.state === PR.MERGED ? "--state-merged" : p.checks === CHECKS.FAILING ? "--danger" : p.checks === CHECKS.PENDING ? "--state-attention" : "--state-complete";
+    s += poly([P(t.x0 + u, t.y0 + 0.01, hb.h * 0.45), P(t.x0 + u + 0.3, t.y0 + 0.01, hb.h * 0.45), P(t.x0 + u + 0.3, t.y0 + 0.01, hb.h * 0.45 + 0.22), P(t.x0 + u, t.y0 + 0.01, hb.h * 0.45 + 0.22)], css(tone), 'opacity="0.85"');
+  });
+  const cols = Math.max(1, Math.ceil(Math.sqrt((n * hb.w) / hb.d)));
+  const rows = Math.ceil(n / cols);
+  const cw = hb.w / cols, rh = hb.d / rows;
+  const desks = agents.map((a, i) => ({ a, x: hb.x + cw * ((i % cols) + 0.5), y: hb.y + rh * (Math.floor(i / cols) + 0.4) }));
+  desks.sort((p, q) => depthOf(p.x, p.y) - depthOf(q.x, q.y));
+  const dw = Math.min(0.7, cw * 0.6), dd = Math.min(0.44, rh * 0.35);
+  for (const { a, x, y } of desks) {
+    const tone = agentTone(a);
+    const done = a.status === AGENT.COMPLETED || a.status === AGENT.CANCELLED;
+    s += boxSVG({ x: x - dw / 2, y: y - dd / 2, w: dw, d: dd, z: 0, h: 0.3 }, "deskTop");
+    s += boxSVG({ x: x - dw * 0.42, y: y - dd / 2, w: dw * 0.84, d: 0.05, z: 0.3, h: 0.32 }, "metal", { topFill: c.unlit });
+    /* The screen: lines scrolling while it works, a mark when it asks or fails, a quiet tick when its turn ended. */
+    const [sx, sy] = PR_(x, y - dd / 2 + 0.06, 0.47);
+    const screen = tone ? css(tone) : theme === "dark" ? "#2c2e36" : "#c5c8d0";
+    s += `<rect x="${sx - 9}" y="${sy - 6}" width="18" height="9" rx="1" fill="${screen}" opacity="${tone ? 0.9 : 0.6}" ${tone && theme === "dark" ? 'filter="url(#glow)"' : ""}/>`;
+    if (a.status === AGENT.RUNNING) for (let k = 0; k < 3; k++) s += `<rect class="loop screen" style="animation-delay:${-k * 0.4}s" x="${sx - 7}" y="${sy - 4.5 + k * 2.6}" width="${8 + ((k * 5) % 7)}" height="1.2" fill="#fff" opacity="0.7"/>`;
+    else if (a.status === AGENT.FAILED) s += `<text x="${sx}" y="${sy + 1.5}" text-anchor="middle" font-size="8" font-weight="800" fill="#fff">!</text>`;
+    else if (done) s += `<path d="M${sx - 3},${sy - 1.5} l2,2 l4,-4" fill="none" stroke="${css("--text-tertiary")}" stroke-width="1.2"/>`;
+    const fy = y + dd / 2 + Math.min(0.3, rh * 0.25);
+    s += `<g opacity="${done ? 0.55 : 1}">${figure(x, fy, "#d97757")}</g>`;
+    /* Only an agent still at it is named over its desk; the rest are in the pane, so a full hall doesn't stack labels. */
+    if (!done) s += agentTag(x, fy, 1.05, shortTitle(a));
+    if (INBOX.some((i) => i.agentId === a.id)) s += bubble(x, fy, 1.6);
+  }
+  return s;
+}
+/* An assembly line: a belt through the hall, a station per agent along it,
+   moving where its agent works; the task's open pull requests wait packed at
+   the belt's end, by the door they leave through for the gate. */
+function lineInside(task, slot) {
+  const c = C();
+  const hb = slot.hollow;
+  const agents = task.agentList;
+  const alongX = hb.w >= hb.d;
+  const len = (alongX ? hb.w : hb.d) - 0.5;
+  const start = alongX ? hb.x + 0.25 : hb.y + 0.25;
+  const mid = alongX ? hb.y + hb.d / 2 : hb.x + hb.w / 2;
+  const at = (u, v) => (alongX ? [start + u, mid + v] : [mid + v, start + u]);
+  const belt = (u0, u1) => (alongX ? { x: start + u0, y: mid - 0.16, w: u1 - u0, d: 0.32 } : { x: mid - 0.16, y: start + u0, w: 0.32, d: u1 - u0 });
+  const packLen = Math.min(0.9, len * 0.25);
+  const stLen = (len - packLen) / Math.max(1, agents.length);
+  const s = "";
+  const items = [];
+  agents.forEach((a, i) => {
+    const u0 = i * stLen, u1 = (i + 1) * stLen;
+    const tone = agentTone(a);
+    const working = a.status === AGENT.RUNNING;
+    const b = belt(u0, u1);
+    items.push({ d: depthOf(b.x + b.w / 2, b.y + b.d / 2) - 0.2, svg: (() => {
+      let g = boxSVG({ ...b, z: 0, h: 0.2 }, theme === "dark" ? "#2a2c33" : "#9a9eaa");
+      const [p0, p1] = [at(u0 + 0.05, 0), at(u1 - 0.05, 0)];
+      const [ax, ay] = PR_(p0[0], p0[1], 0.21), [bx, by] = PR_(p1[0], p1[1], 0.21);
+      g += `<line class="${working ? "loop belt" : ""}" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${theme === "dark" ? "#6b6f7c" : "#e8e9ee"}" stroke-width="3" stroke-dasharray="3 3"/>`;
+      if (working) { const [px, py] = at((u0 + u1) / 2, 0); g += boxSVG({ x: px - 0.12, y: py - 0.12, w: 0.24, d: 0.24, z: 0.2, h: 0.18 }, "crate"); }
+      return g;
+    })() });
+    const side = i % 2 === 0 ? -1 : 1;
+    const [mx, my] = at((u0 + u1) / 2, side * 0.55);
+    const m = { x: mx - 0.2, y: my - 0.2, w: 0.4, d: 0.4 };
+    let g = boxSVG({ ...m, z: 0, h: 0.5 }, a.status === AGENT.FAILED ? "wall2" : "metal");
+    const [lx, ly] = PR_(mx, my, 0.62);
+    g += `<line x1="${PR_(mx, my, 0.5)[0]}" y1="${PR_(mx, my, 0.5)[1]}" x2="${lx}" y2="${ly}" stroke="${c.metal}" stroke-width="1.4"/>`;
+    g += `<circle class="${working || INBOX.some((q) => q.agentId === a.id) ? "loop pulse" : ""}" cx="${lx}" cy="${ly}" r="3.4" fill="${tone ? css(tone) : c.unlit}" ${tone ? 'filter="url(#glow)"' : ""}/>`;
+    const [bx2, by2] = at((u0 + u1) / 2, side * 0.18);
+    const [ax2, ay2] = PR_(mx, my, 0.45), [tx2, ty2] = PR_(bx2, by2, 0.4);
+    g += `<line x1="${ax2}" y1="${ay2}" x2="${tx2}" y2="${ty2}" stroke="#d97757" stroke-width="2.2" stroke-linecap="round"/>`;
+    g += agentTag(mx, my, 1.15, shortTitle(a));
+    if (INBOX.some((q) => q.agentId === a.id)) g += bubble(mx, my, 1.4, 22);
+    items.push({ d: depthOf(mx, my), svg: g });
+  });
+  /* The end of the line: the task's open pull requests, packed and waiting by the door. */
+  const open = task.prList.filter((p) => p.state === PR.OPEN);
+  const [ex, ey] = at(len - packLen / 2, 0);
+  let pack = boxSVG({ x: ex - 0.35, y: ey - 0.35, w: 0.7, d: 0.7, z: 0, h: 0.06 }, "crate");
+  open.slice(0, 3).forEach((p, k) => {
+    const w = Math.min(0.6, Math.max(0.25, linesOf(p) / 400));
+    pack += containerSVG({ pr: p, x: ex, y: ey, w: alongX ? 0.3 : w, d: alongX ? w : 0.3, h: 0.22, z: 0.06 + k * 0.22, orient: alongX ? "y" : "x" });
+  });
+  items.push({ d: depthOf(ex, ey), svg: pack });
+  items.sort((p, q) => p.d - q.d);
+  return s + items.map((it) => it.svg).join("");
+}
+function cutawaySVG(task, slot) {
+  const c = C();
+  const t = turnBox({ ...slot.hollow, z: 0 });
+  const { x0, x1, y0, y1 } = t;
+  const h = slot.hollow.h;
+  const mat = c[slot.hollow.mat] || c.wall;
+  let s = poly([P(x0, y0, 0.03), P(x1, y0, 0.03), P(x1, y1, 0.03), P(x0, y1, 0.03)], c.floor);
+  s += poly([P(x0, y0, 0), P(x0, y1, 0), P(x0, y1, h), P(x0, y0, h)], shade(mat, FX));
+  s += poly([P(x0, y0, 0), P(x1, y0, 0), P(x1, y0, h), P(x0, y0, h)], shade(mat, FY));
+  s += insideSVG(task, slot);
+  const cut = 0.28;
+  s += poly([P(x1, y0, 0), P(x1, y1, 0), P(x1, y1, cut), P(x1, y0, cut)], shade(mat, FX));
+  s += poly([P(x0, y1, 0), P(x1, y1, 0), P(x1, y1, cut), P(x0, y1, cut)], shade(mat, FY));
+  s += `<polyline points="${pts([P(x1, y0, cut), P(x1, y1, cut), P(x0, y1, cut)])}" fill="none" stroke="${theme === "dark" ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.15)"}" stroke-width="1.2"/>`;
+  return s;
+}
+
+/* What a roof says. */
+function roofSignals(task, slot) {
+  const c = C();
+  let s = "";
+  const [rx, ry, rz] = slot.roof;
+  const [px, py] = PR_(rx, ry, rz);
+  if (asking(task)) {
+    const col = css("--state-attention");
+    s += `<line x1="${px}" y1="${py + 14}" x2="${px}" y2="${py}" stroke="${c.metal}" stroke-width="2"/>` +
+      `<ellipse class="loop beacon-ring" cx="${px}" cy="${py}" rx="9" ry="9" fill="none" stroke="${col}" stroke-width="2"/>` +
+      `<ellipse class="loop beacon-ring" style="animation-delay:-0.8s" cx="${px}" cy="${py}" rx="9" ry="9" fill="none" stroke="${col}" stroke-width="2"/>` +
+      `<circle cx="${px}" cy="${py}" r="5.5" fill="${col}" filter="url(#glow)"/>`;
+  } else if (task.id === callTaskId) {
+    const col = css("--voice-developer");
+    s += `<circle cx="${px}" cy="${py}" r="3.2" fill="${col}" filter="url(#glow)"/>`;
+    for (let i = 0; i < 3; i++) s += `<ellipse class="loop wave" style="animation-delay:${-i * 0.8}s" cx="${px}" cy="${py}" rx="26" ry="13" fill="none" stroke="${col}" stroke-width="1.6"/>`;
+  } else if (failed(task)) {
+    s += `<circle class="loop pulse" cx="${px}" cy="${py}" r="5" fill="${css("--danger")}" filter="url(#glow)"/>`;
+  } else if (shippedAll(task) && !running(task)) {
+    const col = css("--state-merged");
+    s += `<line x1="${px}" y1="${py}" x2="${px}" y2="${py - 34}" stroke="${c.metal}" stroke-width="1.6"/><path class="loop flag" d="M${px},${py - 34} l18,4 l-18,6 Z" fill="${col}"/>`;
+  }
+  if (running(task) && slot.stack) {
+    const [sx, sy] = PR_(...slot.stack);
+    for (let i = 0; i < 5; i++) s += `<circle class="loop smoke" style="animation-delay:${-i * 0.96}s" cx="${sx}" cy="${sy}" r="5" fill="${c.smoke}" opacity="0"/>`;
+  }
+  return `<g class="fx-roof">${s}</g>`;
+}
+let craneAngle = 0.6;
+function craneSVG(cr) {
+  const c = C();
+  const [mx, my] = cr.at;
+  let s = boxSVG({ x: mx - 0.09, y: my - 0.09, w: 0.18, d: 0.18, z: 0, h: cr.h }, "#c9a227");
+  const [tx, ty] = PR_(mx, my, cr.h);
+  const tip = [mx + Math.cos(craneAngle) * cr.jib, my + Math.sin(craneAngle) * cr.jib];
+  const back = [mx - Math.cos(craneAngle) * 1.1, my - Math.sin(craneAngle) * 1.1];
+  const [ax, ay] = PR_(tip[0], tip[1], cr.h + 0.1);
+  const [bx, by] = PR_(back[0], back[1], cr.h + 0.1);
+  const tr = [mx + Math.cos(craneAngle) * cr.jib * 0.7, my + Math.sin(craneAngle) * cr.jib * 0.7];
+  const [hx, hy] = PR_(tr[0], tr[1], cr.h + 0.1);
+  const [lx, ly] = PR_(tr[0], tr[1], cr.h - 1.6);
+  s += `<line x1="${bx}" y1="${by}" x2="${ax}" y2="${ay}" stroke="#e0b42e" stroke-width="3" stroke-linecap="round"/>`;
+  s += `<line x1="${tx}" y1="${ty - 14}" x2="${ax}" y2="${ay}" stroke="#e0b42e" stroke-width="0.8"/><line x1="${tx}" y1="${ty - 14}" x2="${bx}" y2="${by}" stroke="#e0b42e" stroke-width="0.8"/>`;
+  s += `<line x1="${tx}" y1="${ty}" x2="${tx}" y2="${ty - 14}" stroke="#e0b42e" stroke-width="2"/>`;
+  s += `<rect x="${bx - 5}" y="${by - 2}" width="10" height="7" fill="${c.metal}"/>`;
+  s += `<line x1="${hx}" y1="${hy}" x2="${lx}" y2="${ly}" stroke="${c.metal}" stroke-width="0.8"/><rect x="${lx - 6}" y="${ly}" width="12" height="7" fill="${c.crate}"/>`;
+  return s;
+}
+function scaffoldSVG(hb) {
+  const col = theme === "dark" ? "#8a7a4a" : "#b89a52";
+  const { x, y, w, d, h } = hb;
+  const corners = [[x - 0.1, y - 0.1], [x + w + 0.1, y - 0.1], [x + w + 0.1, y + d + 0.1], [x - 0.1, y + d + 0.1]];
+  let s = "";
+  for (const [px, py] of corners) { const [a, b] = PR_(px, py, 0); const [, e] = PR_(px, py, h + 0.6); s += `<line x1="${a}" y1="${b}" x2="${a}" y2="${e}" stroke="${col}" stroke-width="1.2"/>`; }
+  for (const f of [0.5, 0.85]) s += `<polygon points="${pts(corners.map(([px, py]) => PR_(px, py, (h + 0.6) * f)))}" fill="none" stroke="${col}" stroke-width="1"/>`;
+  return s;
+}
+
+function buildingSVG(task, slot) {
+  const lit = litFor(task);
+  const items = [];
+  for (const p of slot.parts(lit)) {
+    const svg = p.box ? boxSVG(p.box, p.mat, { win: p.win, stripe: p.stripe }) : cylSVG(...p.cyl, { bands: p.bands });
+    const z = p.box ? p.box.z || 0 : p.cyl[3];
+    const [cx, cy] = p.box ? [p.box.x + p.box.w / 2, p.box.y + p.box.d / 2] : [p.cyl[0], p.cyl[1]];
+    items.push({ z, depth: depthOf(cx, cy), svg, role: p.role });
+  }
+  const crane = underway(task) && slot.crane;
+  if (crane) items.push({ z: 0, depth: depthOf(...slot.crane.at), svg: "", role: "crane" });
+  items.sort((p, q) => p.z - q.z || p.depth - q.depth);
+  let body = "";
+  let cutDone = false;
+  for (const it of items) {
+    if (it.role === "shell" && !cutDone) { body += `<g class="cut">${cutawaySVG(task, slot)}</g>`; cutDone = true; }
+    if (it.role === "crane") { body += `<g class="upper" data-crane="${task.id}">${craneSVG(slot.crane)}</g>`; continue; }
+    body += `<g class="${it.role === "shell" ? "shell" : it.role === "upper" ? "upper" : "keep"}">${it.svg}</g>`;
+  }
+  if (underway(task)) body += `<g class="upper">${scaffoldSVG(slot.hollow)}</g>`;
+  return `<g class="lift">${body}${roofSignals(task, slot)}</g>`;
+}
+
+
+/* A pull request's container, with its outline and its name. */
+function crateSVG(c) {
+  const s = containerSVG(c);
+  const b = { x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, d: c.d };
+  const t = turnBox({ ...b, z: 0, h: c.h });
+  const z0 = c.z || 0, z1 = z0 + c.h;
+  const outline = hull([[t.x0, t.y0, z0], [t.x1, t.y0, z0], [t.x1, t.y1, z0], [t.x0, t.y1, z0], [t.x0, t.y0, z1], [t.x1, t.y0, z1], [t.x1, t.y1, z1], [t.x0, t.y1, z1]].map(([a, bb, z]) => P(a, bb, z)));
+  const taskId = c.unknown ? c.taskId : c.pr.taskId;
+  const name = c.unknown
+    ? `Another pull request of ${byId[taskId].name}, past the three the Factory's list carries; open the task to see it`
+    : `Pull request #${c.pr.number}, ${c.pr.title}: ${c.pr.additions} additions, ${c.pr.deletions} deletions`;
+  const key = c.unknown ? `u-${taskId}-${c.k}` : String(c.pr.number);
+  return `<g class="crate" ${!c.unknown && fresh.has(`drop:${c.pr.number}`) ? 'data-fresh="drop"' : ""} data-crate="${key}" data-card="${c.unknown ? `unknown:${taskId}` : `pr:${c.pr.number}`}" data-task="${taskId}" data-where="${c.where}" tabindex="0" role="button" aria-label="${name}">${s}<polygon class="crate-edge" points="${pts(outline)}"/></g>`;
+}
+const DASHED = () => `stroke="${css("--text-tertiary")}" stroke-width="0.9" stroke-dasharray="2.5 2"`;
+function unknownMark(c) {
+  const [qx, qy] = PR_(c.x, c.y, (c.z || 0) + c.h);
+  return `<text x="${qx}" y="${qy + 3}" text-anchor="middle" font-size="8" font-weight="800" fill="${css("--text-secondary")}">?</text>`;
+}
+/* Containers: a steel box as long as the change, its diff a painted band along its side. */
+function containerSVG(c) {
+  const z = c.z || 0;
+  const b = { x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, d: c.d, z, h: c.h };
+  if (c.unknown) return boxSVG(b, "unknown", { edge: DASHED() }) + unknownMark(c);
+  const merged = c.pr.state === PR.MERGED;
+  const body = merged ? (theme === "dark" ? "#5f5675" : "#b9b0cf") : theme === "dark" ? "#555b69" : "#c3c7d1";
+  let s = boxSVG(b, body);
+  const along = c.orient === "y" ? "y" : "x";
+  const share = c.pr.additions / linesOf(c.pr);
+  /* The long side the viewer sees, in the campus's own axes: its corrugations, then the band. */
+  const t = turnBox(b);
+  const faceX = along === "x" ? (rot % 2 === 0) : (rot % 2 === 1);
+  const seg = (u0, u1, za, zb) => {
+    /* u runs along the container's length in the turned view's face. */
+    if (faceX) return [P(t.x0 + u0, t.y1, za), P(t.x0 + u1, t.y1, za), P(t.x0 + u1, t.y1, zb), P(t.x0 + u0, t.y1, zb)];
+    return [P(t.x1, t.y0 + u0, za), P(t.x1, t.y0 + u1, za), P(t.x1, t.y0 + u1, zb), P(t.x1, t.y0 + u0, zb)];
+  };
+  const faceLen = faceX ? t.x1 - t.x0 : t.y1 - t.y0;
+  for (let u = 0.09; u < faceLen - 0.04; u += 0.11) {
+    const q = seg(u, u, z + 0.04, z + c.h - 0.04);
+    s += `<line x1="${q[0][0]}" y1="${q[0][1]}" x2="${q[3][0]}" y2="${q[3][1]}" stroke="rgba(0,0,0,${theme === "dark" ? 0.28 : 0.12})" stroke-width="0.7"/>`;
+  }
+  /* Whether the band starts with additions at the near or far end depends on the turn; keep additions first along the length. */
+  const flip = (along === "x" && (rot === 2 || rot === 3)) || (along === "y" && (rot === 1 || rot === 2));
+  const ua = flip ? faceLen * (1 - share) : 0;
+  const addSeg = flip ? [ua, faceLen] : [0, faceLen * share];
+  const delSeg = flip ? [0, ua] : [faceLen * share, faceLen];
+  const za = z + c.h * 0.36, zb = z + c.h * 0.56;
+  s += poly(seg(addSeg[0], addSeg[1], za, zb), css("--state-complete"), 'opacity="0.95"');
+  s += poly(seg(delSeg[0], delSeg[1], za, zb), css("--danger"), 'opacity="0.95"');
+  return s;
+}
+function laneLampSVG(lane) {
+  const [gx, gy] = PR_(YARD.x + 0.35, lane.y + LANE_D / 2, 0);
+  const [px, py] = PR_(YARD.x + 0.35, lane.y + LANE_D / 2, 0.85);
+  const has = awaiting().some((p) => p.checks === lane.checks);
+  const col = has ? css(lane.tone) : C().unlit;
+  return `<line x1="${gx}" y1="${gy}" x2="${px}" y2="${py}" stroke="${C().metal}" stroke-width="1.6"/><circle class="${has && lane.checks === CHECKS.PENDING ? "loop pulse" : ""}" cx="${px}" cy="${py}" r="3.6" fill="${col}" ${has ? 'filter="url(#glow)"' : ""}/>`;
+}
+function gateSVG(open) {
+  const c = C();
+  let s = boxSVG({ ...GATEHOUSE, z: 0, h: 1 }, "wall", { win: { rows: 1, per: 1.4, lit: theme === "dark" ? c.lamp : null, ratio: 1, opacity: 0.6, seed: 4 } });
+  s += boxSVG({ x: GATEHOUSE.x - 0.08, y: GATEHOUSE.y - 0.08, w: GATEHOUSE.w + 0.16, d: GATEHOUSE.d + 0.16, z: 1, h: 0.1 }, "roof");
+  /* The barrier is down: merging happens on GitHub, not here. */
+  /* Lowered, or raised for a moment while a merged pull request's truck goes through. */
+  const [ax, ay] = PR_(BARRIER.x, BARRIER.y, 0.62);
+  const [bx, by] = open ? PR_(BARRIER.x, BARRIER.y + 0.15, 0.62 + BARRIER.d) : PR_(BARRIER.x, BARRIER.y + BARRIER.d, 0.62);
+  const [px, py] = PR_(BARRIER.x, BARRIER.y, 0);
+  s += `<line x1="${px}" y1="${py}" x2="${ax}" y2="${ay}" stroke="${c.metal}" stroke-width="2.2"/>`;
+  s += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${c.barrier}" stroke-width="3" stroke-linecap="round"/><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${css("--danger")}" stroke-width="3" stroke-dasharray="6 6"/>`;
+  return s;
+}
+function lotFlagSVG() {
+  const [px, py] = PR_(LOT.x + LOT.w - 0.4, LOT.y + 0.4, 0);
+  return `<line x1="${px}" y1="${py}" x2="${px}" y2="${py - 46}" stroke="${C().metal}" stroke-width="1.6"/><path class="loop flag" d="M${px},${py - 46} l20,4 l-20,7 Z" fill="${css("--state-merged")}"/>`;
+}
+
+function renderObjects() {
+  const list = [];
+  for (const { task, slot } of placed()) {
+    const [x, y, w, d] = slot.plot;
+    const label = `${task.name}: ${statusLine(task)}`;
+    list.push({ depth: depthOf(x + w / 2, y + d / 2), svg: `<g class="bldg" data-id="${task.id}" data-card="task:${task.id}" ${fresh.has(`rise:${task.id}`) ? 'data-fresh="rise"' : ""} tabindex="0" role="button" aria-label="${label}" ${openId === task.id ? "data-open" : ""}>${buildingSVG(task, slot)}</g>` });
+  }
+  for (const c of cratePositions()) list.push({ depth: depthOf(c.x, c.y) + (c.z || 0) * 0.5, svg: crateSVG(c) });
+  const used = placed().map((p) => p.slot.plot).concat([slotAt(TASKS.length).plot]);
+  const clear = ([x, y]) => y < NY - 0.4 && !used.some(([px, py, pw, pd]) => x > px - 0.3 && x < px + pw + 0.3 && y > py - 0.3 && y < py + pd + 0.3);
+  for (const [x, y] of TREES.filter(clear)) list.push({ depth: depthOf(x, y), svg: treeSVG(x, y) });
+  for (const [x, y] of LAMPS.filter(clear)) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) });
+  for (let r = 0; r < extraRows(); r++) for (const x of [8.7, 11.3]) { const y = ROW0 + r * ROW_STEP - 1.0; if (y < NY) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) }); }
+  for (const lane of LANES) list.push({ depth: depthOf(YARD.x + 0.35, lane.y + LANE_D / 2), svg: laneLampSVG(lane) });
+  list.push({ depth: depthOf(GATEHOUSE.x + 0.4, GATEHOUSE.y + 0.4), svg: `<g id="gate">${gateSVG(gateOpen)}</g>` });
+  list.push({ depth: depthOf(LOT.x + LOT.w - 0.4, LOT.y + 0.4), svg: lotFlagSVG() });
+  list.sort((a, b) => a.depth - b.depth);
+  $("layer-objects").innerHTML = `${list.map((i) => `<g data-depth="${i.depth.toFixed(3)}">${i.svg}</g>`).join("")}<g id="movers"></g>`;
+  /* What just happened is drawn arriving once, then never again. */
+  for (const k of [...fresh]) if (!k.startsWith("ping:")) fresh.delete(k);
+  drawMovers();
+}
+function statusLine(t) {
+  if (asking(t)) return "asked you a question";
+  if (failed(t)) return "an agent failed";
+  if (t.id === callTaskId) return "on this Mac's call";
+  if (underway(t)) return "going up";
+  if (running(t)) return "at work";
+  if (shippedAll(t)) return "shipped";
+  if (t.pullRequests.named.some((p) => p.state === PR.OPEN)) return "at the gate";
+  return "quiet";
+}
+
+/* Names: one line, the state's dot, over each roof. */
+function tagSVG(id, x, y, text, tone) {
+  const width = textWidth(text, 12, 500) + (tone ? 26 : 14);
+  return `<g class="tag" data-tag="${id}" data-anchor="${x.toFixed(1)},${y.toFixed(1)}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})">` +
+    `<rect x="${-width / 2}" y="-25" width="${width}" height="19" rx="5"/>` +
+    (tone ? `<circle cx="${-width / 2 + 10}" cy="-15.5" r="3.5" fill="${css(tone)}"/>` : "") +
+    `<text x="${-width / 2 + (tone ? 18 : 7)}" y="-11.5">${text}</text></g>`;
+}
+function renderTags() {
+  let s = "";
+  for (const { task, slot } of placed()) {
+    const [rx, ry, rz] = slot.roof;
+    const lift = task.id === callTaskId ? 1.6 : asking(task) ? 1.1 : shippedAll(task) ? 1.5 : 0.35;
+    const [x, y] = PR_(rx, ry, rz + lift + (underway(task) ? 1.4 : 0));
+    /* A big town names only the buildings where something is happening; the rest answer a hover. */
+    const quiet = ["--text-tertiary", "--state-merged"].includes(taskTone(task));
+    if (TASKS.length > 12 && quiet && openId !== task.id) continue;
+    s += tagSVG(task.id, x, y, task.name, taskTone(task));
+  }
+  const [gx, gy] = PR_(GATEHOUSE.x + GATEHOUSE.w / 2, GATEHOUSE.y + GATEHOUSE.d / 2, 1.5);
+  s += tagSVG("gate", gx, gy, "Merge gate", null);
+  const [lx, ly] = PR_(LOT.x + LOT.w / 2, LOT.y + LOT.d, -0.2);
+  s += tagSVG("shipped", lx, ly + 34, "Shipped", "--state-merged");
+  $("layer-tags").innerHTML = s;
+  applyTagScale();
+}
+const canvas = document.createElement("canvas").getContext("2d");
+function textWidth(t, size, weight) { canvas.font = `${weight} ${size}px -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif`; return canvas.measureText(t).width; }
+
+/* A dashed path on the ground from a task's door to each of its crates, while either is pointed at or open. */
+function renderRoutes() {
+  const ids = new Set([hoverTask, hotPR?.taskId, openId].filter(Boolean));
+  let s = "";
+  for (const { task, slot } of placed()) {
+    if (!ids.has(task.id)) continue;
+    const [x, y, w, d] = slot.plot;
+    const door = [x + w / 2, y + d / 2];
+    for (const c of cratePositions()) {
+      if (c.unknown || c.pr.taskId !== task.id) continue;
+      const line = [door, [10, door[1]], [10, 10], [c.where === "gate" ? 13 : LOT.x, 10], [c.x, c.y]].map(([a, b]) => PR_(a, b, 0.04));
+      s += `<polyline class="route" points="${pts(line)}" stroke="${css(taskTone(task))}"/>`;
+    }
+  }
+  $("layer-routes").innerHTML = s;
+}
+
+function renderAll() {
+  measureTown();
+  gradients.clear();
+  queueMicrotask(() => { for (const k of [...fresh]) if (k.startsWith("ping:")) fresh.delete(k); });
+  for (const g of document.querySelectorAll("#scene defs linearGradient")) g.remove();
+  renderGround(); renderPlots(); renderShadows(); renderObjects(); renderTags(); renderRoutes();
+  syncMarks();
+}
+
+/* ------------------------------------------------------------------------
+   The camera: ephemeral, as is everything a view holds.
+   ------------------------------------------------------------------------ */
+const cam = { x: 0, y: 0, s: 1 };
+let lastSize = null;
+function sceneBounds() {
+  const corners = [[0, 0], [N, 0], [N, NY], [0, NY], [LOT.x + LOT.w, LOT.y], [LOT.x + LOT.w, LOT.y + LOT.d]].map(([x, y]) => PR_(x, y, 0));
+  const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys) - 4.4 * DZ, y1: Math.max(...ys) + 1.5 * DZ };
+}
+function applyTagScale() {
+  const k = 1 / cam.s;
+  for (const t of document.querySelectorAll(".tag")) t.setAttribute("transform", `translate(${t.dataset.anchor}) scale(${k.toFixed(4)})`);
+}
+function applyCamera(instant) {
+  const g = $("camera");
+  g.toggleAttribute("data-instant", !!instant);
+  g.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`;
+  applyTagScale();
+  if (instant) requestAnimationFrame(() => g.removeAttribute("data-instant"));
+}
+function baseScale() {
+  const st = $("stage").getBoundingClientRect();
+  const b = sceneBounds();
+  return Math.min((st.width - 80) / (b.x1 - b.x0), (st.height - 110) / (b.y1 - b.y0));
+}
+function fitCampus(instant) {
+  const st = $("stage").getBoundingClientRect();
+  lastSize = st;
+  const b = sceneBounds();
+  cam.s = baseScale();
+  cam.x = st.width / 2 - ((b.x0 + b.x1) / 2) * cam.s;
+  cam.y = (st.height - 40) / 2 - ((b.y0 + b.y1) / 2) * cam.s;
+  applyCamera(instant);
+}
+function flyTo(wx, wy, wz, scale) {
+  const st = $("stage").getBoundingClientRect();
+  lastSize = st;
+  const [px, py] = PR_(wx, wy, wz);
+  cam.s = scale;
+  cam.x = st.width / 2 - px * cam.s;
+  cam.y = st.height / 2 - py * cam.s + 30;
+  applyCamera(false);
+}
+function zoomBy(f, cx, cy) {
+  const st = $("stage").getBoundingClientRect();
+  const ox = cx ?? st.width / 2, oy = cy ?? st.height / 2;
+  const ns = Math.max(0.35, Math.min(5, cam.s * f));
+  cam.x = ox - ((ox - cam.x) * ns) / cam.s;
+  cam.y = oy - ((oy - cam.y) * ns) / cam.s;
+  cam.s = ns;
+}
+
+/* ------------------------------------------------------------------------
+   Details: a click flies to what was clicked. Nothing changes the work.
+   ------------------------------------------------------------------------ */
+function syncMarks() {
+  for (const p of document.querySelectorAll(".plot")) {
+    const id = p.dataset.plot;
+    p.toggleAttribute("data-hover", hoverTask === id);
+    p.toggleAttribute("data-open", openId === id);
+    p.toggleAttribute("data-focus", focusTask === id);
+  }
+  for (const g of document.querySelectorAll(".bldg")) g.toggleAttribute("data-open", g.dataset.id === openId);
+  for (const y of document.querySelectorAll(".yard-hit")) y.toggleAttribute("data-open", y.dataset.yard === openId);
+  for (const c of document.querySelectorAll(".crate")) {
+    c.toggleAttribute("data-mine", c.dataset.task === openId || (openId === "gate" && c.dataset.where === "gate") || (openId === "shipped" && c.dataset.where === "shipped"));
+    c.toggleAttribute("data-hot", !!hotPR && c.dataset.crate === String(hotPR.number));
+  }
+  for (const t of document.querySelectorAll(".tag")) {
+    t.toggleAttribute("data-dim", !!openId && t.dataset.tag !== openId);
+    t.toggleAttribute("data-hide", t.dataset.tag === openId && !!byId[openId]);
+  }
+  for (const r of document.querySelectorAll(".task-row")) r.setAttribute("aria-current", r.dataset.id === openId ? "true" : "false");
+  $("scene").toggleAttribute("data-focused", !!openId);
+  renderRoutes();
+}
+let shownPR = null;
+function openDetails(id, prNumber) {
+  openId = id;
+  shownPR = prNumber ?? null;
+  hotPR = prNumber ? allPRs().find((p) => p.number === prNumber) : null;
+  syncMarks();
+  $("inspector").setAttribute("data-open", "");
+  renderInspector();
+}
+function select(id, prNumber) {
+  openDetails(id, prNumber);
+  requestAnimationFrame(() => {
+    const crate = prNumber && cratePositions().find((c) => !c.unknown && c.pr.number === prNumber);
+    if (crate) return flyTo(crate.x, crate.y, (crate.z || 0) + crate.h / 2, baseScale() * 2.4);
+    if (id === "gate") return flyTo(YARD.x + YARD.w / 2, YARD.y + YARD.d / 2, 0, baseScale() * 2);
+    if (id === "shipped") return flyTo(LOT.x + LOT.w / 2, LOT.y + LOT.d / 2, 0, baseScale() * 2);
+    const hb = slotOf(id).hollow;
+    flyTo(hb.x + hb.w / 2, hb.y + hb.d / 2, hb.h * 0.45, Math.max(baseScale() * 1.9, 1.15));
+  });
+}
+function closeDetails(refit) {
+  if (!openId) return;
+  const id = openId;
+  openId = null; hotPR = null; shownPR = null;
+  syncMarks();
+  $("inspector").removeAttribute("data-open");
+  if (refit) {
+    requestAnimationFrame(() => fitCampus(false));
+    document.querySelector(`.bldg[data-id="${id}"]`)?.focus({ preventScroll: true });
+  }
+}
+
+function prRow(p, sub = "", n = () => "") {
+  return `<button type="button" class="published-row" data-pr="${p.number}" data-card="pr:${p.number}" ${n()} ${p.number === shownPR ? "data-hot" : ""}>${prMark(p)}` +
+    `<span class="published-name"><span>#${p.number} ·</span><span class="published-title">${p.title}</span>${sub ? `<span class="published-sub">${sub}</span>` : ""}</span>` +
+    `<span class="published-checks" data-failing="${p.state === PR.OPEN && p.checks === CHECKS.FAILING}">${prWords(p)}</span>${lines(p)}</button>`;
+}
+function agentRow(t, a, n) {
+  const asked = INBOX.some((i) => i.agentId === a.id);
+  const glyphNow = a.status === AGENT.RUNNING || a.status === AGENT.STARTING ? workingMark() : harnessMark();
+  const end = a.status === AGENT.FAILED ? `<span class="failed-mark">${glyph("circle-alert")}</span>` : asked ? attentionMark() : "";
+  return `<li><button type="button" class="summary-row" data-card="agent:${a.id}" ${n()}><span class="summary-glyph">${glyphNow}</span><span class="label">${a.title || modelLabel(a)}</span>${end}<span class="time">${a.at ? ago(a.at) : ""}</span></button></li>`;
+}
+function setTab(icon, label) {
+  $("insp-tab-icon").innerHTML = glyph(icon);
+  $("insp-tab-label").textContent = label;
+}
+function renderInspector() {
+  let i = 0;
+  const n = () => `style="--i:${i++}"`;
+  let h = "";
+  if (openId === "gate") {
+    setTab("pr", "Merge gate");
+    for (const lane of LANES) {
+      const prs = awaiting().filter((p) => p.checks === lane.checks);
+      h += `<section class="section" ${n()}><p class="section-heading">${lane.label}<span class="count">${prs.length}</span></p>` +
+        `<div class="published-rows">${prs.map((p) => prRow(p, byId[p.taskId].name)).join("") || `<div class="summary-row" data-unknown>None</div>`}</div></section>`;
+    }
+    h += `<p class="panel-foot" ${n()}>Open pull requests in the Factory's task list, grouped by their checks. Not GitHub's merge queue, and no order; merging happens on GitHub.</p>`;
+  } else if (openId === "shipped") {
+    setTab("merge", "Shipped");
+    const ship = merged();
+    const add = ship.reduce((a, p) => a + p.additions, 0), del = ship.reduce((a, p) => a + p.deletions, 0);
+    h += `<div class="panel-total" ${n()}><b>${ship.length}</b><span>merged</span><span style="margin-left:auto">${lines({ additions: add, deletions: del })}</span></div>`;
+    h += `<section class="section" ${n()}><p class="section-heading">Pull requests</p><div class="published-rows">${ship.map((p) => prRow(p, byId[p.taskId].name)).join("")}</div></section>`;
+    const unknown = TASKS.reduce((a, t) => a + unnamedPRs(t), 0);
+    h += `<p class="panel-foot" ${n()}>The merged pull requests the Factory's task list carries: up to three a task${unknown ? `, so ${unknown} more stand only in their tasks` : ""}. Not an all-time total.</p>`;
+  } else {
+    const t = byId[openId];
+    if (!t) return;
+    setTab("factory", t.name);
+    h += `<p class="panel-sub" ${n()}>${t.repository}</p>`;
+    if (t.id === callTaskId) h += `<div class="summary-row call-row" ${n()}><span class="summary-glyph">${glyph("mic")}</span><span class="label">On this Mac's call</span><span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>`;
+    for (const item of inboxFor(t)) {
+      const asker = t.agentList.find((a) => a.id === item.agentId);
+      h += `<div class="inbox-item" ${n()}><div class="inbox-byline"><button type="button" class="actor-ref" data-card="agent:${item.agentId}"><span class="actor-mark">${harnessMark()}</span>${asker ? asker.model : "An agent"}</button><span>asked <time>${ago(item.postedAt)}</time></span></div>` +
+        `<div class="inbox-indent"><h3>${item.title}</h3><div class="inbox-options">${item.options.map((o) => `<button type="button" class="inbox-option" data-answer="${o}" data-item="${item.id}">${o}</button>`).join("")}</div></div></div>`;
+    }
+    h += `<section class="section" ${n()}><p class="section-heading">Coding agents<span class="count">${t.agentList.length}</span></p><ul class="rows">`;
+    if (!t.agents.total) h += `<li class="summary-row" data-unknown>None yet</li>`;
+    /* Opened, the pane reads the task's whole agent list and each agent's pull request, not the row's summary. */
+    for (const a of t.agentList) h += agentRow(t, a, () => "");
+    h += `</ul></section>`;
+    h += `<section class="section" ${n()}><p class="section-heading">Pull requests<span class="count">${t.prList.length}</span></p><div class="published-rows">`;
+    h += [...t.prList].sort((a, b) => b.number - a.number).map((p) => prRow(p)).join("") || `<div class="summary-row" data-unknown>None yet</div>`;
+    h += `</div></section>`;
+  }
+  $("inspector-body").innerHTML = h;
+}
+
+/* Passing notices, as toast.tsx draws them: a glyph, the words, and where. */
+function pushToast({ icon = "check", tone = "--state-complete", words, detail }) {
+  const ol = $("toasts");
+  const li = document.createElement("li");
+  li.className = "toast";
+  li.style.setProperty("--tone", `var(${tone})`);
+  li.innerHTML = `${glyph(icon)}<div class="toast-text"><div class="toast-words">${words}</div>${detail ? `<div class="toast-detail">${detail}</div>` : ""}</div>`;
+  ol.append(li);
+  while (ol.children.length > 3) ol.firstElementChild.remove();
+  setTimeout(() => { li.dataset.leaving = "true"; setTimeout(() => li.remove(), 160); }, 4200);
+}
+function toast(words, icon = "check") { pushToast({ words, icon }); }
+function answer(itemId, choice) {
+  const k = INBOX.findIndex((i) => i.id === itemId);
+  if (k < 0) return;
+  const item = INBOX[k];
+  INBOX.splice(k, 1);
+  /* A reply hands the agent a message, so its turn starts again. */
+  const t = byId[item.taskId];
+  const agent = t.agentList.find((a) => a.id === item.agentId);
+  if (agent) { agent.status = AGENT.RUNNING; agent.at = NOW; summarize(t); }
+  pushToast({ words: `Replied “${choice}”`, detail: byId[item.taskId].name });
+  refreshAll();
+}
+function refreshAll() {
+  summarizeAll();
+  if (hover.el && !document.contains(hover.el)) hideCard();
+  renderAll(); renderSidebar(); renderCensus(); renderKey();
+  if (openId) renderInspector();
+  applyCamera(true);
+}
+
+function taskTime(t) {
+  return Math.max(t.createdAt, ...t.agentList.map((a) => a.at || 0), ...inboxFor(t).map((i) => i.postedAt));
+}
+function renderSidebar() {
+  $("task-list").innerHTML = `<ul class="task-list">${TASKS.slice().sort((a, b) => b.createdAt - a.createdAt).map((t) => {
+    const mark = asking(t) ? attentionMark() : running(t) ? workingMark() : "";
+    return `<li><button type="button" class="sidebar-plan task-row" data-id="${t.id}" data-card="task:${t.id}" data-card-side="end" aria-current="${openId === t.id}"><span class="sidebar-plan-line"><span class="sidebar-plan-name">${t.name}</span><span class="sidebar-plan-time">${mark}<time>${ago(taskTime(t))}</time></span></span></button></li>`;
+  }).join("")}</ul>`;
+}
+function renderCensus() {
+  const q = INBOX.length, r = readyPRs().length;
+  const btn = $("needs-you");
+  btn.hidden = q + r === 0;
+  /* The Factory's own words for it: "2 need you". What they are is the button's card. */
+  btn.innerHTML = `${attentionMark()}${q + r} need${q + r === 1 ? "s" : ""} you`;
+  btn.dataset.card = "needs";
+  $("inbox-count").textContent = q || "";
+}
+function renderKey() {
+  const k = (svg, html) => `<div class="key-row"><svg viewBox="-11 -9 22 18" aria-hidden="true">${svg}</svg><span>${html}</span></div>`;
+  const ok = css("--state-complete"), no = css("--danger"), work = css("--state-working"), ask = css("--state-attention");
+  $("key").innerHTML =
+    k(`<rect x="-8" y="-6" width="5" height="5" rx="1" fill="${work}"/><rect x="-1" y="-6" width="5" height="5" rx="1" fill="${ask}"/>`, "<b>Windows</b> lit by what the task's agents are doing; smoke while one runs") +
+    k(`<circle r="4" fill="${ask}"/><circle r="8" fill="none" stroke="${ask}" stroke-width="1.5" opacity="0.6"/>`, "<b>Beacon</b>: a question in the Inbox") +
+    k(`<ellipse rx="9" ry="4.5" fill="none" stroke="${css("--voice-developer")}" stroke-width="1.5"/>`, "<b>Rings</b>: on this Mac's call") +
+    k(`<line x1="0" y1="8" x2="0" y2="-7" stroke="#e0b42e" stroke-width="2"/><line x1="-8" y1="-7" x2="9" y2="-7" stroke="#e0b42e" stroke-width="2"/>`, "<b>Crane</b>: at work, no pull request yet") +
+    k(`<rect x="-10" y="-4" width="20" height="8" fill="${css("--text-tertiary")}"/><rect x="-10" y="-1" width="14" height="2" fill="${ok}"/><rect x="4" y="-1" width="6" height="2" fill="${no}"/>`, "<b>Container</b> per pull request: length is lines changed, linear (150 a tile); the band is its additions and deletions") +
+    k(`<rect x="-6" y="-6" width="12" height="12" fill="none" stroke="${css("--text-tertiary")}" stroke-dasharray="2.5 2"/>`, "<b>Dashed container</b> at a door: a pull request past the three a task carries in the list; open the task to see it") +
+    k(`<circle cx="-5" r="3" fill="${no}"/><circle cx="1" r="3" fill="${ask}"/><circle cx="7" r="3" fill="${ok}"/>`, "<b>Gate lanes</b>: checks failing, running, ready. Not a merge queue");
+}
+
+/* Hover cards, as tooltip.tsx hangs them: a card after the pointer rests
+   --hint-delay, at once while the window is warm from the last one, kept
+   180ms after the pointer leaves so it can cross onto the card. */
+const HINT_DELAY = 500, WARM_MS = 500, LINGER_MS = 180;
+const hover = { el: null, showAt: 0, hideAt: 0, warmUntil: 0 };
+function cardHead(glyphHTML, name, sub, corner) {
+  return `<div class="card-head">${glyphHTML ? `<span class="card-glyph">${glyphHTML}</span>` : ""}<div class="card-title"><span class="card-name">${name}</span>${sub ? `<span class="card-sub">${sub}</span>` : ""}</div>${corner ? `<span class="card-corner">${corner}</span>` : ""}</div>`;
+}
+function cardFor(key) {
+  const [kind, id] = key.split(":");
+  if (kind === "task") {
+    const t = byId[id];
+    if (!t) return "";
+    const asks = inboxFor(t);
+    const note = asks.length ? `${t.agents.named.find((a) => a.id === asks[0].agentId)?.model ?? "An agent"} asked: ${asks[0].title}`
+      : t.id === callTaskId ? "On this Mac's call" : t.agents.working ? `${t.agents.working} working` : t.agents.total ? "No agent working" : "No agents yet";
+    const rows = t.agents.named.map((a) => `<div class="card-line"><span class="summary-glyph">${a.status === AGENT.RUNNING ? workingMark() : harnessMark()}</span><span>${a.title || a.model}</span><span class="end">${a.at ? ago(a.at) : ""}</span></div>`).join("") +
+      (t.agents.total > t.agents.named.length ? `<div class="card-line" style="color:var(--text-tertiary)"><span class="summary-glyph"></span><span>${t.agents.total - t.agents.named.length} more agents</span></div>` : "") +
+      t.pullRequests.named.map((p) => `<div class="card-line">${prMark(p)}<span>#${p.number}</span><span class="end">${prWords(p)}</span></div>`).join("");
+    return `<div class="card">${cardHead(glyph("factory"), t.name, t.repository, ago(taskTime(t)))}<p class="card-note">${note}</p>${rows ? `<hr class="card-rule">${rows}` : ""}</div>`;
+  }
+  if (kind === "pr") {
+    const p = allPRs().find((q) => String(q.number) === id);
+    if (!p) return "";
+    return `<div class="card">${cardHead(prMark(p), `#${p.number} ${p.title}`, byId[p.taskId].name, lines(p))}<p class="card-note">${prWords(p)[0].toUpperCase()}${prWords(p).slice(1)} · ${linesOf(p)} lines changed</p></div>`;
+  }
+  if (kind === "unknown") {
+    const t = byId[id];
+    return `<div class="card">${cardHead(glyph("pr"), "1 more pull request", t.name, "")}<p class="card-note">The Factory's list carries three a task. Open the task to see this one and its size.</p></div>`;
+  }
+  if (kind === "agent") {
+    const [t, a] = agentOf(id);
+    if (!a) return "";
+    const word = { running: "Working", starting: "Working", failed: "Failed", cancelled: "Stopped", completed: "" }[a.status];
+    const asked = INBOX.find((q) => q.agentId === a.id);
+    return `<div class="card">${cardHead(a.status === AGENT.RUNNING ? workingMark() : harnessMark(), a.title || a.model, `${modelLabel(a)} · ${t.name}`, [word, a.at ? ago(a.at) : ""].filter(Boolean).join(" · "))}${asked ? `<p class="card-note">Asked: ${asked.title}</p>` : ""}</div>`;
+  }
+  if (kind === "gate") {
+    return `<div class="card">${cardHead(glyph("pr"), "Merge gate", `${awaiting().length} open pull requests`, "")}<p class="card-note">Grouped by their checks. Not GitHub's merge queue; merging happens on GitHub.</p><hr class="card-rule">${LANES.map((l) => `<div class="card-line"><span class="dot" style="--tone:var(${l.tone})"></span>${l.label}<span class="end">${awaiting().filter((p) => p.checks === l.checks).length}</span></div>`).join("")}</div>`;
+  }
+  if (kind === "shipped") {
+    const ship = merged();
+    return `<div class="card">${cardHead(glyph("merge"), "Shipped", "A sample, not an all-time total", lines({ additions: ship.reduce((a, p) => a + p.additions, 0), deletions: ship.reduce((a, p) => a + p.deletions, 0) }))}<p class="card-note">${ship.length} merged pull requests in the Factory's task list.</p></div>`;
+  }
+  if (kind === "needs") {
+    const rows = INBOX.map((i) => `<div class="card-line">${attentionMark()}<span>${i.title}</span><span class="end">${ago(i.postedAt)}</span></div>`).join("") +
+      readyPRs().map((p) => `<div class="card-line">${prMark(p)}<span>#${p.number} ready to merge</span><span class="end">${byId[p.taskId].name}</span></div>`).join("");
+    return `<div class="card">${cardHead(null, `${INBOX.length + readyPRs().length} need you`, "", "")}${rows}</div>`;
+  }
+  return "";
+}
+function placeCard(el) {
+  const card = $("hovercard");
+  const r = el.getBoundingClientRect();
+  const w = card.offsetWidth, h = card.offsetHeight;
+  let x, y;
+  if (el.dataset.cardSide === "end") { x = r.right + 6; y = r.top; if (x + w > innerWidth - 6) x = r.left - 6 - w; }
+  else { x = r.left; y = r.bottom + 6; if (y + h > innerHeight - 6) y = r.top - 6 - h; }
+  card.style.left = `${Math.max(6, Math.min(innerWidth - w - 6, x))}px`;
+  card.style.top = `${Math.max(6, Math.min(innerHeight - h - 6, y))}px`;
+}
+function showCard(el) {
+  const html = cardFor(el.dataset.card);
+  if (!html) return;
+  const card = $("hovercard");
+  card.innerHTML = html;
+  card.hidden = false;
+  card.style.animation = "none"; void card.offsetWidth; card.style.animation = "";
+  placeCard(el);
+  el.setAttribute("aria-describedby", "hovercard");
+}
+function hideCard() {
+  clearTimeout(hover.showAt); clearTimeout(hover.hideAt);
+  if (hover.el) { hover.el.removeAttribute("aria-describedby"); if (!$("hovercard").hidden) hover.warmUntil = performance.now() + WARM_MS; }
+  hover.el = null;
+  $("hovercard").hidden = true;
+}
+document.addEventListener("pointerover", (e) => {
+  if (e.target.closest("#hovercard")) { clearTimeout(hover.hideAt); return; }
+  const el = e.target.closest("[data-card]");
+  if (el === hover.el) { clearTimeout(hover.hideAt); return; }
+  if (!el) { if (hover.el) { clearTimeout(hover.hideAt); hover.hideAt = setTimeout(hideCard, LINGER_MS); } return; }
+  hideCard();
+  hover.el = el;
+  const warm = performance.now() < hover.warmUntil;
+  hover.showAt = setTimeout(() => showCard(el), warm ? 0 : HINT_DELAY);
+});
+document.addEventListener("focusin", (e) => {
+  const el = e.target.closest?.("[data-card]");
+  if (el?.matches(":focus-visible")) { hideCard(); hover.el = el; showCard(el); }
+});
+for (const ev of ["pointerdown", "keydown", "wheel"]) document.addEventListener(ev, (e) => { if (!e.target.closest?.("#hovercard")) hideCard(); }, { capture: true, passive: true });
+function hideCrateCard() { hideCard(); }
+
+/* ------------------------------------------------------------------------
+   Wiring.
+   ------------------------------------------------------------------------ */
+function setTheme(t) {
+  theme = t;
+  document.documentElement.dataset.theme = t;
+  for (const b of document.querySelectorAll("[data-theme-choice]")) b.setAttribute("aria-pressed", String(b.dataset.themeChoice === t));
+  renderAll(); renderKey(); renderSidebar(); applyCamera(true);
+}
+for (const b of document.querySelectorAll("[data-theme-choice]")) b.addEventListener("click", () => setTheme(b.dataset.themeChoice));
+
+const scene = $("scene");
+const stage = $("stage");
+function activate(target) {
+  const crate = target.closest(".crate");
+  if (crate) { select(crate.dataset.task, Number(crate.dataset.crate) || undefined); return true; }
+  const g = target.closest(".bldg");
+  if (g) { select(g.dataset.id); return true; }
+  const yard = target.closest(".yard-hit");
+  if (yard) { select(yard.dataset.yard); return true; }
+  if (target.closest("#new-plot")) { toast("A new task takes the next plot", "plus"); return true; }
+  return false;
+}
+scene.addEventListener("click", (e) => {
+  if (dragMoved) return;
+  if (!activate(e.target) && openId) closeDetails(true);
+});
+scene.addEventListener("pointerover", (e) => {
+  const crate = e.target.closest(".crate");
+  const g = e.target.closest(".bldg");
+  const task = crate ? crate.dataset.task : g ? g.dataset.id : null;
+  const pr = crate && !crate.dataset.crate.startsWith("u-") ? allPRs().find((q) => String(q.number) === crate.dataset.crate) : null;
+  if (task !== hoverTask || pr?.number !== hotPR?.number) { hoverTask = task; if (!shownPR) hotPR = pr; syncMarks(); }
+});
+scene.addEventListener("pointerleave", () => { hideCrateCard(); hoverTask = null; if (!shownPR) hotPR = null; syncMarks(); });
+scene.addEventListener("focusin", (e) => {
+  const g = e.target.closest(".bldg");
+  focusTask = g?.matches(":focus-visible") ? g.dataset.id : null;
+  const crate = e.target.closest(".crate");
+  syncMarks();
+});
+scene.addEventListener("focusout", () => { focusTask = null; hideCrateCard(); syncMarks(); });
+
+scene.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && activate(e.target)) e.preventDefault();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && openId) closeDetails(true);
+  if (e.key === "r" && !e.metaKey && !e.target.closest("input, textarea")) turn();
+});
+$("task-list").addEventListener("click", (e) => { const r = e.target.closest(".task-row"); if (r) select(r.dataset.id); });
+$("inspector").addEventListener("click", (e) => {
+  if (e.target.closest("#insp-close")) closeDetails(true);
+  const row = e.target.closest(".published-row");
+  if (row) { const p = allPRs().find((q) => String(q.number) === row.dataset.pr); if (p) select(p.taskId, p.number); }
+  const a = e.target.closest("[data-answer]");
+  if (a) answer(a.dataset.item, a.dataset.answer);
+  if (e.target.closest("#open-task")) toast("Opens the task", "open");
+});
+$("needs-you").addEventListener("click", () => {
+  const list = [...new Set([...INBOX.map((i) => i.taskId), ...readyPRs().map((p) => p.taskId)])];
+  if (!list.length) return;
+  const next = list[(list.indexOf(openId) + 1) % list.length];
+  select(next, readyPRs().find((p) => p.taskId === next)?.number);
+});
+$("zoom-in").addEventListener("click", () => { zoomBy(1.3); applyCamera(false); });
+$("zoom-out").addEventListener("click", () => { zoomBy(1 / 1.3); applyCamera(false); });
+$("fit").addEventListener("click", () => { if (openId) closeDetails(true); else fitCampus(false); });
+function turn() {
+  rot = (rot + 1) % 4;
+  renderAll();
+  fitCampus(true);
+}
+$("rotate").addEventListener("click", turn);
+$("key-toggle").addEventListener("click", () => {
+  const shown = $("key").hasAttribute("data-hidden");
+  $("key").toggleAttribute("data-hidden", !shown);
+  $("key-toggle").setAttribute("aria-pressed", String(shown));
+});
+
+let drag = null, dragMoved = false;
+stage.addEventListener("pointerdown", (e) => {
+  if (e.target.closest(".map-controls, .key, .toast")) return;
+  drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
+  dragMoved = false;
+});
+window.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!dragMoved && Math.hypot(dx, dy) < 4) return;
+  dragMoved = true;
+  hideCrateCard();
+  stage.setAttribute("data-dragging", "");
+  cam.x = drag.cx + dx; cam.y = drag.cy + dy;
+  applyCamera(true);
+});
+window.addEventListener("pointerup", () => { drag = null; stage.removeAttribute("data-dragging"); setTimeout(() => { dragMoved = false; }, 0); });
+stage.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  zoomBy(Math.exp(-e.deltaY * 0.0022), e.clientX - r.left, e.clientY - r.top);
+  hideCrateCard();
+  applyCamera(true);
+}, { passive: false });
+/* When the pane opens or the window changes size, the campus keeps its middle where it was. */
+new ResizeObserver(() => {
+  const st = stage.getBoundingClientRect();
+  if (!lastSize) { lastSize = st; fitCampus(true); return; }
+  cam.x += (st.width - lastSize.width) / 2;
+  cam.y += (st.height - lastSize.height) / 2;
+  lastSize = st;
+  applyCamera(true);
+}).observe(stage);
+
+const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  tickMovers(dt);
+  if (!reduced.matches && !document.hidden) {
+    craneAngle += dt * 0.18;
+    for (const cr of document.querySelectorAll("[data-crane]")) cr.innerHTML = craneSVG(slotOf(cr.dataset.crane).crane);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* A link may name a frame; each value is matched to one of the page's own. */
+const params = new URLSearchParams(location.search);
+const themeParam = params.get("theme");
+const initialTheme = themeParam === "light" ? "light" : themeParam === "dark" ? "dark" : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+const openParam = [...TASKS.map((t) => t.id), "gate", "shipped"].find((id) => id === params.get("open"));
+const rotParam = ["1", "2", "3"].indexOf(params.get("rot")) + 1;
+renderSidebar();
+renderCensus();
+setTheme(initialTheme);
+for (let i = 0; i < rotParam; i++) turn();
+fitCampus(true);
+if (openParam) select(openParam);
+/* Switching the town's size starts its work over at that size; switching the inside redraws the open building. */
+const SAMPLE_INBOX = JSON.stringify(INBOX);
+function setTown(size) {
+  townSize = size;
+  for (const b of document.querySelectorAll("[data-town]")) b.setAttribute("aria-pressed", String(b.dataset.town === size));
+  closeDetails(false);
+  const fresh = JSON.parse(JSON.stringify(TOWN[size]()));
+  TASKS.splice(0, TASKS.length, ...fresh);
+  reindex();
+  INBOX.splice(0, INBOX.length, ...JSON.parse(SAMPLE_INBOX).filter((i) => byId[i.taskId]));
+  SNAPSHOT = JSON.stringify({ TASKS, INBOX });
+  resetWork();
+  fitCampus(false);
+  schedule(STEP_MS);
+}
+for (const b of document.querySelectorAll("[data-town]")) b.addEventListener("click", () => setTown(b.dataset.town));
+for (const b of document.querySelectorAll("[data-inside]")) b.addEventListener("click", () => {
+  insideStyle = b.dataset.inside;
+  for (const x of document.querySelectorAll("[data-inside]")) x.setAttribute("aria-pressed", String(x === b));
+  refreshAll();
+});
+$("sim-toggle").addEventListener("click", () => { sim.on = !sim.on; renderSimStatus(); if (sim.on) schedule(600); else clearTimeout(sim.timer); });
+$("sim-restart").addEventListener("click", () => { resetWork(); schedule(1200); });
+renderSimStatus();
+if (params.get("events") === "off") { sim.on = false; renderSimStatus(); } else schedule(2400);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
