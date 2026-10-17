@@ -659,6 +659,8 @@ function tasksToolView(
       return answeredAgentCall(CALL_KIND.ARCHIVE_AGENT, input, output);
     case AGENT_TOOL.UNARCHIVE_AGENT:
       return answeredAgentCall(CALL_KIND.UNARCHIVE_AGENT, input, output);
+    case AGENT_TOOL.LIST_MODELS:
+      return namedCall(CALL_KIND.LIST_MODELS, input, output, undefined);
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:

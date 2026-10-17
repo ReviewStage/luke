@@ -8,6 +8,7 @@ import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
   ARCHIVE_AGENT_TOOL,
   LIST_AGENTS_TOOL,
+  LIST_MODELS_TOOL,
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
   READ_PAGE_TOOL,
@@ -132,6 +133,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LIST_MODELS]: {
+    description: LIST_MODELS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_MODELS_TOOL.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {

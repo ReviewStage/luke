@@ -62,6 +62,8 @@ export const CALL_KIND = {
   START_AGENT: "start-agent",
   ARCHIVE_AGENT: "archive-agent",
   UNARCHIVE_AGENT: "unarchive-agent",
+  /** A list of the models a coding agent may be started on (`list_models`). */
+  LIST_MODELS: "list-models",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
   READ_PAGE: "read-page",
@@ -105,6 +107,7 @@ export const CALL_WORDS = {
   [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
   [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived the coding agent", code: false },
   [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
+  [CALL_KIND.LIST_MODELS]: { verb: "Listed the models", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
   [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },

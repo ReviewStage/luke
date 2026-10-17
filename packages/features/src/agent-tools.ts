@@ -35,6 +35,8 @@ export const AGENT_TOOL = {
   ARCHIVE_AGENT: "archive_agent",
   UNARCHIVE_AGENT: "unarchive_agent",
   LIST_TASKS: "list_tasks",
+  // The models an agent may be started on, named for any agent offered `start_agent`.
+  LIST_MODELS: "list_models",
   // The public reads, every role's.
   SEARCH_WEB: "search_web",
   READ_WEB_PAGE: "read_web_page",

@@ -54,6 +54,7 @@ import {
   CODING_AGENT_TOOL_REFUSAL,
   runArchiveAgent,
   runListAgents,
+  runListModels,
   runListTasks,
   runMessageAgent,
   runReadPage,
@@ -375,7 +376,8 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.ARCHIVE_AGENT
     | typeof CODER_TOOL.UNARCHIVE_AGENT
     | typeof CODER_TOOL.READ_PAGE
-    | typeof CODER_TOOL.LIST_TASKS;
+    | typeof CODER_TOOL.LIST_TASKS
+    | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
 }
@@ -389,6 +391,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.READ_PAGE]: runReadPage,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
+  [CODER_TOOL.LIST_MODELS]: runListModels,
 } as const;
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */

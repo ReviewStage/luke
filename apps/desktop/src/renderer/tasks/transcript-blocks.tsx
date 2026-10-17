@@ -35,6 +35,7 @@ import {
   CircleIcon,
   CircleStopIcon,
   CodeXmlIcon,
+  CpuIcon,
   EyeIcon,
   FilePenIcon,
   FileTextIcon,
@@ -541,7 +542,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -572,6 +573,7 @@ const CALL_ICON = {
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.ARCHIVE_AGENT]: ArchiveIcon,
   [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
+  [CALL_KIND.LIST_MODELS]: CpuIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,
