@@ -16,6 +16,8 @@ import type {
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
 import { channels } from "@luke/host/bridge";
+import type { OperatorClient } from "@luke/host/client";
+import { type AppStateStore, voiceWindowGone, voiceWindowState } from "@luke/host/client";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -32,7 +34,6 @@ import {
   session,
   type WebContents,
 } from "electron";
-import { type AppStateStore, voiceWindowGone, voiceWindowState } from "../app-state";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
@@ -45,7 +46,6 @@ import { VoiceWindow } from "../window/voice-window";
 import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
-import type { OperatorClient } from "./operator-client";
 
 /** How long a display change is let settle before the panels are laid out over it. */
 const DISPLAY_SETTLE_MS = 100;

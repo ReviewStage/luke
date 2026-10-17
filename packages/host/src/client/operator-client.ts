@@ -1,13 +1,14 @@
+/**
+ * operator-client.ts -- the one operator a client is: the host's events written into the document, and the bootstrap every later decision is read from.
+ */
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GatewayHost, NodeRegistry } from "@luke/gateway";
-import { channels } from "@luke/host/bridge";
-import type { HostBootstrap, HostOperator } from "@luke/host/host-operator";
 import type { AppSettings } from "@luke/settings/wire";
 import { Effect, Option, type Scope } from "effect";
-import { type AppStateStore, bootstrapPatch } from "../app-state";
-import { wireGateway } from "../gateway/wiring";
-import type { DesktopConfig } from "./desktop-config";
-import type { NativeNodeCapabilities } from "./native-node";
+import { channels } from "../bridge.js";
+import type { HostBootstrap, HostOperator } from "../host-operator.js";
+import { type AppStateStore, bootstrapPatch } from "./app-state-store.js";
+import { type GatewayWiringDependencies, wireGateway } from "./gateway-wiring.js";
 
 /** What the host's events reach in the windows that draw them. */
 interface OperatorClientLinks {
@@ -45,12 +46,12 @@ export interface OperatorClient {
 }
 
 export interface OperatorClientDependencies {
-  config: DesktopConfig;
+  report: (message: string) => void;
   /** The host this client operates. */
   gateway: GatewayHost;
   /** The host's node registry, where this process's native capabilities are offered. */
   nodes: NodeRegistry;
-  node: NativeNodeCapabilities;
+  node: GatewayWiringDependencies["node"];
   /** Everything the host says, written down once; the windows are told from it. */
   state: AppStateStore;
 }
@@ -61,11 +62,11 @@ export interface OperatorClientDependencies {
  * offers this machine's native capabilities as one node. The runtime itself
  * stands behind the host; nothing here composes a store or a brain.
  */
-export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOperatorClient")(
+export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOperatorClient")(
   function* (
     dependencies: OperatorClientDependencies,
   ): Effect.fn.Return<OperatorClient, never, Scope.Scope> {
-    const { config, state } = dependencies;
+    const { report, state } = dependencies;
     let heldLinks: OperatorClientLinks | undefined;
     const links = (): OperatorClientLinks => {
       if (heldLinks === undefined) {
@@ -85,7 +86,7 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOpe
     const gateway = yield* wireGateway({
       gateway: dependencies.gateway,
       nodes: dependencies.nodes,
-      report: config.report,
+      report,
       state,
       node: dependencies.node,
     });

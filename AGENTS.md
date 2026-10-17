@@ -263,7 +263,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   `void | Promise<void>` and whose `reopen()` is synchronous) — so what would
   end this row is a decision about that seam rather than an implementation
   detail of this door.
-- **`apps/desktop/src/main/app-state.ts`** — `AppStateStore`'s `snapshot`,
+- **`packages/host/src/client/app-state-store.ts`** — `AppStateStore`'s `snapshot`,
   `update`, and `touch` run their `SubscriptionRef` operation through
   `Effect.runSyncWith` on the services the launch handed them, never an empty
   context of their own, because every caller but the one production subscriber
@@ -273,7 +273,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   statement — is what turning them into effects a caller awaits would give up.
 - **`packages/host/src/update-service.ts`** — synchronous Electron
   IPC/menu callers (start, check, install) bridge into fibers on the services
-  the launch handed them, on the same terms as the desktop's `app-state.ts`.
+  the launch handed them, on the same terms as the client's `app-state-store.ts`.
 - **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — the notice
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
