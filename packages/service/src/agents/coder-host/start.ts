@@ -8,6 +8,7 @@ import {
   type CodingAgentPlace,
   createCodingAgent,
   discardCodingAgent,
+  readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
@@ -262,8 +263,13 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const choice = yield* acceptedAgentChoice(userId, ask.choice);
   const landing = yield* landingOf(userId, ask);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
+  // Note that a retry whose agent already stands is not asked of GitHub again, because the
+  // branch may be gone since and the agent its Start made is still the answer.
   if (ask.branch !== undefined) {
-    yield* confirmedBranch(landing.workspaceId, landing.repository, ask.branch);
+    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    if (Option.isNone(made)) {
+      yield* confirmedBranch(landing.workspaceId, landing.repository, ask.branch);
+    }
   }
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note alone.

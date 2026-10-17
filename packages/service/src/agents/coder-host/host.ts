@@ -244,7 +244,7 @@ export interface CoderHost extends HostAdmission {
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
-   * checkout stood detached. A read or write that fails is logged and
+   * checkout stood detached or on the branch the agent was started on. A read or write that fails is logged and
    * nothing is written, so the caller's stop of the sandbox follows either
    * way.
    */
@@ -632,7 +632,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const agent = yield* agentOrRefused(admitted);
         const branch = yield* checkoutBranch(sandbox);
-        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, branch);
+        // Note that the branch the agent was started on is another's, such as a stacked pull
+        // request's, so standing on it is recorded as no branch of its own: no pull request
+        // and no GitHub delivery on that branch is taken for this agent's.
+        const own = branch === agent.startBranch ? null : branch;
+        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, own);
       }).pipe(
         Effect.catch((failure) =>
           Effect.logWarning(

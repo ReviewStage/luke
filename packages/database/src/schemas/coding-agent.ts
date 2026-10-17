@@ -38,7 +38,7 @@ import { conversations } from "./storage.js";
  * exactly one of the two stands; the repository is `owner/name`; the branch
  * is the one checked out in the agent's sandbox as its last turn ended,
  * which is where its pull request is looked up, and null until a turn ends
- * or where the checkout stood detached; the start branch is the one its
+ * or where the checkout stood detached or on its start branch; the start branch is the one its
  * starter named for its checkout to be cloned at, such as a stacked pull
  * request's, and null for the repository's default branch, which every
  * agent started without one is cloned at; the title is the agent's name on

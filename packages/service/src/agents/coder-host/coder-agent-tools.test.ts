@@ -569,7 +569,8 @@ test("start_agent starts an agent on the caller's own task as the deployment act
 test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
-  const eve = await fakeCoderEve(workspaceId, [STACKED_BRANCH]);
+  const branches = [STACKED_BRANCH];
+  const eve = await fakeCoderEve(workspaceId, branches);
   const host = hostOf(true);
   const call = await peerCaller(host, caller, eve.services);
   const prompt = "Send the reminder before the invitation expires.";
@@ -615,6 +616,34 @@ test("start_agent with a branch starts an agent whose checkout is cloned at that
     instructions.text.includes(`cut from \`${STACKED_BRANCH}\`, the branch you were started on`),
     instructions.text,
   );
+
+  // A turn that ends on the branch it started on records no branch of its own, so the pull request
+  // already on that branch is never taken for this agent's; one it cut is recorded.
+  let standing = STACKED_BRANCH;
+  const shell = sandboxDouble((command) =>
+    command === "git branch --show-current"
+      ? { exitCode: 0, stdout: `${standing}\n`, stderr: "" }
+      : undefined,
+  );
+  shell.checkedOut = RELAY_FULL_NAME;
+  const branchOf = async () =>
+    Option.getOrThrow(await database.run(readCodingAgent(caller.userId, stored.id))).branch;
+  await database.run(host.recordBranch(admitted.success, shell));
+  assert.equal(await branchOf(), null);
+  standing = "luke/invitation-reminder";
+  await database.run(host.recordBranch(admitted.success, shell));
+  assert.equal(await branchOf(), standing);
+
+  // The same call run again once the branch is gone answers the agent its start made.
+  branches.length = 0;
+  const again = await call(
+    CODER_TOOL.START_AGENT,
+    { prompt, branch: STACKED_BRANCH },
+    "call-stacked",
+  );
+  assert.ok(isRecord(again.agent), JSON.stringify(again));
+  assert.equal(again.agent.id, stored.id);
+  assert.equal(eve.sent.length, 1, "the call run again starts nothing");
 });
 
 test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {
