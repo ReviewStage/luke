@@ -10,6 +10,8 @@
     "./node": "./src/node/index.js",
     "./acts": "./src/acts.js",
     "./app-state": "./src/app-state.js",
+    "./bridge": "./src/bridge.js",
+    "./panel-avatar": "./src/panel-avatar.js",
     "./agent-notices": "./src/agent-notices.js",
     "./app-identity": "./src/app-identity.js",
     "./desktop-service": "./src/desktop-service.js",

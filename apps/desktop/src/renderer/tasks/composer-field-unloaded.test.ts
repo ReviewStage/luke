@@ -5,14 +5,14 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { QUIET_COMPOSER } from "#testing/composer";
-import { PLAN_EDITOR_ASSET } from "../plan-editor/contract";
+import { onSideBundles } from "#testing/side-bundles";
+import { sideBundles } from "../bundle-loader";
 import { AgentComposer } from "./agent-composer";
 import { useAgentComposer } from "./use-agent-composer";
 
 /**
  * A box whose editor bundle could not be loaded says so under the card and
- * stays inert. The bundle is read once per window, so this is a file of its
- * own.
+ * stays inert, its importer failing as a chunk that could not be loaded does.
  */
 
 const roots: Root[] = [];
@@ -38,13 +38,10 @@ test("a box whose editor bundle could not be loaded says so under the card, and 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(createElement(Box)));
-
-  const script = document.head.querySelector(`script[src="${PLAN_EDITOR_ASSET.SCRIPT}"]`);
-  assert.ok(script, "the editor bundle was asked for");
-  await act(async () => {
-    script.dispatchEvent(new Event("error"));
+  const bundles = sideBundles({
+    planEditor: () => Promise.reject(new Error("The chunk could not be loaded.")),
   });
+  await act(async () => root.render(onSideBundles(bundles, createElement(Box))));
 
   assert.equal(
     container.querySelector(".agent-composer-note")?.textContent,

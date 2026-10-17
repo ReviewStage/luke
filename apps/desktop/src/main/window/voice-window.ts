@@ -30,9 +30,9 @@ const REOPEN_DELAY_MS = 1_000;
 /**
  * The one hidden window that will hold the live conversation, so that it
  * outlives every panel: a panel reload, close, or display change must not end
- * an exchange. It loads the same renderer bundle as the panels under the same
- * hardening, differing only in its bootstrap role, and it is never shown,
- * never focused, and never a target for anything drawn. It exists at most
+ * an exchange. It loads the renderer's voice entry (`voice.html`) under the
+ * same hardening as the panels, and it is never shown, never focused, and
+ * never a target for anything drawn. It exists at most
  * once, and everything it may ask of the main process is answered against
  * `owns()` rather than against anything the renderer claims.
  *

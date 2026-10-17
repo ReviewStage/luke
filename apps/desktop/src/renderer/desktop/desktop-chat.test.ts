@@ -33,8 +33,6 @@ beforeEach(() => {
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
       act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
     },
   });
