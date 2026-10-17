@@ -151,10 +151,7 @@ const TEXT_FILE_TYPE = "text/plain";
  * note's are the last of each group the service hands files in, text files
  * and the rest, as many as its marker counts, since the brief's go first.
  */
-function filesOf(
-  message: CodingAgentMessage,
-  noteFiles: NoteFiles,
-): { readonly brief: CodingAgentMessage["parts"]; readonly note: CodingAgentMessage["parts"] } {
+function filesOf(message: CodingAgentMessage, noteFiles: NoteFiles) {
   const kinds = agentParts(message);
   const files = message.parts.filter((_, index) => kinds[index]?.kind !== AGENT_PART.TEXT);
   const isText = (part: (typeof files)[number]) =>
