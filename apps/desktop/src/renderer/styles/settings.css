@@ -199,10 +199,10 @@
   line-height: 1;
 }
 
-/* Inside a running name — a shortcut row's title — the mark is a word in the
+/* Inside a running name — a talk key's label — the mark is a word in the
    line rather than a flex sibling, so it carries the spacing the flex gaps
    give it everywhere else, and sits on the text's own middle. */
-.shortcut-name .settings-attention {
+.luke-settings-row-label > .settings-attention {
   margin-left: 6px;
   vertical-align: -3px;
 }
@@ -539,33 +539,34 @@
 
 /* A changeable key's chord is a field, as a text field is drawn, so a key
    that can be changed reads apart from the fixed list under it: pressed, it
-   records the next chord in place. */
+   records the next chord in place, at the row's label size. */
 .shortcut-field {
-  --shortcut-ink: var(--text-primary);
+  --shortcut-text: var(--luke-type-label-size);
+  --shortcut-ink: var(--luke-color-text);
   display: inline-flex;
   min-width: 104px;
-  height: var(--control-height);
+  height: var(--luke-control-height);
   flex: none;
   align-items: center;
   justify-content: center;
-  padding: 0 var(--space-12);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--control-radius);
-  background: var(--input-fill);
-  color: var(--text-primary);
-  font-size: 13px;
+  padding: 0 var(--luke-space-12);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-input);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
   transition: border-color var(--duration-hover) ease;
 }
 
 .shortcut-field:hover:not(:disabled) {
-  border-color: var(--selected-edge);
+  border-color: var(--luke-color-border-selected);
 }
 
 /* Recording is the field ringed in the focus colour, the way a text field
    being typed into is, and saying what to do: nobody has to guess the next
    keystroke is being listened for. */
 .shortcut-field[aria-pressed="true"] {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
   outline-offset: -1px;
 }
 
@@ -578,12 +579,12 @@
 /* What the field says where there is no chord to draw: none having
    registered, or another app owning it. Muted, because neither is a key. */
 .shortcut-state {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   white-space: nowrap;
 }
 
 .shortcut-field[aria-pressed="true"] > .shortcut-state {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 /* What leads a row that stands for something of its own, a provider's or a

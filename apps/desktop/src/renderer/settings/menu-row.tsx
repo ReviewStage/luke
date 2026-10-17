@@ -29,6 +29,8 @@ type MenuRowActions = readonly MenuAction[] | readonly (readonly MenuAction[])[]
 interface MenuRowWords {
   label: ReactNode;
   description?: ReactNode;
+  /** What went wrong with the row's last act, or nothing while none did. */
+  error?: ReactNode;
   /** The provider's or service's mark the row leads with. */
   leading?: ReactNode;
   control?: ReactNode;
@@ -95,7 +97,12 @@ export function MenuRow({
             {more}
           </>
         ) : (
-          <SettingsRow leading={row.leading} label={row.label} description={row.description}>
+          <SettingsRow
+            leading={row.leading}
+            label={row.label}
+            description={row.description}
+            error={row.error}
+          >
             {() => (
               <>
                 {row.control}
