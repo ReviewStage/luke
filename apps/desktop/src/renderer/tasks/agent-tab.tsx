@@ -11,16 +11,31 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remedy";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import {
+  DocumentIcon,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  HoverCard,
+  HoverCardHead,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
-import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref";
+import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  automationActor,
+} from "../actor-ref";
 import {
   Conversation,
   ConversationContent,
@@ -31,6 +46,7 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/task";
 import { TOOL_STATE } from "../ai-elements/tool";
+import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
@@ -73,6 +89,7 @@ import {
   messageWords,
   newestTodos,
   placedMessages,
+  providerOf,
   settledPlanEdits,
   showsPublishedRow,
   teammateStarter,
@@ -87,6 +104,7 @@ import { CopyMessageAction } from "./copy-message";
 import { ForkedToLine } from "./fork-action";
 import { openReply } from "./fork-model";
 import { linkChip } from "./mention-chip";
+import { MentionedAgentCard } from "./mentioned-agent-card";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
@@ -98,11 +116,12 @@ import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
+import { SentTime } from "./sent-time";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
-import { callHeading, useMinute } from "./task-time";
+import { useMinute } from "./task-time";
 import {
   calledAgent,
   cardTitle,
@@ -130,12 +149,15 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
+import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
 import { useAgentServers } from "./use-agent-servers";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { useKnownNames } from "./use-known-names";
+import { useOpenPlace } from "./use-open-link";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
@@ -338,23 +360,28 @@ function NoticeRow({
 /**
  * The agent a call about one names, as its row's chip wears it: its tab's
  * own tile and name where the place lists the agent, else the title the
- * call's answer gives it on the bare agent mark, as an agent of another
- * task is named; nothing where neither is known, as a start's before it
- * answers, whose row keeps its own words.
+ * call's answer gives it on the mark of its harness, read off the model
+ * the answer says it runs on, or the one the window last read it running
+ * on (`useKnownNames`), as an agent of another task is named; nothing
+ * where neither is known, as a start's before it answers, whose row keeps
+ * its own words.
  */
 function calledAgentActor(
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>,
   cards: TranscriptCards | undefined,
+  known: KnownNames,
 ): Actor | undefined {
   const called = calledAgent(part);
   if (called === undefined) return undefined;
   const listed = called.id === undefined ? undefined : cards?.agent?.(called.id);
   if (listed !== undefined || called.title === undefined) return listed;
+  const model =
+    called.model ?? (called.id === undefined ? undefined : known.agentModels.get(called.id));
   return {
     kind: ACTOR_KIND.AGENT,
     agentId: called.id,
     name: called.title,
-    provider: undefined,
+    provider: model === undefined ? undefined : providerOf(model),
     state: ACTOR_STATE.REST,
   };
 }
@@ -370,6 +397,7 @@ function ToolCallView({
   cards?: TranscriptCards | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
+  const known = useKnownNames();
   return (
     <>
       <TranscriptTool
@@ -379,7 +407,7 @@ function ToolCallView({
         provider={view.provider}
         subject={view.subject}
         description={view.description}
-        agent={calledAgentActor(part, cards)}
+        agent={calledAgentActor(part, cards, known)}
         input={view.input}
         output={view.output}
         errorText={part.errorText}
@@ -556,12 +584,13 @@ function OpeningCallView({
   onOpen: () => void;
 }): ReactNode {
   const view = toolCallView(part);
+  const known = useKnownNames();
   return (
     <TranscriptOpeningCall
       callId={part.callId}
       kind={view.kind}
       subject={view.subject}
-      agent={calledAgentActor(part, cards)}
+      agent={calledAgentActor(part, cards, known)}
       state={part.state}
       hint={hint}
       card={card}
@@ -597,7 +626,10 @@ function AgentPartView({
       }
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
-      const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      // A chat call opens Chat only while the window offers it; otherwise its row folds open as any call's does.
+      const called = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      const target =
+        called?.kind === TOOL_TARGET.CHAT && delegation?.chatOn !== true ? undefined : called;
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
         return (
@@ -898,20 +930,56 @@ function agentOrigin(input: {
 function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   return (
     <span className="message-sender">
-      <ActorRef actor={actor} />
+      {actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
+        <SendingAgent actor={actor} agentId={actor.agentId} />
+      ) : (
+        <ActorRef actor={actor} />
+      )}
     </span>
   );
 }
 
-/** When one of the developer's lines was sent, in the words a finished turn's line ends on (`WorkedFor`), after who sent it where anyone is named. */
-function SentTime({ at, named }: { at: number; named: boolean }): React.JSX.Element {
-  const now = useMinute();
-  return (
-    <span className="message-sent-at">
-      {named ? <span aria-hidden="true">·</span> : null}
-      <time dateTime={new Date(at).toISOString()}>{callHeading(at, now)}</time>
-    </span>
+/**
+ * Another coding agent named as a line's sender, by the id the service
+ * answered for it: its harness's mark and its name, as it sent the line,
+ * hanging its tab's card as it stands now, read as the card is first hung
+ * (`mentioned-agent-card.tsx`), and opening its tab on a press.
+ */
+function SendingAgent({
+  actor,
+  agentId,
+}: {
+  actor: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>;
+  agentId: string;
+}): React.JSX.Element {
+  const { workspaceId } = useMemberDirectory();
+  const openPlace = useOpenPlace();
+  const { taskId } = actor;
+  // Its own card stands while the agent is read, and where the read answers nothing.
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
+    </HoverCard>
   );
+  const card = (
+    <MentionedAgentCard
+      agentId={agentId}
+      taskId={taskId}
+      name={actor.name}
+      workspaceId={workspaceId}
+      fallback={fallback}
+    />
+  );
+  const open =
+    openPlace === undefined
+      ? undefined
+      : () =>
+          openPlace({
+            kind: LINK_PLACE.AGENT,
+            ...(taskId === undefined ? undefined : { planId: taskId }),
+            agentId,
+          });
+  return <ActorRef actor={actor} card={card} onOpen={open} />;
 }
 
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
@@ -1027,6 +1095,7 @@ export function AgentMessage({
             </SentToAgent>
           </MessageContent>
         )}
+        <UndeliveredMark messageId={message.id} />
         {words === "" && named === null && sentAt === undefined ? null : (
           <div className="message-meta">
             {words === "" ? null : (
@@ -1188,6 +1257,7 @@ function AgentTranscriptView({
   endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
+  const undelivered = useUndeliveredLines();
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
@@ -1195,7 +1265,10 @@ function AgentTranscriptView({
     // any other is, but where something sent it, an automation, when it is
     // that sender's card; the rest the developer sent since.
     const first = messages.find(
-      (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+      (message) =>
+        message.role === MESSAGE_ROLE.USER &&
+        chatNoticeOf(message) === undefined &&
+        !undelivered.has(message.id),
     );
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
@@ -1240,7 +1313,12 @@ function AgentTranscriptView({
               />
               {message === first && opening !== undefined && replay !== undefined ? (
                 <>
-                  <ReplayCard replay={opening.replay} place={replay} planId={planId} />
+                  <ReplayCard
+                    replay={opening.replay}
+                    sentAt={first.sentAt}
+                    place={replay}
+                    planId={planId}
+                  />
                   {opening.note === undefined ? null : (
                     <AgentMessage
                       message={opening.note}
@@ -1388,6 +1466,9 @@ function AgentTabView({
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
   const steering = new Set(composer.sent.filter((line) => line.steers).map((line) => line.id));
+  const undelivered = new Set(
+    composer.sent.filter((line) => line.undelivered === true).map((line) => line.id),
+  );
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
   const { members, former } = useMemberDirectory();
@@ -1412,42 +1493,44 @@ function AgentTabView({
       <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId, former)}>
         <AgentPicturesProvider value={pictures}>
           <MentionedServers value={{ disabled: servers.disabled, steering }}>
-            <AgentTranscriptView
-              messages={lines}
-              brief={agent.brief}
-              briefSender={starter === undefined ? undefined : starterActor}
-              origin={origin}
-              readerId={readerId}
-              planId={agent.planId ?? undefined}
-              replay={replay}
-              delegation={{
-                models,
-                own: { model: agent.model, effort: agent.effort },
-                starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                onOpen: onOpenSubagent,
-                onOpenTarget,
-                cards,
-                standings: transcript.subagents,
-                chat,
-                chatOn,
-              }}
-              reading={transcript.reading}
-              failed={transcript.failed}
-              working={working}
-              sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-              startedAt={startedAt}
-              ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
-              endReason={endLineReason(transcript.failure, starter)}
-              onOpenApiKeys={onOpenApiKeys}
-              endTrail={endTrail}
-              onRetry={transcript.onRetry}
-              footer={
-                showsPublishedRow(agent.status, published) ? (
-                  <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-                ) : null
-              }
-              overComposer
-            />
+            <UndeliveredLines value={undelivered}>
+              <AgentTranscriptView
+                messages={lines}
+                brief={agent.brief}
+                briefSender={starter === undefined ? undefined : starterActor}
+                origin={origin}
+                readerId={readerId}
+                planId={agent.planId ?? undefined}
+                replay={replay}
+                delegation={{
+                  models,
+                  own: { model: agent.model, effort: agent.effort },
+                  starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                  onOpen: onOpenSubagent,
+                  onOpenTarget,
+                  cards,
+                  standings: transcript.subagents,
+                  chat,
+                  chatOn,
+                }}
+                reading={transcript.reading}
+                failed={transcript.failed}
+                working={working}
+                sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                startedAt={startedAt}
+                ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+                endReason={endLineReason(transcript.failure, starter)}
+                onOpenApiKeys={onOpenApiKeys}
+                endTrail={endTrail}
+                onRetry={transcript.onRetry}
+                footer={
+                  showsPublishedRow(agent.status, published) ? (
+                    <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+                  ) : null
+                }
+                overComposer
+              />
+            </UndeliveredLines>
           </MentionedServers>
         </AgentPicturesProvider>
       </MacOwnerProvider>
@@ -1590,7 +1673,7 @@ export function AgentTab({
     read: control.readPullRequest,
   });
   const copyWithToast = useCopyToast();
-  const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  const openGitHub = (url: string) => appPlatform().openGitHub(url);
   // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
   const toast = useToast();
   useMessageReveal({
@@ -1664,8 +1747,8 @@ export function AgentTab({
             control={control}
             onOpenAgent={openAgent}
             carry={{
-              words: composer.draft,
-              attachments: composer.attachments,
+              words: composer.unsent.words,
+              attachments: composer.unsent.attachments,
               planId: agent.planId,
             }}
           />

@@ -8,7 +8,6 @@
 
 @layer components {
   .luke-public-page {
-    --luke-public-page-width: 700px;
     --luke-public-page-start: var(--luke-space-48);
     --luke-public-page-end: var(--luke-space-64);
     --luke-public-page-rhythm: var(--luke-space-64);
@@ -30,12 +29,21 @@
     }
   }
 
+  /* The measure is the column's own, so a banner or a footer drawn apart
+     from the page keeps to it as well. */
   .luke-public-page-column {
+    --luke-public-page-width: 700px;
     box-sizing: border-box;
     width: 100%;
     max-width: var(--luke-public-page-width);
     margin-inline: auto;
     padding-inline: var(--luke-page-inset);
+  }
+
+  /* Room for a rail beside the reading column: the rail, its gutter, and
+     the words at about the column's own measure. */
+  .luke-public-page-column[data-width="wide"] {
+    --luke-public-page-width: 860px;
   }
 
   /* The banner owns its ground across the whole page, a wash of it over a

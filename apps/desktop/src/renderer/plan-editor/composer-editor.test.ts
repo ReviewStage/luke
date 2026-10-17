@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, test } from "vitest";
 import {
   composerEditor,
@@ -321,6 +322,26 @@ test("an @ word is reported to the mentions, and a pick writes the mention into 
   assert.equal(word?.query, "ses");
   assert.equal(box.drafts.at(-1), `Fix ${STORE_LINK} `);
   assert.deepEqual(box.drawn, ["session-store.ts luke://file/apps/web/session-store.ts"]);
+});
+
+test("the space a pick writes at the end of the words is drawn, under the panel's own stylesheet", () => {
+  const sheet = document.createElement("style");
+  sheet.textContent = readFileSync(`${__dirname}/../styles/tasks.css`, "utf8");
+  document.head.append(sheet);
+  const box = mountedWithMentions("");
+
+  typeInComposer(box.host, "Fix @ses");
+  box.handle.chooseMention({
+    name: "session-store.ts",
+    target: "luke://file/apps/web/session-store.ts",
+  });
+  const editor = composerEditor(box.host);
+  const spacing = getComputedStyle(editor).whiteSpace;
+  sheet.remove();
+
+  assert.equal(editor.querySelector("p")?.lastChild?.textContent, " ");
+  // Note that a space ending a line collapses under `normal`, which leaves the caret against the chip.
+  assert.equal(spacing, "pre-wrap");
 });
 
 test("words laid in with a mention's link hold it as its chip, and hand the same words back", () => {

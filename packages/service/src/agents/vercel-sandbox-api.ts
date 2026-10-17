@@ -64,10 +64,11 @@ export interface ListedSandbox {
   readonly currentSessionId?: string | undefined;
 }
 
-/** A command the sandbox ran to its end: its exit code and what it printed on stdout. */
+/** A command the sandbox ran to its end: its exit code and what it printed on stdout and stderr. */
 export interface CommandRun {
   readonly exitCode: number;
   readonly stdout: string;
+  readonly stderr: string;
 }
 
 /**
@@ -230,11 +231,13 @@ function jsonOf(text: string): UnparsedWireValue {
 
 /**
  * A finished command's stream read whole: the lines it printed on stdout,
- * in order, and the exit code its last line carries. An error line, or a
- * stream that ends before the command does, is unavailable.
+ * and those on stderr, each in order, and the exit code its last line
+ * carries. An error line, or a stream that ends before the command does, is
+ * unavailable.
  */
 function commandRunOf(text: string): CommandRun | undefined {
   let stdout = "";
+  let stderr = "";
   let exitCode: number | undefined;
   for (const line of text.split("\n")) {
     if (line.trim() === "") continue;
@@ -247,8 +250,9 @@ function commandRunOf(text: string): CommandRun | undefined {
     }
     if (value.stream === "error") return undefined;
     if (value.stream === "stdout") stdout += value.data;
+    else stderr += value.data;
   }
-  return exitCode === undefined ? undefined : { exitCode, stdout };
+  return exitCode === undefined ? undefined : { exitCode, stdout, stderr };
 }
 
 /** The API under the token the reader hands, read afresh for each call. */
@@ -326,10 +330,12 @@ export function vercelSandboxApi(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/stop`,
             asked.teamId,
           );
-          const stopped = yield* callApi(
-            client,
-            HttpClientRequest.post(url, { headers: asked.headers }),
+          // Note that the stop is sent as JSON though it asks nothing, because Vercel answers 415 to a
+          // POST with no JSON content type, as `@vercel/sandbox` sends every call.
+          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({}),
           );
+          const stopped = yield* callApi(client, request);
           if (!succeeded(stopped.status) && stopped.status !== NOT_FOUND_STATUS) {
             return yield* new SandboxUnavailable({ status: stopped.status });
           }

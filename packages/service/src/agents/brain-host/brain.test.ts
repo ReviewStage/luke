@@ -19,6 +19,7 @@ import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { type PlanDocument, planDocumentSchema } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { noNetwork } from "@luke/wire/testing";
 import {
   generateText,
   type JSONValue,
@@ -54,7 +55,6 @@ import {
   NO_GITHUB,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
-import { noNetwork } from "../../testing/no-network.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import {

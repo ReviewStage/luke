@@ -13,6 +13,7 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { GitHubApp } from "../../github/github-app.js";
@@ -27,7 +28,6 @@ import {
   integrationConnectOf,
   integrationConnectOver,
 } from "../../testing/integration-connect.js";
-import { noNetwork } from "../../testing/no-network.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_PRINCIPAL_TYPE } from "../brain-host/bounds.js";
 import { type CoderHost, coderHost } from "../coder-host/host.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";

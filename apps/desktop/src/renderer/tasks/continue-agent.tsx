@@ -11,6 +11,7 @@ import {
   continuationsOf,
   continueTrail,
 } from "./coding-agent-model";
+import { useContinueDoor } from "./fork-action";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
@@ -18,10 +19,15 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  *
  * It ends a failed turn's end line, and the note of a box closed because
  * the agent's session has ended, whose words and files the press carries
- * into the new agent as its note, so nothing typed is lost, and lets go of
- * once it landed, unless they were changed meanwhile, in another window,
- * when the newer words stay. The press is held busy while it is out, and says beside
- * itself why it did not start. Once any agent of the task continues this
+ * on, so nothing typed is lost. Where the agent's tab opens drafts
+ * (`useContinueDoor`), the press opens the task's draft as a continue of
+ * the agent, the words and files laid in its box, and lets the closed box's
+ * go at once: nothing is sent until the developer sends the draft, an empty
+ * one continuing on nothing more. Elsewhere it starts the new agent at
+ * once with them as its note, and lets them go once it landed, unless they
+ * were changed meanwhile, in another window, when the newer words stay;
+ * that press is held busy while it is out, and says beside itself why it
+ * did not start. Once any agent of the task continues this
  * one (`continuationsOf`), each is named in its place by its chip, which
  * opens its tab, so one agent is not continued twice. Nothing stands where
  * no Start could run and none continued it: on an archived task, or an
@@ -71,10 +77,21 @@ export function ContinueAgent({
     [agentId, control.agents, control.archived],
   );
   const { continueAgent } = control;
+  const opensDraft = useContinueDoor();
   const trail = continueTrail(continuations, offers && continueAgent !== undefined);
 
   const press = () => {
     if (continueAgent === undefined || busy) return;
+    // Where the place opens a draft, the words move into the continue's draft, sent once the developer sends it.
+    if (opensDraft !== undefined) {
+      opensDraft(carry?.words ?? "", carry?.attachments ?? []);
+      if (carry !== undefined) {
+        writer.update({ kind: DRAFT_PLACE.AGENT, planId: carry.planId, agentId }, (now) =>
+          holdsCarried(now, carry) ? EMPTY_DRAFT : now,
+        );
+      }
+      return;
+    }
     const words = carry?.words.trim() ?? "";
     setBusy(true);
     setNote(undefined);

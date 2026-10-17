@@ -19,11 +19,13 @@ import {
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { composerEditor, installEditorBundle, installEditorLayout } from "#testing/composer";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { composerEditor, editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -39,6 +41,7 @@ import {
   messageFailureWords,
   startFailureNote,
 } from "./coding-agent-model";
+import { ForkProvider } from "./fork-action";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import type { AgentContinuer } from "./use-coding-agents";
 
@@ -96,7 +99,8 @@ const MESSAGES: readonly CodingAgentMessage[] = [
 
 const roots: Root[] = [];
 
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
@@ -107,7 +111,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   window.localStorage.clear();
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });
 
 async function settle(): Promise<void> {
@@ -158,14 +162,12 @@ async function drawnTab(input: {
     onWriter?: (writer: DraftWriter) => void;
   };
   messages?: readonly CodingAgentMessage[];
+  /** Whether the tab's place opens the continue as a draft, as the task's column does. */
+  drafts?: boolean;
 }) {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (_request: Act): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: (_request: Act): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   const source = agentOf(SOURCE, { status: input.status });
   const continued: {
@@ -174,6 +176,7 @@ async function drawnTab(input: {
     attachments: readonly unknown[] | undefined;
   }[] = [];
   const opened: ToolTarget[] = [];
+  const drafted: { words: string; attachments: readonly CodingAgentAttachment[] }[] = [];
   const continueAgent: AgentContinuer = (agentId, note, attachments) => {
     continued.push({ agentId, note, attachments });
     return input.answer?.() ?? Promise.resolve(undefined);
@@ -209,14 +212,27 @@ async function drawnTab(input: {
           Fragment,
           null,
           input.seed === undefined ? null : createElement(Seeded, input.seed),
-          createElement(AgentTab, {
-            agent: source,
-            control,
-            shown: true,
-            onOpenSubagent: () => undefined,
-            onOpenTarget: (target) => opened.push(target),
-            onHeld: () => undefined,
-          }),
+          createElement(
+            ForkProvider,
+            {
+              value: {
+                onFork: undefined,
+                forkedTo: () => [],
+                onContinue:
+                  input.drafts === true
+                    ? (words, attachments) => drafted.push({ words, attachments })
+                    : undefined,
+              },
+            },
+            createElement(AgentTab, {
+              agent: source,
+              control,
+              shown: true,
+              onOpenSubagent: () => undefined,
+              onOpenTarget: (target) => opened.push(target),
+              onHeld: () => undefined,
+            }),
+          ),
         ),
       ),
     ),
@@ -227,7 +243,13 @@ async function drawnTab(input: {
   return {
     container,
     continued,
+    drafted,
     opened,
+    /** The developer's lines in the transcript reading `words`. */
+    lines: (words: string) =>
+      [...container.querySelectorAll<HTMLElement>(".is-user")].filter((each) =>
+        each.textContent?.includes(words),
+      ),
     endLine: () =>
       container.querySelector<HTMLElement>(".agent-end-line") ??
       container.querySelector<HTMLElement>("[data-ended]"),
@@ -366,7 +388,19 @@ test("a box closed on an ended agent offers Continue in new agent beside its not
     note.textContent ?? "",
     /This agent has ended\. Continue in a new one to carry on\./,
   );
-  assert.equal(composerEditor(tab.container).textContent, "Now add the dark variant.");
+  // The refused line stays where it went, marked, and the closed box does not draw its words again.
+  assert.equal(composerEditor(tab.container).textContent, "", "the words show once");
+  assert.ok(
+    tab.container.querySelector(".agent-composer[data-closed]"),
+    "the box wears its held look",
+  );
+  assert.equal(tab.lines("Now add the dark variant.").length, 1);
+  const [line] = tab.lines("Now add the dark variant.");
+  assert.match(
+    line?.querySelector("[data-undelivered]")?.textContent ?? "",
+    /^Not delivered$/,
+    "the line says it did not go",
+  );
   const [button] = tab.buttons(note);
   assert.ok(button, "the note's remedy continues the agent");
 
@@ -475,7 +509,14 @@ test("words changed in the closed box while its continue is out stay once it lan
     tab.continued.map((each) => each.note),
     ["Fix tests"],
   );
-  assert.equal(composerEditor(tab.container).textContent, "Fix tests and lint");
+  let kept = "";
+  act(() =>
+    writer?.update({ kind: DRAFT_PLACE.AGENT, planId: TASK, agentId: SOURCE }, (was) => {
+      kept = was.text;
+      return was;
+    }),
+  );
+  assert.equal(kept, "Fix tests and lint");
 });
 
 test("a failed agent whose box closed still names the agents that continued it on its end line, which stands whatever replaces the box", async () => {
@@ -503,4 +544,55 @@ test("a failed agent whose box closed still names the agents that continued it o
     /Continued in.*Fix the tile \(2\)/,
   );
   assert.equal(tab.buttons(tab.container).length, 0, "nothing offers a second continue");
+});
+
+test("where the tab's place opens drafts, Continue on a closed box opens the continue's draft with the box's words and files and sends nothing, the box letting them go; on a failed end line it opens one empty", async () => {
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.SANDBOX,
+    message: { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED },
+    seed: { words: "Now add the dark variant.", files: [NOTES] },
+    drafts: true,
+  });
+  const [onLine] = tab.buttons(tab.endLine() ?? assert.fail("the turn ends on its line"));
+  assert.ok(onLine, "the end line offers Continue before the box closes");
+  await act(async () => onLine.click());
+  assert.deepEqual(tab.drafted, [{ words: "", attachments: [] }], "the end line carries nothing");
+
+  const send =
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ??
+    assert.fail("the box offers Send");
+  await act(async () => send.click());
+  await settle();
+  const [button] = tab.buttons(tab.note() ?? assert.fail("the box says why it closed"));
+  assert.ok(button, "the note's remedy continues the agent");
+  await act(async () => button.click());
+  await settle();
+
+  assert.deepEqual(tab.drafted.at(-1), {
+    words: "Now add the dark variant.",
+    attachments: [NOTES],
+  });
+  assert.deepEqual(tab.continued, [], "nothing is sent until the draft is");
+  assert.equal(tab.lines("Now add the dark variant.").length, 1, "the refused line still stands");
+  assert.equal(button.disabled, false, "nothing is out to hold the press for");
+});
+
+test("a message refused before the transcript has read anything stands as the developer's line marked Not delivered, never as the agent's plan", async () => {
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.COMPLETED,
+    message: { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED },
+    seed: { words: "Continue testing.", files: [NOTES] },
+    messages: [],
+  });
+  const send =
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ??
+    assert.fail("the box offers Send");
+  await act(async () => send.click());
+  await settle();
+
+  const [line] = tab.lines("Continue testing.");
+  assert.ok(line, "the refused line is the developer's");
+  assert.ok(line.querySelector("[data-undelivered]"), "marked as not delivered");
+  assert.match(line.textContent ?? "", /notes\.md/u, "with its file");
 });
