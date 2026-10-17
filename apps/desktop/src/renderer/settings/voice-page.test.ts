@@ -84,10 +84,7 @@ function microphoneAt(
 const roots: Root[] = [];
 
 /** Draws Settings on the Voice page and answers the container, and how to draw it again at another answer. */
-function draw(microphone: MicrophoneControl): {
-  container: HTMLElement;
-  redraw: (next: MicrophoneControl) => void;
-} {
+function draw(microphone: MicrophoneControl) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
