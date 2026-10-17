@@ -15,7 +15,12 @@ import { Database } from "../../core/query.js";
 import { createAutomation } from "../../models/automation-store.js";
 import { createCodingAgent } from "../../models/coding-agent-store.js";
 import { createTask } from "../../models/task-store.js";
-import { getTestDB } from "../../testing/index.js";
+import {
+  getTestDB,
+  migrationStatements,
+  RENAME_PLAN_TO_TASK,
+  undoneRename,
+} from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
 
 /**
@@ -96,7 +101,11 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
         yield* sql`UPDATE automation SET organization_id = NULL WHERE id = ${made.id}`;
         yield* sql`UPDATE coding_agent SET organization_id = NULL WHERE id = ${started.agent.id}`;
 
+        // Note that the migration names the plan's row by the names it held then, so the later rename is walked back around it.
+        const renames = yield* migrationStatements(RENAME_PLAN_TO_TASK);
+        for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));
         for (const statement of yield* statements) yield* sql.unsafe(statement);
+        for (const statement of renames) yield* sql.unsafe(statement);
 
         const [automationRow] = yield* sql<{ readonly organization_id: string | null }>`
           SELECT organization_id FROM automation WHERE id = ${made.id}

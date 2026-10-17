@@ -953,6 +953,8 @@ interface GitHubThreadComment {
 interface GitHubReviewThread {
   /** GitHub's id for the review its first comment was made in; none where GitHub names none. */
   readonly reviewId: number | null;
+  /** GitHub's GraphQL id for the thread, which a reply or a resolve names it by. */
+  readonly id: string;
   readonly path: string;
   readonly line: number | null;
   readonly startLine: number | null;
@@ -1133,6 +1135,7 @@ const REVIEW_THREADS_QUERY = `query ReviewThreads($owner: String!, $name: String
       reviewThreads(last: ${OVERVIEW_BOUNDS.MAX_THREADS}) {
         totalCount
         nodes {
+          id
           path
           line
           startLine
@@ -1194,6 +1197,7 @@ const ThreadCommentSchema = Schema.Struct({
 });
 
 const ThreadSchema = Schema.Struct({
+  id: Schema.String,
   path: Schema.String,
   line: Schema.NullOr(Schema.Number),
   startLine: Schema.NullOr(Schema.Number),
@@ -1267,6 +1271,7 @@ function threadOf(node: typeof ThreadSchema.Type): GitHubReviewThread | undefine
   if (first === undefined) return undefined;
   return {
     reviewId: first.pullRequestReview?.databaseId ?? null,
+    id: node.id,
     path: node.path,
     line: node.line,
     startLine: node.startLine,

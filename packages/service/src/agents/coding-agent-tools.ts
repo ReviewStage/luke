@@ -72,11 +72,11 @@ import {
 import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.js";
 
 /**
- * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, message one, start one, and for Luke on a call read one's progress.
+ * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, message one, start one.
  *
  * Luke on a call and every coding agent are offered the same `list_agents`,
- * `message_agent`, and `start_agent`, one implementation each, and Luke
- * `read_agent` beside them; the caller is what differs (`AgentCaller`):
+ * `read_agent`, `message_agent`, and `start_agent`, one implementation each;
+ * the caller is what differs (`AgentCaller`):
  * Luke acting for the member on the call, on the call's task, or a coding
  * agent acting for its starter, on its own task, which the host read from
  * the session it admitted and never from the call. A list, a read, and a
@@ -91,7 +91,11 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * transcript's turn journals, rendered as a short tail of what the agent
  * said and did; a read of one agent also asks GitHub what that branch
  * published, as the agent's tab does (`coder-host/published.ts`), and says
- * nothing of it where GitHub could not be asked. A message takes the one
+ * nothing of it where GitHub could not be asked. Luke summarises a read
+ * aloud, so his tail's entries are cut close and his words for the tool say
+ * so; a coding agent reads its tail as text, to learn why an agent went
+ * quiet, so each of its entries keeps more, and it may ask for a longer
+ * tail, to a bound. A message takes the one
  * path the message box's does (`coder-host/steer.ts`), under the key eve
  * gave the tool call, so a call eve runs again after a lost answer sends
  * once, and answers as soon as the session took it, never waiting on a
@@ -133,12 +137,16 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
 const TASKS_LIST_LIMIT = 50;
 
 const CODING_AGENT_TOOL_BOUNDS = {
-  /** The newest turns a progress read walks, the one under way included. */
+  /** The newest turns a progress read walks first, the one under way included. */
   TAIL_TURNS: 3,
-  /** The most entries a progress read answers, the newest last. */
+  /** The entries a progress read answers where it asks for no number, the newest last. */
   TAIL_ENTRIES: 20,
-  /** The most characters one entry of the tail carries. */
+  /** The most entries a progress read may ask for: with a coding agent's entries, about ten thousand tokens. */
+  MAX_TAIL_ENTRIES: 50,
+  /** The most characters one entry of Luke's tail carries, which he summarises aloud. */
   ENTRY_CHARS: 300,
+  /** The most characters one entry of a coding agent's tail carries, which it reads as text. */
+  AGENT_ENTRY_CHARS: 800,
   /** The most characters an agent's latest activity carries in the list. */
   ACTIVITY_CHARS: 160,
 } as const;
@@ -276,6 +284,21 @@ const AGENT_ID = describeWire(
 
 const READ_AGENT_INPUT = Schema.Struct({ agentId: AGENT_ID });
 
+/** A coding agent's read names the agent and, at most, how long a tail it wants. */
+const CODER_READ_AGENT_INPUT = Schema.Struct({
+  agentId: AGENT_ID,
+  entries: Schema.optionalKey(
+    describeWire(
+      Schema.Int.check(
+        Schema.isBetween({ minimum: 1, maximum: CODING_AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES }),
+      ),
+      "How many entries of its transcript to read, the newest last; " +
+        `${CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES} when left out, at most ` +
+        `${CODING_AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES}.`,
+    ),
+  ),
+});
+
 const MESSAGE_AGENT_INPUT = Schema.Struct({
   agentId: AGENT_ID,
   text: describeWire(
@@ -341,6 +364,7 @@ const START_AGENT_INPUT = Schema.Struct({
 });
 
 const readAgentRef = Schema.decodeUnknownResult(READ_AGENT_INPUT);
+const readAgentAsked = Schema.decodeUnknownResult(CODER_READ_AGENT_INPUT);
 
 const ARCHIVE_AGENT_INPUT = Schema.Struct({
   agentId: AGENT_ID,
@@ -384,6 +408,7 @@ export const LIST_AGENTS_TOOL = {
   inputSchema: AGENT_LIST_INPUT,
 } as const;
 
+/** `read_agent` as Luke on a call is offered it, who says what he read aloud. */
 export const READ_AGENT_TOOL = {
   name: AGENT_TOOL.READ_AGENT,
   description:
@@ -391,6 +416,21 @@ export const READ_AGENT_TOOL = {
     "request from it as GitHub holds them, and a short tail of what it last said and did, " +
     "newest last. Summarise it in a sentence or two; never read it out.",
   inputSchema: READ_AGENT_INPUT,
+} as const;
+
+/** `read_agent` as a coding agent is offered it, which reads the tail as text and may ask for more of it. */
+export const CODER_READ_AGENT_TOOL = {
+  name: AGENT_TOOL.READ_AGENT,
+  description:
+    "Read one coding agent of your workspace by its id, on any task and started by any member: " +
+    `what ${AGENT_TOOL.LIST_AGENTS} says of it, the branch it pushed and the pull request from it ` +
+    "as GitHub holds them, and the tail of its transcript, what it last said and which tools it " +
+    "called on what, newest last, each entry cut to " +
+    `${CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS} characters. Read one to learn why an agent ` +
+    "went quiet, what it is stuck on, or what it did, before you message it or decide what " +
+    "comes next. It only reads: the agent is not told. Answers `accepted` with the reading, or " +
+    "`rejected` and why.",
+  inputSchema: CODER_READ_AGENT_INPUT,
 } as const;
 
 export const MESSAGE_AGENT_TOOL = {
@@ -858,15 +898,41 @@ export function runListAgents(
   );
 }
 
-/** One call of `read_agent`: the agent as the list reads it, and the tail of its newest turns. */
+/**
+ * The newest entries of an agent's transcript, as many as asked where it
+ * has them. Note that the newest turns are read first and older ones only
+ * where those fall short, because a coding agent's one turn is often its
+ * whole run, long enough on its own; and that the second read takes as many
+ * turns as entries asked, since a turn that ended carries at least one.
+ */
+const tailOf = (agent: CodingAgent, entries: number, entryChars: number) =>
+  Effect.gen(function* () {
+    const entriesIn = (journals: readonly StoredUIMessage[]) =>
+      journals.flatMap((journal) => entriesOf(journal, entryChars));
+    const newest = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
+    const read = entriesIn(newest);
+    const more =
+      read.length < entries &&
+      newest.length === CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS &&
+      entries > CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS;
+    const all = more ? entriesIn(yield* journalsOf(agent, entries)) : read;
+    return all.slice(-entries);
+  });
+
+/** One call of `read_agent`: the agent as the list reads it, and the tail of its newest turns, as long as asked and each entry cut for the caller. */
 export function runReadAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readAgentRef(input);
+  const asked = readAgentAsked(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE));
   }
+  const entries = asked.success.entries ?? CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES;
+  const entryChars =
+    call.caller.kind === AGENT_CALLER.AGENT
+      ? CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS
+      : CODING_AGENT_TOOL_BOUNDS.ENTRY_CHARS;
   return orStoreRefusal(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(call.caller, asked.success.agentId);
@@ -876,10 +942,7 @@ export function runReadAgent(
       const step = yield* workspaceStepOf(callerUserId(call.caller), workspaceId);
       const reading = yield* readAgent(agent, task, standing(agent), yield* offeredModels, step);
       const published = yield* publishedOf(callerUserId(call.caller), agent);
-      const journals = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
-      const tail = journals
-        .flatMap((journal) => entriesOf(journal, CODING_AGENT_TOOL_BOUNDS.ENTRY_CHARS))
-        .slice(-CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES);
+      const tail = yield* tailOf(agent, entries, entryChars);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: readingRecord(reading),

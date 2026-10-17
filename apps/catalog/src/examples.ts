@@ -1,4 +1,5 @@
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
@@ -36,11 +37,12 @@ export const EXAMPLES: readonly Example[] = [
   CHIPS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
+  TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
   SEGMENTED_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
-  TOOLTIPS_EXAMPLE,
+  AUTH_PAGE_EXAMPLE,
 ];
