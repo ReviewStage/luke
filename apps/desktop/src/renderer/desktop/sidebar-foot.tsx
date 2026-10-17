@@ -8,6 +8,7 @@ import {
   DIALOG_TONE,
   ExternalIcon,
   GearIcon,
+  IconButton,
   KeyboardIcon,
   ProviderMark,
   riseAbove,
@@ -294,15 +295,12 @@ export function SidebarFoot({
       <AccountMenu account={account} shown={shown} onSettings={onSettings} onSignOut={onSignOut} />
       <SidebarUpdate updates={updates} />
       <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
-        <button
-          type="button"
-          className="icon-button sidebar-settings"
-          aria-label="Settings"
+        <IconButton
+          icon={<GearIcon />}
+          label="Settings"
           aria-current={settingsOpen ? "page" : undefined}
           onClick={onSettings}
-        >
-          <GearIcon />
-        </button>
+        />
       </Tooltip>
     </div>
   );

@@ -290,7 +290,7 @@ body,
   top: var(--desktop-bar-height);
   bottom: 0;
   left: 0;
-  width: var(--space-6);
+  width: var(--luke-space-6);
 }
 
 .desktop-shell[data-sidebar-collapsed="true"] .desktop-main .desktop-toolbar {
@@ -368,7 +368,7 @@ body,
   min-height: 0;
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
-  border-right: 1px solid var(--hairline);
+  border-right: 1px solid var(--luke-color-border);
   background: var(--desktop-sidebar);
 }
 
@@ -414,8 +414,8 @@ body,
 .sidebar-search {
   display: flex;
   align-items: center;
-  gap: var(--glyph-gap);
-  height: var(--control-height);
+  gap: var(--luke-icon-gap);
+  height: var(--luke-control-height);
   margin: 0 0 var(--list-gap);
   padding: 0 var(--row-inset);
   border-radius: 9px;
@@ -430,15 +430,15 @@ body,
 .sidebar-new-task:hover:not(:disabled),
 .sidebar-search:hover:not(:disabled),
 .sidebar-search[aria-current="page"] {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .sidebar-rule {
   height: 1px;
   flex: 0 0 auto;
-  margin: var(--space-8) var(--row-inset);
+  margin: var(--luke-space-8) var(--row-inset);
   border: 0;
-  background: var(--hairline);
+  background: var(--luke-color-border);
 }
 
 .sidebar-new-task:disabled,
@@ -462,12 +462,12 @@ body,
 .sidebar-factory[aria-current="page"],
 .sidebar-automations[aria-current="page"],
 .sidebar-issues[aria-current="page"] {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .sidebar-inbox-waiting {
   margin-left: auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -711,8 +711,8 @@ body,
 .sidebar-new-task svg,
 .sidebar-search svg,
 .sidebar-item svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: 0 0 auto;
 }
 
@@ -729,7 +729,7 @@ body,
 /* The plans stand a section's gap below the pinned ones while any are
    pinned. */
 .sidebar-group + .sidebar-group {
-  margin-top: var(--section-gap);
+  margin-top: var(--luke-section-gap);
 }
 
 /* A section's head, Pinned's and Tasks', in the headings' voice a level
@@ -737,10 +737,10 @@ body,
    it folds, and its buttons at its end, View options on Tasks'. */
 .sidebar-section-head {
   display: flex;
-  height: var(--control-height);
+  height: var(--luke-control-height);
   align-items: center;
-  gap: var(--space-4);
-  padding: 0 var(--space-4) 0 var(--row-inset);
+  gap: var(--luke-space-4);
+  padding: 0 var(--luke-space-4) 0 var(--row-inset);
   -webkit-app-region: no-drag;
 }
 
@@ -749,11 +749,11 @@ body,
   min-width: 0;
   flex: 1;
   align-items: baseline;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -761,29 +761,32 @@ body,
 }
 
 button.sidebar-section-head-name:hover {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .sidebar-section-head-count {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
 }
 
 /* View options wears a dot while the view leaves tasks out, so a filtered
-   list never passes for the whole of it. */
-.sidebar-view-options[data-filtered="true"] {
+   list never passes for the whole of it: drawn by the box around the
+   button, over its corner. */
+.sidebar-view-options {
   position: relative;
+  display: inline-flex;
 }
 
 .sidebar-view-options[data-filtered="true"]::after {
   position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
+  top: var(--luke-space-4);
+  right: var(--luke-space-4);
   width: 5px; /* off-scale: a status dot */
   height: 5px; /* off-scale: a status dot */
   border-radius: 50%;
-  background: var(--focus-ring);
+  background: var(--luke-color-focus-ring);
   content: "";
+  pointer-events: none;
 }
 
 /* What the view filters by, under the Tasks head, each chip drawn as the
@@ -791,8 +794,8 @@ button.sidebar-section-head-name:hover {
 .sidebar-view-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  padding: 0 var(--space-6) var(--space-6);
+  gap: var(--luke-space-4);
+  padding: 0 var(--luke-space-6) var(--luke-space-6);
 }
 
 .sidebar-view-chip {
@@ -800,12 +803,12 @@ button.sidebar-section-head-name:hover {
   min-width: 0;
   height: 22px; /* off-scale: a chip a row's half-step shorter than the palette's */
   align-items: center;
-  gap: var(--space-4);
-  padding: 0 var(--space-2) 0 var(--space-6);
-  border: 1px solid var(--selected-edge);
+  gap: var(--luke-space-4);
+  padding: 0 var(--luke-space-2) 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border-selected);
   border-radius: 999px;
-  background: var(--selected);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-selected);
+  color: var(--luke-color-text);
   font-size: 12px;
   font-weight: 500;
   -webkit-app-region: no-drag;
@@ -831,12 +834,12 @@ button.sidebar-section-head-name:hover {
   border: 0;
   border-radius: 999px;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .sidebar-view-chip button:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
 }
 
 .sidebar-view-chip button svg {
@@ -855,8 +858,8 @@ button.sidebar-section-head-name:hover {
 }
 
 .sidebar-note {
-  margin: var(--space-4) var(--row-inset);
-  color: var(--text-secondary);
+  margin: var(--luke-space-4) var(--row-inset);
+  color: var(--luke-color-text-muted);
   font-size: 12.5px;
   line-height: 1.45;
 }
@@ -871,7 +874,7 @@ button.sidebar-section-head-name:hover {
 }
 
 .sidebar-skeleton-row {
-  padding: var(--space-6) var(--row-inset);
+  padding: var(--luke-space-6) var(--row-inset);
   font-size: 13px;
   line-height: var(--sidebar-row-line);
 }
@@ -890,7 +893,7 @@ button.sidebar-section-head-name:hover {
 .sidebar-task {
   display: block;
   width: 100%;
-  padding: var(--space-8) var(--row-inset);
+  padding: var(--luke-space-8) var(--row-inset);
   border-radius: 9px;
   background: none;
   text-align: left;
@@ -913,7 +916,7 @@ button.sidebar-section-head-name:hover {
    in its line and would make the row a pixel taller than New plan's. */
 .desktop-sidebar .sidebar-task {
   display: flex;
-  height: var(--control-height);
+  height: var(--luke-control-height);
   align-items: center;
   padding-block: 0;
 }
@@ -923,7 +926,7 @@ button.sidebar-section-head-name:hover {
 }
 
 .desktop-sidebar .sidebar-task-marks {
-  top: calc((var(--control-height) - var(--sidebar-row-line)) / 2);
+  top: calc((var(--luke-control-height) - var(--sidebar-row-line)) / 2);
 }
 
 /* A plan's row fills while the pointer is anywhere on its item, its own
@@ -932,11 +935,11 @@ button.sidebar-section-head-name:hover {
 :where(.sidebar-task-item:hover) > .sidebar-task,
 .sidebar-new-task:hover:not(:disabled),
 .sidebar-search:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .sidebar-task[aria-current="page"] {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
@@ -1368,7 +1371,7 @@ ul.actor-stack {
   .sidebar-task[aria-current="page"]
   :is(.sidebar-task-name, .sidebar-pinned-tab-name),
 .desktop-sidebar .sidebar-task-item:hover :is(.sidebar-task-name, .sidebar-pinned-tab-name) {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 /* The one unread mark: what the developer has not seen, a plan saved since
@@ -1380,7 +1383,7 @@ ul.actor-stack {
    quieter ink, the ink carries half the step, so a semibold is enough. */
 .sidebar-task[data-unread="true"] .sidebar-task-name,
 .tab[data-unread="true"] .tab-label {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-weight: 680;
 }
 
@@ -1396,9 +1399,9 @@ ul.actor-stack {
   padding: 1px 4px; /* off-scale */
   border: 0;
   border-radius: 5px;
-  background: var(--desktop-ground);
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
-  color: var(--text-primary);
+  background: var(--luke-color-ground);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+  color: var(--luke-color-text);
   font-family: inherit;
   font-size: 13px;
 }
@@ -1409,7 +1412,7 @@ ul.actor-stack {
 .sidebar-task-line {
   display: flex;
   align-items: baseline;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   min-width: 0;
 }
 
@@ -1425,13 +1428,13 @@ ul.actor-stack {
   flex: none;
   align-self: center;
   --state-glyph-size: 14px;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .sidebar-task-time {
   flex: none;
-  min-width: calc(2 * var(--sidebar-plan-mark) + var(--space-2));
-  color: var(--text-tertiary);
+  min-width: calc(2 * var(--sidebar-plan-mark) + var(--luke-space-2));
+  color: var(--luke-color-text-subtle);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -1444,7 +1447,7 @@ ul.actor-stack {
 .sidebar-task-time .state-glyph {
   --state-glyph-size: 12px;
 
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
   vertical-align: -1.5px; /* off-scale */
 }
 
@@ -1456,8 +1459,8 @@ ul.actor-stack {
   display: inline-block;
   max-width: 7em;
   overflow: hidden;
-  margin-right: var(--space-6);
-  color: var(--text-tertiary);
+  margin-right: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
   text-overflow: ellipsis;
   vertical-align: bottom;
   white-space: nowrap;
@@ -1468,7 +1471,7 @@ ul.actor-stack {
    of the name's, and steps out with the time while the row is hovered. */
 .sidebar-task-time > .actor-mark {
   top: -1px; /* off-scale: centres the face on the time's figures */
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
 }
 
 /* Home's time sets its parts apart by its own gap. */
@@ -1481,12 +1484,12 @@ ul.actor-stack {
   width: 12px;
   height: 12px;
   flex: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   vertical-align: -1.5px; /* off-scale */
 }
 
 .sidebar-task-time .task-mark-glyph {
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
 }
 
 /* A row holding a draft wears its pencil at the glyph's size, before the mark
@@ -1494,7 +1497,7 @@ ul.actor-stack {
 .sidebar-task-time .draft-mark {
   width: 12px;
   height: 12px;
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
   vertical-align: -1.5px; /* off-scale */
 }
 
@@ -1503,7 +1506,7 @@ ul.actor-stack {
    (`attention-mark.tsx`), a size under the glyph's, so the disc's edge
    reads at the time's height. */
 .task-mark-attention {
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
 }
 
 .task-mark-attention .attention-mark {
@@ -1529,12 +1532,12 @@ ul.actor-stack {
 
 .sidebar-task-marks {
   position: absolute;
-  top: var(--space-8);
+  top: var(--luke-space-8);
   right: var(--row-inset);
   display: flex;
   height: 1lh;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   font-size: 13px;
   opacity: 0;
 }
@@ -1552,12 +1555,12 @@ ul.actor-stack {
   padding: 0;
   border-radius: 6px;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   transition: color var(--duration-hover) ease;
 }
 
 .sidebar-task-mark:hover:not(:disabled) {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .sidebar-task-mark:disabled {
@@ -1565,8 +1568,8 @@ ul.actor-stack {
 }
 
 .sidebar-task-mark svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: 0 0 auto;
 }
 
@@ -1595,8 +1598,10 @@ ul.actor-stack {
 .sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
   z-index: 2;
   border-radius: 9px;
-  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-sidebar);
-  box-shadow: 0 4px 12px var(--shadow);
+  background:
+    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
+    var(--desktop-sidebar);
+  box-shadow: 0 4px 12px var(--luke-color-shadow);
   transition: none;
 }
 
@@ -1618,28 +1623,28 @@ ul.actor-stack {
    is hovered, holds focus, or has its menu open. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-tasks + .sidebar-repository {
-  margin-top: var(--space-8);
+  margin-top: var(--luke-space-8);
 }
 
 .sidebar-repository-header {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   margin-bottom: var(--list-gap);
-  padding-right: var(--space-4);
+  padding-right: var(--luke-space-4);
   border-radius: 9px;
   transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
 }
 
 .sidebar-repository-header:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 /* Ringed while its menu is open, as a plan row is, so the menu is plainly
    about this repository. */
 .sidebar-repository-header[data-menu-open="true"] {
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
 .sidebar-repository-toggle {
@@ -1647,11 +1652,11 @@ ul.actor-stack {
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: var(--glyph-gap);
-  padding: var(--space-8) var(--row-inset);
+  gap: var(--luke-icon-gap);
+  padding: var(--luke-space-8) var(--row-inset);
   border-radius: 9px;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 12px;
   font-weight: 500;
   text-align: left;
@@ -1660,12 +1665,12 @@ ul.actor-stack {
 
 /* A header in the sidebar stands as tall as the rows under it. */
 .desktop-sidebar .sidebar-repository-toggle {
-  padding-block: calc((var(--control-height) - var(--sidebar-row-line)) / 2);
+  padding-block: calc((var(--luke-control-height) - var(--sidebar-row-line)) / 2);
   line-height: var(--sidebar-row-line);
 }
 
 .sidebar-repository-header:hover .sidebar-repository-toggle {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .sidebar-repository-toggle:focus-visible {
@@ -1676,7 +1681,7 @@ ul.actor-stack {
    as a plan row's ring takes in its Pin and Archive. */
 :root[data-keyboard="true"]
 .sidebar-repository-header:has(> .sidebar-repository-toggle:focus-visible) {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
 
@@ -1690,8 +1695,8 @@ ul.actor-stack {
    swap crossfades in place and the name never moves. */
 .sidebar-repository-glyph {
   display: grid;
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
   place-items: center;
 }
@@ -1704,13 +1709,13 @@ ul.actor-stack {
 }
 
 .sidebar-repository-glyph > svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .sidebar-repository-glyph > .repository-picture {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .sidebar-repository-glyph > .settings-chevron {
@@ -1741,7 +1746,7 @@ ul.actor-stack {
 .sidebar-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1755,8 +1760,10 @@ ul.actor-stack {
 .sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
   z-index: 3;
   border-radius: 9px;
-  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-sidebar);
-  box-shadow: 0 4px 12px var(--shadow);
+  background:
+    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
+    var(--desktop-sidebar);
+  box-shadow: 0 4px 12px var(--luke-color-shadow);
   transition: none;
 }
 
@@ -1767,8 +1774,8 @@ ul.actor-stack {
 /* A section's emoji stands where a glyph would, in the glyph's square. */
 .sidebar-section-emoji {
   display: grid;
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   place-items: center;
   font-size: 12px;
   line-height: 1;
@@ -1778,9 +1785,9 @@ ul.actor-stack {
    name, which stands at the row's inset where the section wears no icon. */
 .sidebar-section-empty {
   margin: 0;
-  padding: var(--space-4) var(--row-inset) var(--space-6)
-    calc(var(--row-inset) + var(--control-glyph) + var(--space-8));
-  color: var(--text-tertiary);
+  padding: var(--luke-space-4) var(--row-inset) var(--luke-space-6)
+    calc(var(--row-inset) + var(--luke-control-icon) + var(--luke-space-8));
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
 }
 
@@ -1792,7 +1799,7 @@ ul.actor-stack {
    line stands where the row would land among a section's tasks. */
 [data-row-drop][data-drop-target="true"] {
   border-radius: 9px;
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .sidebar-tasks > .sidebar-task-item:is([data-drop-before="true"], [data-drop-after="true"])::after {
@@ -1801,7 +1808,7 @@ ul.actor-stack {
   left: var(--row-inset);
   height: 2px;
   border-radius: 1px;
-  background: var(--focus-ring);
+  background: var(--luke-color-focus-ring);
   content: "";
   pointer-events: none;
 }
@@ -1882,7 +1889,7 @@ ul.actor-stack {
 .sidebar-repository-pinned {
   display: inline-flex;
   flex: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .sidebar-repository-pinned svg {
@@ -1896,8 +1903,8 @@ ul.actor-stack {
    opacity changing, so the name is cut where it always is. */
 .sidebar-repository-count {
   flex: none;
-  margin-left: calc(var(--space-6) - var(--glyph-gap));
-  color: var(--text-tertiary);
+  margin-left: calc(var(--luke-space-6) - var(--luke-icon-gap));
+  color: var(--luke-color-text-subtle);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   opacity: 0;
@@ -1933,18 +1940,18 @@ ul.actor-stack {
   justify-content: center;
   border-radius: 6px;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   transition: color var(--duration-hover) ease;
 }
 
 .sidebar-repository-action:hover,
 .sidebar-repository-action[aria-expanded="true"] {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .sidebar-repository-action svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
@@ -1964,14 +1971,14 @@ ul.actor-stack {
    nothing more. */
 .sidebar-pinned-tab .sidebar-task-line {
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   padding-right: var(--sidebar-plan-mark);
 }
 
 .sidebar-pinned-tab-glyph {
   display: flex;
   flex: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .sidebar-pinned-tab-glyph svg {
@@ -2006,20 +2013,20 @@ ul.actor-stack {
 .sidebar-foot {
   display: flex;
   flex-direction: column;
-  padding-top: var(--space-8);
+  padding-top: var(--luke-space-8);
 }
 
 .sidebar-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   width: 100%;
   height: 34px;
   padding: 0 var(--row-inset);
   border-radius: 8px;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 13px;
   font-weight: 560;
   text-align: left;
@@ -2029,14 +2036,14 @@ ul.actor-stack {
 }
 
 .sidebar-item:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 .sidebar-item[aria-current="page"],
 .sidebar-item[aria-current="location"] {
-  background: var(--raised-strong);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
 }
 
 /* The foot's one row: the account at its start, taking what room is left;
@@ -2044,7 +2051,7 @@ ul.actor-stack {
 .sidebar-account-row {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   container: sidebar-foot / inline-size;
 }
 
@@ -2055,11 +2062,11 @@ ul.actor-stack {
   min-width: 0;
   flex: 1;
   height: 42px;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 .sidebar-account[aria-expanded="true"] {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .sidebar-account-name {
@@ -2067,10 +2074,6 @@ ul.actor-stack {
   flex: 1;
   font-size: 13px;
   font-weight: 600;
-}
-
-.sidebar-settings[aria-current="page"] {
-  color: var(--text-primary);
 }
 
 /* A release with something to press, a pill between the account and the
@@ -2081,12 +2084,12 @@ ul.actor-stack {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   height: 24px;
-  padding: 0 var(--space-8);
+  padding: 0 var(--luke-space-8);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--state-working) 14%, transparent);
-  color: var(--state-working);
+  background: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
+  color: var(--luke-color-working);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -2095,16 +2098,16 @@ ul.actor-stack {
 }
 
 .sidebar-update:hover {
-  background: color-mix(in srgb, var(--state-working) 22%, transparent);
+  background: color-mix(in srgb, var(--luke-color-working) 22%, transparent);
 }
 
 .sidebar-update[data-failed="true"] {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-  color: var(--danger-text);
+  background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
+  color: var(--luke-color-danger-text);
 }
 
 .sidebar-update[data-failed="true"]:hover {
-  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  background: color-mix(in srgb, var(--luke-color-danger) 22%, transparent);
 }
 
 .sidebar-update svg {

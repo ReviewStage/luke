@@ -113,7 +113,7 @@ export function SidebarAgent({
               <AgentGlyph agent={agent} />
             </span>
             <span className="sidebar-task-name">{name}</span>
-            {unread ? <span className="visually-hidden">(unread)</span> : null}
+            {unread ? <span className="luke-visually-hidden">(unread)</span> : null}
             <span className="sidebar-task-time">
               {repository === undefined ? null : (
                 <span className="sidebar-task-repository">{repository}</span>
