@@ -62,6 +62,8 @@ type TextEntryProps = Named & {
   placeholder?: string | undefined;
   disabled?: boolean | undefined;
   readOnly?: boolean | undefined;
+  /** Whether the form it stands in refuses to submit while it is empty, or, for an address, malformed. */
+  required?: boolean | undefined;
   autoFocus?: boolean | undefined;
   name?: string | undefined;
   maxLength?: number | undefined;
@@ -79,6 +81,7 @@ function entryAttributes(props: TextEntryProps) {
     placeholder: props.placeholder,
     disabled: props.disabled,
     readOnly: props.readOnly,
+    required: props.required,
     autoFocus: props.autoFocus,
     name: props.name,
     maxLength: props.maxLength,

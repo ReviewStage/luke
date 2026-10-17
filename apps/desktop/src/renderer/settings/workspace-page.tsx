@@ -18,11 +18,17 @@ import { ACT_KIND } from "@luke/host/acts";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
+  BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  CHIP_LOOK,
+  Chip,
   ConfirmDialog,
   ProviderMark,
   SettingsSection,
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_TYPE,
+  TextField,
   TrashIcon,
   useConfirmDialog,
   useMenu,
@@ -43,7 +49,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
-import { CHIP_LOOK, Chip } from "../chip";
+// The heir's chip still wears a class of its own, until the leave flow moves.
+import { Chip as WindowChip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu } from "../desktop/action-menu";
 import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
@@ -589,7 +596,7 @@ function HeirChip({
   const door = useRef<HTMLButtonElement | null>(null);
   return (
     <>
-      <Chip
+      <WindowChip
         look={CHIP_LOOK.FIELD}
         chevron
         ref={door}
@@ -599,7 +606,7 @@ function HeirChip({
       >
         <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
         <span className="chip-name">{chosen.name}</span>
-      </Chip>
+      </WindowChip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label="New owner"
@@ -777,6 +784,7 @@ function TeamMembers({
  * The role an invitation is sent as: the field chip a Settings picker wears,
  * "Member ⌄", whose menu checks the role chosen and says under each what it
  * may do, as the composer's model chip stands beside its field and its send.
+ * It is `@luke/ui`'s field `Chip`, its one width its container's.
  */
 function RoleChip({
   value,
@@ -794,12 +802,11 @@ function RoleChip({
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
-    <>
+    <span className="workspace-invite-role">
       <Chip
         look={CHIP_LOOK.FIELD}
         chevron
         ref={door}
-        className="workspace-invite-role"
         aria-label={`Invite as ${ROLE_WORDS[value]}`}
         disabled={disabled}
         {...menu.trigger()}
@@ -825,7 +832,7 @@ function RoleChip({
           onClose={menu.close}
         />
       )}
-    </>
+    </span>
   );
 }
 
@@ -835,7 +842,9 @@ function RoleChip({
  * each under the outline face a person not yet in wears, saying as what and
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
  * nothing first since inviting the address again undoes it. A refusal is
- * said under the form.
+ * said under the form. The form is `@luke/ui`'s `TextField`, the role's
+ * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
+ * led by the face, through `MenuRow`, Copy link its outline `Button`.
  */
 function Invitations({
   workspaceId,
@@ -934,29 +943,30 @@ function Invitations({
 
   return (
     <>
-      <form className="settings-row workspace-invite" onSubmit={invite}>
-        <input
-          type="email"
-          required
-          className="settings-input"
-          aria-label="Email address"
-          placeholder="name@example.com"
-          autoComplete="off"
-          spellCheck={false}
-          value={email}
-          disabled={busy}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-        <button type="submit" className="toolbar-button bordered-button" disabled={busy}>
-          Invite
-        </button>
-      </form>
-      {note === undefined ? null : (
-        <p className="error-message" role="alert">
-          {note}
-        </p>
-      )}
+      <div className="workspace-invite-row">
+        <form className="workspace-invite" onSubmit={invite}>
+          <TextField
+            type={TEXT_FIELD_TYPE.EMAIL}
+            required
+            label="Email address"
+            placeholder="name@example.com"
+            autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+            spellCheck={false}
+            value={email}
+            disabled={busy}
+            onChange={setEmail}
+          />
+          <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
+          <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE} disabled={busy}>
+            Invite
+          </Button>
+        </form>
+        {note === undefined ? null : (
+          <p className="error-message" role="alert">
+            {note}
+          </p>
+        )}
+      </div>
       {firstReadFailed !== undefined ? (
         <ReadFailed line={firstReadFailed} onRetry={read} />
       ) : pending === undefined ? (
@@ -976,21 +986,21 @@ function Invitations({
               onSelect: () => cancel(one.id),
             },
           ]}
-        >
-          <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />
-          <span className="settings-copy">
-            <OneLine as="strong" text={one.email} />
-            <small>{`Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`}</small>
-          </span>
-          {/* Luke sends no mail: the accept link is copied and sent by hand. */}
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            onClick={() => copy(one.acceptUrl, "Link copied")}
-          >
-            Copy link
-          </button>
-        </MenuRow>
+          row={{
+            leading: <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />,
+            label: <OneLine as="span" text={one.email} />,
+            description: `Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`,
+            // Luke sends no mail: the accept link is copied and sent by hand.
+            control: (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                onClick={() => copy(one.acceptUrl, "Link copied")}
+              >
+                Copy link
+              </Button>
+            ),
+          }}
+        />
       ))}
     </>
   );
@@ -1552,9 +1562,14 @@ function ShownWorkspace({
         </SettingsSection>
       </div>
       {managesWorkspace(workspace) ? (
-        <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
-          <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
-        </SettingsGroup>
+        <div {...searchAnchorProps(SETTINGS_SECTION.INVITATIONS)}>
+          <SettingsSection title="Invitations">
+            <Invitations
+              workspaceId={workspace.id}
+              owner={workspace.role === WORKSPACE_ROLE.OWNER}
+            />
+          </SettingsSection>
+        </div>
       ) : null}
       <SettingsGroup title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub workspace={workspace} />

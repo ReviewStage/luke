@@ -10,7 +10,8 @@ import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_TYPE, TextArea, TextField } from "
 /**
  * text-field.test.ts -- a text entry draws the value its caller holds and
  * hands every change back, answers Enter only when no input method is
- * composing, stays out of spell check and autofill where asked, hands a paste to a
+ * composing, stays out of spell check and autofill where asked, holds its
+ * form back while empty where required, hands a paste to a
  * caller that takes pasted files itself, and inside a field is named, described, and marked invalid by
  * the field's words.
  */
@@ -184,6 +185,28 @@ test("a field asked to is left out of the system's autofill, and is the browser'
   );
   assert.equal(fieldNamed(page, "API key").autocomplete, "off");
   assert.equal(fieldNamed(page, "Note").getAttribute("autocomplete"), null);
+});
+
+test("a required field holds back the form it stands in while it is empty, and a field not required does not", () => {
+  const submitted: string[] = [];
+  const form = (name: string, required: boolean) =>
+    createElement(
+      "form",
+      {
+        "aria-label": name,
+        onSubmit: (event: React.FormEvent) => {
+          event.preventDefault();
+          submitted.push(name);
+        },
+      },
+      createElement(TextField, { label: name, required, value: "", onChange: () => undefined }),
+    );
+  const page = render(createElement("div", null, form("Address", true), form("Note", false)));
+
+  for (const each of page.querySelectorAll("form")) act(() => each.requestSubmit());
+
+  assert.deepEqual(submitted, ["Note"]);
+  assert.equal(fieldNamed(page, "Address").validity.valueMissing, true);
 });
 
 test("inside a field, a text entry is named, described, and marked invalid by the field's words", () => {
