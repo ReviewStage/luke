@@ -352,6 +352,8 @@ enough.
 [#2991](https://github.com/ReviewStage/luke/pull/2991),
 [#3008](https://github.com/ReviewStage/luke/pull/3008))
 
+![The Teammate invitations plan over the whole window, its Goal holding Dana's design of the invite dialog as a picture with its caption under it.](apps/web/public/changelog/0.15.0/pictures-in-plans.png)
+
 ### Pictures from coding agents
 
 A coding agent or its worker shows you pictures from its sandbox, such as a
@@ -367,6 +369,8 @@ with Undo.
 [#2927](https://github.com/ReviewStage/luke/pull/2927),
 [#2979](https://github.com/ReviewStage/luke/pull/2979),
 [#3004](https://github.com/ReviewStage/luke/pull/3004))
+
+![The picture viewer open over a coding agent's transcript on the second of three screenshots it took of Relay's members page, with Add to plan in its head.](apps/web/public/changelog/0.15.0/pictures-from-coding-agents.png)
 
 ### A person's page
 
@@ -384,6 +388,8 @@ A member who left keeps their picture, grayed, and their name says they left.
 [#2995](https://github.com/ReviewStage/luke/pull/2995),
 [#3001](https://github.com/ReviewStage/luke/pull/3001),
 [#3015](https://github.com/ReviewStage/luke/pull/3015))
+
+![Dana Moreno's page in acme: what she has working now, two questions waiting on her answer, the tasks she created, her other agents and her automations, its ⋯ menu open on Copy link.](apps/web/public/changelog/0.15.0/a-persons-page.png)
 
 ### Copy link to anything
 
@@ -419,6 +425,8 @@ Workspace › Integrations. Then New task in the sidebar offers the workspace's
 Linear issues, and picking one starts the task with that issue as Luke's
 context. Agents in the workspace use its Linear connection.
 ([#2859](https://github.com/ReviewStage/luke/pull/2859))
+
+![The sidebar with New task's picker open on acme's Linear issues, each with its key and state, a search field above them and Blank task below.](apps/web/public/changelog/0.15.0/start-a-task-from-linear.png)
 
 ### Several accounts at one integration
 
@@ -509,6 +517,8 @@ and the sidebar reach it.
 [#2968](https://github.com/ReviewStage/luke/pull/2968),
 [#2998](https://github.com/ReviewStage/luke/pull/2998),
 [#3020](https://github.com/ReviewStage/luke/pull/3020))
+
+![The Factory over the whole window: Teammate invitations on a call in Talk, three questions and the agents at work in Build, and pull requests ready to merge and merged today in Ship.](apps/web/public/changelog/0.15.0/the-factory.png)
 
 ### Improvements
 
