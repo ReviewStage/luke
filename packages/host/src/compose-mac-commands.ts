@@ -6,6 +6,7 @@ import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { Environment, Reporter } from "./effect/seams.js";
+import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import { type MacShell, runMacCommand } from "./mac-command-runner.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -145,6 +146,7 @@ export function composeMacCommands(
       yield* Effect.forkScoped(Effect.forever(guarded));
     });
 
-    return { methods: {}, lifetime } satisfies MacCommandsComposer;
+    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.MAC_COMMANDS> = {};
+    return { methods, lifetime } satisfies MacCommandsComposer;
   });
 }

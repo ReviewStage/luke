@@ -73,7 +73,9 @@ describe("the host's platform concerns", () => {
     Effect.gen(function* () {
       const stateRoot = yield* temporaryDirectoryScoped("luke-host-browser-");
       // Note that nothing here provides a `ChildProcessSpawner` or a
-      // `TerminalSocket`: the layer would not typecheck if it asked for one.
+      // `TerminalSocket`. The layer's type, narrowed to the concerns chosen,
+      // asks for neither, and a build that reached for one anyway would die
+      // here on the missing service.
       const browser = hostStandingLayer.pipe(
         Layer.provideMerge(hostAssemblyLayer([])),
         Layer.provide(machineOver(stateRoot)),

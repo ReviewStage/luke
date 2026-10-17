@@ -379,10 +379,17 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     };
     return assembly;
   });
+  // Note that the build is checked against every platform concern's seam
+  // first, so a requirement a composer gains is never dropped from `R`.
+  const checked: Layer.Layer<
+    HostAssemblyTag,
+    DuplicateGatewayMethod,
+    HostAssemblyRequirements | PlatformConcernRequirements[HostPlatformConcern]
+  > = Layer.effect(HostAssemblyTag, build);
   // SAFETY: the build asks for a platform concern's own seam only on the
   // branch that composes that concern, so a concern left out of `chosen`
   // never reads what `PlatformConcernRequirements` would have added for it.
-  return Layer.effect(HostAssemblyTag, build) as Layer.Layer<
+  return checked as Layer.Layer<
     HostAssemblyTag,
     DuplicateGatewayMethod,
     HostAssemblyRequirements | PlatformConcernRequirements[Chosen]
