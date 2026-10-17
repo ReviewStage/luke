@@ -29,6 +29,7 @@ import {
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
+  Switch,
 } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
@@ -44,7 +45,6 @@ import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
 import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
-import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import {

@@ -30,7 +30,16 @@ import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
-import { CopyIcon, EmptyState, ErrorState, ProviderMark, useMenu } from "@luke/ui";
+import {
+  CopyIcon,
+  EmptyState,
+  ErrorState,
+  ProviderMark,
+  Skeleton,
+  SkeletonRegion,
+  Switch,
+  useMenu,
+} from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   CheckIcon,
@@ -51,8 +60,6 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { Skeleton, SkeletonRegion } from "../skeleton";
-import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
@@ -659,14 +666,13 @@ function PartSkeleton({
   className?: string;
 }): React.JSX.Element {
   return (
-    <SkeletonRegion
-      label={label}
-      className={className ? `pull-request-skeleton ${className}` : "pull-request-skeleton"}
-    >
-      {widths.map((width, at) => (
-        // oxlint-disable-next-line react/no-array-index-key -- a skeleton's blocks never move.
-        <Skeleton key={at} width={width} />
-      ))}
+    <SkeletonRegion label={label}>
+      <div className={className ? `pull-request-skeleton ${className}` : "pull-request-skeleton"}>
+        {widths.map((width, at) => (
+          // oxlint-disable-next-line react/no-array-index-key -- a skeleton's blocks never move.
+          <Skeleton key={at} width={width} />
+        ))}
+      </div>
     </SkeletonRegion>
   );
 }

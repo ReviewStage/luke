@@ -18,7 +18,6 @@
     "./theme.css": "./src/theme.css",
     "./tokens.css": "./src/tokens/tokens.css",
     "./styles.css": "./src/styles.css",
-    "./compat": "./src/compat.js",
     "./search-tokens": "./src/search-tokens.js",
     "./reply-quote": "./src/reply-quote.js",
     "./skill-mention": "./src/skill-mention.js",
