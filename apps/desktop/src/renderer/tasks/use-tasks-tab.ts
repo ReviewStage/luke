@@ -1,6 +1,7 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
+import { CHANNEL_KIND } from "@luke/features/chat-wire";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -1193,6 +1194,8 @@ export function useTasksTab(input: {
       setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU });
     }
   }
+  // The task's Chat tab on screen reads the task's plan channel, which the column below says once it knows its tab.
+  const [tabReading, setTabReading] = useState<string | undefined>(undefined);
   const liveChat = useWorkspaceChat({
     account: input.account,
     workspaceId: listedWorkspace?.id,
@@ -1200,7 +1203,7 @@ export function useTasksTab(input: {
     reading:
       shown && standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL
         ? standIn.place.channelId
-        : undefined,
+        : tabReading,
     readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
     writeChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_POST, params),
   });
@@ -1388,6 +1391,14 @@ export function useTasksTab(input: {
     standIn === undefined &&
     fixture === undefined &&
     !sidePanel.fullScreen;
+  // The task's Chat tab on screen is its plan channel read, as the window's Chat on a channel is.
+  const tabChannel =
+    columnShown && mainTabs.tab === MAIN_TAB.CHAT
+      ? liveChat.chat?.channels.find(
+          (channel) => channel.kind === CHANNEL_KIND.PLAN && channel.planId === viewed.activeTaskId,
+        )?.id
+      : undefined;
+  if (tabChannel !== tabReading) setTabReading(tabChannel);
   // An agent's page stands in the task's place, showing its agent as its tab would.
   const shownAgent =
     shown && fixture === undefined && agentView !== undefined

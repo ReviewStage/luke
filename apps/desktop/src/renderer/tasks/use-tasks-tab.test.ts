@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
+import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
@@ -2393,4 +2394,53 @@ test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only
   await settle();
   act(() => off.control().onShowChat(TASK.id));
   assert.ok(!off.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+});
+
+test("the task's Chat tab on screen marks the task's plan channel read, as the window's Chat on that channel does", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const channelId = "c0ffee00-0000-4000-8000-000000000002";
+  const answer = {
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    channels: [
+      { id: channelId, kind: CHANNEL_KIND.PLAN, name: "invites", archived: false, planId: TASK.id },
+    ],
+    messages: [
+      {
+        id: "d0d0d0d0-0000-4000-8000-000000000003",
+        seq: 4,
+        touchedSeq: 4,
+        channelId,
+        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
+        blocks: [],
+        mentions: [],
+        postedAt: 1,
+      },
+    ],
+    cursor: "4",
+  };
+  let reads = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
+        reads += 1;
+        return reads === 1 ? Promise.resolve(answer) : new Promise(() => undefined);
+      },
+      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().onShowChat(TASK.id));
+  await vi.waitFor(async () => {
+    await settle();
+    const wrote = tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_CHAT_POST);
+    assert.deepEqual(
+      wrote.map((each) => each.payload),
+      [{ workspaceId: PERSONAL.id, write: { readTo: 4, channelId } }],
+    );
+  });
 });
