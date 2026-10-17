@@ -1592,7 +1592,7 @@ test("files picked or dropped in an item's box are drawn as chips and go with it
 });
 
 /** A text file whose bytes are read only once the test opens its gate, as a slow disk would hand them over. */
-function gatedFile(name: string, words: string): { file: File; open: () => void } {
+function gatedFile(name: string, words: string) {
   const file = new File([words], name, { type: "text/plain" });
   let open: () => void = () => undefined;
   const gate = new Promise<ArrayBuffer>((resolve) => {
