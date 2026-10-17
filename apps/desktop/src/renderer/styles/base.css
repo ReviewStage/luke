@@ -990,6 +990,9 @@ svg.working-mark[viewBox] {
     --duration-fast: 1ms;
     --duration-pane: 1ms;
     --row-stagger: 0ms;
+    /* A late state's wait (`--late-delay`) stands: it holds back a blip that
+       heals at once rather than moving anything, and zeroing it would
+       flash every blip on screen. */
     /* Idle motion is the one thing here that no one asked for, so it is the
        first thing to stop: Luke sits still, upright, with his eyes open. The
        spinner holds too — a working row still says Working in words. */
