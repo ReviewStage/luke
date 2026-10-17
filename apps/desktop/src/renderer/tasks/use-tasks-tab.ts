@@ -9,6 +9,7 @@ import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
+import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { CodeRef, Task } from "@luke/features/task-wire";
 import {
   TASK_CALL_FAILURE,
@@ -26,6 +27,7 @@ import {
   RUN_PROFILE,
 } from "@luke/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
 import { type ChatAskAnswer, type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
 import {
@@ -41,6 +43,11 @@ import {
   sameTab,
 } from "@luke/ui/tab-strip-model";
 import {
+  applySectionWrite,
+  NO_TASK_SECTIONS,
+  SECTION_WRITE_FAILED_NOTE,
+} from "@luke/ui/task-sections-model";
+import {
   AGENT_PIN_FAILED_NOTES,
   agentsPinned,
   archivedTasksNote,
@@ -50,6 +57,7 @@ import {
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
+  type LinearIssuesAsk,
   MARK_FAILED_NOTES,
   MARK_UNDOS,
   MICROPHONE_PRESS,
@@ -101,14 +109,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
-import {
-  DIALOG_TONE,
-  type DialogConfirm,
-  type DialogQuestion,
-  useConfirmDialog,
-} from "../settings/confirm-dialog";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import type { FixtureChat, Staged } from "./chat-fixture";
+
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -153,6 +156,12 @@ import {
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
 import { agentListCallIds, workerCallIds, workRowsOf } from "./work-model";
+
+/** A change to the sections drawn before the service answered it, and when it was asked. */
+interface PendingSectionWrite {
+  readonly write: TaskSectionWrite;
+  readonly at: number;
+}
 
 /**
  * use-tasks-tab.ts -- the panel's Tasks tab as one control: which page shows, the presses each page makes, and the host's read of the tasks as the tab shows.
@@ -602,13 +611,15 @@ export interface TasksControl {
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /**
-     * The read of a workspace's Linear issues, which the dialog matches its
-     * name against as it is typed, where that workspace has Linear
-     * connected; none where it has not, which leaves the name a plain field.
+     * The read of a workspace's Linear issues, where that workspace has
+     * Linear connected; none where it has not, which leaves the name a plain
+     * field. Asked nothing, it answers the issues the dialog reads as it
+     * opens; asked a search or an identifier, it answers what Linear finds
+     * for the name as typed.
      */
     linearIssuesIn: (
       workspaceId: string | undefined,
-    ) => (() => Promise<readonly LinearIssueSummary[]>) | undefined;
+    ) => ((ask?: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>) | undefined;
   };
   /** Leaves the open task for the home page; a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
@@ -651,6 +662,18 @@ export interface TasksControl {
    * on this Mac instead (`sidePanel`), which the drop's `putBack` restores.
    */
   onMovePins: (moves: readonly PinMove[], putBack?: () => void) => void;
+  /**
+   * The sections the account made in its sidebars and the tasks it keeps
+   * in them, every workspace's, as the service last answered them with the
+   * writes still out drawn over them.
+   */
+  taskSections: TaskSections;
+  /**
+   * Writes changes to the sections, in order, on the account: drawn at
+   * once, sent one after another, and let go as each is answered, so a
+   * refused one goes back with a toast.
+   */
+  onWriteSections: (writes: readonly TaskSectionWrite[]) => void;
   /** Deletes a task, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
   onDeleteTask: (taskId: string) => Promise<ActionResult>;
   /**
@@ -1070,6 +1093,17 @@ export function useTasksTab(input: {
         accountSignedIn ? unsettledPinPositions(held, viewed) : NO_PENDING_POSITIONS,
       ),
     [viewed, accountSignedIn],
+  );
+  // A change to the sections stands drawn until its act settles, by which
+  // time main's view carries the service's answer to it. Note that a
+  // sign-out lets every one go, as it does a repository's pin.
+  const [sectionWrites, setSectionWrites] = useState<readonly PendingSectionWrite[]>([]);
+  useEffect(() => {
+    if (!accountSignedIn) setSectionWrites([]);
+  }, [accountSignedIn]);
+  const taskSections = sectionWrites.reduce(
+    (held, pending) => applySectionWrite(held, pending.write, pending.at),
+    viewed.taskSections ?? NO_TASK_SECTIONS,
   );
   // A tab closed names a task of the account it was closed under, so a sign-out lets them go.
   useEffect(() => {
@@ -1684,6 +1718,37 @@ export function useTasksTab(input: {
     });
   };
 
+  // Each change to the sections waits on the one before it, so the service
+  // takes them in the order they were drawn. A fixture run draws them and
+  // sends none, so its sections stand as dragged until it ends.
+  const sectionFlight = useRef<Promise<unknown>>(Promise.resolve());
+  const writeSections = (writes: readonly TaskSectionWrite[]) => {
+    const now = Date.now();
+    const pending = writes.map((write): PendingSectionWrite => ({ write, at: now }));
+    if (pending.length === 0) return;
+    setSectionWrites((held) => [...held, ...pending]);
+    if (fixture !== undefined) return;
+    const pressedBy = input.account;
+    for (const each of pending) {
+      const flight = sectionFlight.current.then(() =>
+        accountNow.current === pressedBy
+          ? act(ACT_KIND.TASKS_WRITE_SECTION, each.write).catch(() => false)
+          : undefined,
+      );
+      sectionFlight.current = flight;
+      flight.then((changed) => {
+        setSectionWrites((held) => held.filter((one) => one !== each));
+        if (changed === false) {
+          toast({
+            words: SECTION_WRITE_FAILED_NOTE,
+            tone: TOAST_TONE.FAILED,
+            hold: TOAST_HOLD.FAILED,
+          });
+        }
+      });
+    }
+  };
+
   // Several tasks archived at once answer with one toast rather than one
   // each, so its Undo brings back every task the service kept, and opens
   // again the open task where the archive left it. A task the service
@@ -2053,11 +2118,11 @@ export function useTasksTab(input: {
   };
 
   // The dialog matches its name against the Linear issues of the workspace
-  // it starts in, where that workspace has Linear connected.
+  // it starts in, and searches them, where that workspace has Linear connected.
   const linearIssuesIn: TasksControl["newTask"]["linearIssuesIn"] = (workspaceId) => {
     const linked = viewed.workspaces.find((each) => each.id === workspaceId);
     if (linked?.linear?.active !== true) return undefined;
-    return () => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { workspaceId: linked.id });
+    return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
   };
 
   // New task opens the dialog over whatever stands, an open task and its
@@ -2775,6 +2840,8 @@ export function useTasksTab(input: {
     onArchiveTasks: archiveTasks,
     pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
     onPinRepository: pinRepository,
+    taskSections,
+    onWriteSections: writeSections,
     onPinAgent: pinAgent,
     onMovePins: movePins,
     onDeleteTask: deleteTask,

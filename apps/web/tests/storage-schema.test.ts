@@ -92,6 +92,8 @@ const DECLARED_TABLES = [
   "task",
   "task_board",
   "task_pin",
+  "task_section",
+  "task_section_entry",
   "turns",
   "user",
   "verification",

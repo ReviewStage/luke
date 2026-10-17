@@ -28,6 +28,8 @@ export const GATEWAY_METHOD = {
   /** One task pinned or unpinned on the service; the list and the open document take the task it answered without reading either again. */
   TASKS_PIN: "tasks.pin",
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
+  /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
+  TASKS_WRITE_SECTION: "tasks.writeSection",
   /** One task archived or brought back on the service, taken in place as a pin is; the open task stays open either way. */
   TASKS_ARCHIVE: "tasks.archive",
   /** The repositories the account reaches through the Luke GitHub App, read from the service now. */

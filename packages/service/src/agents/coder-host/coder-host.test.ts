@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { agentWorkspace, roster } from "@luke/database/models/chat-store";
 import {
+  archiveCodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
   latestTurnsOf,
@@ -11,17 +14,20 @@ import { readConversationPicture } from "@luke/database/models/conversation-pict
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { openTaskConversation, readTask } from "@luke/database/models/task-store";
+import { openTaskConversation, readTask, updateTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
@@ -48,6 +54,7 @@ import { noNetwork } from "../../testing/no-network.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { CODER_REFUSAL } from "./bounds.js";
+import { CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import type { ProviderKeys } from "./model.js";
@@ -198,6 +205,10 @@ const openAgent = (
       admitted: admitted.success,
     };
   });
+
+/** Chat turned on for the account, as Settings › Experimental turns it on. */
+const chatOn = (userId: string) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
 
 /** A GitHub where the developer reaches the agent's repository through one installation, granting the App what the test says; the fixture's own grant when unsaid. */
 const reachingRelay = (permissions?: Readonly<Record<string, string>>) =>
@@ -795,6 +806,93 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(!asked.includes("the invite table is mine"));
         const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
         assert.equal(titled.title, "Teammate invitations by email");
+      }),
+  );
+
+  it.effect(
+    "a planless agent reaches its chat through the host, its own channel its workspace's general one",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        yield* chatOn(userId);
+        const db = yield* Database;
+        yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, agent.id));
+        const read = yield* host
+          .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.ok("channels" in read, JSON.stringify(read));
+        assert.deepEqual(
+          read.channels.map((channel) => channel.name),
+          ["#general"],
+        );
+      }),
+  );
+
+  it.effect(
+    "chat is off for an agent whose starter never turned it on: its tools are not offered and a call is refused; once turned on, they are offered and answer",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, admitted } = yield* openAgent(host);
+        const read = () =>
+          host
+            .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+            .pipe(Effect.provide(reachingRelay()));
+        assert.equal(yield* host.chatOffered(admitted), false);
+        assert.deepEqual(yield* read(), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: CHAT_TOOL_REFUSAL.OFF,
+        });
+        yield* chatOn(userId);
+        assert.equal(yield* host.chatOffered(admitted), true);
+        const answered = yield* read();
+        assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED);
+      }),
+  );
+
+  it.effect(
+    "a post from an archived agent, or from one on an archived task, is refused without stamping it as having left, so once brought back it posts again",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const post = (admitted: Parameters<CoderHost["chat"]>[0]) =>
+          host
+            .chat(admitted, {
+              tool: CHAT_TOOL.POST,
+              input: unparsedWire({ text: "Still here." }),
+              clientKey: "call-left",
+              postsInTurn: 0,
+            })
+            .pipe(Effect.provide(reachingRelay()));
+        const stamped = (userId: string, agentId: string) =>
+          Effect.gen(function* () {
+            const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agentId));
+            const members = yield* roster(userId, workspace);
+            return members.some((member) => member.agentId === agentId && member.leftAt !== null);
+          });
+        const refused = { status: ACTION_RESULT_STATUS.REJECTED, reason: CHAT_TOOL_REFUSAL.LEFT };
+
+        const archived = yield* openAgent(host);
+        yield* chatOn(archived.userId);
+        yield* archiveCodingAgent(archived.userId, archived.agent.id, true);
+        assert.deepEqual(yield* post(archived.admitted), refused);
+        assert.equal(yield* stamped(archived.userId, archived.agent.id), false);
+        yield* archiveCodingAgent(archived.userId, archived.agent.id, false);
+        assert.notDeepEqual(yield* post(archived.admitted), refused, "brought back, it posts");
+
+        const onArchivedTask = yield* openAgent(host);
+        yield* chatOn(onArchivedTask.userId);
+        const taskId = onArchivedTask.agent.taskId ?? "";
+        yield* updateTask(onArchivedTask.userId, taskId, { archived: true });
+        assert.deepEqual(yield* post(onArchivedTask.admitted), refused);
+        assert.equal(yield* stamped(onArchivedTask.userId, onArchivedTask.agent.id), false);
+        yield* updateTask(onArchivedTask.userId, taskId, { archived: false });
+        assert.notDeepEqual(
+          yield* post(onArchivedTask.admitted),
+          refused,
+          "brought back, it posts",
+        );
       }),
   );
 });
