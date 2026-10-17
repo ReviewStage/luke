@@ -27,8 +27,9 @@
  * lands rather than waiting on the slowest: the pull request whole, its
  * description and its mergeability among it; every check on its head, one
  * by one, read by the pull request's own head ref so it waits on no read of
- * the head's commit; and its comments, its reviews, and its review threads,
- * made one conversation in time order.
+ * the head's commit, and beside them its head's deployments in one GraphQL
+ * read; and its comments, its reviews, and its review threads, made one
+ * conversation in time order.
  */
 
 import {
@@ -46,6 +47,8 @@ import {
   type CheckSummary,
   CONVERSATION_ENTRY,
   type CodingAgentChangedFile,
+  DEPLOYMENT_STATE,
+  type DeploymentState,
   DIFF_SIDE,
   type DiffSide,
   MERGE_STATE,
@@ -54,6 +57,7 @@ import {
   PATCH_OMITTED,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
+  type PullRequestDeployment,
   type PullRequestState,
   REVIEW_STATE,
   type ReviewState,
@@ -1499,3 +1503,175 @@ export const pullRequestConversation = /* @__PURE__ */ Effect.fn("web/pullReques
     };
   },
 );
+
+/**
+ * How many deployments of the head one read asks GitHub for, the newest
+ * first: twice the most it lists, so an environment deployed again and
+ * again leaves room for the others once each keeps its newest.
+ */
+const DEPLOYMENTS_ASKED = OVERVIEW_BOUNDS.MAX_DEPLOYMENTS * 2;
+
+/**
+ * The deployments of a pull request's head, in one GraphQL read whatever
+ * their number: the head is the pull request's last commit, so no read of
+ * its commit comes first, and each deployment carries its newest status,
+ * where REST would ask once for the list and once more for each status.
+ */
+const DEPLOYMENTS_QUERY = `query Deployments($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      commits(last: 1) {
+        nodes {
+          commit {
+            deployments(first: ${DEPLOYMENTS_ASKED}, orderBy: { field: CREATED_AT, direction: DESC }) {
+              nodes {
+                environment
+                state
+                creator { avatarUrl }
+                latestStatus { state environmentUrl }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+const DeploymentSchema = Schema.Struct({
+  environment: Schema.NullOr(Schema.String),
+  state: Schema.NullOr(Schema.String),
+  creator: Schema.NullOr(Schema.Struct({ avatarUrl: Schema.String })),
+  latestStatus: Schema.NullOr(
+    Schema.Struct({ state: Schema.String, environmentUrl: Schema.NullOr(Schema.String) }),
+  ),
+});
+
+/** GitHub's GraphQL answer to the deployments read: its data where it read any, and its errors where it met some. */
+const DeploymentsAnswerSchema = Schema.Struct({
+  data: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        repository: Schema.NullOr(
+          Schema.Struct({
+            pullRequest: Schema.NullOr(
+              Schema.Struct({
+                commits: Schema.Struct({
+                  nodes: Schema.Array(
+                    Schema.NullOr(
+                      Schema.Struct({
+                        commit: Schema.Struct({
+                          deployments: Schema.NullOr(
+                            Schema.Struct({ nodes: Schema.Array(Schema.NullOr(DeploymentSchema)) }),
+                          ),
+                        }),
+                      }),
+                    ),
+                  ),
+                }),
+              }),
+            ),
+          }),
+        ),
+      }),
+    ),
+  ),
+  errors: Schema.optionalKey(Schema.Array(Schema.Struct({ message: Schema.String }))),
+});
+
+/** GitHub's words for where a deployment or its newest status stands, as the wire says each; any it adds reads as still deploying. */
+const GITHUB_DEPLOYMENT_STATE = new Map<string, DeploymentState>([
+  ["SUCCESS", DEPLOYMENT_STATE.READY],
+  ["ACTIVE", DEPLOYMENT_STATE.READY],
+  ["FAILURE", DEPLOYMENT_STATE.FAILED],
+  ["ERROR", DEPLOYMENT_STATE.FAILED],
+  ["INACTIVE", DEPLOYMENT_STATE.INACTIVE],
+  ["DESTROYED", DEPLOYMENT_STATE.INACTIVE],
+  ["ABANDONED", DEPLOYMENT_STATE.INACTIVE],
+]);
+
+/** The address a deployment serves, only where it is https, since the window opens it in the browser. */
+function deploymentUrlOf(spelled: string | null | undefined): string | null {
+  if (spelled === null || spelled === undefined) return null;
+  try {
+    return new URL(spelled).protocol === "https:" ? spelled : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One deployment as the wire carries it; none for one GitHub names no environment of. */
+function deploymentOf(node: typeof DeploymentSchema.Type): PullRequestDeployment | undefined {
+  if (node.environment === null || node.environment === "") return undefined;
+  const spelled = node.latestStatus?.state ?? node.state ?? "";
+  const deployment: PullRequestDeployment = {
+    environment: nameOf(node.environment),
+    state: GITHUB_DEPLOYMENT_STATE.get(spelled) ?? DEPLOYMENT_STATE.PENDING,
+    url: deploymentUrlOf(node.latestStatus?.environmentUrl),
+  };
+  const avatarUrl = githubAvatarUrl(node.creator?.avatarUrl);
+  return avatarUrl === undefined ? deployment : { ...deployment, avatarUrl };
+}
+
+/** The newest deployment of each environment, newest first, up to the bound. */
+function newestOfEach(
+  deployments: readonly PullRequestDeployment[],
+): readonly PullRequestDeployment[] {
+  const seen = new Set<string>();
+  return deployments
+    .filter((deployment) => {
+      if (seen.has(deployment.environment)) return false;
+      seen.add(deployment.environment);
+      return true;
+    })
+    .slice(0, OVERVIEW_BOUNDS.MAX_DEPLOYMENTS);
+}
+
+/**
+ * A pull request's head's deployments, such as its Vercel Previews: the
+ * newest of each environment, newest first, up to the bound, each with
+ * where its newest status left it and the https address it serves. It is
+ * one request whatever their number (`DEPLOYMENTS_QUERY`). A pull request
+ * the repository does not hold, or a repository where the App may not read
+ * deployments, lists none, said once in the log, rather than failing the
+ * checks read it stands beside.
+ */
+export function pullRequestDeployments(
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Effect.Effect<readonly PullRequestDeployment[], never, HttpClient.HttpClient> {
+  const [owner = "", name = ""] = fullName.split("/");
+  const request = githubPost(GRAPHQL_PATH, token, {
+    query: DEPLOYMENTS_QUERY,
+    variables: { owner, name, number },
+  });
+  return Effect.scoped(
+    Effect.flatMap(send(request), (response) => readBody(response, DeploymentsAnswerSchema)),
+  ).pipe(
+    Effect.flatMap((answer) => {
+      const head = answer.data?.repository?.pullRequest?.commits.nodes.at(-1);
+      const listed = head?.commit.deployments;
+      if (listed === undefined || listed === null) {
+        return Effect.as(
+          Effect.logWarning(
+            `GitHub answered no deployments of pull request ${number} (${answer.errors?.length ?? 0} errors)`,
+          ),
+          [],
+        );
+      }
+      const deployments = listed.nodes.flatMap((node) =>
+        node === null ? [] : (deploymentOf(node) ?? []),
+      );
+      return Effect.succeed(newestOfEach(deployments));
+    }),
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `the deployments of pull request ${number} were not read: ${failure._tag}`,
+        ),
+        [],
+      ),
+    ),
+  );
+}

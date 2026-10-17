@@ -8,6 +8,7 @@ import {
   CHECK_STATE,
   CODING_AGENT_AUTHOR,
   CONVERSATION_ENTRY,
+  DEPLOYMENT_STATE,
   DIFF_SIDE,
   MERGE_STATE,
   OVERVIEW_BOUNDS,
@@ -25,6 +26,7 @@ import { namedOverviewConversation, namedOverviewPullRequest } from "./github-pe
 import {
   pullRequestChecks,
   pullRequestConversation,
+  pullRequestDeployments,
   pullRequestOverview,
 } from "./pull-requests.js";
 
@@ -109,6 +111,30 @@ function checkRun(name: string, status: string, conclusion: string | null) {
   };
 }
 
+/** GitHub's GraphQL answer to the deployments read, the head's deployments newest first, as given; none where none are given. */
+function deploymentsAnswer(
+  deployments: readonly object[] | Response | undefined,
+): object | Response | undefined {
+  if (deployments === undefined || deployments instanceof Response) return deployments;
+  return {
+    data: {
+      repository: {
+        pullRequest: { commits: { nodes: [{ commit: { deployments: { nodes: deployments } } }] } },
+      },
+    },
+  };
+}
+
+/** A deployment as GitHub's GraphQL names one, with its newest status; one with none yet stands as queued. */
+function deployment(environment: string, status: string | null, url: string | null) {
+  return {
+    environment,
+    state: status === null ? "QUEUED" : "ACTIVE",
+    creator: { avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4" },
+    latestStatus: status === null ? null : { state: status, environmentUrl: url },
+  };
+}
+
 /** A repository answering the overview's reads as given, and not found for the rest. */
 function repository(answers: {
   readonly pull?: object;
@@ -117,14 +143,20 @@ function repository(answers: {
   readonly comments?: readonly object[];
   readonly reviews?: readonly object[];
   readonly graphql?: object | Response;
+  readonly deployments?: readonly object[] | Response;
 }): RepositoryScript {
   return (sent) => {
     const { pathname } = new URL(sent.url);
-    if (pathname === "/graphql" && sent.method === "POST" && answers.graphql !== undefined) {
-      const asked: { variables?: object } = JSON.parse(sent.body);
-      // Note that the threads are asked of this one pull request by name and number.
+    if (pathname === "/graphql" && sent.method === "POST") {
+      const asked: { query: string; variables?: object } = JSON.parse(sent.body);
+      // Note that the threads and the deployments are each asked of this one pull request by name and number.
       assert.deepEqual(asked.variables, { owner: "acme", name: "relay", number: NUMBER });
-      return answers.graphql instanceof Response ? answers.graphql : Response.json(answers.graphql);
+      const answer = asked.query.startsWith("query Deployments")
+        ? deploymentsAnswer(answers.deployments)
+        : answers.graphql;
+      if (answer !== undefined) {
+        return answer instanceof Response ? answer : Response.json(answer);
+      }
     }
     // Note that the bodies are GitHub's to render, so a read of one that does not ask for its rendering is refused.
     const rendered = sent.headers.get("accept") === "application/vnd.github.full+json";
@@ -377,6 +409,85 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
             { name: "ci/legacy", avatarUrl: undefined },
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "a head's deployments: the newest of each environment, newest first, where its newest status left it, its https address alone, and its App's avatar, in one request whatever their number",
+    () =>
+      Effect.gen(function* () {
+        let asked = 0;
+        const script = repository({
+          deployments: [
+            deployment("Preview – luke-web", "SUCCESS", "https://luke-web-git-x.vercel.app"),
+            deployment("Preview – docs", "IN_PROGRESS", "https://docs-git-x.vercel.app"),
+            deployment("Preview – luke-web", "FAILURE", "https://luke-web-old.vercel.app"),
+            deployment("staging", "ERROR", "http://staging.example.com"),
+            deployment("review-app", "INACTIVE", null),
+            deployment("queued", null, null),
+          ],
+        });
+        const deployments = yield* pullRequestDeployments(TOKEN, REPOSITORY, NUMBER).pipe(
+          answering((sent) => {
+            asked += 1;
+            return script(sent);
+          }),
+        );
+        assert.deepEqual(deployments, [
+          {
+            environment: "Preview – luke-web",
+            state: DEPLOYMENT_STATE.READY,
+            url: "https://luke-web-git-x.vercel.app",
+            avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
+          },
+          {
+            environment: "Preview – docs",
+            state: DEPLOYMENT_STATE.PENDING,
+            url: "https://docs-git-x.vercel.app",
+            avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
+          },
+          {
+            environment: "staging",
+            state: DEPLOYMENT_STATE.FAILED,
+            url: null,
+            avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
+          },
+          {
+            environment: "review-app",
+            state: DEPLOYMENT_STATE.INACTIVE,
+            url: null,
+            avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
+          },
+          {
+            environment: "queued",
+            state: DEPLOYMENT_STATE.PENDING,
+            url: null,
+            avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
+          },
+        ]);
+        assert.equal(asked, 1, "one request reads every deployment and its newest status");
+      }),
+  );
+
+  it.effect(
+    "deployments GitHub refuses to name, or a read that fails, list none rather than failing beside the checks",
+    () =>
+      Effect.gen(function* () {
+        const refused = yield* pullRequestDeployments(TOKEN, REPOSITORY, NUMBER).pipe(
+          answering(
+            repository({
+              deployments: Response.json({
+                data: { repository: { pullRequest: null } },
+                errors: [{ message: "Resource not accessible by integration" }],
+              }),
+            }),
+          ),
+        );
+        assert.deepEqual(refused, []);
+        const failed = yield* pullRequestDeployments(TOKEN, REPOSITORY, NUMBER).pipe(
+          answering(repository({ deployments: Response.json({}, { status: 502 }) })),
+        );
+        assert.deepEqual(failed, []);
       }),
   );
 

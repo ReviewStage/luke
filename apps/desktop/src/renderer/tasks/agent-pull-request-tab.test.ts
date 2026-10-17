@@ -17,6 +17,7 @@ import {
   type CodingAgentOverviewConversation,
   type CodingAgentOverviewPullRequest,
   type CodingAgentSummary,
+  DEPLOYMENT_STATE,
   DIFF_SIDE,
   MERGE_STATE,
   PULL_REQUEST_STATE,
@@ -195,6 +196,7 @@ beforeEach(() => {
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
         if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
+        if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
         if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
           images.push(request.payload.src);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
@@ -529,6 +531,57 @@ it.effect(
       registry.dispose();
     }),
 );
+
+test("the Checks tab lists the head's deployments over its checks: each environment, where it stands, and a press opening the address it serves; a head with none lists no deployments", async () => {
+  const deployed: CodingAgentOverviewChecks = {
+    ...CHECKS,
+    deployments: [
+      {
+        environment: "Preview – luke-web",
+        state: DEPLOYMENT_STATE.READY,
+        url: "https://luke-web-git-expiry.vercel.app",
+        avatarUrl: "https://avatars.githubusercontent.com/in/8329?v=4",
+      },
+      { environment: "staging", state: DEPLOYMENT_STATE.FAILED, url: null },
+    ],
+  };
+  const tab = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: deployed }) }),
+  );
+  await choose(tab, "Checks");
+  const headings = [...tab.querySelectorAll(".pull-request-heading")]
+    .filter((each) => each.closest("[hidden]") === null)
+    .map((each) => each.firstChild?.textContent);
+  assert.deepEqual(headings, ["Deployments", "Checks"], "the deployments stand over the checks");
+  const deployments =
+    tab.querySelector<HTMLElement>('[aria-label="Deployments"]') ??
+    assert.fail("the deployments stand");
+  assert.equal(deployments.querySelector(".pull-request-count")?.textContent, "2");
+  assert.deepEqual(words(deployments, ".pull-request-check-name"), [
+    "Preview – luke-web",
+    "staging",
+  ]);
+  assert.deepEqual(
+    [...deployments.querySelectorAll('.pull-request-check-glyph[role="img"]')].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
+    ["Deployed", "Failed"],
+  );
+  assert.equal(
+    deployments.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+    "https://avatars.githubusercontent.com/in/8329?v=4&s=32",
+  );
+  const buttons = deployments.querySelectorAll<HTMLButtonElement>("button.pull-request-check");
+  assert.equal(buttons.length, 1, "a deployment naming no address opens nothing");
+  act(() => buttons[0]?.click());
+  await settle();
+  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+
+  act(() => root?.unmount());
+  const none = await draw(controlAnswering());
+  await choose(none, "Checks");
+  assert.equal(none.querySelector('[aria-label="Deployments"]'), null);
+});
 
 test("past five checks the list folds behind Show all, keeping every one that failed or still runs above the fold, and folds again on Show less", async () => {
   const passing = Array.from({ length: 6 }, (_, at) => check(`test ${at}`, CHECK_STATE.PASSED));

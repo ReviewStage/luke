@@ -71,6 +71,7 @@ import {
   type PullRequestReadFailure,
   pullRequestChecks,
   pullRequestConversation,
+  pullRequestDeployments,
   pullRequestFiles,
   pullRequestOverview,
 } from "../github/pull-requests.js";
@@ -196,7 +197,7 @@ import {
  * tab asks for at once and draws as each lands: the pull request itself,
  * its description, branches, mergeability, author, and the reviewers it
  * asks for (`GET /api/agents/{id}/overview/pull-request`); its head's checks
- * one by one (`GET /api/agents/{id}/overview/checks`); and its conversation
+ * one by one and its deployments (`GET /api/agents/{id}/overview/checks`); and its conversation
  * and where its reviewers stand (`GET /api/agents/{id}/overview/conversation`),
  * its words as GitHub renders them. An image those words name (`GET /api/agents/{id}/github-image`) is
  * read on a token for the agent's repository too, an upload re-signed by its
@@ -899,13 +900,25 @@ const overviewPullRequestEndpoint = /* @__PURE__ */ Effect.fn(
   );
 });
 
-/** GET reads the checks on the agent's pull request's head, failures first, up to the bound. */
+/**
+ * GET reads the checks on the agent's pull request's head, failures first,
+ * up to the bound, and its head's deployments beside them: three requests
+ * to GitHub at once whatever their number, the check runs, the commit
+ * statuses, and the deployments.
+ */
 const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewChecksEndpoint")(
   function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
     return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-      Effect.map(pullRequestChecks(token, agent.repository, pullRequest.number), (checks) => ({
-        checks,
-      })),
+      Effect.map(
+        Effect.all(
+          [
+            pullRequestChecks(token, agent.repository, pullRequest.number),
+            pullRequestDeployments(token, agent.repository, pullRequest.number),
+          ],
+          { concurrency: "unbounded" },
+        ),
+        ([checks, deployments]) => ({ checks, deployments }),
+      ),
     );
   },
 );
