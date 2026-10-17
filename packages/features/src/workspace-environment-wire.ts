@@ -36,6 +36,11 @@ export const WORKSPACE_ENVIRONMENT_BOUNDS = {
   MAX_VALUE_CHARS: 16_384,
   /** The most variables and secrets one workspace may hold together. */
   MAX_ENTRIES: 100,
+  /**
+   * The shortest secret: the shortest value masked out of what a command
+   * answers, since a shorter one would mask ordinary words and numbers too.
+   */
+  MIN_SECRET_CHARS: 4,
 } as const;
 
 /** Names the sandbox's shell or the agent's own commands depend on, which no workspace may set. */
@@ -128,7 +133,14 @@ export const workspaceEnvironmentSaveRequestSchema = EffectSchema.Struct({
     // A NUL ends a C string, so no environment can carry one.
     EffectSchema.isPattern(/^[^\0]*$/u),
   ),
-});
+}).check(
+  // A secret too short to mask is refused rather than kept and printed whole.
+  EffectSchema.makeFilter(
+    (asked) =>
+      asked.kind !== WORKSPACE_ENVIRONMENT_KIND.SECRET ||
+      asked.secretValue.length >= WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS,
+  ),
+);
 
 /** One variable or secret removed by an owner or admin (POST); removing a name the workspace does not hold moves nothing. */
 export const workspaceEnvironmentRemoveRequestSchema = EffectSchema.Struct({

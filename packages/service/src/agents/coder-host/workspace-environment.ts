@@ -4,7 +4,10 @@ import {
   listWorkspaceEnvironmentRows,
   sealedOf,
 } from "@luke/database/models/workspace-environment-store";
-import { WORKSPACE_ENVIRONMENT_KIND } from "@luke/features/workspace-environment-wire";
+import {
+  WORKSPACE_ENVIRONMENT_BOUNDS,
+  WORKSPACE_ENVIRONMENT_KIND,
+} from "@luke/features/workspace-environment-wire";
 import { Effect, Redacted, Result } from "effect";
 import type { BashToolOutput } from "eve/tools/bash";
 import { HostedEnvironment } from "../../environment.js";
@@ -31,8 +34,8 @@ import { HostedEnvironment } from "../../environment.js";
 /** What a secret's value is replaced with in a command's answer. */
 export const MASKED_SECRET = "[REDACTED]";
 
-/** The shortest secret masked: a shorter one would mask ordinary words and numbers out of every answer. */
-const MIN_MASKED_CHARS = 4;
+/** The shortest secret masked, which is the shortest the service keeps. */
+const MIN_MASKED_CHARS = WORKSPACE_ENVIRONMENT_BOUNDS.MIN_SECRET_CHARS;
 
 /** What one command runs with. */
 export interface ShellEnvironment {

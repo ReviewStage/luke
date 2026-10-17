@@ -345,7 +345,9 @@ what a command answers, but a command can still print it changed, so a secret
 can reach the agent's model, its transcript, and the traces of its run,
 which include the agent traces sent to Sentry described under "Error,
 performance, and agent reports from our service". A value is saved under a
-field name Sentry replaces before a request's trace leaves. We never log a
+field name Sentry replaces before a request's trace leaves, but the request
+that hands a command to the sandbox carries the values too, and can reach
+Sentry with that request's trace. We never log a
 value or send one to our analytics or screen recordings. Removing one in
 Settings deletes it, and every one goes with its workspace.
 

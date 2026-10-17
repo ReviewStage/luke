@@ -294,6 +294,28 @@ it.layer(getTestDB())("the workspace environment route", (it) => {
     }),
   );
 
+  it.effect("refuses a secret too short to be masked out of what a command prints", () =>
+    Effect.gen(function* () {
+      const { workspace, owner, ask } = yield* openWorkspace({ ring: KEK.ONE });
+
+      const refused = yield* ask(
+        save(owner, workspace, "PIN", WORKSPACE_ENVIRONMENT_KIND.SECRET, "123"),
+      );
+      const variable = yield* ask(
+        save(owner, workspace, "LEVEL", WORKSPACE_ENVIRONMENT_KIND.VARIABLE, "3"),
+      );
+
+      assert.deepEqual(
+        statusOf(refused),
+        refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+      );
+      assert.deepEqual(
+        entriesOf(variable).entries.map((entry) => entry.name),
+        ["LEVEL"],
+      );
+    }),
+  );
+
   it.effect("refuses a name the sandbox or Luke sets itself, or one no shell takes", () =>
     Effect.gen(function* () {
       const { workspace, owner, ask } = yield* openWorkspace({ ring: KEK.ONE });
