@@ -245,3 +245,84 @@ export const submitPullRequestReview = /* @__PURE__ */ Effect.fn("web/submitPull
     );
   },
 );
+
+const THREAD_PULL_REQUEST_QUERY = `query($id: ID!) {
+  node(id: $id) { ... on PullRequestReviewThread { pullRequest { id } } }
+}`;
+
+const ThreadPullRequestSchema = Schema.Struct({
+  node: Schema.NullOr(
+    Schema.Struct({
+      pullRequest: Schema.optionalKey(Schema.Struct({ id: Schema.String })),
+    }),
+  ),
+});
+
+/** What the member is told where the thread named is none of this pull request's, or none they can see. */
+const NOT_THIS_THREAD = "Could not resolve to a review thread on this pull request.";
+
+/**
+ * The review thread confirmed one of this pull request's, read on the
+ * member's token, so a thread of another pull request is never changed
+ * through this one's tab; a thread out of their sight is refused alike.
+ */
+const threadOnPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  threadId: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const read = yield* githubWrite(
+    token,
+    THREAD_PULL_REQUEST_QUERY,
+    { id: threadId },
+    ThreadPullRequestSchema,
+  );
+  if (read.node?.pullRequest?.id !== pullRequestId) return yield* refusalOf([NOT_THIS_THREAD]);
+});
+
+const REPLY_MUTATION = `mutation($id: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $id, body: $body }) {
+    comment { id }
+  }
+}`;
+
+const RESOLVE_MUTATION = `mutation($id: ID!) {
+  resolveReviewThread(input: { threadId: $id }) { thread { isResolved } }
+}`;
+
+const UNRESOLVE_MUTATION = `mutation($id: ID!) {
+  unresolveReviewThread(input: { threadId: $id }) { thread { isResolved } }
+}`;
+
+/** A reply on one of the pull request's review threads, on the member's token, published at once. */
+export const replyToReviewThread = /* @__PURE__ */ Effect.fn("web/replyToReviewThread")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  reply: { readonly threadId: string; readonly body: string },
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* threadOnPullRequest(token, pullRequestId, reply.threadId);
+  yield* githubWrite(
+    token,
+    REPLY_MUTATION,
+    { id: reply.threadId, body: reply.body },
+    Schema.Unknown,
+  );
+});
+
+/** One of the pull request's review threads marked resolved, or opened again where `resolved` is false, on the member's token. */
+export const setReviewThreadResolved = /* @__PURE__ */ Effect.fn("web/setReviewThreadResolved")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    threadId: string,
+    resolved: boolean,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    yield* threadOnPullRequest(token, pullRequestId, threadId);
+    yield* githubWrite(
+      token,
+      resolved ? RESOLVE_MUTATION : UNRESOLVE_MUTATION,
+      { id: threadId },
+      Schema.Unknown,
+    );
+  },
+);

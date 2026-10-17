@@ -75,7 +75,9 @@ import {
 import { githubReadOrRefusal } from "../github/github-refusal.js";
 import {
   pullRequestNodeId,
+  replyToReviewThread,
   setPullRequestDraft,
+  setReviewThreadResolved,
   submitPullRequestReview,
 } from "../github/pull-request-writes.js";
 import {
@@ -217,7 +219,8 @@ import {
  * and where its reviewers stand (`GET /api/agents/{id}/overview/conversation`),
  * its words as GitHub renders them. A change to that pull request
  * (`POST /api/agents/{id}/pull-request/action`), such as marking it ready for
- * review or submitting a review, is made on GitHub as the member who asks, on their own GitHub
+ * review, submitting a review, or replying on or resolving a review
+ * thread, is made on GitHub as the member who asks, on their own GitHub
  * sign-in and never the App's, through the one seam every such change takes
  * (`pull-request-write.ts`), and answers how GitHub took it; the agent's kept
  * published answer is let go, so the next read asks GitHub afresh. An image
@@ -1001,6 +1004,16 @@ function actionWrite(
           );
         case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
           return submitPullRequestReview(token, id, request);
+        case PULL_REQUEST_ACTION.REPLY_TO_THREAD:
+          return replyToReviewThread(token, id, request);
+        case PULL_REQUEST_ACTION.RESOLVE_THREAD:
+        case PULL_REQUEST_ACTION.UNRESOLVE_THREAD:
+          return setReviewThreadResolved(
+            token,
+            id,
+            request.threadId,
+            request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD,
+          );
       }
     });
 }

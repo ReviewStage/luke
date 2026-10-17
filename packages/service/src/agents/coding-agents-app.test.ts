@@ -1263,6 +1263,27 @@ function reviewMutations(calls: readonly GraphqlCall[]) {
     ]);
 }
 
+/** A change to one of the pull request's review threads as the bearer given. */
+function threadActionAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
+}
+
+/** GitHub answering a thread's calls: the pull request's id, every thread named as one of the pull request given, and an empty answer to each mutation. */
+function threadsAnswering(threadPullRequestId: string): (call: GraphqlCall) => Response {
+  return (call) => {
+    if (call.query.includes("mutation")) return Response.json({ data: {} });
+    if (call.query.includes("PullRequestReviewThread")) {
+      return Response.json({ data: { node: { pullRequest: { id: threadPullRequestId } } } });
+    }
+    return Response.json({ data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } } });
+  };
+}
+
+/** The GitHub mutation a document makes, by the name its first field spells. */
+function mutationName(query: string): string {
+  return /\{\s*(\w+)\(/u.exec(query)?.[1] ?? "";
+}
+
 it.layer(getTestDB())("changing an agent's pull request", (it) => {
   /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
   const published = (options: {
@@ -1533,6 +1554,85 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           );
         }
         assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "a member replies on a review thread of the pull request, resolves it, and opens it again, each on their own token",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: threadsAnswering(PULL_REQUEST_NODE_ID),
+        });
+
+        const answers = [
+          yield* ask(
+            threadActionAs(other, agent.id, {
+              action: "reply-to-thread",
+              threadId: "PRRT_flag",
+              body: "Renamed in the next push.",
+            }),
+          ),
+          yield* ask(
+            threadActionAs(other, agent.id, { action: "resolve-thread", threadId: "PRRT_flag" }),
+          ),
+          yield* ask(
+            threadActionAs(other, agent.id, { action: "unresolve-thread", threadId: "PRRT_flag" }),
+          ),
+        ];
+
+        for (const answered of answers) {
+          assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        }
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables]),
+          [
+            [
+              "addPullRequestReviewThreadReply",
+              { id: "PRRT_flag", body: "Renamed in the next push." },
+            ],
+            ["resolveReviewThread", { id: "PRRT_flag" }],
+            ["unresolveReviewThread", { id: "PRRT_flag" }],
+          ],
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a thread of another pull request is refused in words saying so and never changed, and a blank reply never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: threadsAnswering("PR_kwDOsomeOtherPull"),
+        });
+
+        const elsewhere = yield* ask(
+          threadActionAs(other, agent.id, { action: "resolve-thread", threadId: "PRRT_elsewhere" }),
+        );
+        const blank = yield* ask(
+          threadActionAs(other, agent.id, {
+            action: "reply-to-thread",
+            threadId: "PRRT_flag",
+            body: " \n ",
+          }),
+        );
+
+        assert.deepEqual(elsewhere, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words: "Could not resolve to a review thread on this pull request.",
+          },
+        });
+        assert.deepEqual(
+          blank,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.ok(calls.every((call) => !call.query.includes("mutation")));
       }),
   );
 

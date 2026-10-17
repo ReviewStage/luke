@@ -1,4 +1,5 @@
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
@@ -32,6 +33,7 @@ export const EXAMPLES: readonly Example[] = [
   ARTWORK_EXAMPLE,
   TYPOGRAPHY_EXAMPLE,
   LAYOUT_EXAMPLE,
+  BADGES_EXAMPLE,
   BUTTONS_EXAMPLE,
   CHIPS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
@@ -41,6 +43,6 @@ export const EXAMPLES: readonly Example[] = [
   SEGMENTED_EXAMPLE,
   SPINNERS_EXAMPLE,
   SKELETONS_EXAMPLE,
-  BADGES_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
+  AUTH_PAGE_EXAMPLE,
 ];
