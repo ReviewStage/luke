@@ -167,6 +167,22 @@ function drawn(
   return { container, asked, started };
 }
 
+/** What `draw` drew with the column stood wide enough for its margin, since jsdom lays nothing out. */
+function wide<Drawn>(draw: () => Drawn): Drawn {
+  const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get: () => 1400,
+  });
+  try {
+    return draw();
+  } finally {
+    // Note that jsdom holds the width on `Element.prototype`, so the stand-in is taken away rather than put back.
+    if (width !== undefined) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+    else Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+  }
+}
+
 /** The words marked for a thread, joined as drawn. */
 function markedWords(container: HTMLElement, thread: string): string {
   return [...container.querySelectorAll(`mark.plan-comment-mark[data-threads~="${thread}"]`)]
@@ -219,14 +235,7 @@ test("a press on a thread's words opens it beside them, its ✓ resolving it and
 });
 
 test("a thread whose words were deleted stays in the margin, saying so over its quote", () => {
-  // Note that jsdom lays nothing out, so the column is stood wide enough for its margin.
-  const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
-  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
-    configurable: true,
-    get: () => 1400,
-  });
-  const { container } = drawn("page");
-  if (width !== undefined) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+  const { container } = wide(() => drawn("page"));
 
   const card = container.querySelector(`.comment-card[data-thread="${ID.GONE}"]`);
 
@@ -453,7 +462,7 @@ test("the button beside a list comments on the bullet under the pointer, a paren
     "\n\n",
   );
   const listed: Task = { ...DOCUMENT_TASK, document: { body: text, assumptions: [] } };
-  const { container, started } = drawn("page", [], () => true, listed);
+  const { container, started } = wide(() => drawn("page", [], () => true, listed));
   const second = [...container.querySelectorAll("li")].find((li) =>
     li.textContent?.startsWith("Second item"),
   );
@@ -484,4 +493,45 @@ test("the button beside a list comments on the bullet under the pointer, a paren
   ]);
   assert.deepEqual(spans[0], [PLAN_COMMENT_SCOPE.BLOCK, "Second item", "Second item"]);
   assert.deepEqual(spans.at(-1), [PLAN_COMMENT_SCOPE.BLOCK, "nested two", "nested two"]);
+});
+
+test("a thread at rest opens from a press anywhere on its card", () => {
+  const { container } = drawn("page");
+  act(() => container.querySelector<HTMLButtonElement>(".comment-count")?.click());
+  const card = () =>
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.GONE}"]`);
+  assert.equal(card()?.dataset.open, "false");
+
+  act(() => card()?.querySelector<HTMLElement>(".comment-head")?.click());
+  assert.equal(card()?.dataset.open, "true", "the card's head opens it");
+});
+
+test("the pointer on a thread's words marks its card before a press", () => {
+  const { container } = wide(() => drawn("page"));
+  const mark = container.querySelector<HTMLElement>(
+    `mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`,
+  );
+  const card = () =>
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.equal(card()?.dataset.pointed, "false");
+
+  act(() => mark?.dispatchEvent(new Event("pointerover", { bubbles: true })));
+
+  assert.equal(card()?.dataset.pointed, "true");
+  assert.equal(card()?.dataset.open, "false", "and leaves it closed until a press");
+});
+
+test("a line's count stands every thread on the line under it, the first open", () => {
+  const { container } = drawn("page");
+
+  act(() => container.querySelector<HTMLButtonElement>(".comment-count")?.click());
+
+  const cards = [...container.querySelectorAll<HTMLElement>(".comment-float .comment-card")];
+  assert.deepEqual(
+    cards.map((card) => [card.dataset.thread, card.dataset.open]),
+    [
+      [ID.OPEN, "true"],
+      [ID.GONE, "false"],
+    ],
+  );
 });
