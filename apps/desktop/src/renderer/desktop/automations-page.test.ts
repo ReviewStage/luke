@@ -1407,6 +1407,36 @@ test("Escape keeps a new page whose schedule was changed, though nothing was typ
   assert.equal(places.length, 1);
 });
 
+test("Escape while writing the prompt lets go of the caret and reaches the window marked taken, composing or not", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  const prompt =
+    page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Prompt']") ??
+    assert.fail("no prompt");
+  type(prompt, "Triage the issues opened overnight.");
+  act(() => prompt.focus());
+
+  const reached: boolean[] = [];
+  const listen = (event: KeyboardEvent) => reached.push(event.defaultPrevented);
+  window.addEventListener("keydown", listen);
+  const pressEscape = (init: KeyboardEventInit) =>
+    act(() => {
+      prompt.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true, ...init }),
+      );
+    });
+
+  pressEscape({ isComposing: true });
+  assert.equal(document.activeElement, prompt, "the input method's cancel keeps the caret");
+  pressEscape({});
+  window.removeEventListener("keydown", listen);
+
+  // Note that both reach the window, whose live call Escape stops first, marked taken, so neither leaves the page.
+  assert.deepEqual(reached, [true, true]);
+  assert.notEqual(document.activeElement, prompt);
+  assert.equal(prompt.value, "Triage the issues opened overnight.");
+});
+
 test("a refresh that fails while an automation's page stands keeps the page and what was typed in it", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();

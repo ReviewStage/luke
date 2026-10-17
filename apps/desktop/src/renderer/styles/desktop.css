@@ -5575,24 +5575,6 @@ button.automation-run:hover {
   background: var(--raised);
 }
 
-/* The task is its card: the words written on the card's own ground, the
-   card's corner the field's, ringed while it holds the caret as any field is. */
-.settings-card > .automation-prompt {
-  min-height: 120px; /* off-scale */
-  padding: var(--space-12) var(--space-16);
-  border: 0;
-  border-radius: inherit;
-  background: none;
-  color: var(--text-primary);
-  font: inherit;
-  line-height: 1.5;
-  resize: vertical;
-}
-
-.settings-card > .automation-prompt::placeholder {
-  color: var(--text-tertiary);
-}
-
 /* Chat ----------------------------------------------------------------------- */
 
 /* The window's Chat, in the plan's place beside the sidebar as the Inbox
