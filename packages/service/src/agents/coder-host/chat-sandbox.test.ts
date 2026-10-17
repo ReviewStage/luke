@@ -62,3 +62,26 @@ test("an inbox post opens the sandbox only where an image block names a picture,
     false,
   );
 });
+
+test("an inbox reply opens the sandbox only where it shows a picture, which is read from a file there", () => {
+  assert.equal(
+    opensSandbox(
+      requested(CODER_TOOL.REPLY_INBOX, {
+        key: "invite-copy",
+        text: "See.",
+        images: [{ path: "shot.png" }],
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    opensSandbox(requested(CODER_TOOL.REPLY_INBOX, { key: "invite-copy", text: "Words alone." })),
+    false,
+  );
+  assert.equal(
+    opensSandbox(
+      requested(CODER_TOOL.REPLY_INBOX, { key: "invite-copy", text: "None.", images: [] }),
+    ),
+    false,
+  );
+});
