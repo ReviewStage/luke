@@ -168,6 +168,7 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
     [...card.querySelectorAll(".settings-row strong")].map((label) => label.textContent),
   );
   assert.deepEqual(cards, [
+    ["Sections"],
     ["Issues"],
     ["Chat"],
     ["Video calls", "Avatar"],
