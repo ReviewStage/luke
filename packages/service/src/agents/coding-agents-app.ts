@@ -29,6 +29,7 @@ import {
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
   CODING_AGENT_WORKSPACE_QUERY,
+  type CodingAgentAttachment,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
   codingAgentArchiveRequestSchema,
@@ -307,13 +308,14 @@ const MAXIMUM_ATTACHMENTS_BODY_BYTES =
 const MAXIMUM_START_BODY_BYTES =
   6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
 
-/** An answer is a note and a few short fields: the note's bound at JSON's widest escape, and room for the rest. */
+/** An answer is a note, a few short fields, and the files a message may carry: the note's bound at JSON's widest escape, the files, and room for the rest. */
 const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
   6 *
     (INBOX_BOUNDS.MAX_NOTE_CHARS +
       INBOX_BOUNDS.MAX_FIELDS *
         (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
   2_048;
 
 /** A change to a pull request names the change and its few fields, so a body past this is no change. */
@@ -1224,15 +1226,23 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_ANSWER_BODY_BYTES);
   const asked = readEither(inboxAnswerRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { revision, clientKey, ...reply } = asked.success;
-  const taken = yield* takenAnswer(userId, stored.value, { revision, clientKey, reply });
+  const { revision, clientKey, attachments = [], ...reply } = asked.success;
+  const taken = yield* takenAnswer(userId, stored.value, {
+    revision,
+    clientKey,
+    reply,
+    attachments,
+  });
   if (taken === undefined) {
     // Not taken: the item moved on, or another answer settled it; it is answered as it now stands.
     const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
   }
-  if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer)) {
+  if (
+    taken.answer === undefined ||
+    !inboxAnswerHeard(taken, taken.answer, taken.answerFiles?.length ?? 0)
+  ) {
     return inboxAnswered(taken, true);
   }
   const answer = taken.answer;
@@ -1242,6 +1252,7 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     const eve = yield* eveFor(seams, request);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxAnswerMessage(taken, answer),
+      attachments,
       clientKey,
       sender: { kind: MESSAGE_SENDER.MEMBER, userId },
     });
@@ -1267,16 +1278,28 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
 const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   stored: StoredInboxItem,
-  asked: { readonly revision: number; readonly clientKey: string; readonly reply: InboxReply },
+  asked: {
+    readonly revision: number;
+    readonly clientKey: string;
+    readonly reply: InboxReply;
+    readonly attachments: readonly CodingAgentAttachment[];
+  },
 ): Effect.fn.Return<InboxItem | undefined, HostedRefusal, DatabaseServices> {
   const { item, answerKey } = stored;
   if (answerKey === asked.clientKey) return item;
   if (item.status !== INBOX_STATUS.OPEN || item.revision !== asked.revision) return undefined;
-  if (inboxReplyRefusal(item, asked.reply) !== undefined) {
+  if (inboxReplyRefusal(item, asked.reply, asked.attachments.length) !== undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const answered = yield* hostedStoreOrUnavailable(
-    answerInboxItem(userId, item.id, asked.revision, asked.reply, asked.clientKey),
+    answerInboxItem(
+      userId,
+      item.id,
+      asked.revision,
+      asked.reply,
+      asked.clientKey,
+      asked.attachments,
+    ),
   );
   return Option.getOrUndefined(answered);
 });

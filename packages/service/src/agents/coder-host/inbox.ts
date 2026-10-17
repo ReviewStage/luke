@@ -117,6 +117,8 @@ interface AgentInboxLine {
   readonly response?: InboxItem["response"];
   readonly needsReply?: boolean;
   readonly answer?: InboxReply;
+  /** The names of the files the developer attached to the answer, which reached the agent with it as a message's files do. */
+  readonly answerFiles?: readonly string[];
   readonly closedReason?: string;
 }
 
@@ -175,6 +177,9 @@ function lineOf(item: InboxItem): AgentInboxLine {
     status: item.status,
     ...asks,
     ...(item.answer === undefined ? undefined : { answer: item.answer }),
+    ...(item.answerFiles === undefined
+      ? undefined
+      : { answerFiles: item.answerFiles.map((file) => file.name) }),
     ...(item.closedReason === undefined ? undefined : { closedReason: item.closedReason }),
   };
 }

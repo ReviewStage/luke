@@ -24,3 +24,16 @@ export const MESSAGE_SENDER = {
 } as const;
 
 export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
+
+/**
+ * What one of an inbox item's attachments is: a picture the agent posted
+ * for an image block, or a file the developer attached to their answer,
+ * which the item keeps beside the answer it went with.
+ */
+export const INBOX_ATTACHMENT_KIND = {
+  PICTURE: "picture",
+  ANSWER_FILE: "answer-file",
+} as const;
+
+export type InboxAttachmentKind =
+  (typeof INBOX_ATTACHMENT_KIND)[keyof typeof INBOX_ATTACHMENT_KIND];

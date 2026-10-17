@@ -132,6 +132,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
     codingAgentTodosInputSchema: codingAgentWire.codingAgentTodosInputSchema,
     storedObjectSchema: codingAgentWire.storedObjectSchema,
+    codingAgentAttachmentsSchema: codingAgentWire.codingAgentAttachmentsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
   "inbox-wire": {
     inboxKeySchema: inboxWire.inboxKeySchema,
@@ -150,6 +151,7 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxFormValueSchema: inboxWire.inboxFormValueSchema,
     inboxFormValuesSchema: inboxWire.inboxFormValuesSchema,
     inboxReplySchema: inboxWire.inboxReplySchema,
+    inboxAnswerFileSchema: inboxWire.inboxAnswerFileSchema,
     inboxReadBlockSchema: inboxWire.inboxReadBlockSchema,
     inboxReadResponseSchema: inboxWire.inboxReadResponseSchema,
     inboxItemSchema: inboxWire.inboxItemSchema,

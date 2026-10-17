@@ -443,6 +443,46 @@
                 ],
                 "additionalProperties": false
               },
+              "answerFiles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "attachmentId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "mediaType": {
+                      "type": "string",
+                      "enum": [
+                        "image/png",
+                        "image/jpeg",
+                        "image/webp",
+                        "application/pdf",
+                        "text/plain"
+                      ]
+                    },
+                    "byteCount": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "attachmentId",
+                    "name",
+                    "mediaType",
+                    "byteCount"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 10
+              },
               "answeredBy": {
                 "type": "object",
                 "properties": {

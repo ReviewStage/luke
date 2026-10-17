@@ -266,7 +266,7 @@ const codingAgentAttachmentSchema = EffectSchema.Struct({
 export type CodingAgentAttachment = typeof codingAgentAttachmentSchema.Type;
 
 /** The files of one message: bounded in count, and in the bytes they hold together, each file padded apart. */
-const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSchema).check(
+export const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSchema).check(
   EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS),
   EffectSchema.makeFilter(
     (attachments) =>

@@ -71,6 +71,7 @@ import {
 } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
@@ -2648,6 +2649,61 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
         assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
         assert.ok(handed.includes("Done, and on preview too."), "it carries the note");
+      }),
+  );
+
+  it.effect(
+    "files attached to an answer reach the agent with it as a message's files do, alone on an item that asks nothing back too, and the item keeps them, each served under the type it travelled as",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, fetch, post, answer, read } = yield* openInbox(eve);
+        const posted = yield* post({
+          key: "flag-files",
+          title: "Turn on the agent-mail flag in staging",
+          response: { type: INBOX_RESPONSE.TODO },
+          needsReply: false,
+        });
+        assert.ok(Result.isSuccess(posted));
+        const before = eve.sent.length;
+
+        const filed = yield* answer(posted.success.id, {
+          revision: posted.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+          attachments: [
+            {
+              name: "staging-flags.txt",
+              mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+              data: "b24=",
+            },
+          ],
+        });
+        assert.equal(filed.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(eve.sent.length, before + 1, "a file with no note reaches the agent");
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
+        assert.ok(handed.includes("staging-flags.txt"), "it carries the file");
+
+        const kept = (yield* read()).items.find((each) => each.key === "flag-files")?.answerFiles;
+        assert.deepEqual(
+          kept?.map(({ name, mediaType, byteCount }) => ({ name, mediaType, byteCount })),
+          [
+            {
+              name: "staging-flags.txt",
+              mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+              byteCount: 2,
+            },
+          ],
+        );
+        const served = yield* fetch(
+          request(INBOX_ATTACHMENT, owner, {
+            id: posted.success.id,
+            attachment: kept?.[0]?.attachmentId ?? "",
+          }),
+        );
+        assert.equal(served.headers.get("content-type"), CODING_AGENT_ATTACHMENT_TYPE.TEXT);
+        assert.equal(yield* Effect.promise(() => served.text()), "on");
       }),
   );
 

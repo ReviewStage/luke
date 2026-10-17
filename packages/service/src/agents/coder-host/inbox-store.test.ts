@@ -16,6 +16,7 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_REPLY,
@@ -25,6 +26,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
+import { ACTION_RESULT_STATUS } from "../../core.js";
 import {
   accountInboxTasks,
   accountWaitingItems,
@@ -32,10 +34,12 @@ import {
   closeInboxItem,
   type InboxAgent,
   postInboxItem,
+  readInboxAttachment,
   readInboxItem,
   taskInboxItems,
   withdrawInboxAnswer,
 } from "../../inbox/inbox-store.js";
+import { readOwnInbox } from "./inbox.js";
 import { accountInboxPast } from "./inbox-page.js";
 
 /**
@@ -335,6 +339,76 @@ it.layer(getTestDB())("the inbox store", (it) => {
           "a closed item takes no answer",
         );
         assert.deepEqual(yield* taskInboxItems(other, agent.taskId), []);
+      }),
+  );
+
+  it.effect(
+    "the files an answer carries are kept on the item in the order attached and read back by a teammate, and go with the answer when it is withdrawn and when the agent asks again",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+        const files = [
+          { name: "notes.txt", mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT, data: "aGVsbG8=" },
+          { name: "spec.pdf", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF, data: "JVBERi0=" },
+        ];
+        const key = randomUUID();
+
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(agent.userId, id, 1, DONE, key, files),
+        );
+        const kept = answered.answerFiles ?? [];
+        const read = Option.getOrThrow(yield* readInboxItem(teammate, id)).item;
+        const first = kept[0] ?? assert.fail("the first file is kept");
+        const bytes = Option.getOrThrow(
+          yield* readInboxAttachment(teammate, id, first.attachmentId),
+        );
+        assert.deepEqual(
+          kept.map(({ name, mediaType, byteCount }) => ({ name, mediaType, byteCount })),
+          [
+            { name: "notes.txt", mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT, byteCount: 5 },
+            { name: "spec.pdf", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF, byteCount: 5 },
+          ],
+        );
+        assert.deepEqual(read.answerFiles, kept, "a teammate reads the same files");
+        const told = yield* readOwnInbox(agent);
+        assert.ok(told.status === ACTION_RESULT_STATUS.ACCEPTED);
+        assert.deepEqual(
+          told.inbox.find((line) => line.key === SETTINGS.key)?.answerFiles,
+          ["notes.txt", "spec.pdf"],
+          "the agent reads back which files its answer carried, by name",
+        );
+        assert.deepEqual(
+          { ...bytes, bytes: new TextDecoder().decode(bytes.bytes) },
+          { contentType: CODING_AGENT_ATTACHMENT_TYPE.TEXT, bytes: "hello", fileName: "notes.txt" },
+        );
+
+        const withdrawn = Option.getOrThrow(yield* withdrawInboxAnswer(agent.userId, id, key));
+        assert.equal(withdrawn.answerFiles, undefined);
+        assert.ok(
+          Option.isNone(yield* readInboxAttachment(agent.userId, id, first.attachmentId)),
+          "a withdrawn answer's files are gone",
+        );
+
+        const again = Option.getOrThrow(
+          yield* answerInboxItem(agent.userId, id, withdrawn.revision, DONE, randomUUID(), files),
+        );
+        assert.equal(again.answerFiles?.length, 2);
+        const askedAgain = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(askedAgain));
+        assert.equal(
+          askedAgain.success.answerFiles,
+          undefined,
+          "asking again keeps no answer's files",
+        );
+        assert.equal(
+          Option.getOrThrow(yield* readInboxItem(agent.userId, id)).item.answerFiles,
+          undefined,
+        );
       }),
   );
 

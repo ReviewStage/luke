@@ -1,6 +1,10 @@
 import { isWireBoolean, isWireNumber, isWireString } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
-import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_BOUNDS,
+  codingAgentAttachmentsSchema,
+} from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./task-wire.js";
@@ -444,6 +448,24 @@ export const inboxReplySchema = EffectSchema.Struct({
 
 export type InboxReply = typeof inboxReplySchema.Type;
 
+/**
+ * One file the developer attached to their answer, as the item keeps it:
+ * the attachment its bytes are fetched by, its own name, the type it
+ * travelled as, and how many bytes it is, so a reader draws it before
+ * fetching it.
+ */
+export const inboxAnswerFileSchema = EffectSchema.Struct({
+  attachmentId: wireUuidSchema,
+  name: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS),
+  ),
+  mediaType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+  byteCount: countedNumber,
+});
+
+export type InboxAnswerFile = typeof inboxAnswerFileSchema.Type;
+
 /** The types this build draws, by which a read tells a type it does not know. */
 const KNOWN_TYPES: ReadonlySet<string> = new Set([
   ...Object.values(INBOX_BLOCK),
@@ -499,6 +521,12 @@ export const inboxItemSchema = EffectSchema.Struct({
   startedBy: EffectSchema.optionalKey(memberRefSchema),
   /** The developer's answer, on an answered item. */
   answer: EffectSchema.optionalKey(inboxReplySchema),
+  /** The files the developer attached to their answer, in the order attached; absent where they attached none. */
+  answerFiles: EffectSchema.optionalKey(
+    EffectSchema.Array(inboxAnswerFileSchema).check(
+      EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS),
+    ),
+  ),
   /**
    * The member who answered, on an answered item, any member of the plan's
    * workspace; absent for an answer nobody can be named for, and from a
@@ -530,10 +558,15 @@ export const inboxAnswerSchema = EffectSchema.Struct({
 
 export type InboxAnswer = typeof inboxAnswerSchema.Type;
 
-/** An answer to one item: the revision it answers, the answer, and a key the client made, so an answer sent again after a lost reply is taken once. */
+/**
+ * An answer to one item: the revision it answers, the answer, the files
+ * the developer attached, bounded as a message's are, and a key the client
+ * made, so an answer sent again after a lost reply is taken once.
+ */
 export const inboxAnswerRequestSchema = EffectSchema.Struct({
   revision: countedNumber,
   ...inboxReplySchema.fields,
+  attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
 });
 
@@ -594,13 +627,18 @@ function replyWords(reply: InboxReply): string {
 /**
  * Whether an answer reaches the agent as one of the developer's messages:
  * every answer to an item that asks to be heard back, and any other carrying
- * words the developer typed, since words are written to be read; a bare
- * press on an item that asks nothing back, Done or Got it, is kept for the
- * agent to read in its own time. The service hands an answer off by it, and
- * the window says where an answer went and reads the agent again by it.
+ * words the developer typed or files they attached, since both are given to
+ * be read; a bare press on an item that asks nothing back, Done or Got it,
+ * is kept for the agent to read in its own time. The service hands an answer
+ * off by it, and the window says where an answer went and reads the agent
+ * again by it.
  */
-export function inboxAnswerHeard(item: Pick<InboxItem, "needsReply">, reply: InboxReply): boolean {
-  return item.needsReply || (reply.note ?? "").trim() !== "";
+export function inboxAnswerHeard(
+  item: Pick<InboxItem, "needsReply">,
+  reply: InboxReply,
+  files = 0,
+): boolean {
+  return item.needsReply || (reply.note ?? "").trim() !== "" || files > 0;
 }
 
 /**
@@ -675,12 +713,14 @@ function choiceRefusal(
 /**
  * Why an answer does not fit its item, or nothing where it does: the
  * response takes the reply, a pick names offered options, a form's values
- * fill it, and words stand where the answer is the developer's own. A
- * response this build does not know takes nothing.
+ * fill it, and words or files stand where the answer is the developer's
+ * own, as a message is words, files, or both. A response this build does
+ * not know takes nothing.
  */
 export function inboxReplyRefusal(
   item: Pick<InboxItem, "response">,
   reply: InboxReply,
+  files = 0,
 ): string | undefined {
   const response = item.response;
   if (!knownResponse(response)) return "The item asks something this Luke does not know.";
@@ -692,8 +732,8 @@ export function inboxReplyRefusal(
   if (reply.reply === INBOX_REPLY.SUBMITTED && response.type === INBOX_RESPONSE.FORM) {
     return formRefusal(response, reply.values);
   }
-  if (reply.reply === INBOX_REPLY.ANSWERED && (reply.note ?? "").trim() === "") {
-    return "An answer in the developer's own words needs words.";
+  if (reply.reply === INBOX_REPLY.ANSWERED && (reply.note ?? "").trim() === "" && files === 0) {
+    return "An answer in the developer's own words needs words or files.";
   }
   return undefined;
 }

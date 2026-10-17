@@ -14,12 +14,18 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
 import { task } from "@luke/database/schemas/plan";
+import { INBOX_ATTACHMENT_KIND } from "@luke/database/storage-vocabulary";
 import type {
   AccountInboxAutomation,
   AccountInboxEntry,
   AccountInboxTask,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  type CodingAgentAttachment,
+  type CodingAgentAttachmentType,
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -31,8 +37,8 @@ import {
   type InboxPost,
   type InboxPostBlock,
   type InboxReply,
+  inboxAnswerFileSchema,
   inboxBlockSchema,
-  inboxImageTypeSchema,
   inboxReplySchema,
   inboxResponseSchema,
 } from "@luke/features/inbox-wire";
@@ -61,7 +67,11 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * (`@luke/database/schemas/inbox-attachment`) under an id minted here, which the
  * block kept on the item names in the path's place; the item's attachments
  * its new blocks no longer name go with the same write, so a picture the
- * agent dropped from an item is dropped from the store. A post counts the agent's open items against the bound
+ * agent dropped from an item is dropped from the store. The files the
+ * developer attaches to an answer are rows of the item's too, of their own
+ * kind, written with the answer and read back beside it; they go with the
+ * answer, so an answer taken back deletes them, and so does a post, which
+ * opens the item again with no answer. A post counts the agent's open items against the bound
  * under a lock on the agent's own row, so two posts of one step cannot both
  * slip under it. An answer is taken only by the revision it names and only
  * while the item is open, so an answer to an item the agent has since
@@ -109,11 +119,21 @@ export interface StoredInboxItem {
   readonly answerKey: string | null;
 }
 
-/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
+/** One picture as a post hands it in: the type its bytes were sniffed to be, and the bytes. */
 export interface InboxImage {
   readonly contentType: InboxImageType;
   readonly bytes: Uint8Array;
 }
+
+/** One of the item's attachments as a read answers it: the type it is served under, its bytes, and, for a file of an answer's, its name. */
+export interface InboxAttachmentRead {
+  readonly contentType: CodingAgentAttachmentType;
+  readonly bytes: Uint8Array;
+  readonly fileName: string | null;
+}
+
+/** The type an attachment's row keeps, any a message's file may travel as. */
+const attachmentTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const INBOX_COLUMNS = {
@@ -132,6 +152,10 @@ const INBOX_COLUMNS = {
     string | null
   >`(select "name" from ${user} where ${user.id} = ${inboxItem.userId})`,
   answer: inboxItem.answer,
+  // The files of the answer, in the order they were attached, each a scalar read for `returning` as the names are.
+  // Note that the item's id is named whole, because Drizzle writes a column bare where a statement reads one table,
+  // and a bare `id` inside the subquery is the attachment's own.
+  answerFiles: sql<unknown>`(select coalesce(json_agg(json_build_object('attachmentId', "answer_file"."id", 'name', "answer_file"."file_name", 'mediaType', "answer_file"."content_type", 'byteCount', "answer_file"."byte_count") order by "answer_file"."created_at"), '[]'::json) from ${inboxAttachment} as "answer_file" where "answer_file"."item_id" = "inbox_item"."id" and "answer_file"."kind" = ${INBOX_ATTACHMENT_KIND.ANSWER_FILE})`,
   answerKey: inboxItem.answerKey,
   answeredBy: inboxItem.answeredBy,
   // A scalar read rather than a join, because `returning` projects these too and joins nothing.
@@ -157,6 +181,7 @@ const InboxRowSchema = Schema.Struct({
   startedBy: Schema.String,
   startedByName: Schema.NullOr(Schema.String),
   answer: Schema.NullOr(inboxReplySchema),
+  answerFiles: Schema.Array(inboxAnswerFileSchema),
   answerKey: Schema.NullOr(Schema.String),
   answeredBy: Schema.NullOr(Schema.String),
   answeredByName: Schema.NullOr(Schema.String),
@@ -185,6 +210,7 @@ function storedItem(row: InboxRow): StoredInboxItem {
         ? undefined
         : { startedBy: { userId: row.startedBy, name: row.startedByName } }),
       ...(row.answer === null ? undefined : { answer: row.answer }),
+      ...(row.answerFiles.length === 0 ? undefined : { answerFiles: row.answerFiles }),
       ...(row.answeredBy === null || row.answeredByName === null
         ? undefined
         : { answeredBy: { userId: row.answeredBy, name: row.answeredByName } }),
@@ -265,20 +291,25 @@ const AttachmentWriteSchema = Schema.Struct({
   taskId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
   itemId: Schema.String,
-  contentType: inboxImageTypeSchema,
+  kind: Schema.Literals(Object.values(INBOX_ATTACHMENT_KIND)),
+  fileName: Schema.NullOr(Schema.String),
+  contentType: attachmentTypeSchema,
   byteCount: Schema.Number,
   bytes: Schema.Uint8Array,
   now: Schema.Date,
 });
 
-/** One picture written as a row of the item's, under the id the block names. */
+/** One picture written as a row of the item's, under the id the block names, or one file of an answer's. */
 const insertAttachment = SqlSchema.void({
   Request: AttachmentWriteSchema,
   execute: ({ now, ...attachment }) =>
     Database.use((db) => db.insert(inboxAttachment).values({ ...attachment, createdAt: now })),
 });
 
-/** The item's attachments no block of its names any longer, deleted. */
+/**
+ * The item's attachments no block of its names any longer, deleted, and
+ * with them every file of an answer, which a post leaves the item without.
+ */
 const deleteOtherAttachments = SqlSchema.void({
   Request: Schema.Struct({ itemId: Schema.String, kept: Schema.Array(Schema.String) }),
   execute: ({ itemId, kept }) =>
@@ -300,11 +331,19 @@ const findAttachment = SqlSchema.findOneOption({
     itemId: Schema.String,
     attachmentId: Schema.String,
   }),
-  Result: Schema.Struct({ contentType: inboxImageTypeSchema, bytes: Schema.Uint8Array }),
+  Result: Schema.Struct({
+    contentType: attachmentTypeSchema,
+    bytes: Schema.Uint8Array,
+    fileName: Schema.NullOr(Schema.String),
+  }),
   execute: ({ userId, itemId, attachmentId }) =>
     Database.use((db) =>
       db
-        .select({ contentType: inboxAttachment.contentType, bytes: inboxAttachment.bytes })
+        .select({
+          contentType: inboxAttachment.contentType,
+          bytes: inboxAttachment.bytes,
+          fileName: inboxAttachment.fileName,
+        })
         .from(inboxAttachment)
         .innerJoin(inboxItem, eq(inboxItem.id, inboxAttachment.itemId))
         .where(
@@ -805,6 +844,8 @@ export function postInboxItem(
             taskId: agent.taskId,
             organizationId: locked.value.organizationId,
             itemId: row.id,
+            kind: INBOX_ATTACHMENT_KIND.PICTURE,
+            fileName: null,
             contentType: attachment.contentType,
             byteCount: attachment.bytes.byteLength,
             bytes: attachment.bytes,
@@ -815,18 +856,20 @@ export function postInboxItem(
           itemId: row.id,
           kept: attachments.map((attachment) => attachment.id),
         });
-        return Result.succeed(storedItem(row).item);
+        // Note that the write's `returning` read the answer's files before they were deleted, and a post keeps no answer.
+        const { answerFiles: _gone, ...item } = storedItem(row).item;
+        return Result.succeed(item);
       }),
     ),
   );
 }
 
-/** The picture, where it is the item's: its type and its bytes; nothing where the account reaches no such item or the item carries no such picture. */
+/** The attachment, a picture or a file of its answer, where it is the item's: its type, its bytes, and a file's name; nothing where the account reaches no such item or the item carries no such attachment. */
 export function readInboxAttachment(
   userId: string,
   itemId: string,
   attachmentId: string,
-): InboxStoreEffect<Option.Option<InboxImage>> {
+): InboxStoreEffect<Option.Option<InboxAttachmentRead>> {
   return findAttachment({ userId, itemId, attachmentId });
 }
 
@@ -952,32 +995,102 @@ const withdrawAnswer = SqlSchema.findOneOption({
     ),
 });
 
-/** The answer taken under the key withdrawn, the item open again, where it still stands; nothing where it does not. */
+/** The files of the item's answer, deleted. */
+const deleteAnswerFiles = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String }),
+  execute: ({ itemId }) =>
+    Database.use((db) =>
+      db
+        .delete(inboxAttachment)
+        .where(
+          and(
+            eq(inboxAttachment.itemId, itemId),
+            eq(inboxAttachment.kind, INBOX_ATTACHMENT_KIND.ANSWER_FILE),
+          ),
+        ),
+    ),
+});
+
+/** Where an item's attachments are written under: its plan, none for an agent with no plan, and its workspace. */
+const findItemPlace = SqlSchema.findOne({
+  Request: Schema.Struct({ itemId: Schema.String }),
+  Result: Schema.Struct({ taskId: Schema.NullOr(Schema.String), organizationId: Schema.String }),
+  execute: ({ itemId }) =>
+    Database.use((db) =>
+      db
+        .select({ taskId: inboxItem.taskId, organizationId: ITEM_WORKSPACE })
+        .from(inboxItem)
+        .where(eq(inboxItem.id, itemId)),
+    ),
+});
+
+/** The answer taken under the key withdrawn, the item open again and its answer's files gone with the answer, where it still stands; nothing where it does not. */
 export function withdrawInboxAnswer(
   userId: string,
   itemId: string,
   answerKey: string,
 ): InboxStoreEffect<Option.Option<InboxItem>> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      withdrawAnswer({ userId, itemId, answerKey, now }),
-      Option.map((row) => storedItem(row).item),
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const withdrawn = yield* withdrawAnswer({ userId, itemId, answerKey, now });
+        if (Option.isNone(withdrawn)) return Option.none();
+        yield* deleteAnswerFiles({ itemId });
+        // Note that the update's `returning` read the files before they were deleted, so they are left off here.
+        const { answerFiles: _gone, ...item } = storedItem(withdrawn.value).item;
+        return Option.some(item);
+      }),
     ),
   );
 }
 
-/** The developer's answer taken on the item at the revision named, under the key the client sent it with; nothing where the item is no longer open at that revision. */
+/**
+ * The developer's answer taken on the item at the revision named, under the
+ * key the client sent it with, and the files they attached written beside
+ * it, in the order attached; nothing where the item is no longer open at
+ * that revision. Note that the item is read again once the files are
+ * written, because the answer's `returning` cannot see rows written after
+ * it.
+ */
 export function answerInboxItem(
   userId: string,
   itemId: string,
   revision: number,
   answer: InboxReply,
   answerKey: string,
+  files: readonly CodingAgentAttachment[] = [],
 ): InboxStoreEffect<Option.Option<InboxItem>> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      answerItem({ userId, itemId, revision, answer, answerKey, now }),
-      Option.map((row) => storedItem(row).item),
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const answered = yield* answerItem({ userId, itemId, revision, answer, answerKey, now });
+        if (Option.isNone(answered)) return Option.none();
+        if (files.length === 0) return Option.some(storedItem(answered.value).item);
+        const place = yield* findItemPlace({ itemId }).pipe(
+          Effect.catchTag("NoSuchElementError", Effect.die),
+        );
+        const minted = yield* Effect.sync(() => files.map((file) => ({ file, id: randomUUID() })));
+        yield* Effect.forEach(minted, ({ file, id }, index) => {
+          const bytes = new Uint8Array(Buffer.from(file.data, "base64"));
+          return insertAttachment({
+            id,
+            userId: answered.value.startedBy,
+            ...place,
+            itemId,
+            kind: INBOX_ATTACHMENT_KIND.ANSWER_FILE,
+            fileName: file.name,
+            contentType: file.mediaType,
+            byteCount: bytes.byteLength,
+            bytes,
+            // Note that each file is a millisecond after the last, so a read lists them in the order attached.
+            now: new Date(now.getTime() + index),
+          });
+        });
+        const read = yield* findItem({ userId, itemId });
+        return Option.map(read, (row) => storedItem(row).item);
+      }),
     ),
   );
 }
