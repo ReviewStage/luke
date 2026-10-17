@@ -5,12 +5,12 @@ import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { FormField } from "../form-field/form-field.js";
-import { TextArea, TextField } from "./text-field.js";
+import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_TYPE, TextArea, TextField } from "./text-field.js";
 
 /**
  * text-field.test.ts -- a text entry draws the value its caller holds and
  * hands every change back, answers Enter only when no input method is
- * composing, stays out of spell check where asked, hands a paste to a
+ * composing, stays out of spell check and autofill where asked, hands a paste to a
  * caller that takes pasted files itself, and inside a field is named, described, and marked invalid by
  * the field's words.
  */
@@ -165,6 +165,25 @@ test("a text entry asked not to is left out of the system's spell check, and is 
   assert.equal(fieldNamed(page, "Name").getAttribute("spellcheck"), "false");
   assert.equal(page.querySelector("textarea")?.getAttribute("spellcheck"), "false");
   assert.equal(fieldNamed(page, "Note").getAttribute("spellcheck"), null);
+});
+
+test("a field asked to is left out of the system's autofill, and is the browser's to fill otherwise", () => {
+  const page = render(
+    createElement(
+      "div",
+      null,
+      createElement(TextField, {
+        label: "API key",
+        type: TEXT_FIELD_TYPE.PASSWORD,
+        autoComplete: TEXT_FIELD_AUTO_COMPLETE.OFF,
+        value: "",
+        onChange: () => undefined,
+      }),
+      createElement(TextField, { label: "Note", value: "", onChange: () => undefined }),
+    ),
+  );
+  assert.equal(fieldNamed(page, "API key").autocomplete, "off");
+  assert.equal(fieldNamed(page, "Note").getAttribute("autocomplete"), null);
 });
 
 test("inside a field, a text entry is named, described, and marked invalid by the field's words", () => {

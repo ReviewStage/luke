@@ -1,6 +1,6 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { EllipsisIcon, IconButton, useMenu } from "@luke/ui";
-import { useRef } from "react";
+import { EllipsisIcon, IconButton, SettingsRow, useMenu } from "@luke/ui";
+import { type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 
@@ -17,11 +17,31 @@ import { Tooltip } from "../tooltip";
  * hands focus back to the ⋯ the menu returned it to.
  *
  * Its acts may come in groups, a rule between each. The ⋯ is `@luke/ui`'s
- * quiet `IconButton`.
+ * quiet `IconButton`. A row given its words (`row`) stands in `@luke/ui`'s
+ * `SettingsRow`, its control and the ⋯ at the row's end; one given
+ * `children` still draws them in the window's own row, until its page moves.
  */
 
 /** A row's acts: one list, or lists drawn with a rule between each. */
 type MenuRowActions = readonly MenuAction[] | readonly (readonly MenuAction[])[];
+
+/** A row's words as the shared row draws them, and the control standing before its ⋯. */
+interface MenuRowWords {
+  label: ReactNode;
+  description?: ReactNode;
+  /** The provider's or service's mark the row leads with. */
+  leading?: ReactNode;
+  control?: ReactNode;
+}
+
+/** What the row draws: its words for the shared row, or its own children in the window's row. */
+type MenuRowBody =
+  | { row: MenuRowWords; children?: undefined }
+  | {
+      row?: undefined;
+      /** The row's words, and any control standing before the ⋯. */
+      children: ReactNode;
+    };
 
 /** Whether a row's acts came in groups rather than as one list. */
 function grouped(actions: MenuRowActions): actions is readonly (readonly MenuAction[])[] {
@@ -39,8 +59,9 @@ export function MenuRow({
   actions,
   heading,
   anchor,
+  row,
   children,
-}: {
+}: MenuRowBody & {
   /** What the menu is named: "Linear actions". */
   label: string;
   actions: MenuRowActions;
@@ -48,8 +69,6 @@ export function MenuRow({
   heading?: string;
   /** The id a pressed search result lands on. */
   anchor?: string;
-  /** The row's words, and any control standing before the ⋯. */
-  children: React.ReactNode;
 }): React.JSX.Element {
   // The page is drawn whenever the row is, so the menu needs no surface of
   // its own to close with: it closes with the row unmounting.
@@ -57,19 +76,33 @@ export function MenuRow({
   const door = useRef<HTMLButtonElement | null>(null);
   const groups = groupsOf(actions);
   const acting = groups.length > 0;
+  const more = !acting ? null : (
+    <Tooltip label="More">
+      <IconButton ref={door} icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
+    </Tooltip>
+  );
   return (
     <>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click is a second door to the ⋯ beside it, which is the keyboard's. */}
       <div
-        className="settings-row menu-row"
+        className={row === undefined ? "settings-row menu-row" : "menu-row"}
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         onContextMenu={acting ? menu.contextMenu(door) : undefined}
       >
-        {children}
-        {!acting ? null : (
-          <Tooltip label="More">
-            <IconButton ref={door} icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-          </Tooltip>
+        {row === undefined ? (
+          <>
+            {children}
+            {more}
+          </>
+        ) : (
+          <SettingsRow leading={row.leading} label={row.label} description={row.description}>
+            {() => (
+              <>
+                {row.control}
+                {more}
+              </>
+            )}
+          </SettingsRow>
         )}
       </div>
       {menu.drawn === undefined ? null : (

@@ -30,6 +30,14 @@ export const TEXT_FIELD_TYPE = {
 
 export type TextFieldType = (typeof TEXT_FIELD_TYPE)[keyof typeof TEXT_FIELD_TYPE];
 
+/** What the system may fill a one-line field with: nothing, for a credential it must neither offer nor keep. */
+export const TEXT_FIELD_AUTO_COMPLETE = {
+  OFF: "off",
+} as const;
+
+export type TextFieldAutoComplete =
+  (typeof TEXT_FIELD_AUTO_COMPLETE)[keyof typeof TEXT_FIELD_AUTO_COMPLETE];
+
 /**
  * How a text entry is named: by its `FormField`'s label, through the field's
  * control, or by a `label` of its own where it stands alone, so none is
@@ -89,11 +97,14 @@ function composing(event: KeyboardEvent): boolean {
 /** One line of text, answering Enter with `onEnter` where it is given. */
 export function TextField({
   type = TEXT_FIELD_TYPE.TEXT,
+  autoComplete,
   onEnter,
   ref,
   ...props
 }: TextEntryProps & {
   type?: TextFieldType;
+  /** What the system may fill the field with; the browser's own choice where none is named. */
+  autoComplete?: TextFieldAutoComplete | undefined;
   /** What an Enter does, pressed while no input method is composing. */
   onEnter?: (() => void) | undefined;
   ref?: Ref<HTMLInputElement> | undefined;
@@ -103,6 +114,7 @@ export function TextField({
       ref={ref}
       className="luke-text-field"
       type={type}
+      autoComplete={autoComplete}
       {...entryAttributes(props)}
       onChange={(event) => props.onChange(event.target.value)}
       onKeyDown={(event) => {
