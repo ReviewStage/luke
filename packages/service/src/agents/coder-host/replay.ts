@@ -68,9 +68,10 @@ import { CURSOR_START } from "./transcript.js";
  * conversation it is. A continue replays every step; a fork stops at the
  * assistant message named, its turn's journal included, and a message that
  * is none of the source's own journals is refused. A fork of a reply still
- * being written names how many of its steps were seen as Fork was pressed,
- * and keeps those steps alone, as they stand when the Start reads them, so
- * the steps the source began after the press stay out of it. The source's first
+ * being written names where it was seen to end as Fork was pressed, by its
+ * steps and the words and calls of the last of them, and keeps those alone,
+ * as they stand when the Start reads them, so what the source wrote after
+ * the press stays out of it. The source's first
  * message is its brief and is not replayed: the new agent is handed the
  * plan as it stands now, or the source's prompt with the text files
  * attached to it, an automation run's prompt as it was handed, without the
@@ -639,8 +640,8 @@ interface ReplayTold {
   readonly forked: { readonly at: boolean; readonly edited: readonly string[] | undefined };
   readonly unkept: readonly string[];
   readonly messageId: string | undefined;
-  /** How many of that message's steps the fork kept, where it was of a reply still being written; none where it kept the message whole. */
-  readonly messageSteps?: number | undefined;
+  /** Where the fork cut that message, where it was of a reply still being written; none where it kept the message whole. */
+  readonly cut?: StepCut | undefined;
 }
 
 /** A replay fitted to the new agent's window, and what the new agent's row keeps of where it came from. */
@@ -684,7 +685,8 @@ export function replayOf(
     startedFrom: {
       agentId: source.id,
       ...message,
-      ...(told.messageSteps === undefined ? undefined : { messageSteps: told.messageSteps }),
+      ...(told.cut === undefined ? undefined : { messageSteps: told.cut.steps }),
+      ...(told.cut?.stepParts === undefined ? undefined : { messageStepParts: told.cut.stepParts }),
       steps: kept.length,
       totalSteps,
       ...(told.copy.copied ? { branch: told.copy.branch } : undefined),
@@ -809,34 +811,55 @@ interface PinnedRecords {
   readonly rest: Parts;
 }
 
+/** Where a fork of a reply still being written cuts it: after its first `steps` steps, and within the last of them after its first `stepParts` words and calls, where that is named. */
+interface StepCut {
+  readonly steps: number;
+  readonly stepParts: number | undefined;
+}
+
+/** Whether a part is one the replay hands on, a step's words or a call, which a fork's cut within a step counts. */
+function isReplayedPart(part: Parts[number]): boolean {
+  return isTextUIPart(part) || isStoredToolPart(part);
+}
+
 /**
- * A message's parts cut after its first `steps` steps, as a fork of a reply
- * still being written keeps them, and the parts it leaves out: everything
- * from the boundary of the step after those on. Parts ahead of the first
- * boundary are kept with the first step; a message of no more steps than
- * that is kept whole.
+ * A message's parts as a fork of a reply still being written keeps them,
+ * and the parts it leaves out: its first `steps` steps, the last of them
+ * only up to its first `stepParts` words and calls where those are named,
+ * and nothing after. Parts ahead of the first boundary are kept with the
+ * first step; a message of no more than that is kept whole. Note that a
+ * kept step's words and calls are kept as they stand when the Start reads
+ * them, so words still being drafted at the press, or a call's result that
+ * landed after it, come with them.
  */
-function cutAtStep(parts: Parts, steps: number): CutParts {
+function cutAtStep(parts: Parts, cut: StepCut): CutParts {
   const boundaries = parts.flatMap((part, index) =>
     part.type === UI_PART_TYPE.STEP_START ? [index] : [],
   );
-  const end = boundaries[steps] ?? parts.length;
+  const stepStart = boundaries[cut.steps - 1];
+  // A message holding fewer steps than the press saw is not the one it saw, so it is kept whole.
+  if (stepStart === undefined) return { kept: parts, rest: [] };
+  const stepEnd = boundaries[cut.steps] ?? parts.length;
+  const counted = parts.flatMap((part, index) =>
+    index > stepStart && index < stepEnd && isReplayedPart(part) ? [index] : [],
+  );
+  const end = cut.stepParts === undefined ? stepEnd : (counted[cut.stepParts] ?? stepEnd);
   return { kept: parts.slice(0, end), rest: parts.slice(end) };
 }
 
-/** The records with the cut message's parts cut at the step a fork names, and the parts left out; the records as read where it names none. */
+/** The records with the cut message's parts cut where a fork names, and the parts left out; the records as read where it names no cut. */
 function pinnedRecords(
   records: readonly StoredMessageRecord[],
   messageId: string | undefined,
-  steps: number | undefined,
+  cut: StepCut | undefined,
 ): PinnedRecords {
   const at = records.findIndex(
     (record) => record.id === messageId && record.message.role === MESSAGE_ROLE.ASSISTANT,
   );
-  const cut = records[at];
-  if (steps === undefined || cut === undefined) return { records, rest: [] };
-  const { kept, rest } = cutAtStep(cut.message.parts, steps);
-  const pinned = { ...cut, message: { ...cut.message, parts: kept } };
+  const record = records[at];
+  if (cut === undefined || record === undefined) return { records, rest: [] };
+  const { kept, rest } = cutAtStep(record.message.parts, cut);
+  const pinned = { ...record, message: { ...record.message, parts: kept } };
   return { records: records.with(at, pinned), rest };
 }
 
@@ -889,7 +912,11 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = yield* hostedStoreOrUnavailable(recordsOf(source, from.messageId));
   if (read === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const { cutSeq } = read;
-  const { records, rest } = pinnedRecords(read.records, from.messageId, from.messageSteps);
+  const cut =
+    from.messageSteps === undefined
+      ? undefined
+      : { steps: from.messageSteps, stepParts: from.messageStepParts };
+  const { records, rest } = pinnedRecords(read.records, from.messageId, cut);
   const lines = records.filter((record) => record.message.role === MESSAGE_ROLE.USER);
   const senders = yield* hostedStoreOrUnavailable(
     lineSendersOf(
@@ -928,7 +955,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       forked: { at: forked, edited },
       unkept: files.unkept,
       messageId: from.messageId,
-      messageSteps: from.messageSteps,
+      cut,
     },
   };
 });

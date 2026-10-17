@@ -274,7 +274,7 @@ async function forkedAtInTab(
   return forks.map(({ agentId: _agent, opening: _opening, ...at }) => at);
 }
 
-test("while an agent works, the newest of its replies, which the running turn may still be writing, forks as far as the steps it has begun, and every earlier one whole; once it settles, every reply forks whole", async () => {
+test("while an agent works, the newest of its replies, which the running turn may still be writing, forks as far as it has been written, by its steps and the words and calls of the last, and every earlier one whole; once it settles, every reply forks whole", async () => {
   const LATEST = "6b3a4f5e-7d8c-4b9a-8c3d-4e5f6a7b8c9d";
   const writing = {
     ...reply(LATEST, "Adding the retry"),
@@ -282,8 +282,16 @@ test("while an agent works, the newest of its replies, which the running turn ma
       { type: "step-start" },
       { type: "text", text: "Adding the retry" },
       { type: "step-start" },
+      { type: "text", text: "Running the tests" },
+      {
+        type: "tool-bash",
+        toolCallId: "call-1",
+        state: "input-available",
+        input: { command: "pnpm test" },
+      },
     ],
   };
+
   const settled = [
     line("task", "Queue the invite email."),
     reply(TURN, "Moved it onto the queue."),
@@ -294,7 +302,7 @@ test("while an agent works, the newest of its replies, which the running turn ma
   for (const working of [CODING_AGENT_STATUS.RUNNING, CODING_AGENT_STATUS.STARTING]) {
     assert.deepEqual(
       await forkedAtInTab(working, settled),
-      [{ messageId: TURN }, { messageId: LATEST, messageSteps: 2 }],
+      [{ messageId: TURN }, { messageId: LATEST, messageSteps: 2, messageStepParts: 2 }],
       `${working}: the newest reply is cut where it stands`,
     );
   }

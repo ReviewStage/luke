@@ -44,8 +44,21 @@ const openConversation = (kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSA
     return { userId, conversationId };
   });
 
-/** A turn that formed words and asked for a call in its one step, then failed before the call answered; its journal as the store then holds it. */
-const failedTurnJournal = (kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND]) =>
+/** A step eve ran, gave up on, and ran again: the abandoned attempt's words, then the step told again. */
+const RETRIED_ATTEMPT = [
+  { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 },
+  {
+    kind: BRAIN_RUN_EVENT.TEXT_DRAFTED,
+    step: 1,
+    text: "The migration is complete, and every test passes.",
+  },
+] as const;
+
+/** A turn that formed words and asked for a call in its one step, then failed before the call answered, after an abandoned attempt at that step where one is given; its journal as the store then holds it. */
+const failedTurnJournal = (
+  kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND],
+  abandoned: typeof RETRIED_ATTEMPT | readonly [] = [],
+) =>
   Effect.gen(function* () {
     const target = yield* openConversation(kind);
     const writer = yield* storeWriter({ tools: TOOLS });
@@ -59,6 +72,7 @@ const failedTurnJournal = (kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERS
         trigger: BRAIN_TURN_TRIGGER.ASK,
         at: 0,
       },
+      ...abandoned,
       { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 },
       { kind: BRAIN_RUN_EVENT.TEXT_DRAFTED, step: 1, text: "I will look at the tests first." },
       {
@@ -73,7 +87,7 @@ const failedTurnJournal = (kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERS
         responseIds: [],
         at: 1,
       },
-    ] as const;
+    ];
     for (const [index, body] of bodies.entries()) {
       yield* writer.consume(target, { ...turn, ...body, sequence: index + 1 });
     }
@@ -190,6 +204,20 @@ it.layer(getTestDB())("the store writer's failed turns", (it) => {
         assert.partialDeepStrictEqual("output" in call ? call.output : undefined, {
           status: UNKNOWN_ACTION_STATUS,
         });
+      }),
+  );
+
+  it.effect(
+    "a coding agent's failed turn keeps the words of the attempt it failed on, never those of an attempt eve ran again, however much longer",
+    () =>
+      Effect.gen(function* () {
+        const parts = yield* failedTurnJournal(CONVERSATION_KIND.CODING_AGENT, RETRIED_ATTEMPT);
+        assert.deepEqual(
+          parts.flatMap((part) =>
+            part.type === UI_PART_TYPE.TEXT && "text" in part ? [part.text] : [],
+          ),
+          ["I will look at the tests first."],
+        );
       }),
   );
 

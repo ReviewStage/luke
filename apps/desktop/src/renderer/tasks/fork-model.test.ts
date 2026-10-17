@@ -76,16 +76,16 @@ test("a forked draft's send is from the source at its message, under the draft's
     attachments: [notes],
     disabledServers: [],
   });
-  // A fork of a reply still being written names the steps it keeps, so the cut does not grow after the press.
+  // A fork of a reply still being written names where it was cut, so the cut does not grow after the press.
   assert.deepEqual(
     forkStart({
       ...base,
-      fork: { ...fork, messageSteps: 3 },
+      fork: { ...fork, messageSteps: 3, messageStepParts: 1 },
       words: "",
       attachments: [],
       choice: undefined,
     }).from,
-    { ...from, messageSteps: 3 },
+    { ...from, messageSteps: 3, messageStepParts: 1 },
   );
 });
 

@@ -103,7 +103,7 @@ import {
 import { ContinueAgent } from "./continue-agent";
 import { CopyMessageAction } from "./copy-message";
 import { ForkedToLine, useForkOffered } from "./fork-action";
-import { forkStepsOf, openReply } from "./fork-model";
+import { type ForkCut, forkCutOf, openReply } from "./fork-model";
 import { linkChip } from "./mention-chip";
 import { MentionedAgentCard } from "./mentioned-agent-card";
 import {
@@ -1040,13 +1040,13 @@ export function AgentMessage({
   arrived = NO_ARRIVED,
   planId,
   forkable = true,
-  forkSteps,
+  forkCut,
 }: {
   message: CodingAgentMessage;
   /** Whether its tab may offer to fork at it. */
   forkable?: boolean;
-  /** How many of its steps a fork keeps, where it is the reply a running turn is still writing (`forkStepsOf`), which offers no fork before its first step; none for a settled message, kept whole. */
-  forkSteps?: number | undefined;
+  /** Where a fork cuts it, where it is the reply a running turn is still writing (`forkCutOf`), which offers no fork before its first step; none for a settled message, kept whole. */
+  forkCut?: ForkCut | undefined;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
@@ -1143,7 +1143,7 @@ export function AgentMessage({
   const last = stretches.findLastIndex((stretch) => stretch.line === undefined);
   // Note that Copy waits for whole words, while Fork takes a turn of no words, or one still running, as it stands.
   const copyable = words !== "" && !moving;
-  const forks = forkable && forkSteps !== 0;
+  const forks = forkable && forkCut?.messageSteps !== 0;
   // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
   return stretches.map((stretch, index) => {
     if (stretch.line !== undefined) {
@@ -1184,7 +1184,7 @@ export function AgentMessage({
                   copyable={copyable}
                   messageId={message.id}
                   forkable={forks}
-                  forkSteps={forkSteps}
+                  forkCut={forkCut}
                   className={SENT_ACTIONS_CLASS}
                 />
               ) : null
@@ -1306,7 +1306,7 @@ function AgentTranscriptView({
                 planId={message === plan ? planId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
-                forkSteps={forkStepsOf(message, open)}
+                forkCut={forkCutOf(message, open)}
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}

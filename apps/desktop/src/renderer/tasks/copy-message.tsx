@@ -4,6 +4,7 @@ import { MessageAction, MessageActions } from "../ai-elements/message";
 import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback";
 import { useCopyLink } from "../copy-link-item";
 import { ForkMessageAction } from "./fork-action";
+import type { ForkCut } from "./fork-model";
 import { useMessagePlace } from "./message-links";
 
 /**
@@ -23,7 +24,7 @@ export function CopyMessageAction({
   copyable = true,
   messageId,
   forkable = false,
-  forkSteps,
+  forkCut,
   className,
 }: {
   words: string;
@@ -33,8 +34,8 @@ export function CopyMessageAction({
   messageId?: string | undefined;
   /** Whether the message is the agent's own, which its tab may offer to fork. */
   forkable?: boolean;
-  /** How many of the message's steps its fork keeps, where it is a reply still being written; none where a fork keeps it whole. */
-  forkSteps?: number | undefined;
+  /** Where its fork cuts it, where it is a reply still being written; none where a fork keeps it whole. */
+  forkCut?: ForkCut | undefined;
   className?: string;
 }): ReactNode {
   const { state, copy } = useCopyFeedback();
@@ -63,7 +64,7 @@ export function CopyMessageAction({
         </MessageAction>
       )}
       {!forkable || messageId === undefined ? null : (
-        <ForkMessageAction messageId={messageId} words={words} messageSteps={forkSteps} />
+        <ForkMessageAction messageId={messageId} words={words} cut={forkCut} />
       )}
     </MessageActions>
   );

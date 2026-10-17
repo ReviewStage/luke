@@ -197,6 +197,10 @@
                   "type": "number",
                   "minimum": 0
                 },
+                "messageStepParts": {
+                  "type": "number",
+                  "minimum": 0
+                },
                 "steps": {
                   "type": "number",
                   "minimum": 0

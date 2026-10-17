@@ -5297,7 +5297,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a fork of a reply still being written keeps the steps seen as Fork was pressed, none begun after, and names the files the rest of that reply edited; a fork naming no steps keeps the reply whole",
+    "a fork of a reply still being written keeps the steps, and the words and calls of the last of them, seen as Fork was pressed, nothing written after, and names the files the rest of that reply edited; a fork naming no steps keeps the reply whole",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
@@ -5316,7 +5316,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           text("Now the mailer."),
           write("call-8", "src/mailer.ts"),
         ]);
-        const fork = (messageSteps: number | undefined) =>
+        const fork = (messageSteps: number | undefined, messageStepParts?: number) =>
           Effect.gen(function* () {
             const started = readAnswer(
               codingAgentAnswerSchema,
@@ -5328,6 +5328,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
                     agentId: source.id,
                     messageId: writing,
                     ...(messageSteps === undefined ? undefined : { messageSteps }),
+                    ...(messageStepParts === undefined ? undefined : { messageStepParts }),
                   },
                 }),
               ),
@@ -5346,6 +5347,15 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           /After that message it edited `src\/mailer\.ts`; undo/u,
         );
 
+        // A press that saw the step's words and not yet its call keeps the words alone.
+        const within = yield* fork(1, 1);
+        assert.equal(within.started.from?.messageStepParts, 1);
+        assert.equal(within.replay?.steps.at(-1)?.summary, "Said: Writing the expiry first.");
+        assert.match(
+          within.replay?.preamble ?? "",
+          /After that message it edited `src\/expiry\.ts`, `src\/mailer\.ts`; undo/u,
+        );
+
         const whole = yield* fork(undefined);
         assert.equal(whole.started.from?.messageSteps, undefined);
         assert.deepEqual(
@@ -5359,6 +5369,15 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             startAs(owner, task.id, {
               idempotencyKey: randomUUID(),
               from: { agentId: source.id, messageSteps: 1 },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              from: { agentId: source.id, messageId: writing, messageStepParts: 1 },
             }),
           ),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),

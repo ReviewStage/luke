@@ -1408,18 +1408,23 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
 
-/** The newest step's calls still unanswered, settled as an abandoned attempt's; a journal with none, or closed, is a repeat. */
+/** The newest step's calls still unanswered, settled as an abandoned attempt's, and a coding agent's words of that attempt dropped; a journal with neither, or closed, is a repeat. */
 const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   row: MessageRow,
 ): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
   const boundary = row.parts.findLastIndex((part) => part.type === UI_PART_TYPE.STEP_START);
-  const parts = row.parts.map((part, index) =>
-    index > boundary && isStoredToolPart(part) && !isSettledToolPartState(part.state)
-      ? unansweredToolPart(part, UNANSWERED_REASON.RETRIED)
-      : part,
-  );
-  const settled = parts.some((part, index) => part !== row.parts[index]);
+  // Note that a coding agent's abandoned words leave with the attempt, since its failed turn keeps its words and the retry's own, which may be shorter, could not replace them.
+  const dropsWords = context.kind === CONVERSATION_KIND.CODING_AGENT;
+  const parts = row.parts.flatMap((part, index): Parts => {
+    if (index <= boundary) return [part];
+    if (dropsWords && part.type === UI_PART_TYPE.TEXT) return [];
+    return isStoredToolPart(part) && !isSettledToolPartState(part.state)
+      ? [unansweredToolPart(part, UNANSWERED_REASON.RETRIED)]
+      : [part];
+  });
+  const settled =
+    parts.length !== row.parts.length || parts.some((part, index) => part !== row.parts[index]);
   if (!settled || row.finishedAt !== null) return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
   return yield* amendJournal(context, row, parts);
 });
@@ -1440,6 +1445,9 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
  * nothing will answer, so it is settled here as a turn's end settles one,
  * rather than left running until the turn ends, which for a coding agent is
  * its whole run: a worker such a call delegated reads as starting until then.
+ * A coding agent's words of the abandoned attempt leave the step too, since
+ * the model never read them and the new attempt drafts its own, so a turn
+ * that then fails keeps the words of the attempt it failed on.
  * Note that a call the new attempt asks for again under the same id finds it
  * settled, which no provider's fresh answer does, since each mints its own.
  */
