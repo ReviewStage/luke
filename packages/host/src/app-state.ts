@@ -258,8 +258,10 @@ export type AppStateSnapshot = AppState & { window: AppWindowFacts };
  * the window facts, and the capabilities that decide which platform controls
  * stand, each one this build knows, since a bridge other than the desktop's
  * may hand them. The other slices are read by the guards of the vocabularies
- * they came from, where a reader actually uses them, so the read drops what
- * this declaration does not name rather than refusing it.
+ * they came from, where a reader actually uses them, so the read tolerates
+ * the slices this declaration does not name rather than refusing them. The
+ * read only answers yes or no: the delivered value is passed on untouched,
+ * never the decoded one, which would carry only what is declared here.
  */
 const appStateSnapshotSchema = Schema.Struct({
   version: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
