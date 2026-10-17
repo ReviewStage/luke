@@ -82,6 +82,7 @@ import {
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import { ForkedToLine } from "./fork-action";
 import { linkChip } from "./mention-chip";
 import {
   agentMessagePlace,
@@ -1098,12 +1099,14 @@ export function AgentMessage({
                 <CopyMessageAction
                   words={words}
                   messageId={message.id}
+                  forkable
                   className={SENT_ACTIONS_CLASS}
                 />
               )
             }
           />
         )}
+        {ends ? <ForkedToLine messageId={message.id} /> : null}
       </Message>
     );
   });

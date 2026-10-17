@@ -780,6 +780,11 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         cards={cards}
                         chat={chat}
+                        onFork={
+                          archived
+                            ? undefined
+                            : (fork) => openColumnTab({ draft: agents.onForkDraft(fork) })
+                        }
                       />
                     )}
                   </FindScope>
