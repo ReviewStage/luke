@@ -36,8 +36,8 @@ const ACCOUNT = {
 /** Stands in for Electron's Keychain-backed `safeStorage`. */
 const CIPHER: SecretCipher = {
   isAvailable: () => true,
-  encrypt: (plainText) => Buffer.from(plainText, "utf8"),
-  decrypt: (cipherText) => cipherText.toString("utf8"),
+  encrypt: (plainText) => new TextEncoder().encode(plainText),
+  decrypt: (cipherText) => new TextDecoder().decode(cipherText),
 };
 
 const FILE_SYSTEM = Effect.runSync(Effect.provide(FileSystem.FileSystem, NodeFileSystem.layer));

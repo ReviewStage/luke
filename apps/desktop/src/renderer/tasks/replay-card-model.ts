@@ -5,6 +5,8 @@ import {
   type ReplayStep,
 } from "@luke/features/agent-replay";
 import type { CodingAgentMessage, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
+import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { AGENT_PART, agentParts, messageWords } from "./coding-agent-model";
 
 /**
@@ -40,6 +42,48 @@ const SPEAKER_SEPARATOR = ": ";
 
 /** The word the service leads the agent's words' summary with, which the row's "Agent" already says. */
 const SAID_WORD = "Said";
+
+/** How the service lays a call's step out: its input after this lead, then its result after the next. */
+const CALL_PARTS = {
+  INPUT: "Input: ",
+  RESULT: "\nResult: ",
+  FAILED: "Failed: ",
+} as const;
+
+/** What the service adds to a call's summary while the call was still under way. */
+const RUNNING_MARK = " (running)";
+
+/**
+ * The kind of call each verb the service says a call in names, the first
+ * kind of the transcript's own words to say it, so a replayed call wears
+ * the icon its row wears in a transcript; a verb the transcript does not
+ * say, as "Used", is another call's.
+ */
+const VERB_KIND: ReadonlyMap<string, CallKind> = new Map(
+  Object.values(CALL_KIND)
+    .toReversed()
+    .map((kind) => [CALL_WORDS[kind].verb, kind] as const),
+);
+
+/** What one step is drawn as: a line sent to the source, the source agent's words, or one of its calls as a transcript's row. */
+export const STEP_VIEW = {
+  LINE: "line",
+  SAID: "said",
+  CALL: "call",
+} as const;
+
+export type StepView =
+  | { readonly kind: typeof STEP_VIEW.LINE; readonly sender: string; readonly words: string }
+  | { readonly kind: typeof STEP_VIEW.SAID; readonly words: string }
+  | {
+      readonly kind: typeof STEP_VIEW.CALL;
+      readonly call: CallKind;
+      readonly state: ToolState;
+      readonly subject: string;
+      readonly input: string;
+      readonly output: string | undefined;
+      readonly errorText: string | undefined;
+    };
 
 /** The most links of a `from` chain a brief's source is looked for along, so a chain that loops ends. */
 const MAX_CHAIN = 32;
@@ -121,10 +165,7 @@ export function leftOutLine(replay: Replay): string | undefined {
 
 /** The lede the card's body opens on, naming the source by its tab's name. */
 export function replayLede(source: string): string {
-  return (
-    `What this agent was handed of ${source}'s work, one step per line: its words in full, ` +
-    "each tool call with its result trimmed. Open a step to read it as it was sent."
-  );
+  return `What this agent was handed of ${source}'s work, as it was sent.`;
 }
 
 /**
@@ -210,4 +251,54 @@ export function briefAgent(
     ...(automationId === undefined ? undefined : { automationId }),
     ...(automationName === undefined ? undefined : { automationName }),
   };
+}
+
+/** A call's step read back as its row: its kind and subject from its summary, its input and result from its words, failed where its result says so. */
+function callView(step: ReplayStep): StepView {
+  const split = step.summary.indexOf(SPEAKER_SEPARATOR);
+  const verb = split < 0 ? step.summary : step.summary.slice(0, split);
+  const running = step.summary.endsWith(RUNNING_MARK);
+  const subject =
+    split < 0
+      ? ""
+      : step.summary.slice(
+          split + SPEAKER_SEPARATOR.length,
+          running ? -RUNNING_MARK.length : undefined,
+        );
+  const words = step.words.startsWith(CALL_PARTS.INPUT)
+    ? step.words.slice(CALL_PARTS.INPUT.length)
+    : step.words;
+  const at = words.indexOf(CALL_PARTS.RESULT);
+  const input = at < 0 ? words : words.slice(0, at);
+  const result = at < 0 ? undefined : words.slice(at + CALL_PARTS.RESULT.length);
+  const failed = result?.startsWith(CALL_PARTS.FAILED) === true;
+  return {
+    kind: STEP_VIEW.CALL,
+    call: VERB_KIND.get(verb) ?? CALL_KIND.OTHER,
+    state: running
+      ? TOOL_STATE.INPUT_AVAILABLE
+      : failed
+        ? TOOL_STATE.OUTPUT_ERROR
+        : TOOL_STATE.OUTPUT_AVAILABLE,
+    subject: subject === "" ? step.summary : subject,
+    input,
+    output: running || failed ? undefined : result,
+    errorText: failed ? result?.slice(CALL_PARTS.FAILED.length) : undefined,
+  };
+}
+
+/**
+ * What a step is drawn as in the card, as a transcript draws the same:
+ * a line as a sent message under whoever sent it, the agent's words as its
+ * words, and a call as a call's row opening onto its input and its result.
+ */
+export function stepView(step: ReplayStep): StepView {
+  switch (step.kind) {
+    case REPLAY_STEP_KIND.LINE:
+      return { kind: STEP_VIEW.LINE, sender: stepLine(step).who, words: step.words };
+    case REPLAY_STEP_KIND.SAID:
+      return { kind: STEP_VIEW.SAID, words: step.words };
+    case REPLAY_STEP_KIND.TOOL:
+      return callView(step);
+  }
 }

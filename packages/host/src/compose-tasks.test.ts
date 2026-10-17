@@ -972,6 +972,20 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   }),
 );
 
+it.effect("a refresh that reads what the view already holds tells the window nothing", () =>
+  Effect.gen(function* () {
+    const billing = task(BILLING, "Billing export", "# Billing export", 20);
+    const { call, told } = yield* subject(fakeService([billing]));
+
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    const firstRead = told.length;
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+
+    assert.ok(firstRead > 0, "the first read is told");
+    assert.equal(told.length, firstRead);
+  }),
+);
+
 it.effect(
   "the window's refresh lists the agents with no plan beside the plans, and a list read that fails keeps them",
   () =>

@@ -8,7 +8,6 @@ import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { RepositoryPicture } from "../repository-picture";
-import { RetryButton } from "../retry-button";
 import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { InboxItemRow } from "../tasks/inbox-list";
@@ -178,9 +177,8 @@ function HomeInbox({
         </ul>
       )}
       {waiting.failed ? (
-        <div className="sidebar-note flex items-center gap-2" role="alert">
-          <span>Some items could not be read.</span>
-          <RetryButton onRetry={waiting.onRetry} />
+        <div className="sidebar-note">
+          <ErrorState onRetry={waiting.onRetry}>Some items could not be read.</ErrorState>
         </div>
       ) : empty && waiting.reading ? (
         <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
