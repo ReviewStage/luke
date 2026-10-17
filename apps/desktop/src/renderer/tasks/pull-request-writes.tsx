@@ -10,13 +10,22 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_BOUNDS,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestAction,
   type PullRequestActionRequest,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ChevronDownIcon, GitPullRequestDraftIcon, GitPullRequestIcon, XIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  GitPullRequestClosedIcon,
+  GitPullRequestDraftIcon,
+  GitPullRequestIcon,
+  PencilIcon,
+  XIcon,
+} from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 import { useAct } from "../act";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { useGitHubConnection } from "../github-connect";
@@ -38,22 +47,29 @@ import { PullRequestMark } from "./pull-request-mark";
  * sign in with GitHub again where it would not take the member's sign-in,
  * and Luke's own words where the change never reached GitHub.
  *
- * The pill is the one control here so far, as stage-cli's status pill is:
- * it opens a menu offering what may be done from where the pull request
- * stands, Ready for review for a draft and Convert to draft for one open,
- * and stays a plain pill once it is merged or closed. It and the line are
- * drawn by whatever bar the tab wears, so they move with it.
+ * The pill opens a menu of what may be done from where the pull request
+ * stands, as stage-cli's status pill does: Ready for review for a draft and
+ * Convert to draft for one open, each with Close pull request, Reopen pull
+ * request for one closed, and nothing once it is merged. The title is
+ * edited in place, as stage-cli's is: its pencil opens a field over it,
+ * Enter or the check keeps the words, and Escape or the cross keeps the
+ * title as it stood. The pill, the title, and the line are drawn by
+ * whatever header the tab wears, so they move with it.
  */
 
 /** The changes the pill's own menu makes. */
 type StateAction =
   | typeof PULL_REQUEST_ACTION.READY_FOR_REVIEW
-  | typeof PULL_REQUEST_ACTION.CONVERT_TO_DRAFT;
+  | typeof PULL_REQUEST_ACTION.CONVERT_TO_DRAFT
+  | typeof PULL_REQUEST_ACTION.CLOSE
+  | typeof PULL_REQUEST_ACTION.REOPEN;
 
 /** What each of the pill's changes says on its menu. */
 const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: "Ready for review",
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: "Convert to draft",
+  [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
+  [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
 } as const satisfies Record<StateAction, string>;
 
 /** What the pill says while a change is out, whichever control sent it. */
@@ -64,6 +80,9 @@ const PENDING_WORDS = {
   [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Enabling auto-merge",
   [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disabling auto-merge",
   [PULL_REQUEST_ACTION.DEQUEUE]: "Leaving the queue",
+  [PULL_REQUEST_ACTION.CLOSE]: "Closing",
+  [PULL_REQUEST_ACTION.REOPEN]: "Reopening",
+  [PULL_REQUEST_ACTION.EDIT_TITLE]: "Renaming",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
@@ -164,10 +183,12 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
 function actionsFrom(state: PullRequestState): readonly StateAction[] {
   switch (state) {
     case PULL_REQUEST_STATE.DRAFT:
-      return [PULL_REQUEST_ACTION.READY_FOR_REVIEW];
+      return [PULL_REQUEST_ACTION.READY_FOR_REVIEW, PULL_REQUEST_ACTION.CLOSE];
     case PULL_REQUEST_STATE.OPEN:
-      return [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT];
-    default:
+      return [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT, PULL_REQUEST_ACTION.CLOSE];
+    case PULL_REQUEST_STATE.CLOSED:
+      return [PULL_REQUEST_ACTION.REOPEN];
+    case PULL_REQUEST_STATE.MERGED:
       return [];
   }
 }
@@ -176,6 +197,8 @@ function actionsFrom(state: PullRequestState): readonly StateAction[] {
 const ACTION_GLYPHS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: <GitPullRequestIcon aria-hidden="true" />,
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: <GitPullRequestDraftIcon aria-hidden="true" />,
+  [PULL_REQUEST_ACTION.CLOSE]: <GitPullRequestClosedIcon aria-hidden="true" />,
+  [PULL_REQUEST_ACTION.REOPEN]: <GitPullRequestIcon aria-hidden="true" />,
 } as const satisfies Record<StateAction, React.JSX.Element>;
 
 /**
@@ -211,6 +234,7 @@ export function PullRequestStateMenu({
   const items: MenuAction[] = actions.map((action) => ({
     label: ACTION_WORDS[action],
     icon: ACTION_GLYPHS[action],
+    danger: action === PULL_REQUEST_ACTION.CLOSE,
     disabled: writes.pending !== undefined,
     onSelect: () => void writes.write({ action }),
   }));
@@ -269,5 +293,105 @@ export function PullRequestWriteNote({
         </button>
       </Tooltip>
     </p>
+  );
+}
+
+/** The title's own words. */
+const TITLE_WORDS = {
+  EDIT: "Edit title",
+  SAVE: "Save title",
+  CANCEL: "Cancel",
+  FIELD: "Pull request title",
+} as const;
+
+/**
+ * The pull request's title and number, its pencil opening a field over the
+ * title where its words may be changed: kept on Enter or the check where
+ * they changed and are not empty, given up on Escape or the cross. The field
+ * stands until GitHub answers, and closes once it has.
+ */
+export function PullRequestTitle({
+  title,
+  number,
+  writes,
+}: {
+  title: string;
+  /** The pull request's number as the header says it. */
+  number: string;
+  writes: PullRequestWrites;
+}): React.JSX.Element {
+  const [editing, setEditing] = useState<string | undefined>(undefined);
+  const field = useRef<HTMLInputElement | null>(null);
+  const busy = writes.pending !== undefined;
+  const begin = () => {
+    setEditing(title);
+    requestAnimationFrame(() => field.current?.select());
+  };
+  const keep = () => {
+    const words = (editing ?? "").trim();
+    if (words === "" || words === title) {
+      setEditing(undefined);
+      return;
+    }
+    void writes
+      .write({ action: PULL_REQUEST_ACTION.EDIT_TITLE, title: words })
+      .then(() => setEditing(undefined));
+  };
+  if (editing === undefined) {
+    return (
+      <h2 className="pull-request-title pull-request-title-editable">
+        {title} <span className="pull-request-number">{number}</span>
+        <Tooltip label={TITLE_WORDS.EDIT}>
+          <button
+            type="button"
+            className="icon-button pull-request-title-edit"
+            aria-label={TITLE_WORDS.EDIT}
+            disabled={busy}
+            onClick={begin}
+          >
+            <PencilIcon />
+          </button>
+        </Tooltip>
+      </h2>
+    );
+  }
+  return (
+    <div className="pull-request-title pull-request-title-field">
+      <input
+        ref={field}
+        className="pull-request-title-input"
+        aria-label={TITLE_WORDS.FIELD}
+        value={editing}
+        maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS}
+        disabled={busy}
+        onChange={(event) => setEditing(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") keep();
+          if (event.key === "Escape") setEditing(undefined);
+        }}
+      />
+      <Tooltip label={TITLE_WORDS.SAVE}>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={TITLE_WORDS.SAVE}
+          disabled={busy || editing.trim() === ""}
+          onClick={keep}
+        >
+          <CheckIcon />
+        </button>
+      </Tooltip>
+      <Tooltip label={TITLE_WORDS.CANCEL}>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={TITLE_WORDS.CANCEL}
+          disabled={busy}
+          onClick={() => setEditing(undefined)}
+        >
+          <XIcon />
+        </button>
+      </Tooltip>
+    </div>
   );
 }

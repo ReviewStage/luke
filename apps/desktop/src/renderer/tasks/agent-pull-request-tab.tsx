@@ -70,6 +70,7 @@ import { blockedWords, MergeActions } from "./merge-box";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
 import {
   PullRequestStateMenu,
+  PullRequestTitle,
   PullRequestWriteNote,
   type PullRequestWrites,
   usePullRequestWrites,
@@ -1123,8 +1124,10 @@ function ConversationPart({
 /** The fixed header's title and number, as the pull request's read says or, until it lands, as Luke held them; a skeleton where neither has. */
 function HeaderTitle({
   title,
+  writes,
 }: {
   title: Pick<CodingAgentPullRequest, "title" | "number"> | undefined;
+  writes: PullRequestWrites;
 }): React.JSX.Element {
   if (title === undefined) {
     return (
@@ -1136,9 +1139,7 @@ function HeaderTitle({
     );
   }
   return (
-    <h2 className="pull-request-title">
-      {title.title} <span className="pull-request-number">{pullRequestNumberLabel(title)}</span>
-    </h2>
+    <PullRequestTitle title={title.title} number={pullRequestNumberLabel(title)} writes={writes} />
   );
 }
 
@@ -1567,7 +1568,7 @@ export function AgentPullRequestTab({
       ) : (
         <>
           <header className="pull-request-header">
-            <HeaderTitle title={title} />
+            <HeaderTitle title={title} writes={writes} />
             <PullRequestHead parts={parts} now={now} repository={repository} writes={writes} />
           </header>
           <PullRequestTabs

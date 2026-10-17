@@ -1914,6 +1914,44 @@ button.file-ref:hover .file-ref-path {
   user-select: text;
 }
 
+/* The title edited in place (`pull-request-writes.tsx`): its pencil stands
+   faint after the number until the title is hovered or the pencil focused,
+   and the field takes the title's own type and room. */
+.pull-request-title-edit {
+  width: 22px;
+  height: 22px;
+  margin-inline-start: var(--space-2);
+  vertical-align: middle;
+  opacity: 0;
+}
+
+.pull-request-title-edit svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pull-request-title-editable:hover .pull-request-title-edit,
+.pull-request-title-edit:focus-visible {
+  opacity: 1;
+}
+
+.pull-request-title-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pull-request-title-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: inherit;
+  font: inherit;
+}
+
 .pull-request-number {
   color: var(--text-tertiary);
   font-weight: 400;

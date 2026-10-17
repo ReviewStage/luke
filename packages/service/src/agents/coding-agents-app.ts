@@ -80,6 +80,8 @@ import {
   pullRequestNodeId,
   setAutoMerge,
   setPullRequestDraft,
+  setPullRequestOpen,
+  setPullRequestTitle,
   takeOutOfMergeQueue,
 } from "../github/pull-request-writes.js";
 import {
@@ -1024,6 +1026,12 @@ function writeOf(
       return setAutoMerge(token, id, undefined);
     case PULL_REQUEST_ACTION.DEQUEUE:
       return takeOutOfMergeQueue(token, id);
+    case PULL_REQUEST_ACTION.CLOSE:
+      return setPullRequestOpen(token, id, false);
+    case PULL_REQUEST_ACTION.REOPEN:
+      return setPullRequestOpen(token, id, true);
+    case PULL_REQUEST_ACTION.EDIT_TITLE:
+      return setPullRequestTitle(token, id, request.title);
   }
 }
 
