@@ -25,6 +25,7 @@
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
     font-weight: var(--luke-weight-medium);
+    text-decoration: none;
     white-space: nowrap;
     cursor: pointer;
     transition:

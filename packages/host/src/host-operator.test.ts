@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { INBOX_REPLY } from "@luke/features/inbox-wire";
 import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from "@luke/gateway";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
@@ -87,4 +88,40 @@ it.effect(
         ],
       );
     }),
+);
+
+it.effect("an inbox answer's files travel to the host with its words, under the answer's key", () =>
+  Effect.gen(function* () {
+    const { client, requests } = recordingClient();
+    const operator = operatorOver(client);
+    const attachments = [
+      { name: "alerts.yml", mediaType: "text/plain", data: "dGhyZXNob2xk" },
+    ] as const;
+
+    yield* operator.codingAgentInboxAnswer({
+      itemId: "item-1",
+      revision: 2,
+      reply: INBOX_REPLY.ANSWERED,
+      note: "See the file.",
+      attachments,
+      clientKey: "answer-1",
+    });
+
+    assert.deepEqual(
+      requests.map((request) => [request.method, request.params]),
+      [
+        [
+          GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER,
+          {
+            itemId: "item-1",
+            revision: 2,
+            reply: INBOX_REPLY.ANSWERED,
+            note: "See the file.",
+            attachments,
+            clientKey: "answer-1",
+          },
+        ],
+      ],
+    );
+  }),
 );

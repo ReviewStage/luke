@@ -343,9 +343,21 @@ body {
   background: var(--luke-color-surface);
 }
 
+/* The face gives way to a narrow or short window, so the card that fits it
+   never has to clip it: the window less the dimmed margin, the picture's
+   inset, the card's edge, and, for its height, the bar above it. */
 .catalog-media-picture > .luke-face {
-  width: 480px;
-  height: 320px;
+  width: min(
+    480px,
+    100vw -
+    2 *
+    (var(--luke-space-24) + var(--luke-space-48)) -
+    2px,
+    (100vh - 2 * (var(--luke-space-24) + var(--luke-space-48)) - 48px) *
+    3 / 2
+  );
+  height: auto;
+  aspect-ratio: 3 / 2;
 }
 
 /* The measure a settings page gives its sections. */
@@ -425,7 +437,13 @@ body {
   height: 120px;
 }
 
-/* Room a placeholder stands in, as wide as what it stands for. */
+/* Room a placeholder stands in, as wide as what it stands for; a block's
+   room is a plot's whole box. */
+.catalog-skeleton-block {
+  width: 240px;
+  height: 96px;
+}
+
 .catalog-skeleton-line {
   width: 160px;
 }
@@ -473,6 +491,40 @@ body {
   height: 480px;
 }
 
+/* The window's toolbar a page under the toolbar frame stands still: one
+   row, its title at the toolbar's own 15px, a hairline under it, as the
+   desktop window draws it. */
+.catalog-window-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  min-height: 46px;
+  padding: var(--luke-space-8) var(--luke-page-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.catalog-window-toolbar-title {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: var(--luke-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A board's columns, each a card's width, which outrun a narrow screen so
+   the page scrolls them sideways. */
+.catalog-board {
+  display: flex;
+  gap: var(--luke-space-12);
+}
+
+.catalog-board-column {
+  flex: 1 0 220px;
+}
+
 /* A screen as tall as a window, which scrolls the public page it holds as a
    document would, so its banner stands still at the top. */
 .catalog-screen-public {
@@ -506,6 +558,14 @@ body {
   color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
+}
+
+/* A release in the wide page's example: its version and date on a rail
+   beside its notes, as the changelog lays them. */
+.catalog-public-release {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: var(--luke-space-40);
 }
 
 /* Luke's face at the size the OAuth cards open with. */

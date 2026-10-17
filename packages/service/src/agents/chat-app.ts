@@ -11,6 +11,7 @@ import {
   memberNamed,
   messageAt,
   readAllTo,
+  readTo,
   resolveAsk,
 } from "@luke/database/models/chat-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -55,13 +56,13 @@ import {
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { EVE_MOUNT, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
 import {
+  CHAT_DOORS,
   type ChatTelling,
-  HELD_DOORS,
   HOSTED_OF_CHAT_REFUSAL,
   postChat,
   tellMessage,
 } from "./coder-host/chat-notify.js";
-import { messageOnWire, workspaceChatPast } from "./coder-host/chat-page.js";
+import { messageOnWire, readsOf, workspaceChatPast } from "./coder-host/chat-page.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /**
@@ -216,7 +217,7 @@ const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     writer: storeWriter({ tools: CODER_TOOL_SET }),
     userId: writer.userId,
     organizationId: writer.organizationId,
-    doors: HELD_DOORS,
+    doors: CHAT_DOORS,
   };
 });
 
@@ -351,23 +352,27 @@ const resolveAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * How far the person has read, moved on to the place given across every
- * channel, never back. Note that a read naming one channel is refused,
- * because the store keeps one cursor per member until per-channel cursors
- * land, and moving them all would tell the window a channel moved that it
- * did not name.
+ * How far the person has read, moved on to the place given, never back: in
+ * the channel named, or every channel where none is. Answers where the
+ * cursor stands everywhere, and each channel's own cursor past it.
  */
 const readToAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Writer,
-  read: { readonly readTo: number; readonly channelId?: string },
+  seq: number,
+  channelId: string | undefined,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, DatabaseServices> {
   const { userId, organizationId, self } = writer;
-  if (read.channelId !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const moved = yield* hostedStoreOrUnavailable(
-    readAllTo(userId, organizationId, self.id, read.readTo),
-  );
-  if (Option.isNone(moved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { readSeq: moved.value });
+  if (channelId === undefined) {
+    const moved = yield* hostedStoreOrUnavailable(readAllTo(userId, organizationId, self.id, seq));
+    if (Option.isNone(moved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  } else {
+    const read = yield* hostedStoreOrUnavailable(
+      readTo(userId, organizationId, self.id, channelId, seq),
+    );
+    if (!read) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  const read = yield* hostedStoreOrUnavailable(readsOf(userId, organizationId, self.id));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, read);
 });
 
 /** POST writes to the workspace's chat as the account's own member of it: a post, an answer, a resolve, or a read. */
@@ -387,7 +392,7 @@ const writeChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   const writer = { userId, organizationId, self: self.value };
   const telling = tellingOf(seams, writer);
   const write = asked.success;
-  if ("readTo" in write) return yield* readToAsPerson(writer, write);
+  if ("readTo" in write) return yield* readToAsPerson(writer, write.readTo, write.channelId);
   if ("resolve" in write) {
     return yield* resolveAsPerson(writer, write.resolve.seq, write.resolve.reason);
   }
