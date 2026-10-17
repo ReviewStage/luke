@@ -1842,7 +1842,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   act(() => button("New secret").click());
   act(() => {
     const confirm = [
-      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
     ].find((each) => each.textContent === "New secret");
     confirm?.click();
   });
@@ -1902,7 +1902,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");
   act(() => {
     const confirm = [
-      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+      ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
     ].find((each) => each.textContent === "New secret");
     assert.ok(confirm, "the dialog asks first");
     confirm.click();

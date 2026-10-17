@@ -185,7 +185,7 @@ function MoveTaskCard({
   };
   return (
     <ModalShell
-      className="confirm-dialog move-dialog"
+      className="move-dialog"
       labelledBy={titleId}
       busy={moving}
       initialFocus={chosen === undefined ? cancel : first}
