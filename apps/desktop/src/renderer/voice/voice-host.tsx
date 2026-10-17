@@ -1,9 +1,10 @@
 import { useRef } from "react";
+import { appBridge } from "../app-bridge";
 import type { AvatarFeedActs } from "./live-call";
 import { useVoiceSession } from "./use-voice-session";
 
 /** Luke's voice for his avatar, sent to main, which relays it to the panel while the avatar stands. */
-const AVATAR_FEED: AvatarFeedActs = { feed: (feed) => window.luke.feedAvatar(feed) };
+const AVATAR_FEED: AvatarFeedActs = { feed: (feed) => appBridge().feedAvatar(feed) };
 
 /**
  * What the hidden voice window mounts: the live conversation, and the one

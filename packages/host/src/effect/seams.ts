@@ -5,7 +5,9 @@
  * so a composer states the seams it reaches in its own requirements instead of
  * taking a kernel that holds all of them.
  */
+import type { OpenSocket } from "@luke/voice";
 import { type ConfigProvider, Context, Layer, Logger } from "effect";
+import type { OpenTerminalSocket } from "../compose-terminals.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
@@ -46,6 +48,21 @@ export interface IdSourceSeam {
 }
 
 export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/host/IdSource") {}
+
+/**
+ * The WebSockets the host opens to the service: the voice sideband and a
+ * terminal's relay. They arrive rather than being built here, because the
+ * only implementation so far is over `ws` (`@luke/host/node`), and a host
+ * that imported it could not load where `ws` does not.
+ */
+export interface HostSocketsSeam {
+  readonly openVoice: OpenSocket;
+  readonly openTerminal: OpenTerminalSocket;
+}
+
+export class HostSockets extends Context.Service<HostSockets, HostSocketsSeam>()(
+  "@luke/host/HostSockets",
+) {}
 
 /**
  * Where a line about the host's own running goes. The service answers the
@@ -91,7 +108,7 @@ export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSign
   "@luke/host/ShutdownSignal",
 ) {}
 
-/** Every seam tag a host composition stands on. */
+/** Every seam tag the host's kernel stands on; the assembly adds `HostSockets`. */
 export type HostSeamTags =
   | StateRoot
   | RunMode

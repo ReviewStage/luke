@@ -4,18 +4,28 @@ import type { AppStateSnapshot } from "@luke/host/app-state";
 import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
+import type { AppBridge } from "#shared/bridge";
 import {
   eventWithoutAccessTokens,
   transactionWithoutAccessTokens,
   withoutAccessTokens,
 } from "#shared/sentry-breadcrumbs";
 import { App } from "./app";
+import { installAppBridge } from "./app-bridge";
 import { callAvatarAtom } from "./call/call-avatar";
 import { CallWindowCard } from "./call/call-card";
 import { PanelAvatarVoice } from "./call/panel-avatar";
 import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead } from "./use-app-state";
 import { VoiceHost } from "./voice/voice-host";
+
+// The desktop's bridge is the one the preload exposed as `window.luke`, and
+// this is the one place that global is read: everything else reaches main
+// through `appBridge()`, which reads what is installed here before anything
+// below subscribes or draws.
+const preloadWindow: Window & { readonly luke?: AppBridge } = window;
+if (preloadWindow.luke === undefined) throw new Error("The preload's bridge is missing");
+installAppBridge(preloadWindow.luke);
 
 // Every window's tracing, as Sentry's Electron guide sets up a renderer; the
 // DSN, release, and environment are main's, which every renderer event goes

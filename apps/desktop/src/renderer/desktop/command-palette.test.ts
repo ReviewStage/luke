@@ -25,6 +25,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_TASK } from "#testing/document-task";
@@ -381,14 +382,11 @@ function MenuWindow({ moves }: { moves: string[] }): null {
 
 test("the menu bar's Back and Forward, a mouse's side buttons among them, leave the window behind the palette alone", () => {
   let menuListener: ((command: AppCommand) => void) | undefined;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onMenuCommand: (listener: (command: AppCommand) => void) => {
-        menuListener = listener;
-        return () => undefined;
-      },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    onMenuCommand: (listener: (command: AppCommand) => void) => {
+      menuListener = listener;
+      return () => undefined;
     },
   });
   const moves: string[] = [];
@@ -518,18 +516,15 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     createdAt: 1,
   } as const;
   const listed: (string | undefined)[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.AUTOMATIONS_LIST) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        listed.push(request.payload.workspaceId);
-        const value = { automations: [automation] };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.AUTOMATIONS_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      listed.push(request.payload.workspaceId);
+      const value = { automations: [automation] };
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
     },
   });
   const tasks = tasksControl({
@@ -930,15 +925,12 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
+    recordSurfaceEvent: () => undefined,
   });
   return copied;
 }
@@ -1210,17 +1202,14 @@ test("People lists the listed workspace's members by name and role, the reader a
       role: WORKSPACE_ROLE.MEMBER,
     },
   ];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: members }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        ),
-    },
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: members }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      ),
   });
   const opened: string[] = [];
   const base = tasksControl();

@@ -7,6 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { AttachmentViewer } from "./attachment-viewer";
@@ -38,10 +39,7 @@ const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({ recordSurfaceEvent: () => undefined });
 });
 
 afterEach(() => {

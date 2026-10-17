@@ -26,6 +26,7 @@ import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
+import { appBridge } from "./app-bridge";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
@@ -497,7 +498,7 @@ export function SettingsSearchField({
           }}
           onFocus={() => {
             if (placed.current) return;
-            window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+            appBridge().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
               search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
             });
           }}

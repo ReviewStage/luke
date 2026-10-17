@@ -589,3 +589,125 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
   assert.equal(again.control().draft?.fork, undefined, "a fork let go stays let go");
   assert.equal(again.control().draft?.prompt, "Try the queue, then retry");
 });
+
+test("continuing an agent starts on the task from its whole transcript under the agent's own key, a press asked again after no answer carrying the same key, and the new agent's tab opens as a Start's does", async () => {
+  const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const continued = { ...STARTED, from: { agentId: SOURCE, steps: 3, totalSteps: 3 } };
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [continued] });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { agent: continued },
+  );
+  await tab.mount();
+  const continueAgent = tab.control().continueAgent ?? assert.fail("a Start could run");
+
+  let failed: Failure | undefined;
+  await act(async () => {
+    failed = await continueAgent(SOURCE);
+  });
+  assert.equal(failed?.text, "The agent could not be started. Try again.");
+  assert.deepEqual(tab.started, []);
+  await act(async () => {
+    failed = await continueAgent(SOURCE);
+  });
+  await settle();
+
+  assert.equal(failed, undefined);
+  assert.deepEqual(startPayloads(tab.asked), [
+    { taskId: TASK, idempotencyKey: "key-1", from: { agentId: SOURCE } },
+    { taskId: TASK, idempotencyKey: "key-1", from: { agentId: SOURCE } },
+  ]);
+  assert.deepEqual(tab.started, [AGENT]);
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => agent.from?.agentId),
+    [SOURCE],
+    "the new agent joins the list, naming what it continues",
+  );
+  assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
+});
+
+test("a continue carries the developer's words and files as its note, other words or a refusal minting a key of their own, and each agent continued keeps its own key", async () => {
+  const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const OTHER = "ae3c8c6b-5f4a-4fad-8d88-8b6e9c4a5d43";
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+  );
+  await tab.mount();
+  const continueAgent = tab.control().continueAgent ?? assert.fail("a Start could run");
+
+  await act(async () => {
+    await continueAgent(SOURCE, "Add the dark variant.", [notes]);
+    await continueAgent(SOURCE, "Add the light variant.", [notes]);
+    await continueAgent(OTHER);
+    await continueAgent(SOURCE, "Add the light variant.", [notes]);
+    await continueAgent(SOURCE, "Add the light variant.", [notes]);
+  });
+
+  assert.deepEqual(
+    startPayloads(tab.asked).map(({ idempotencyKey, from, note, attachments }) => ({
+      idempotencyKey,
+      from,
+      note,
+      attachments,
+    })),
+    [
+      {
+        idempotencyKey: "key-1",
+        from: { agentId: SOURCE },
+        note: "Add the dark variant.",
+        attachments: [notes],
+      },
+      {
+        idempotencyKey: "key-2",
+        from: { agentId: SOURCE },
+        note: "Add the light variant.",
+        attachments: [notes],
+      },
+      {
+        idempotencyKey: "key-3",
+        from: { agentId: OTHER },
+        note: undefined,
+        attachments: undefined,
+      },
+      {
+        idempotencyKey: "key-2",
+        from: { agentId: SOURCE },
+        note: "Add the light variant.",
+        attachments: [notes],
+      },
+      {
+        idempotencyKey: "key-4",
+        from: { agentId: SOURCE },
+        note: "Add the light variant.",
+        attachments: [notes],
+      },
+    ],
+  );
+});
+
+test("no continue is offered while no Start could run: an archived task, a task naming no repository, or an agent read with no task", async () => {
+  const archived = mount({ taskId: TASK, repository: "acme/relay", archived: true });
+  archived.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await archived.mount();
+  assert.equal(archived.control().continueAgent, undefined);
+
+  const bare = mount({ taskId: TASK, repository: null });
+  bare.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await bare.mount();
+  assert.equal(bare.control().continueAgent, undefined);
+
+  const page = mount({ taskId: undefined, agentId: AGENT, repository: null });
+  page.answer(ACT_KIND.CODING_AGENTS_PAGE, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await page.mount();
+  assert.equal(page.control().continueAgent, undefined);
+});

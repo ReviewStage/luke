@@ -70,7 +70,7 @@ const STEPS: Replay["steps"] = [
   {
     kind: REPLAY_STEP_KIND.TOOL,
     summary: "Read: src/invite.ts",
-    words: 'read_file("src/invite.ts")\n→ 42 lines (result trimmed)',
+    words: 'Input: {"filePath":"src/invite.ts"}\nResult: export const INVITE_DAYS = 7;',
   },
   { kind: REPLAY_STEP_KIND.SAID, summary: "Said: Seven days it is.", words: "Seven days it is." },
 ];
@@ -224,7 +224,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   assert.equal(container.querySelector("[data-replay-step]"), null);
 });
 
-test("opened, the card says what it holds, a row per step naming who, each opening onto its words exactly, and a continuation's transcript opens on the source's tab", async () => {
+test("opened, the card draws each step as a transcript does, a line as a sent message under its sender, the agent's words as words, and a call as a call's row opening onto its input and result, and a continuation's transcript opens on the source's tab", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     brief: CODING_AGENT_BRIEF.PLAN,
@@ -243,20 +243,25 @@ test("opened, the card says what it holds, a row per step naming who, each openi
   );
   assert.match(body?.textContent ?? "", /Builds on luke\/start-from/u);
   assert.doesNotMatch(body?.textContent ?? "", /left out/u);
-  const rows = [...container.querySelectorAll("[data-replay-step] > summary")].map((row) =>
-    [...row.children].map((each) => each.textContent),
+  const steps = [...container.querySelectorAll("[data-replay-step]")];
+  assert.deepEqual(
+    steps.map((step) => step.getAttribute("data-replay-step")),
+    ["line", "tool", "said"],
   );
-  // A line is named by whoever sent it, Charles here though Dean started the source.
-  assert.deepEqual(rows, [
-    ["Charles Pan", "Use seven days."],
-    ["Agent", "Read: src/invite.ts"],
-    ["Agent", "Seven days it is."],
-  ]);
-  press(container.querySelectorAll("[data-replay-step] > summary")[1]);
-  assert.equal(
-    container.querySelector("[data-replay-step] pre")?.textContent,
-    'read_file("src/invite.ts")\n→ 42 lines (result trimmed)',
-  );
+  // A line is a sent message, named by whoever sent it, Charles here though Dean started the source.
+  const [line, call, said] = steps;
+  assert.ok(line?.classList.contains("is-user"));
+  assert.match(line?.textContent ?? "", /Use seven days\./u);
+  assert.equal(line?.querySelector(".message-sender")?.textContent, "Charles Pan");
+  assert.match(said?.textContent ?? "", /Seven days it is\./u);
+  // A call is a call's row, its verb and subject on the line, folded until opened.
+  const head = call?.querySelector("summary");
+  assert.match(head?.textContent ?? "", /Read/u);
+  assert.match(head?.textContent ?? "", /src\/invite\.ts/u);
+  assert.doesNotMatch(call?.textContent ?? "", /INVITE_DAYS/u);
+  press(head);
+  assert.match(call?.textContent ?? "", /"filePath":"src\/invite\.ts"/u);
+  assert.match(call?.textContent ?? "", /export const INVITE_DAYS = 7;/u);
 
   press(container.querySelector("[data-replay-open]"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);

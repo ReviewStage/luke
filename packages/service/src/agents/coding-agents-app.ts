@@ -118,6 +118,7 @@ import {
   PublishedKey,
   withPublishedCache,
 } from "./coder-host/published.js";
+import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
 import { acceptedAgentChoice, startCodingAgent } from "./coder-host/start.js";
 import {
   codingAgentPage,
@@ -343,6 +344,8 @@ const MAXIMUM_MESSAGE_BODY_BYTES =
 
 export interface CodingAgentsAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
+  /** The model a Start from another agent summarizes the steps it cannot keep on; the deployment's own (`coder-host/replay-summary.ts`) where none is named. */
+  summaryModel?: SummaryModelOf;
 }
 
 /** What the routes may require of the function that stands them. */
@@ -465,6 +468,13 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     model !== undefined && effort !== undefined
       ? { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) }
       : undefined;
+  const environment = yield* HostedEnvironment;
+  const summaryModel: SummaryModelOf =
+    seams.summaryModel ??
+    ((owner, chosen, effort) =>
+      productionSummaryModel(owner, chosen, effort).pipe(
+        Effect.provideService(HostedEnvironment, environment),
+      ));
   const { agent, created } = yield* choiceOrInvalid(
     startCodingAgent(eveFor(seams, request), userId, {
       taskId,
@@ -476,6 +486,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       from,
       // Note that the wire takes a note only beside a source, and an empty one is no note: its files carry it alone.
       note: note === "" ? undefined : note,
+      summaryModel,
     }),
   );
   if (!created) {

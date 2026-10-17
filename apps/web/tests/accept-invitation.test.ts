@@ -62,6 +62,14 @@ const SIGNED_IN: Answer = {
   },
 };
 
+const SIGNED_IN_UNVERIFIED: Answer = {
+  status: 200,
+  body: {
+    session: { id: "session-1", userId: "user-1", expiresAt: "2099-01-01T00:00:00.000Z" },
+    user: { id: "user-1", email: INVITED, name: "Ada", emailVerified: false },
+  },
+};
+
 const SIGNED_OUT: Answer = { status: 200, body: null };
 
 function offerRead(answer: InvitationOfferAnswer): Answer {
@@ -112,8 +120,20 @@ afterEach(() => {
 
 test("a valid invitation names its workspace and inviter and is accepted from its button", async () => {
   let settleAccept: (answer: Answer) => void = () => undefined;
-  const answers = signedInReading(VALID);
-  const page = await openPage(answers);
+  let offer = VALID;
+  let sessionRead: () => void = () => undefined;
+  const page = await openPage(
+    new Map([
+      [
+        "/api/auth/get-session",
+        () => {
+          sessionRead();
+          return SIGNED_IN;
+        },
+      ],
+      [HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER, () => offer],
+    ]),
+  );
   await titled(page, "Join Atlas");
   expect(page.textContent).toContain("Grace invited you to plan in Atlas on Luke, as member.");
   expect(buttonNames(page)).toEqual(["Accept invitation"]);
@@ -127,7 +147,13 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await act(async () => buttonNamed(page, "Accept invitation").click());
   expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true");
 
+  // Note that accepting makes Better Auth read the session again, after which the route answers spent.
+  const sessionReadAgain = new Promise<void>((settle) => {
+    sessionRead = settle;
+  });
+  offer = offerRead({ refused: INVITATION_OFFER_REFUSAL.SPENT });
   await act(async () => settleAccept({ status: 200, body: { invitation: {}, member: {} } }));
+  await act(async () => sessionReadAgain);
   await titled(page, "You joined Atlas");
   expect(page.textContent).toContain("Return to Luke. You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
@@ -208,4 +234,26 @@ test("a sign-in asked for again, after a session came and went, carries no earli
   await titled(page, "Sign in to accept your invitation");
   expect(page.querySelector('[role="alert"]')?.textContent).toBe("");
   expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);
+});
+
+test("an address verified while the page stood open makes the invitation acceptable", async () => {
+  let session = SIGNED_IN_UNVERIFIED;
+  let offer = offerRead({ refused: INVITATION_OFFER_REFUSAL.UNVERIFIED });
+  const page = await openPage(
+    new Map([
+      ["/api/auth/get-session", () => session],
+      [HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER, () => offer],
+    ]),
+  );
+  await titled(page, "Your address isn't verified");
+
+  // Note that Better Auth refetches on visibility only after the prior session read has aged out.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  session = SIGNED_IN;
+  offer = VALID;
+  vi.setSystemTime(Date.now() + 60_000);
+  await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+
+  await titled(page, "Join Atlas");
+  expect(buttonNames(page)).toEqual(["Accept invitation"]);
 });
