@@ -6,7 +6,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
@@ -324,4 +324,49 @@ test("a setting is drawn as written while its write is out, so a press reads the
   assert.equal(lastDrawn().look.inlineDiff, "none", "drawn before the document comes back");
   await flush();
   assert.equal(lastDrawn().look.inlineDiff, "none");
+});
+
+/** Holds every settings write unanswered, and the window's document unchanged, until a test answers one. */
+function holdSettingWrites(): Array<(outcome: ActOutcome) => void> {
+  const held: Array<(outcome: ActOutcome) => void> = [];
+  const before = window.luke.act;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: Act) =>
+        request.kind === ACT_KIND.SETTING_UPDATE
+          ? new Promise((resolve) => held.push(resolve))
+          : before(request),
+    },
+  });
+  return held;
+}
+
+test("a write answered while a later one to the same setting is out leaves the later one drawn", async () => {
+  await drawTab();
+  const held = holdSettingWrites();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  act(() => settingControl(popover, '[role="radio"]', "Unified").click());
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+  await flush();
+
+  assert.equal(lastDrawn().look.layout, "split");
+});
+
+test("a refused write is said under its row, and the row can be pressed again", async () => {
+  await drawTab();
+  const held = holdSettingWrites();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not save that setting." });
+  await flush();
+
+  assert.ok(popover.querySelector('[role="alert"]'), "the refusal is said");
+  assert.equal(settingControl(popover, '[role="switch"]', "Ligatures").disabled, false);
+  assert.equal(lastDrawn().look.ligatures, false);
 });

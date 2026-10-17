@@ -21,7 +21,7 @@
 
 import { APP_SETTING_DEFAULTS, type AppSettingField, type AppSettingValue } from "@luke/settings";
 import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
-import type { ActionResult } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
@@ -99,6 +99,12 @@ export interface FileViewSettingsControl {
  */
 let pending: Partial<FileViewSettings> = {};
 const pendingListeners = new Set<() => void>();
+/** Each field's latest write, by the number it was asked under, which alone may clear what is drawn for it. */
+const latestWrite = new Map<FileViewField, number>();
+let writesAsked = 0;
+
+/** What a control is told where a write was refused before it reached the store. */
+const REFUSED = "Could not save that setting on this system.";
 
 function subscribePending(listener: () => void): () => void {
   pendingListeners.add(listener);
@@ -138,14 +144,22 @@ export function useFileViewSettings(): FileViewSettingsControl {
   );
   const change = useCallback(
     <Field extends FileViewField>(field: Field, value: AppSettingValue<Field>) => {
+      writesAsked += 1;
+      const asked = writesAsked;
+      latestWrite.set(field, asked);
       setPending({ ...pending, [field]: value });
-      // The write is drawn as written until it is answered, then as the document holds it.
+      // The write is drawn as written until the field's latest write is answered, then as the document holds it.
       const settle = () => {
-        if (pending[field] === value) setPending(without(pending, field));
+        if (latestWrite.get(field) !== asked) return;
+        latestWrite.delete(field);
+        setPending(without(pending, field));
       };
-      const write = updateSetting(field, value);
-      write.then(settle, settle);
-      return write;
+      // Note that a refusal is answered as a rejected result, as a control reads one, rather than thrown.
+      const write: Promise<ActionResult> = updateSetting(field, value).then(
+        (result) => result,
+        () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED }),
+      );
+      return write.finally(settle);
     },
     [updateSetting],
   );
