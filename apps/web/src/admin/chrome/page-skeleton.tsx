@@ -1,6 +1,7 @@
 import { SkeletonRegion } from "@luke/ui";
-import { type AdminTab, plainLeftClick, tabHref } from "../routing";
+import type { AdminTab } from "../routing";
 import { SkeletonBody, type SkeletonShape } from "../skeleton";
+import { BackLink } from "./back-link";
 import { AdminPage, type ViewerAccount } from "./page-header";
 
 /**
@@ -35,17 +36,7 @@ export function PageSkeleton({
       controls={controls}
     >
       {back === undefined ? null : (
-        <a
-          href={tabHref(back.tab)}
-          className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
-          onClick={(event) => {
-            if (!plainLeftClick(event)) return;
-            event.preventDefault();
-            back.onBack();
-          }}
-        >
-          <span aria-hidden="true">←</span> {back.label}
-        </a>
+        <BackLink tab={back.tab} label={back.label} onBack={back.onBack} />
       )}
       <SkeletonRegion label="Loading…">
         <SkeletonBody shapes={shapes} />

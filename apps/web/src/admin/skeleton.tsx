@@ -1,4 +1,4 @@
-import { Skeleton as LineBone, TEXT_ELEMENT, Text } from "@luke/ui";
+import { Skeleton as LineBone, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { ChartFrameSkeleton } from "./charts/chart-frame";
 import {
   METRIC_STATUS,
@@ -285,7 +285,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
           {shape.avatar ? <Skeleton circle className="size-14 shrink-0" /> : null}
           <div>
             {shape.title === undefined ? null : (
-              <h1 className="text-2xl font-semibold tracking-[-0.01em]">{shape.title}</h1>
+              <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
+                {shape.title}
+              </Text>
             )}
             {shape.lines.map((line, index) => (
               <div

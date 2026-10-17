@@ -66,11 +66,11 @@ export function DayNote({
   totalAccounts: number;
 }): React.JSX.Element {
   return (
-    <p className="mt-3 text-sm text-muted-foreground">
+    <SectionNote>
       Voice and attention count the hosted-tier calls each account spent on this UTC day.
       {truncatedTo !== undefined
         ? ` Only the ${formatNumber(truncatedTo)} busiest accounts are listed. The totals count all ${formatNumber(totalAccounts)}.`
         : ""}
-    </p>
+    </SectionNote>
   );
 }
