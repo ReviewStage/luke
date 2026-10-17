@@ -5226,6 +5226,66 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a continue of a continue keeps the summary its source carried ahead of that source's steps, where the new window holds them",
+    () =>
+      Effect.gen(function* () {
+        const model = new MockLanguageModelV4({
+          doGenerate: async () => ({
+            content: [{ type: "text", text: "Recap of the oldest steps." }],
+            finishReason: { unified: "stop", raw: "stop" },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+              outputTokens: { total: 1, text: 1, reasoning: 0 },
+            },
+            warnings: [],
+          }),
+        });
+        const summaryModel: SummaryModelOf = () =>
+          Effect.succeed({ model, providerOptions: {}, counted: Effect.void });
+        const { owner, eve, first, continueFrom } = yield* longSource({ summaryModel });
+        const second = yield* continueFrom(first.id);
+        const carried = openedParts(eve).parts.replay;
+        assert.ok(carried?.summary !== undefined);
+
+        const secondStored = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
+        yield* transcriptRow(secondStored, 1, MESSAGE_ROLE.USER, [
+          text(secondStored.planSnapshot ?? ""),
+        ]);
+        yield* continueFrom(second.id, { model: SOL, effort: "low" });
+        const third = openedParts(eve).parts.replay;
+
+        assert.deepEqual(third?.summary, carried.summary);
+        assert.deepEqual(
+          third?.steps.map((step) => step.summary),
+          carried.steps.map((step) => step.summary),
+        );
+        assert.equal(third?.totalSteps, LONG_TURNS);
+      }),
+  );
+
+  it.effect(
+    "the files a Start's note carries are counted against the window before the steps are chosen",
+    () =>
+      Effect.gen(function* () {
+        const { eve, first, continueFrom } = yield* longSource();
+        yield* continueFrom(first.id, { note: "Look at this." });
+        const without = openedParts(eve).parts.replay?.steps.length ?? 0;
+
+        const notes = {
+          name: "notes.txt",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          data: Buffer.from("y".repeat(40_000), "utf8").toString("base64"),
+        };
+        const started = yield* continueFrom(first.id, {
+          note: "Look at this.",
+          attachments: [notes],
+        });
+
+        assert.ok((started.from?.steps ?? without) < without, "the file took room the steps had");
+      }),
+  );
+
+  it.effect(
     "a continue of a continue carries the first source's kept steps ahead of its own within the new agent's window",
     () =>
       Effect.gen(function* () {

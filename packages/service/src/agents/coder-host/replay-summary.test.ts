@@ -24,10 +24,12 @@ const said = (at: number, size = 1_000): ReplayStep => ({
 /** A model answering each call by `answer`, or never where it answers nothing, keeping each prompt it was asked. */
 function scripted(answer: (prompt: string) => string | undefined) {
   const asked: string[] = [];
+  const bounds: (number | undefined)[] = [];
   const model = new MockLanguageModelV4({
     doGenerate: async (options) => {
       const prompt = JSON.stringify(options.prompt);
       asked.push(prompt);
+      bounds.push(options.maxOutputTokens);
       const text = answer(prompt);
       if (text === undefined) return new Promise<never>(() => {});
       return {
@@ -42,7 +44,7 @@ function scripted(answer: (prompt: string) => string | undefined) {
     },
   });
   const summary: SummaryModel = { model, providerOptions: {}, counted: Effect.void };
-  return { summary, asked };
+  return { summary, asked, bounds };
 }
 
 /** A window whose share eve compacts at leaves room for about `chunkBytes` of steps per summary call. */
@@ -83,23 +85,31 @@ it.effect("steps past one call's room are summarized in chunks, then combined ol
   }),
 );
 
-it.effect("chunks past the cap leave out the oldest steps, and the summary says how many", () =>
-  Effect.gen(function* () {
-    const { summary, asked } = scripted((prompt) =>
-      prompt.includes("Part 1:") ? "Whole recap." : "Part.",
-    );
-    const steps = Array.from({ length: REPLAY_FIT.MAX_CHUNKS + 2 }, (_, at) => said(at, 20_000));
-    const written = yield* summarizeSteps(summary, steps, windowFor(25_000));
+it.effect(
+  "chunks past the cap leave out the oldest steps, the summary says how many, and each chunk's summary is held to its share of the combining call",
+  () =>
+    Effect.gen(function* () {
+      const { summary, asked, bounds } = scripted((prompt) =>
+        prompt.includes("Part 1:") ? "Whole recap." : "Part.",
+      );
+      const steps = Array.from({ length: REPLAY_FIT.MAX_CHUNKS + 2 }, (_, at) => said(at, 20_000));
+      const written = yield* summarizeSteps(summary, steps, windowFor(25_000));
 
-    assert.ok(Option.isSome(written));
-    assert.match(
-      written.value.text,
-      /^\(The oldest 2 steps were too many to summarize and are left out\.\)/u,
-    );
-    assert.equal(written.value.steps, steps.length);
-    assert.equal(asked.length, REPLAY_FIT.MAX_CHUNKS + 1);
-    assert.ok(!asked.some((prompt) => prompt.includes("Step 0.") || prompt.includes("Step 1.")));
-  }),
+      assert.ok(Option.isSome(written));
+      assert.match(
+        written.value.text,
+        /^\(The oldest 2 steps were too many to summarize and are left out\.\)/u,
+      );
+      assert.equal(written.value.steps, steps.length);
+      assert.equal(asked.length, REPLAY_FIT.MAX_CHUNKS + 1);
+      const chunkBound = bounds[0] ?? 0;
+      assert.ok(
+        chunkBound * REPLAY_FIT.MAX_CHUNKS <= 25_000 / 4,
+        `each chunk writes at most ${chunkBound}`,
+      );
+      assert.equal(bounds.at(-1), REPLAY_FIT.SUMMARY_OUTPUT_TOKENS);
+      assert.ok(!asked.some((prompt) => prompt.includes("Step 0.") || prompt.includes("Step 1.")));
+    }),
 );
 
 it.effect("a call that fails, or a summary still unwritten at the timeout, writes nothing", () =>
@@ -119,7 +129,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const steps = Array.from({ length: 40 }, (_, at) => said(at, 2_000));
-      const whole = yield* fitReplay(steps, stepsBytes(steps), () =>
+      const whole = yield* fitReplay(steps, undefined, stepsBytes(steps), () =>
         Effect.die("no summary asked for"),
       );
       assert.deepEqual(whole, { kept: steps, summary: undefined });
@@ -127,11 +137,11 @@ it.effect(
       const budget = 60_000;
       const recap = { text: "Recap.", steps: 0 };
       const summarized: number[] = [];
-      const beside = yield* fitReplay(steps, budget, (dropped) => {
+      const beside = yield* fitReplay(steps, undefined, budget, (dropped) => {
         summarized.push(dropped.length);
         return Effect.succeed(Option.some({ ...recap, steps: dropped.length }));
       });
-      const alone = yield* fitReplay(steps, budget, () => Effect.succeed(Option.none()));
+      const alone = yield* fitReplay(steps, undefined, budget, () => Effect.succeed(Option.none()));
 
       assert.equal(beside.summary?.steps, steps.length - beside.kept.length);
       assert.deepEqual(summarized, [steps.length - beside.kept.length]);
@@ -142,5 +152,38 @@ it.effect(
       assert.ok(stepsBytes(alone.kept) <= budget);
       assert.equal(alone.summary, undefined);
       assert.equal(alone.kept.at(-1), steps.at(-1));
+    }),
+);
+
+it.effect(
+  "a recap the source already carried is read first and folded into the new summary, and kept as it is where everything fits",
+  () =>
+    Effect.gen(function* () {
+      const { summary, asked } = scripted(() => "Folded recap.");
+      const earlier = { text: "The first twenty steps built the store.", steps: 20 };
+      const written = yield* summarizeSteps(summary, [said(0)], 200_000, earlier);
+      assert.deepEqual(written, Option.some({ text: "Folded recap.", steps: 21 }));
+      assert.match(
+        asked[0] ?? "",
+        /Recap of the earlier steps:\\nThe first twenty steps built the store\..*Step 0\./su,
+      );
+
+      const steps = [said(0), said(1)];
+      const kept = yield* fitReplay(steps, earlier, 1_000_000, () =>
+        Effect.die("no summary asked for"),
+      );
+      assert.deepEqual(kept, { kept: steps, summary: earlier });
+
+      const folded: (typeof earlier | undefined)[] = [];
+      yield* fitReplay(
+        Array.from({ length: 40 }, (_, at) => said(at, 2_000)),
+        earlier,
+        60_000,
+        (_, carried) => {
+          folded.push(carried);
+          return Effect.succeed(Option.none());
+        },
+      );
+      assert.deepEqual(folded, [earlier]);
     }),
 );

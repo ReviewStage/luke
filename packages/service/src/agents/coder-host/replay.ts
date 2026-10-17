@@ -547,6 +547,8 @@ export interface StartFrom {
   /** Every step the replay could hand on, oldest first, its chain's carried ahead of its own, before any bound; and how many there were. */
   readonly steps: readonly ReplayStep[];
   readonly totalSteps: number;
+  /** The summary the source's own replay carried of the steps before those, which the new replay keeps ahead of them; none where it carried none. */
+  readonly carriedSummary: ReplaySummary | undefined;
   readonly choice: ModelChoice;
   readonly disabledServers: readonly string[];
   /** An automation run's own prompt, the words its servers are read from; none for a source started by hand. */
@@ -728,6 +730,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     attachments: files.attachments,
     steps: [...carried, ...mine],
     totalSteps,
+    carriedSummary: handed.carried?.summary,
     choice: { model: source.model, effort: source.effort, contextWindow: source.contextWindow },
     disabledServers: source.disabledServers,
     serverWords: source.automationOrigin?.prompt,

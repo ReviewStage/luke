@@ -70,6 +70,7 @@ import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
 import { type FittedReplay, replayOf, type StartFrom, startFromOf } from "./replay.js";
 import {
+  filesBytes,
   fitReplay,
   REPLAY_FIT,
   replayBudgetBytes,
@@ -351,6 +352,7 @@ const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   from: StartFrom,
   choice: ModelChoice,
   summaryModel: SummaryModelOf | undefined,
+  files: readonly CodingAgentAttachment[],
 ): Effect.fn.Return<ReplayFitter, never, DatabaseServices | ModelCatalog> {
   const catalog = yield* ModelCatalog;
   const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
@@ -376,15 +378,16 @@ const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       Effect.map(
         fitReplay(
           from.steps,
+          from.carriedSummary,
           replayBudgetBytes(
             windowTokens,
             instructions,
-            new TextEncoder().encode(firstMessageWords).byteLength,
+            new TextEncoder().encode(firstMessageWords).byteLength + filesBytes(files),
           ),
-          (dropped) =>
+          (dropped, earlier) =>
             model === undefined
               ? Effect.succeed(Option.none())
-              : summarizeSteps(model, dropped, windowTokens),
+              : summarizeSteps(model, dropped, windowTokens, earlier),
         ),
         ({ kept, summary }) => replayOf(from, kept, summary),
       ),
@@ -421,7 +424,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
   const noteFiles = from === undefined ? undefined : noteFilesOf(ask.attachments ?? []);
   const fitter =
-    from === undefined ? undefined : yield* replayFitterOf(userId, from, choice, ask.summaryModel);
+    from === undefined
+      ? undefined
+      : yield* replayFitterOf(userId, from, choice, ask.summaryModel, [
+          ...from.attachments,
+          ...(ask.attachments ?? []),
+        ]);
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
   const brief = landing.place;
