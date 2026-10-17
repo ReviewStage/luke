@@ -69,10 +69,12 @@ export const messagesContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))
     .input(EffectSchema.Struct({ ...byCall, ...transcriptQuery }))
     .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
-  /** One task's conversation, past the cursor and held while a turn runs, or a page of its turns. */
+  /** One task's conversation, past the cursor and held while a turn runs, or in one look where `hold=none` asks, or a page of its turns. */
   task: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/plans/{id}/messages" }))
-    .input(EffectSchema.Struct({ ...byId, ...transcriptQuery, before: queryValue }))
+    .input(
+      EffectSchema.Struct({ ...byId, ...transcriptQuery, before: queryValue, hold: queryValue }),
+    )
     .output(EffectSchema.flip(codingAgentMessagesAnswerSchema)),
   /** One task's brain worker's transcript past the cursor, held while it runs. */
   taskWorker: hostedProcedure

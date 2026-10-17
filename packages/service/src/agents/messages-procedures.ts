@@ -56,6 +56,7 @@ import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import {
   BRAIN_POLL,
   type BrainPage,
+  brainPageNow,
   brainPagePast,
   brainStatusNow,
   brainTitleAwaited,
@@ -143,6 +144,18 @@ const turnNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = readEither(wireUuidSchema)(unparsedWire(before));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return read.success;
+});
+
+/** The one word a task's read takes for `hold`: past the cursor in one look, never held. */
+const HOLD_NONE = "none";
+
+/** Whether a read past the cursor asks for one look rather than a hold; refused where `hold` names anything else. */
+const unheldNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
+  hold: string | undefined,
+): Effect.fn.Return<boolean, HostedRefusal> {
+  if (hold === undefined) return false;
+  if (hold !== HOLD_NONE) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return true;
 });
 
 /**
@@ -300,7 +313,8 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const taskId = yield* uuidNamed(input.id);
       const after = yield* cursorNamed(input.after);
       const before = yield* turnNamed(input.before);
-      if (after !== undefined && before !== undefined) {
+      const unheld = yield* unheldNamed(input.hold);
+      if ((after !== undefined && before !== undefined) || (unheld && after === undefined)) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
@@ -316,7 +330,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const page = yield* hostedStoreOrUnavailable(
         after === undefined
           ? brainTurnsPage(target, before)
-          : brainPagePast(target, cursorOfWire(after)),
+          : (unheld ? brainPageNow : brainPagePast)(target, cursorOfWire(after)),
       );
       return taskAnswer(page, null);
     }),

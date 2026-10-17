@@ -27,6 +27,7 @@ import {
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import type { PlanConversationLiveAnswer } from "@luke/features/live-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import {
@@ -90,6 +91,7 @@ import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
+import type { LiveClient } from "./live-follow.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -801,6 +803,8 @@ function fakeService(tasks: Task[]): FakeService {
 const CONVERSATION_READ = {
   NEWEST: "newest",
   AFTER: "after",
+  /** Past a cursor in one look, never held, as a read on the conversation's live mark asks. */
+  LOOK: "look",
   BEFORE: "before",
 } as const;
 
@@ -824,6 +828,10 @@ interface FakeConversations extends TasksConversationClient {
   answer: (taskId: string, answer: CodingAgentMessagesAnswerView) => Effect.Effect<void>;
   /** The older pages, by the turn each is read before. */
   older: Record<string, CodingAgentMessagesAnswer>;
+  /** What the service seals for following a plan's conversation; none answers unanswered, as a service without Realtime does. */
+  sealed: PlanConversationLiveAnswer | undefined;
+  /** Every plan a seal was asked for, in order. */
+  readonly seals: string[];
 }
 
 function fakeConversations(): Effect.Effect<FakeConversations> {
@@ -837,6 +845,13 @@ function fakeConversations(): Effect.Effect<FakeConversations> {
       asks: [],
       nextAsk: Queue.take(asked),
       older: {},
+      sealed: undefined,
+      seals: [],
+      taskConversationLive: (taskId) =>
+        Effect.sync(() => {
+          conversations.seals.push(taskId);
+          return conversations.sealed ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        }),
       answer: (taskId, answer) => {
         const waiting = pages.get(taskId);
         assert.ok(waiting, `no conversation for ${taskId}`);
@@ -848,7 +863,11 @@ function fakeConversations(): Effect.Effect<FakeConversations> {
             page.before !== undefined
               ? [taskId, CONVERSATION_READ.BEFORE, page.before]
               : page.after !== undefined
-                ? [taskId, CONVERSATION_READ.AFTER, page.after]
+                ? [
+                    taskId,
+                    page.unheld === true ? CONVERSATION_READ.LOOK : CONVERSATION_READ.AFTER,
+                    page.after,
+                  ]
                 : [taskId, CONVERSATION_READ.NEWEST];
           conversations.asks.push(ask);
           yield* Queue.offer(asked, ask);
@@ -906,6 +925,64 @@ function conversationPage(
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
+/** The host's clock, which a seal's renewal is timed by. */
+const NOW = 1_800_000_100_000;
+
+/** A task's conversation mark sealed as the service answers it. */
+const SEALED_CONVERSATION: PlanConversationLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    mark: {
+      capability: "capability-mark",
+      queryFingerprint: "fingerprint-mark",
+      expiresAt: NOW + 60_000,
+    },
+  },
+};
+
+/** A conversation's mark as its row delivers it, at a sequence and with the newest turn's status. */
+function markRow(seq: number, turnStatus: string) {
+  return { seq, revision: seq, turnId: "turn-1", turnStatus, workers: [] };
+}
+
+/** Realtime as a script: each subscription by its capability, and a way to deliver rows to one or stop it for good. */
+function fakeRealtime() {
+  const listeners = new Map<
+    string,
+    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
+  >();
+  const closed: string[] = [];
+  const open = (url: string): LiveClient => ({
+    subscribe: (query) => ({
+      onChange: (listener) => {
+        listeners.set(query.capability, listener);
+        return () => listeners.delete(query.capability);
+      },
+      renew: () => Promise.resolve(),
+      unsubscribe: () => void listeners.delete(query.capability),
+    }),
+    close: () => void closed.push(url),
+  });
+  /** The mark's subscription, once the host's follower has made it. */
+  const subscribed = Effect.gen(function* () {
+    for (let turn = 0; turn < 100; turn += 1) {
+      const listener = listeners.get("capability-mark");
+      if (listener !== undefined) return listener;
+      yield* Effect.yieldNow;
+    }
+    return assert.fail("the host never subscribed to the mark");
+  });
+  return {
+    open,
+    closed,
+    /** The mark's rows delivered, as Realtime's snapshot carries them, once the host subscribed. */
+    deliver: (data: readonly unknown[]) =>
+      Effect.map(subscribed, (listener) => listener({ status: "live", data })),
+    /** The mark's subscription stopped for good. */
+    fail: Effect.map(subscribed, (listener) => listener({ status: "error", data: [] })),
+  };
+}
+
 /** The one voice call as the live composer holds it: about a task, about the desk, or none. */
 interface StandingCall {
   about: { readonly taskId: string | undefined } | undefined;
@@ -922,8 +999,11 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
     }[] = [];
     const standing = options.call ?? { about: undefined };
     const conversations = yield* fakeConversations();
+    const realtime = fakeRealtime();
     const tasks = yield* composeTasks({
+      openLive: realtime.open,
       kernel: {
+        now: () => NOW,
         runMode: { sendsNetwork: true },
         emit: (kind, payload) => {
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
@@ -966,7 +1046,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    return { tasks, call, told, last, viewWhere, viewLands, conversations };
+    return { tasks, call, told, last, viewWhere, viewLands, conversations, realtime };
   });
 }
 
@@ -1715,6 +1795,103 @@ it.effect(
       yield* TestClock.adjust(Duration.seconds(5));
 
       assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+    }),
+);
+
+it.effect(
+  "where the service seals the conversation's mark, the open plan's conversation is asked in one look each time the mark moves, an idle one included, and never on a hold or a word of the call",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations, realtime } = yield* subject(service);
+      conversations.sealed = SEALED_CONVERSATION;
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.NEWEST]);
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* realtime.deliver([markRow(2, "running")]);
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.LOOK, "1:1"]);
+      assert.deepEqual(conversations.seals, [INVITES]);
+      const settled = yield* viewLands((view) => view.conversation?.cursor === "2:2");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* settled;
+
+      // The same mark again, a word of the call, and a long wait ask nothing.
+      yield* realtime.deliver([markRow(2, "running")]);
+      tasks.showActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        planId: INVITES,
+        planner: {},
+        notes: false,
+      });
+      yield* TestClock.adjust(Duration.minutes(5));
+      assert.equal(conversations.asks.length, 2);
+
+      yield* realtime.deliver([markRow(3, "settled")]);
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.LOOK, "2:2"]);
+    }),
+);
+
+it.effect(
+  "a conversation mark that stops goes on from the cursor held on reads the service holds",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations, realtime } = yield* subject(service);
+      conversations.sealed = SEALED_CONVERSATION;
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* realtime.fail;
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      const parked = yield* viewLands((view) => view.conversation?.cursor === "2:2");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* parked;
+
+      assert.deepEqual(conversations.seals, [INVITES]);
+    }),
+);
+
+it.effect(
+  "a plan the service seals no conversation mark for is read on held reads, woken by its call as before without asking for a mark again until it is opened again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      const parked = yield* viewLands((view) => view.conversation !== undefined);
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* parked;
+
+      tasks.showActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        planId: INVITES,
+        planner: {},
+        notes: false,
+      });
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      assert.deepEqual(conversations.seals, [INVITES]);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.NEWEST]);
+      assert.deepEqual(conversations.seals, [INVITES, INVITES]);
     }),
 );
 
