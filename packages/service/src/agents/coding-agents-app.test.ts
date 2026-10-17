@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
@@ -184,6 +184,7 @@ import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integr
 import {
   fixtureOidcToken,
   SOURCE_SANDBOX,
+  type SourceCheckout,
   sourceCheckout,
   sourceSandbox,
 } from "../testing/source-sandbox.js";
@@ -4327,6 +4328,25 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       return { ...opened, checkout, sandbox, continued };
     });
 
+  /** The fetch the preamble hands on, run in a checkout of the remote cloned as an agent's is, with the default branch alone; answers that checkout. */
+  const fetchedAsHanded = (checkout: SourceCheckout, preamble: string) => {
+    const fetch = /`(git remote set-branches [^`]+)`/u.exec(preamble)?.[1] ?? "";
+    const fresh = join(checkout.root, "fresh");
+    checkout.sh(
+      checkout.root,
+      "git",
+      "clone",
+      "--quiet",
+      "--single-branch",
+      "--branch",
+      "main",
+      checkout.remote,
+      fresh,
+    );
+    checkout.sh(fresh, "sh", "-c", fetch);
+    return fresh;
+  };
+
   it.effect(
     "a continue copies the source's checkout, what it had not committed included, to a branch of its own from the sandbox it wakes and stops again, names that branch and how a fresh checkout fetches it, and keeps it on its record",
     (t) =>
@@ -4344,20 +4364,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
         assert.ok(preamble.includes(`Its own branch was \`${PUBLISHED.branch}\``));
         // The words the preamble hands on, run in a checkout cloned as an agent's is, find the copy.
-        const fetch = /`(git remote set-branches [^`]+)`/u.exec(preamble)?.[1] ?? "";
-        const fresh = join(checkout.root, "fresh");
-        checkout.sh(
-          checkout.root,
-          "git",
-          "clone",
-          "--quiet",
-          "--single-branch",
-          "--branch",
-          "main",
-          checkout.remote,
-          fresh,
-        );
-        checkout.sh(fresh, "sh", "-c", fetch);
+        const fresh = fetchedAsHanded(checkout, preamble);
         assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), branch);
         assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
         assert.deepEqual(
@@ -4382,10 +4389,21 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a source whose task moved to another repository since it started is copied nowhere, its sandbox left asleep, and taken up from the branch it pushed",
+    "a source whose task moved to another repository since it started is copied nowhere, its sandbox left asleep, and taken up from the branch it pushed, fetched as one word whatever a shell would read in its name",
     (t) =>
       Effect.gen(function* () {
-        const { source, sandbox, continued } = yield* copyScenario(t);
+        const { owner, source, checkout, sandbox, continued } = yield* copyScenario(t);
+        // A name git allows whose words a shell would run, joined so it reads as no template placeholder.
+        const pushedBranch = ["luke/invites$(touch$", "{IFS}pwned)"].join("");
+        checkout.sh(
+          checkout.checkout,
+          "git",
+          "push",
+          "--quiet",
+          "origin",
+          `HEAD:refs/heads/${pushedBranch}`,
+        );
+        yield* updateCodingAgentBranch(owner, source.id, pushedBranch);
         yield* Database.use((db) =>
           db
             .update(codingAgent)
@@ -4398,6 +4416,9 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.equal(started.from?.branch, undefined);
         assert.match(preamble, /what it had not pushed could not be copied from its sandbox/u);
         assert.deepEqual([sandbox.ran, sandbox.stops, sandbox.state.status], [[], [], "stopped"]);
+        const fresh = fetchedAsHanded(checkout, preamble);
+        assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), pushedBranch);
+        assert.equal(existsSync(join(fresh, "pwned")), false);
       }),
   );
 

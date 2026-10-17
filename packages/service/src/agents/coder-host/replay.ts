@@ -386,7 +386,13 @@ const recordsOf = (source: CodingAgent) =>
  * added to what the remote fetches, fetched, and tracked as it is switched to.
  */
 function fetchWords(branch: string): string {
-  return `fetch and check that branch out with \`git remote set-branches --add origin ${branch} && git fetch origin ${branch} && git switch ${branch}\`, since your checkout was cloned with the default branch alone`;
+  const quoted = shellQuoted(branch);
+  return `fetch and check that branch out with \`git remote set-branches --add origin ${quoted} && git fetch origin ${quoted} && git switch ${quoted}\`, since your checkout was cloned with the default branch alone`;
+}
+
+/** A word quoted for a POSIX shell, so a branch name git allows but a shell reads, such as one with `;` or `$`, stays one word. */
+function shellQuoted(word: string): string {
+  return `'${word.replaceAll("'", "'\\''")}'`;
 }
 
 /** The words with their first letter capital. */
