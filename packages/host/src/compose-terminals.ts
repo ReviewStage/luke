@@ -49,6 +49,7 @@ import { Base64 } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -402,7 +403,7 @@ function composed(
 
   const encoder = new TextEncoder();
 
-  const methods: GatewayMethodTable = {
+  const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.TERMINALS> = {
     [GATEWAY_METHOD.TERMINALS_LIST]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(
