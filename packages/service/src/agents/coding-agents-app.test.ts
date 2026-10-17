@@ -201,8 +201,10 @@ import {
 } from "./brain-host/eve-sessions.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
+  CHAT_DIGEST_HEADING,
   CHAT_TOOL_REFUSAL,
   type ChatAgent,
+  chatDigest,
   postAsAgent,
   readAsAgent,
   resolveAsAgent,
@@ -4212,6 +4214,74 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         assert.ok(missing.status === ACTION_RESULT_STATUS.REJECTED && "reason" in missing);
         assert.ok(missing.reason.endsWith("missing.png"), missing.reason);
+      }),
+  );
+
+  it.effect(
+    "a turn opens with the chat the agent has not read, once, leaving out the message a notice already told it, and with nothing once it has read",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const { first: one, second: two } = chat.handles;
+        assert.equal(yield* chatDigest(chat.second), undefined, "nothing waits yet");
+
+        const plain = yield* chat.post(chat.first, { text: "Starting on the emails." });
+        const root = yield* chat.post(chat.first, QUEUE_ASK);
+        const dm = yield* chat.post(chat.first, { text: "Is the table yours?", to: two });
+        assert.ok("seq" in plain && "seq" in root && "told" in dm);
+        assert.deepEqual(dm.told, [two], "the DM is told as a notice");
+        assert.equal(
+          yield* chatDigest(chat.second),
+          [
+            CHAT_DIGEST_HEADING,
+            `m ${plain.seq} · ${one} in #teammate-invitations: Starting on the emails.`,
+            `m ${root.seq} · ${one} in #teammate-invitations asks (${CHAT_ASK.CHOICE}): ${QUEUE_ASK.text}`,
+          ].join("\n"),
+        );
+        assert.equal(yield* chatDigest(chat.second), undefined, "a digest is a read");
+
+        const long = "Every invitation carries its sender, its workspace, and its expiry. ".repeat(
+          12,
+        );
+        const reply = yield* chat.post(chat.first, { text: long, replyTo: plain.seq });
+        assert.ok("seq" in reply);
+        const cut = yield* chatDigest(chat.second);
+        assert.ok(cut !== undefined);
+        assert.ok(
+          cut.endsWith(`… (read_chat({ thread: ${plain.seq} }) reads the rest)`),
+          "a message cut short names the read that carries it whole",
+        );
+        const thread = yield* chat.read(chat.second, { thread: plain.seq });
+        assert.ok("messages" in thread);
+        assert.equal(thread.messages.at(-1)?.text, long);
+
+        yield* chat.post(chat.first, { text: "One more.", replyTo: plain.seq });
+        const read = yield* chat.read(chat.second);
+        assert.ok("messages" in read);
+        assert.equal(read.messages.length, 1);
+        assert.equal(yield* chatDigest(chat.second), undefined, "what a read took waits no more");
+      }),
+  );
+
+  it.effect(
+    "an agent that joins the chat joins at its head, so its first turn opens with nothing that was said before it, and with what is said after",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        yield* chat.post(chat.first, { text: "Said before the newcomer." });
+        const started = yield* startedAgent(chat.owner, chat.task.id, chat.ask);
+        const newcomer: ChatAgent = {
+          ...chat.first,
+          self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
+        };
+        assert.equal(yield* chatDigest(newcomer), undefined);
+        const after = yield* chat.post(chat.first, { text: "Said after." });
+        assert.ok("seq" in after);
+        assert.equal(
+          yield* chatDigest(newcomer),
+          `${CHAT_DIGEST_HEADING}\nm ${after.seq} · ${chat.handles.first} in #teammate-invitations: Said after.`,
+        );
       }),
   );
 });
