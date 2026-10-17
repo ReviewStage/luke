@@ -19,6 +19,12 @@ import type { MouseEvent, ReactNode, Ref } from "react";
  * holds still on `--loop-motion`, as every endless loop does under reduced
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
+ *
+ * A ButtonLink is a Button's look on a link, for an act that is going
+ * somewhere: a download, another site, an app's own scheme. The browser
+ * follows its address, so it opens in a new tab, copies, and hands off as
+ * any link does; it is never unavailable or busy, since a link that cannot
+ * be followed is not drawn.
  */
 
 /** What a press does, which is what a button looks like. */
@@ -117,6 +123,37 @@ export function Button({
         <span className="luke-button-words">{children}</span>
       </span>
     </button>
+  );
+}
+
+/** A link drawn as a labelled button: its words after its glyph, going to `href` when pressed. */
+export function ButtonLink({
+  href,
+  variant,
+  icon,
+  onClick,
+  children,
+}: {
+  href: string;
+  variant?: ButtonVariant;
+  /** Called as the press leaves, before the browser follows the link. */
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  /** The glyph before its words. */
+  icon?: ReactNode;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <a
+      className="luke-button"
+      data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      href={href}
+      onClick={onClick}
+    >
+      <span className="luke-button-face">
+        {icon}
+        <span className="luke-button-words">{children}</span>
+      </span>
+    </a>
   );
 }
 

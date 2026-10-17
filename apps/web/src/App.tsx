@@ -1,4 +1,4 @@
-import { PUBLIC_TITLE, PublicPage, PublicSection } from "@luke/ui";
+import { BUTTON_VARIANT, ButtonLink, PUBLIC_TITLE, PublicPage, PublicSection } from "@luke/ui";
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { DemoVideo } from "./DemoVideo";
 import {
@@ -23,20 +23,16 @@ export function App(): React.JSX.Element {
     >
       <PublicSection>
         <div className="flex flex-wrap items-center gap-3">
-          <a
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground no-underline transition-[filter,transform] duration-150 hover:brightness-95 active:translate-y-px motion-reduce:transition-none"
+          <ButtonLink
+            variant={BUTTON_VARIANT.PRIMARY}
             href={DMG_URL}
             onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
           >
             Download for macOS
-          </a>
-          <a
-            className="inline-flex items-center gap-2 rounded-md border border-border px-[23px] py-[11px] text-sm font-semibold text-muted-foreground no-underline transition-colors duration-150 hover:border-muted-foreground hover:text-foreground motion-reduce:transition-none"
-            href={REPOSITORY_URL}
-          >
-            <GitHubMark />
+          </ButtonLink>
+          <ButtonLink variant={BUTTON_VARIANT.OUTLINE} href={REPOSITORY_URL} icon={<GitHubMark />}>
             View on GitHub
-          </a>
+          </ButtonLink>
         </div>
 
         {/* A requirement, not a sentence: mono is what the page reserves for
