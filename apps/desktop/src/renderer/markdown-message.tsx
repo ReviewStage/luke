@@ -2,7 +2,7 @@ import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { createContext, type ReactNode, useContext, useMemo, useRef } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PlanDiagram } from "./plan-diagram";
@@ -355,6 +355,65 @@ const glueDrawnLinks =
     }
   };
 
+/** Each task item's checkbox, by the tree's own node, and the offset its item starts at in the words. */
+const TASK_ITEMS = new WeakMap<HastElement, number>();
+
+/**
+ * Gives each task item's checkbox the offset its list item starts at in the
+ * words, its marker's, which the tree keeps on the item and not on the box.
+ * Note that the nearest item is the box's own, so a nested list's box names
+ * its own item rather than the one around it.
+ */
+function placeTasks(parent: HastParent, item: number | undefined): void {
+  for (const child of parent.children) {
+    if (child.type !== "element") continue;
+    const at = child.tagName === "li" ? child.position?.start.offset : item;
+    if (child.tagName === "input" && child.properties.type === "checkbox" && at !== undefined) {
+      TASK_ITEMS.set(child, at);
+    }
+    placeTasks(child, at);
+  }
+}
+
+/** The rehype step that names each task item's checkbox by its item's offset. */
+const placeTaskItems = () => (tree: HastParent) => placeTasks(tree, undefined);
+
+/**
+ * Ticks or clears the task item whose marker starts at an offset in the
+ * words, answering whether the change was saved.
+ */
+export type TaskToggler = (at: number) => Promise<boolean>;
+
+/**
+ * A task item's checkbox that ticks or clears its item. It flips at the
+ * press, since the words come back changed only once the change is saved,
+ * and flips back where it was not. Note that it is keyed by the words' own
+ * state, so a change arriving from anyone redraws it from the words.
+ */
+function TaskBox({
+  at,
+  checked,
+  toggle,
+}: {
+  at: number;
+  checked: boolean;
+  toggle: TaskToggler;
+}): React.JSX.Element {
+  return (
+    <input
+      key={String(checked)}
+      type="checkbox"
+      defaultChecked={checked}
+      onChange={(event) => {
+        const box = event.currentTarget;
+        toggle(at).then((saved) => {
+          if (!saved) box.checked = checked;
+        });
+      }}
+    />
+  );
+}
+
 /**
  * GitHub's dialect, which is the one coding agents write: tables,
  * strikethrough, and task lists, with a single tilde left as the character it
@@ -586,6 +645,7 @@ export function MarkdownMessage({
   picture,
   found,
   diagrams,
+  onTask,
 }: {
   words: string;
   className?: string;
@@ -601,8 +661,15 @@ export function MarkdownMessage({
   found?: readonly string[] | undefined;
   /** Whether a Mermaid fence draws as its diagram, as on the plan's page and its versions; every fence is code without it. */
   diagrams?: boolean | undefined;
+  /** Ticks or clears a task item pressed, as a plan the developer can edit does; every checkbox is read-only without it. */
+  onTask?: TaskToggler | undefined;
 }): React.JSX.Element {
+  // Note that the toggler is read as a box is pressed, so a new one each render redraws nothing.
+  const toggler = useRef(onTask);
+  toggler.current = onTask;
+  const toggles = onTask !== undefined;
   const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
+  if (toggles) rehypePlugins.push(placeTaskItems);
   if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words]);
   if (found !== undefined && found.length > 0) rehypePlugins.push([markFound, found]);
   if (link !== undefined) rehypePlugins.push([glueDrawnLinks, link]);
@@ -614,7 +681,8 @@ export function MarkdownMessage({
       link === undefined &&
       openLink === undefined &&
       diagrams !== true &&
-      picture === undefined
+      picture === undefined &&
+      !toggles
     ) {
       return COMPONENTS;
     }
@@ -633,8 +701,19 @@ export function MarkdownMessage({
       drawing.img = ({ src, alt, title }) =>
         (isWireString(src) ? picture(src, alt ?? "", title) : undefined) ?? <>{alt ?? ""}</>;
     }
+    if (toggles) {
+      const toggle: TaskToggler = (at) => toggler.current?.(at) ?? Promise.resolve(false);
+      drawing.input = ({ node, ...props }) => {
+        const at = node === undefined ? undefined : TASK_ITEMS.get(node);
+        return at === undefined ? (
+          <input {...props} />
+        ) : (
+          <TaskBox at={at} checked={props.checked === true} toggle={toggle} />
+        );
+      };
+    }
     return drawing;
-  }, [link, openLink, diagrams, picture]);
+  }, [link, openLink, diagrams, picture, toggles]);
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>
       <FenceEdit.Provider value={edit}>

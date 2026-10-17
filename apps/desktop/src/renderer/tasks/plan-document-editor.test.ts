@@ -221,6 +221,62 @@ test("a press on a diagram's Show code shows its code and opens no editor", asyn
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
+test("a press on a task's checkbox ticks or clears that one item in the saved text, and opens no editor", async () => {
+  const body = [
+    "## Goal",
+    "Invite a *teammate*.",
+    "",
+    "## Steps",
+    "- [ ] Send the invite",
+    "  - [ ] Write the email",
+    "* [X] Pick a role",
+    "",
+    "> 1. [ ] Quoted",
+    "",
+  ].join("\n");
+  const { container, sent, render } = mount([
+    { saved: true },
+    { conflict: { current: body } },
+    { saved: true },
+  ]);
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const boxes = [
+    ...block(container, "Steps").querySelectorAll<HTMLInputElement>("input[type=checkbox]"),
+  ];
+  assert.deepEqual(
+    boxes.map((box) => [box.disabled, box.checked]),
+    [
+      [false, false],
+      [false, false],
+      [false, true],
+      [false, false],
+    ],
+  );
+  const [, nested, ticked, quoted] = boxes;
+  assert.ok(nested && ticked && quoted, "every box is drawn");
+
+  act(() => nested.click());
+  await settle();
+  act(() => ticked.click());
+  await settle();
+  act(() => quoted.click());
+  await settle();
+
+  assert.deepEqual(
+    sent.map((request) => request.document),
+    [
+      { base: body, value: body.replace("  - [ ] Write", "  - [x] Write") },
+      { base: body, value: body.replace("* [X] Pick", "* [ ] Pick") },
+      { base: body, value: body.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
+    ],
+  );
+  assert.equal(nested.checked, true, "a saved tick stands");
+  assert.equal(ticked.checked, true, "a tick the save refused goes back");
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+});
+
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
   const { container, render } = mount();
   const edit = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
