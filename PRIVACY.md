@@ -328,6 +328,25 @@ service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
+**A workspace's environment variables and secrets.** An owner or admin of a
+workspace can keep environment variables and secrets that every coding agent
+of the workspace, and its workers, run their shell commands with. Each value
+is sent once, over HTTPS, to our service, and stored under the workspace
+encrypted the way your own API keys are, so a copy of our database alone
+cannot read it; our operators who hold the server-only secret too could. Beside
+it we keep its name, whether it is a variable or a secret, who saved it last,
+and when, and for a secret of twelve characters or more a hint of its last
+four. Every member of the workspace is shown a variable's value; a secret is
+shown only by its hint. Before each shell command an agent runs, our service
+reads the values and hands them to the agent's sandbox with the command, so
+they stand in that command's environment and are not written to the sandbox's
+disk. A secret's value is replaced with `[REDACTED]` wherever it appears in
+what a command answers, but a command can still print it changed, so a secret
+can reach the agent's model, its transcript, and the traces of its run. We
+never log a value or send one to our analytics, crash reports, or screen
+recordings. Removing one in Settings deletes it, and every one goes with its
+workspace.
+
 **A task's whiteboard.** You and Luke can both draw on a
 task's whiteboard. Our service stores it with the task, as drawn and readable
 by our own operators: every shape, arrow, line, stroke, and piece of text and
