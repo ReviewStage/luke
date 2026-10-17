@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { issueGroups, issueIdentifier } from "./issue-list-model.js";
+import { issueColumns, issueGroups, issueIdentifier } from "./issue-list-model.js";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "./issue-wire.js";
 
 /**
@@ -65,4 +65,23 @@ test("an identifier is the workspace's prefix and the issue's number", () => {
   assert.equal(issueIdentifier("Charles's workspace", 1), "CW-1");
   assert.equal(issueIdentifier("Initech", 3), "INIT-3");
   assert.equal(issueIdentifier("  ", 9), "ISSUE-9");
+});
+
+test("a board stands a column for every status in the order work moves through them, an empty one among them, each sorted as the list sorts", () => {
+  const columns = issueColumns([
+    issue(1, { status: ISSUE_STATUS.DONE }),
+    issue(2, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.LOW }),
+    issue(3, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.URGENT }),
+  ]);
+
+  assert.deepEqual(
+    columns.map((column) => [column.status, column.issues.map((one) => one.number)]),
+    [
+      [ISSUE_STATUS.BACKLOG, []],
+      [ISSUE_STATUS.TODO, [3, 2]],
+      [ISSUE_STATUS.IN_PROGRESS, []],
+      [ISSUE_STATUS.DONE, [1]],
+      [ISSUE_STATUS.CANCELED, []],
+    ],
+  );
 });

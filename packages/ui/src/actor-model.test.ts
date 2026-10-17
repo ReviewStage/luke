@@ -281,18 +281,9 @@ test("the signed-in account is drawn as the reader, by the name, address, and pi
   );
 });
 
-test("someone a pull request names on GitHub is Luke's agent for Luke's own bot, a teammate where their GitHub account is a member's, and themself on GitHub otherwise", () => {
-  const agent: Actor = {
-    kind: ACTOR_KIND.AGENT,
-    name: "Fix auth flow",
-    provider: undefined,
-    state: ACTOR_STATE.REST,
-  };
-  const place = { members: [DANA, SAM], readerId: SAM.userId, agent };
-  const lukeBot = { login: "luke[bot]", bot: true, luke: true };
+test("someone a pull request names on GitHub is a teammate where their GitHub account is a member's, and themself on GitHub otherwise, Luke's own bot among them", () => {
+  const place = { members: [DANA, SAM], readerId: SAM.userId };
 
-  assert.deepEqual(githubActor(lukeBot, place), agent);
-  assert.deepEqual(githubActor(lukeBot, { ...place, agent: undefined }), LUKE_ACTOR);
   assert.deepEqual(
     githubActor({ login: "danareyes", bot: false, userId: DANA.userId }, place),
     personActor(DANA, [DANA, SAM], SAM.userId),
@@ -325,6 +316,11 @@ test("someone a pull request names on GitHub is Luke's agent for Luke's own bot,
     login: "devin-ai-integration[bot]",
     bot: true,
   });
+  assert.deepEqual(
+    githubActor({ login: "luke-agent[bot]", bot: true }, place),
+    { kind: ACTOR_KIND.GITHUB, login: "luke-agent[bot]", bot: true },
+    "Luke's own App's bot is an App's bot like any other",
+  );
   assert.deepEqual(
     [actorName(stranger), actorName(devin, { possessive: true })],
     ["octocat", "devin-ai-integration’s"],
@@ -365,7 +361,7 @@ test("a linked GitHub login who left keeps their picture and their account's nam
   assert.deepEqual(
     githubActor(
       { login: "leepark", bot: false, userId: "user-lee" },
-      { members: [DANA, SAM], readerId: SAM.userId, agent: undefined, former },
+      { members: [DANA, SAM], readerId: SAM.userId, former },
     ),
     {
       kind: ACTOR_KIND.SOMEONE,

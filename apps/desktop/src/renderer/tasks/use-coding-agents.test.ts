@@ -408,7 +408,7 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
       url,
       files: [],
       truncated: false,
-      author: { login: "luke[bot]", bot: true, luke: true },
+      author: { login: "luke-agent[bot]", bot: true },
       reviewers: [{ by: { login: "octocat", bot: false }, state }],
     },
   });
@@ -430,7 +430,7 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
   assert.deepEqual(tab.control().changesPeople.get(AGENT), {
     url,
     people: {
-      author: { login: "luke[bot]", bot: true, luke: true },
+      author: { login: "luke-agent[bot]", bot: true },
       reviewers: [{ by: { login: "octocat", bot: false }, state: "approved" }],
     },
   });

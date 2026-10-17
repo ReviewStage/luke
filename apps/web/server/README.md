@@ -691,6 +691,35 @@ seconds of audio in the row's `dictation_seconds`, beside the voice seconds
 the OpenAI project behind the key is the backstop and should be configured
 with it.
 
+## Sentry
+
+The functions and both eve roots report to Sentry's `luke-web` project, set
+up as Sentry's own guides set it up. `server/runtime.ts` provides
+`@luke/service/observability/sentry`'s `sentryLayer()`, which is the Effect
+guide's: `Sentry.effectLayer` starts the SDK and registers its
+`ErrorReporter`, so a route that fails or dies is captured as the router
+answers 500, and the tracer and metrics layers send Effect's spans and
+metrics. `webServices` adds `Sentry.SentryEffectLogger` beside the JSON
+logger, so every log line is a Sentry log. Each eve root starts Sentry in
+`instrumentation/sentry.ts` with `Sentry.eveInstrumentation`, the eve guide's,
+which eve runs before it loads the agent and which traces every turn, model
+call, and tool call; its `runtime.ts` adds the same reporting without a second
+start. The scheduled sweep checks in to the `maintenance-sweep` Cron monitor
+as a run starts and as it ends, and Sentry creates the monitor from the
+first check-in.
+
+The SDK runs with Sentry's default data collection, which `PRIVACY.md` and
+root `AGENTS.md`'s "Never" describe. Sentry's Vercel integration, which maps
+this Vercel project to the `luke-web` Sentry project, owns `SENTRY_DSN`,
+`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`; a variable of those
+names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
+disabled. `VERCEL_ENV` names the environment. `scripts/bundle-functions.ts`
+uploads the function bundles' source maps when the build holds
+`SENTRY_AUTH_TOKEN`, under the release the plugin writes into each bundle from
+the deployment's commit. Alert rules are set in Sentry, not here: a Slack
+`#alerts` message on more than ten events in five minutes, and an email to
+the issue's owners on a high-priority issue.
+
 ## Hosted voice service
 
 ### Deploying
