@@ -37,6 +37,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
+  AttachmentChip,
   BUTTON_VARIANT,
   Button,
   Checkbox,
@@ -45,7 +46,6 @@ import {
   ErrorState,
   IconButton,
   ImageIcon,
-  RemoveIcon,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -186,32 +186,6 @@ async function takenImages(
   if (unreadable) return { images, refusal: IMAGE_REFUSAL.UNREADABLE };
   if (files.length > room) return { images, refusal: IMAGE_REFUSAL.FULL };
   return { images };
-}
-
-/** One screenshot coming along, small enough to recognise, with the way to take it off. */
-function ImageThumbnail({
-  image,
-  busy,
-  onRemove,
-}: {
-  image: FeedbackImage;
-  busy: boolean;
-  onRemove: () => void;
-}): React.JSX.Element {
-  return (
-    <li className="feedback-dialog-image">
-      <img src={feedbackImageUrl(image)} alt={image.name} />
-      <button
-        type="button"
-        className="corner-dismiss"
-        aria-label={`Remove ${image.name}`}
-        disabled={busy}
-        onClick={onRemove}
-      >
-        <RemoveIcon />
-      </button>
-    </li>
-  );
 }
 
 /**
@@ -407,10 +381,11 @@ export function FeedbackDialog({
         {draft.images.length > 0 ? (
           <ul className="feedback-dialog-images" aria-label="Screenshots">
             {draft.images.map((image, index) => (
-              <ImageThumbnail
+              <AttachmentChip
                 key={`${image.name}-${String(index)}`}
-                image={image}
-                busy={busy}
+                name={image.name}
+                image={feedbackImageUrl(image)}
+                removeDisabled={busy}
                 onRemove={() =>
                   changeDraft({
                     images: latestDrafts()[kind].images.filter((_, held) => held !== index),

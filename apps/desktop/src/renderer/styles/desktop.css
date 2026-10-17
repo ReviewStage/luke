@@ -2591,47 +2591,6 @@ ul.actor-stack {
   color: var(--text-tertiary);
 }
 
-/* The way off a thumbnail, on its corner: an attached file's chip or a
-   feedback screenshot. Note that the disc is 18px but the button is 24px,
-   because the corner of a thumbnail carries no more disc than that and the
-   pointer still needs the 24px target docs/DESIGN.md asks of a control
-   floating over one: a transparent border is hit like the rest of the button,
-   and the ground is clipped inside it. */
-.corner-dismiss {
-  position: absolute;
-  top: -9px;
-  right: -9px;
-  display: flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border: 3px solid transparent;
-  border-radius: 50%;
-  background: var(--surface-popover) padding-box;
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
-  color: var(--text-secondary);
-  transition: color var(--duration-hover) ease;
-}
-
-.corner-dismiss:hover:not(:disabled) {
-  color: var(--text-primary);
-}
-
-.corner-dismiss:disabled {
-  opacity: 0.5;
-}
-
-/* base.css draws the ring; it stands inside the target, close round the disc. */
-.corner-dismiss:focus-visible {
-  outline-offset: var(--focus-ring-inset);
-}
-
-.corner-dismiss svg {
-  width: 8px;
-  height: 8px;
-}
-
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
    alert in one cell, only the state's own drawn, so a copy crossfades in
    place, the check in the success colour, and the button never moves. */
@@ -8250,23 +8209,6 @@ button.automation-run:hover {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-/* A screenshot at the size of a control row: enough to recognise, with its
-   way off on its own corner. */
-.feedback-dialog-image {
-  position: relative;
-  width: 64px;
-  height: 48px;
-}
-
-.feedback-dialog-image img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-6);
-  object-fit: cover;
 }
 
 /* The signature as one line: the choice at its start, and who the note is
