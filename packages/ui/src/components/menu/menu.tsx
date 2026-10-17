@@ -413,12 +413,16 @@ function Submenu({
   onBack: () => void;
 }): React.JSX.Element {
   const { entry, anchor, focus } = open;
+  const rows = entry.items.length;
   const [at, setAt] = useState<{ left: number; top: number } | undefined>(undefined);
 
+  // Note that it is placed again as its rows change, because its owner may
+  // draw it more while it stands, as a list of members does as it arrives,
+  // and a taller submenu would run past the window's foot where it stood.
   useLayoutEffect(() => {
     const drawn = surface.current;
     const menu = anchor.closest('[role="menu"]');
-    if (drawn === null || menu === null) return;
+    if (drawn === null || menu === null || rows === 0) return;
     const { width, height } = drawn.getBoundingClientRect();
     const beside = menu.getBoundingClientRect();
     const opener = anchor.getBoundingClientRect();
@@ -432,7 +436,7 @@ function Submenu({
       left: clamp(left, MENU_MARGIN, window.innerWidth - width - MENU_MARGIN),
       top: clamp(top, MENU_MARGIN, window.innerHeight - height - MENU_MARGIN),
     });
-  }, [anchor, surface]);
+  }, [anchor, surface, rows]);
 
   const placed = at !== undefined;
   useEffect(() => {
