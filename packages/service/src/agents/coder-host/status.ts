@@ -109,7 +109,9 @@ function turnRuns(turn: CodingAgentLatestTurn): boolean {
  * turn was queued was a steer to it and still counts. Else it awaits for
  * the grace, counted from when it was written or the newest turn ended,
  * whichever came later, since that is how long it has stood with nothing
- * running to take it, and is unanswered past it.
+ * running to take it, and is unanswered past it. A turn failed because its
+ * session ended for good leaves every line awaiting nothing, since the
+ * session that would have taken one is gone and no message reopens it.
  */
 function lineStandingOf(
   turn: CodingAgentLatestTurn | undefined,
@@ -117,6 +119,7 @@ function lineStandingOf(
 ): LineStanding {
   const line = standing.awaitingLineAt?.getTime();
   if (line === undefined) return LINE_STANDING.NONE;
+  if (turn?.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED) return LINE_STANDING.NONE;
   if (turn !== undefined && turnRuns(turn)) return LINE_STANDING.AWAITS;
   if (turn !== undefined && line < turn.queuedAt.getTime()) {
     return LINE_STANDING.NONE;
@@ -207,6 +210,9 @@ export function codingAgentFailureOf(
   if (turn === undefined) return CODING_AGENT_FAILURE.NOT_STARTED;
   if (turn.status !== TURN_STATUS.FAILED) return undefined;
   if (turn.failure === BRAIN_REQUEST_FAILURE.ABANDONED) return CODING_AGENT_FAILURE.ABANDONED;
+  if (turn.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED) {
+    return CODING_AGENT_FAILURE.SESSION_ENDED;
+  }
   if (turn.failure !== BRAIN_REQUEST_FAILURE.MODEL) return CODING_AGENT_FAILURE.OTHER;
   const detail = turn.failureDetail ?? "";
   const named = FAILURE_WORDS.find(([, words]) => words.some((word) => detail.includes(word)));

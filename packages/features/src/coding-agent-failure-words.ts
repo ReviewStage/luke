@@ -24,6 +24,7 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
     "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
   [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "the conversation was too long for the model",
+  [CODING_AGENT_FAILURE.SESSION_ENDED]: "the agent's session ended and can't be reached again",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
@@ -33,6 +34,7 @@ const RESTART_ADVICE = "start a new one";
 /** The failures only a new agent mends. */
 const MENDED_BY_NEW_AGENT: ReadonlySet<CodingAgentFailure> = new Set([
   CODING_AGENT_FAILURE.NOT_STARTED,
+  CODING_AGENT_FAILURE.SESSION_ENDED,
 ]);
 
 /**

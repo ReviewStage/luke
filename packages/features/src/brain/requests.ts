@@ -57,6 +57,12 @@ export const BRAIN_REQUEST_FAILURE = {
    * was lost rather than that it is still going.
    */
   ABANDONED: "abandoned",
+  /**
+   * The run's session ended for good: eve refused a message to it as a
+   * session it no longer runs, while its turn still stood running, so the
+   * turn's end is never coming and its record says the session was lost.
+   */
+  SESSION_ENDED: "session_ended",
 } as const;
 
 export type BrainRequestFailure =

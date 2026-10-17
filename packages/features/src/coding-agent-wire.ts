@@ -183,6 +183,8 @@ export const CODING_AGENT_FAILURE = {
   FAST_NOT_ENABLED: "fast_not_enabled",
   /** The provider refused the step's prompt as longer than the model's context window. */
   CONTEXT_OVERFLOW: "context_overflow",
+  /** The agent's session ended for good while its turn ran, and eve no longer runs it: nothing reaches it again, and only a new agent, a continue of it among them, goes on. */
+  SESSION_ENDED: "session_ended",
   OTHER: "other",
 } as const;
 
