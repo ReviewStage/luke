@@ -48,6 +48,9 @@ export interface CronMonitor {
 /** A monitor's config as a check-in carries it. */
 type MonitorConfig = NonNullable<Parameters<typeof Sentry.captureCheckIn>[1]>;
 
+/** The share of requests traced, in every process of this deployment. */
+const TRACES_SAMPLE_RATE = 0.1;
+
 /** What a process of this deployment starts Sentry with; a test adds its own transport. */
 export type SentryOptions = Sentry.NodeOptions;
 
@@ -60,9 +63,11 @@ export function sentryOptions(): SentryOptions {
   return {
     dsn: process.env[SENTRY_ENVIRONMENT.DSN],
     environment: process.env[SENTRY_ENVIRONMENT.DEPLOYMENT] ?? UNNAMED_DEPLOYMENT,
-    // Set tracesSampleRate to 1.0 to capture 100% of transactions for
-    // tracing. Sentry recommends adjusting this value in production.
-    tracesSampleRate: 1.0,
+    // Note that one in ten requests is traced, because each request carries
+    // several Effect spans and every request came to about 140,000 spans an
+    // hour in production, which a plan's span quota does not hold. Errors,
+    // logs, and check-ins are not sampled by this.
+    tracesSampleRate: TRACES_SAMPLE_RATE,
   };
 }
 
