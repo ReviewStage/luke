@@ -1258,7 +1258,8 @@ export const ACT = {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
       inboxTaskId: EffectSchema.NullOr(exactId),
-      chatShown: EffectSchema.optionalKey(EffectSchema.Boolean),
+      /** The workspace whose Chat is on screen, the window's or a task's Chat tab; none where no Chat is. */
+      chatShownIn: EffectSchema.optionalKey(EffectSchema.NullOr(exactId)),
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",

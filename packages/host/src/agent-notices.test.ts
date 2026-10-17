@@ -1001,16 +1001,26 @@ it.effect(
         { messageId: chatEntry(51).messageId, words: "@agent-2 asked you", detail: "Chat" },
       ]);
 
-      notices.shownChat(true);
+      notices.shownChat("workspace-acme");
       const before = f.posted.length;
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
-        chat: [chatEntry(40), chatEntry(47), chatEntry(51), chatEntry(52)],
+        chat: [
+          chatEntry(40),
+          chatEntry(47),
+          chatEntry(51),
+          chatEntry(52),
+          chatEntry(53, { workspaceId: "workspace-beta", planId: null }),
+        ],
         cursor: "4",
         readAt: READ_AT,
       });
       yield* settled;
-      assert.equal(f.chatToasted.length, 1);
+      // Chat on screen is Acme's, so Acme's message is read there and Beta's is still told.
+      assert.deepEqual(
+        f.chatToasted.map((toast) => toast.messageId),
+        [chatEntry(51).messageId, chatEntry(53).messageId],
+      );
       assert.equal(f.posted.length, before);
     }),
 );
@@ -1034,5 +1044,28 @@ it.effect(
       yield* settled;
       assert.equal(f.posted.length, 0);
       assert.equal(f.badges.at(-1), 0);
+    }),
+);
+
+it.effect(
+  "an open ask that comes to the read changed before the last answer was read, as one of a workspace just joined, is no news",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      f.answerInbox({
+        items: [],
+        chat: [
+          chatEntry(30, { reason: ACCOUNT_CHAT_REASON.ASK, updatedAt: READ_AT - 4 * 86_400_000 }),
+          chatEntry(31, { updatedAt: READ_AT + 60_000 }),
+        ],
+        cursor: "2",
+        readAt: READ_AT + 120_000,
+      });
+      yield* settled;
+      assert.deepEqual(f.said(), [{ title: TASK_NAME, body: "@agent-2 messaged you" }]);
     }),
 );

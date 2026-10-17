@@ -1417,22 +1417,24 @@ export function useTasksTab(input: {
   // Chat on screen, the window's or a task's Chat tab, is where what waits in chat is read, so main announces none of it then.
   const chatOnScreen =
     shown && (standIn?.kind === STAND_IN.CHAT || (columnShown && mainTabs.tab === MAIN_TAB.CHAT));
+  // Note that it is the listed workspace's Chat on screen, which is all a message elsewhere is not read in.
+  const chatShownIn = chatOnScreen ? (listedWorkspace?.id ?? null) : null;
   const reportedTab = useRef<
-    { agentId: string | null; inboxTaskId: string | null; chatShown: boolean } | undefined
+    { agentId: string | null; inboxTaskId: string | null; chatShownIn: string | null } | undefined
   >(undefined);
   useEffect(() => {
     const was = reportedTab.current;
     if (
       was?.agentId === shownAgent &&
       was.inboxTaskId === shownInbox &&
-      was.chatShown === chatOnScreen
+      was.chatShownIn === chatShownIn
     ) {
       return;
     }
-    const now = { agentId: shownAgent, inboxTaskId: shownInbox, chatShown: chatOnScreen };
+    const now = { agentId: shownAgent, inboxTaskId: shownInbox, chatShownIn };
     reportedTab.current = now;
     tell(ACT_KIND.CODING_AGENTS_SHOWN, now);
-  }, [shownAgent, shownInbox, chatOnScreen, tell]);
+  }, [shownAgent, shownInbox, chatShownIn, tell]);
   // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
   useEffect(() => {
     if (inboxChosen !== undefined) {

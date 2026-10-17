@@ -307,7 +307,7 @@ export interface AgentNotices {
   /** The panel said which task's Inbox tab it shows, or none. */
   shownInbox(taskId: string | null): void;
   /** The panel said whether its Chat is on screen. */
-  shownChat(shown: boolean): void;
+  shownChat(workspaceId: string | null): void;
 }
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
@@ -594,7 +594,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** The highest revision any answer for the account held of each item, so one back unchanged is known. */
     const seenRevision = new Map<string, number>();
     let shownInbox: string | null = null;
-    let shownChat = false;
+    /** The workspace whose Chat the panel has on screen, none where no Chat is: a message waiting there is read there. */
+    let shownChat: string | null = null;
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -739,7 +740,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** A chat message came to wait: told nowhere on Chat in front, in the toast elsewhere in front, and as a notification behind. */
     function announceChat(entry: AccountChatEntry): void {
-      if (focused && shownChat) return;
+      if (focused && shownChat === entry.workspaceId) return;
       const text = chatNoticeText(
         entry,
         entry.planId === null ? undefined : taskName(entry.planId),
@@ -813,12 +814,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         chat: new Set(chat.map((entry) => entry.messageId)),
       };
       publishWaiting(answer);
-      // A chat message is news once, as it first waits: the first answer is where the account stands.
-      for (const entry of chat) {
-        if (was !== undefined && !was.chat.has(entry.messageId)) announceChat(entry);
-      }
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
+      // A chat message is news once, as it first waits: the first answer is where the account stands,
+      // and one changed before the last answer was read, as an open ask of a workspace just joined, is no news.
+      for (const entry of chat) {
+        if (since === undefined || was?.chat.has(entry.messageId) === true) continue;
+        if (entry.updatedAt > since) announceChat(entry);
+      }
       for (const item of answer.items) {
         const known = seenRevision.get(item.id);
         seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
@@ -1036,8 +1039,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         shownAgent = agentId;
         seen(agentId);
       },
-      shownChat: (shown) => {
-        shownChat = shown;
+      shownChat: (workspaceId) => {
+        shownChat = workspaceId;
       },
       shownInbox: (taskId) => {
         shownInbox = taskId;
