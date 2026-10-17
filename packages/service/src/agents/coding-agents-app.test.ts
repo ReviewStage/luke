@@ -4165,7 +4165,9 @@ const text = (words: string) => ({ type: "text", text: words });
 /** The first message the newest session opened on, read back into its brief, its replay, and its note. */
 function openedParts(eve: ReturnType<typeof fakeEve>) {
   const message = eve.opened.at(-1)?.message.message;
-  if (!isWireString(message)) return assert.fail("the session opened on words alone");
+  if (message === undefined || Array.isArray(message)) {
+    return assert.fail("the session opened on words alone");
+  }
   return { text: message, parts: firstMessageParts(message) };
 }
 
