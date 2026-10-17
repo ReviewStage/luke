@@ -2,7 +2,6 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type KeyRing,
   openProviderKey,
-  parseKeyRing,
   sealProviderKey,
 } from "@luke/database/models/provider-key-seal";
 import {
@@ -50,6 +49,7 @@ import {
   providerKeyHint,
 } from "../providers/provider-key-check.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { keyRingOrUnavailable } from "./key-ring.js";
 import { handleProviderKeyRewrap } from "./provider-key-rewrap.js";
 
 /**
@@ -103,20 +103,6 @@ type ProviderKeysRequirements =
   | DatabaseServices
   | HostedEnvironment
   | HttpClient.HttpClient;
-
-/** The deployment's ring, or the request refused as unavailable where it holds none it can parse. */
-const keyRingOrUnavailable = Effect.gen(function* () {
-  const environment = yield* HostedEnvironment;
-  const configured = environment.providerKeyEncryptionKeys;
-  if (configured === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  const ring = parseKeyRing(configured);
-  if (Result.isFailure(ring)) {
-    // The fault names the shape that is wrong and never a value.
-    yield* Effect.logError(`The provider key encryption keys cannot be read: ${ring.failure}`);
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  return ring.success;
-});
 
 /** The account's keys as it is shown them, each one the ring cannot open answered unreadable. */
 const summariesOf = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, ring: KeyRing) {

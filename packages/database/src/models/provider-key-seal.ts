@@ -3,7 +3,7 @@ import type { ProviderKeyProvider } from "@luke/features/provider-key-wire";
 import { Redacted, Result } from "effect";
 
 /**
- * provider-key-seal.ts -- an account's own provider key sealed for the database, and opened again for the one call that needs it.
+ * provider-key-seal.ts -- an account's own provider key, or a workspace's environment value, sealed for the database, and opened again for the one call that needs it.
  *
  * Envelope encryption under AES-256-GCM. Every save draws a fresh 32-byte
  * data key, seals the provider key under it, and wraps the data key under
@@ -25,6 +25,11 @@ import { Redacted, Result } from "effect";
  * standing row onto it by unwrapping and rewrapping its data key, never
  * touching the provider key itself. A version stays in the list until no
  * row names it.
+ *
+ * A workspace's environment values (`workspace-environment-store.ts`) are
+ * sealed the same way under the same ring, with purposes of their own and
+ * bound to the workspace and the variable's name, so a provider key never
+ * opens as an environment value or the reverse.
  */
 
 /** The environment the key-encryption keys are read from. */
@@ -40,11 +45,21 @@ const SEAL = {
   TAG_BYTES: 16,
 } as const;
 
-/** What each seal's additional data names first, so a wrapped data key never opens as a sealed provider key or the reverse. */
-const SEAL_PURPOSE = {
+/** What each seal's additional data names first, so a wrapped data key never opens as a sealed value or the reverse, and one kind of value never as another. */
+interface SealPurpose {
+  readonly DATA_KEY: string;
+  readonly VALUE: string;
+}
+
+const PROVIDER_KEY_PURPOSE: SealPurpose = {
   DATA_KEY: "luke/provider-key/data-key",
-  PROVIDER_KEY: "luke/provider-key/key",
-} as const;
+  VALUE: "luke/provider-key/key",
+};
+
+const WORKSPACE_ENVIRONMENT_PURPOSE: SealPurpose = {
+  DATA_KEY: "luke/workspace-environment/data-key",
+  VALUE: "luke/workspace-environment/value",
+};
 
 /** One entry of the environment's list: a version of one to six digits and a 32-byte key in standard base64. */
 const KEY_ENTRY = /^(\d{1,6}):([A-Za-z0-9+/]{43}=)$/u;
@@ -79,17 +94,34 @@ export interface SealOwner {
   readonly provider: ProviderKeyProvider;
 }
 
+/** Which workspace variable a seal is, which both seals bind. */
+export interface EnvironmentSealOwner {
+  readonly organizationId: string;
+  readonly name: string;
+}
+
+/** What a seal is bound to: its purposes, and the names its row stands under, in order. */
+interface SealBinding {
+  readonly purpose: SealPurpose;
+  readonly names: readonly string[];
+}
+
 /** A sealed key the service cannot open: it is used for nothing until it is replaced. */
 export const PROVIDER_KEY_UNREADABLE = "unreadable";
 
 export type ProviderKeyUnreadable = typeof PROVIDER_KEY_UNREADABLE;
 
-function additionalData(purpose: string, owner: SealOwner, version?: number): Buffer {
+function providerBinding(owner: SealOwner): SealBinding {
+  return { purpose: PROVIDER_KEY_PURPOSE, names: [owner.userId, owner.provider] };
+}
+
+function environmentBinding(owner: EnvironmentSealOwner): SealBinding {
+  return { purpose: WORKSPACE_ENVIRONMENT_PURPOSE, names: [owner.organizationId, owner.name] };
+}
+
+function additionalData(purpose: string, names: readonly string[], version?: number): Buffer {
   // A JSON array, so no account id can be spelled to run into the provider beside it.
-  const named =
-    version === undefined
-      ? [purpose, owner.userId, owner.provider]
-      : [purpose, owner.userId, owner.provider, version];
+  const named = version === undefined ? [purpose, ...names] : [purpose, ...names, version];
   return Buffer.from(JSON.stringify(named), "utf8");
 }
 
@@ -122,30 +154,77 @@ function openBytes(key: Uint8Array, sealed: string, aad: Buffer): Buffer | undef
 /** The data key a row wraps, or nothing where its version is gone or its wrap does not open. */
 function openDataKey(
   ring: KeyRing,
-  owner: SealOwner,
+  binding: SealBinding,
   sealed: SealedProviderKey,
 ): Buffer | undefined {
   const wrapping = ring.keys.get(sealed.keyVersion);
   if (wrapping === undefined) return undefined;
-  const aad = additionalData(SEAL_PURPOSE.DATA_KEY, owner, sealed.keyVersion);
+  const aad = additionalData(binding.purpose.DATA_KEY, binding.names, sealed.keyVersion);
   const dataKey = openBytes(Redacted.value(wrapping), sealed.sealedDataKey, aad);
   return dataKey?.length === SEAL.KEY_BYTES ? dataKey : undefined;
 }
 
 function wrapDataKey(
   ring: KeyRing,
-  owner: SealOwner,
+  binding: SealBinding,
   dataKey: Uint8Array,
 ): Pick<SealedProviderKey, "keyVersion" | "sealedDataKey"> {
   const wrapping = ring.keys.get(ring.current);
   // The parse puts the current version in the map, so its absence is a ring built by hand wrongly.
   if (wrapping === undefined)
     throw new Error("The key ring names a current version it does not hold.");
-  const aad = additionalData(SEAL_PURPOSE.DATA_KEY, owner, ring.current);
+  const aad = additionalData(binding.purpose.DATA_KEY, binding.names, ring.current);
   return {
     keyVersion: ring.current,
     sealedDataKey: sealBytes(Redacted.value(wrapping), dataKey, aad),
   };
+}
+
+function sealValue(
+  ring: KeyRing,
+  binding: SealBinding,
+  value: Redacted.Redacted<string>,
+): SealedProviderKey {
+  const dataKey = randomBytes(SEAL.KEY_BYTES);
+  const sealedKey = sealBytes(
+    dataKey,
+    Buffer.from(Redacted.value(value), "utf8"),
+    additionalData(binding.purpose.VALUE, binding.names),
+  );
+  const wrapped = wrapDataKey(ring, binding, dataKey);
+  dataKey.fill(0);
+  return { ...wrapped, sealedKey };
+}
+
+function openValue(
+  ring: KeyRing,
+  binding: SealBinding,
+  sealed: SealedProviderKey,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const dataKey = openDataKey(ring, binding, sealed);
+  if (dataKey === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
+  const opened = openBytes(
+    dataKey,
+    sealed.sealedKey,
+    additionalData(binding.purpose.VALUE, binding.names),
+  );
+  dataKey.fill(0);
+  if (opened === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
+  const value = Redacted.make(opened.toString("utf8"));
+  opened.fill(0);
+  return Result.succeed(value);
+}
+
+function rewrapValue(
+  ring: KeyRing,
+  binding: SealBinding,
+  sealed: SealedProviderKey,
+): Result.Result<SealedProviderKey, ProviderKeyUnreadable> {
+  const dataKey = openDataKey(ring, binding, sealed);
+  if (dataKey === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
+  const wrapped = wrapDataKey(ring, binding, dataKey);
+  dataKey.fill(0);
+  return Result.succeed({ ...wrapped, sealedKey: sealed.sealedKey });
 }
 
 /** The ring the environment's value names, or which shape it breaks. */
@@ -177,15 +256,7 @@ export function sealProviderKey(
   owner: SealOwner,
   key: Redacted.Redacted<string>,
 ): SealedProviderKey {
-  const dataKey = randomBytes(SEAL.KEY_BYTES);
-  const sealedKey = sealBytes(
-    dataKey,
-    Buffer.from(Redacted.value(key), "utf8"),
-    additionalData(SEAL_PURPOSE.PROVIDER_KEY, owner),
-  );
-  const wrapped = wrapDataKey(ring, owner, dataKey);
-  dataKey.fill(0);
-  return { ...wrapped, sealedKey };
+  return sealValue(ring, providerBinding(owner), key);
 }
 
 /** The provider key a row seals, sealed again at once, or unreadable where any part of it does not open for this owner. */
@@ -194,18 +265,7 @@ export function openProviderKey(
   owner: SealOwner,
   sealed: SealedProviderKey,
 ): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
-  const dataKey = openDataKey(ring, owner, sealed);
-  if (dataKey === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
-  const opened = openBytes(
-    dataKey,
-    sealed.sealedKey,
-    additionalData(SEAL_PURPOSE.PROVIDER_KEY, owner),
-  );
-  dataKey.fill(0);
-  if (opened === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
-  const key = Redacted.make(opened.toString("utf8"));
-  opened.fill(0);
-  return Result.succeed(key);
+  return openValue(ring, providerBinding(owner), sealed);
 }
 
 /** The row's data key wrapped again under the ring's current version, the provider key's seal untouched; unreadable where its wrap does not open. */
@@ -214,9 +274,32 @@ export function rewrapProviderKey(
   owner: SealOwner,
   sealed: SealedProviderKey,
 ): Result.Result<SealedProviderKey, ProviderKeyUnreadable> {
-  const dataKey = openDataKey(ring, owner, sealed);
-  if (dataKey === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
-  const wrapped = wrapDataKey(ring, owner, dataKey);
-  dataKey.fill(0);
-  return Result.succeed({ ...wrapped, sealedKey: sealed.sealedKey });
+  return rewrapValue(ring, providerBinding(owner), sealed);
+}
+
+/** A workspace's environment value sealed for its variable's row under a fresh data key, wrapped under the ring's current version. */
+export function sealEnvironmentValue(
+  ring: KeyRing,
+  owner: EnvironmentSealOwner,
+  value: Redacted.Redacted<string>,
+): SealedProviderKey {
+  return sealValue(ring, environmentBinding(owner), value);
+}
+
+/** The environment value a row seals, or unreadable where any part of it does not open for this workspace and name. */
+export function openEnvironmentValue(
+  ring: KeyRing,
+  owner: EnvironmentSealOwner,
+  sealed: SealedProviderKey,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  return openValue(ring, environmentBinding(owner), sealed);
+}
+
+/** The environment row's data key wrapped again under the ring's current version, its value's seal untouched. */
+export function rewrapEnvironmentValue(
+  ring: KeyRing,
+  owner: EnvironmentSealOwner,
+  sealed: SealedProviderKey,
+): Result.Result<SealedProviderKey, ProviderKeyUnreadable> {
+  return rewrapValue(ring, environmentBinding(owner), sealed);
 }

@@ -69,6 +69,13 @@ the check names. A component is placed by review under the same rule.
   request, a log line, a local variable, or an agent's prompt, reply, or tool
   result carries may reach Sentry; a credential among it is replaced only
   where Sentry's denylist catches it by name, and `PRIVACY.md` says so.
+  And, approved by Dean on 2026-10-16: a workspace's cloud environment secrets
+  reach its coding agents' sandboxes as environment variables
+  (`packages/service/src/agents/coder-host/workspace-environment.ts`). Their
+  values are masked out of what the agent's shell commands answer where
+  found, but a command may still print one transformed, so they may reach the
+  conversation, the model, the agent's transcript and traces, and Sentry as the
+  carve-out above lets a tool result. Never a counted event or a fixture.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

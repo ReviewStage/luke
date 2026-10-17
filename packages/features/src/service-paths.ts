@@ -202,6 +202,12 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_LINEAR_DISCONNECT: "/api/workspaces/linear/disconnect",
   /** The Linear issues a member of a workspace may start a plan from, or those a search matches (POST). */
   WORKSPACE_LINEAR_ISSUES: "/api/workspaces/linear/issues",
+  /** A workspace's environment variables and secrets, to a member of it (POST); `workspace-environment-wire.ts` declares every body. */
+  WORKSPACE_ENVIRONMENT: "/api/workspaces/environment",
+  /** One environment variable or secret saved by an owner or admin (POST), answering the list. */
+  WORKSPACE_ENVIRONMENT_SAVE: "/api/workspaces/environment/save",
+  /** One environment variable or secret removed by an owner or admin (POST), answering the list. */
+  WORKSPACE_ENVIRONMENT_REMOVE: "/api/workspaces/environment/remove",
   /** A workspace renamed by an owner or an admin (POST), answering the workspace; its slug stays as it was. */
   WORKSPACES_RENAME: "/api/workspaces/rename",
   /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */
