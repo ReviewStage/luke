@@ -16,8 +16,6 @@ import { SpinnerRing } from "../spinner";
  * past that, and under it a footer with whatever the owner puts at its
  * left and the round submit at its right. The agent tab's message box and
  * the Inbox's draw this one card, so a change here is the look of both.
- * Its type is one variable (`--composer-type`), set on the card, from which
- * the field's line and so its least and greatest heights follow.
  * The registry's attachments,
  * speech button, selects, hover cards, tabs, and command palette are not
  * here, because nothing draws them yet; each arrives with the surface that
@@ -28,8 +26,8 @@ import { SpinnerRing } from "../spinner";
  * holds the words and clears them once the message has gone, so a message
  * that did not go stays in the box to be sent again. The registry's
  * textarea is not here: both boxes draw an editor in its place
- * (`../tasks/composer-field.tsx`) in its look (`PROMPT_INPUT_FIELD_CLASS`),
- * whose Enter submits through the one door (`submitPromptInput`).
+ * (`../tasks/composer-field.tsx`), whose Enter submits through the one
+ * door (`submitPromptInput`).
  *
  * The submit is drawn the way Claude's and ChatGPT's are: one round
  * button that never changes size or place, filled in the panel's ink with
@@ -46,12 +44,6 @@ export type PromptInputProps = Omit<HTMLAttributes<HTMLFormElement>, "onSubmit">
   onSubmit: () => void;
 };
 
-/** The card's one size: the type its field is set in. */
-const COMPOSER_TYPE = {
-  /** A message box under a transcript. */
-  DEFAULT: "[--composer-type:13px]",
-} as const;
-
 export function PromptInput({
   className,
   onSubmit,
@@ -65,7 +57,6 @@ export function PromptInput({
   return (
     <form
       className={cn(
-        COMPOSER_TYPE.DEFAULT,
         "field-well flex w-full flex-col rounded-xl border border-border bg-card",
         className,
       )}
@@ -76,10 +67,6 @@ export function PromptInput({
     </form>
   );
 }
-
-/** The field's look: one line to about eight, then scrolling, in the card's type. */
-export const PROMPT_INPUT_FIELD_CLASS =
-  "max-h-[calc(8*1.45em+24px)] min-h-[calc(1.45em+24px)] w-full overflow-y-auto bg-transparent px-4 pt-4 pb-2 text-(length:--composer-type) leading-[1.45] text-foreground outline-none select-text";
 
 /** Submits the form around a field, as Enter there does, unless its submit button is disabled. */
 export function submitPromptInput(field: Element): void {
