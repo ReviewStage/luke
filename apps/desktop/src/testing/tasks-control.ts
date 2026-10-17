@@ -89,6 +89,7 @@ export function codingAgentsControl(
     draft: undefined,
     onNewDraft: () => "draft",
     onForkDraft: () => "draft",
+    onContinueDraft: () => "draft",
     onDropFork: ignore,
     onDraftChange: ignore,
     onDraftAttachments: ignore,

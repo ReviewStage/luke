@@ -200,7 +200,7 @@ function line(id: string, text: string): CodingAgentMessage {
 async function forkedAtInTab(
   status: CodingAgentStatus,
   messages: readonly CodingAgentMessage[],
-): Promise<readonly (string | null)[]> {
+): Promise<readonly (string | undefined)[]> {
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });

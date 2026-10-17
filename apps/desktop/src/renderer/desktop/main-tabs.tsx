@@ -1,5 +1,6 @@
 import {
   CODING_AGENT_BOUNDS,
+  type CodingAgentAttachment,
   type CodingAgentBrief,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -659,6 +660,7 @@ export function MainTabContent({
   cards,
   chat,
   onFork,
+  onContinue,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX | typeof MAIN_TAB.CHAT>;
   agents: CodingAgentsControl;
@@ -683,6 +685,10 @@ export function MainTabContent({
   chat?: ChatNoticeDoors | undefined;
   /** Opens the task's draft as a fork of one of an agent's messages; none where no draft opens, as on an agent no task holds. */
   onFork?: ((fork: AgentFork) => void) | undefined;
+  /** Opens the task's draft as a continue of an agent with the words and files its closed box held; none where no draft opens, as on an agent no task holds. */
+  onContinue?:
+    | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
+    | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the task no longer holds only until the
@@ -705,6 +711,7 @@ export function MainTabContent({
         agent,
         control: agents,
         onFork,
+        onContinue,
         cards: cards.agent(agent.id),
         onOpenTarget,
       })}

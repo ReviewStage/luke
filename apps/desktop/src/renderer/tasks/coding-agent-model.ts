@@ -1594,6 +1594,8 @@ export interface SentLine {
   readonly known: ReadonlySet<string>;
   /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
   readonly steers: boolean;
+  /** Whether the agent refused it for good, its session ended, so it stands where it went marked as not delivered, and no row will read it back. */
+  readonly undelivered?: boolean;
 }
 
 /**
@@ -1641,6 +1643,8 @@ export function unreadSentLines(
 ): SentLinesRead {
   const claimed = new Set(taken);
   const lines = sent.filter((line) => {
+    // A line the agent refused for good has no row to be read back by.
+    if (line.undelivered === true) return true;
     const row = developerRows(messages).find(
       (message) =>
         !line.known.has(message.id) &&

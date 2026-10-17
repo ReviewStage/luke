@@ -590,6 +590,104 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
   assert.equal(again.control().draft?.prompt, "Try the queue, then retry");
 });
 
+test("a continue opens the task's draft with the closed box's words and files after any it held, its chips on the source's servers, sends nothing, holds through a tab switch and a relaunch, and an empty send continues under the draft's key, asked again under the same one", async () => {
+  const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const CONTINUED = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const source: CodingAgentSummary = {
+    ...STARTED,
+    status: CODING_AGENT_STATUS.FAILED,
+    disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+  };
+  const continued: CodingAgentSummary = {
+    ...STARTED,
+    id: CONTINUED,
+    from: { agentId: AGENT, steps: 3, totalSteps: 3 },
+  };
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  const before = mount({ taskId: TASK, repository: "acme/relay" });
+  before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [source] }, { agents: [source] });
+  await before.mount();
+
+  // Words already in the task's draft stay, the box's laid in after them.
+  act(() => {
+    before.control().onNewDraft();
+  });
+  act(() => before.control().onDraftChange({ prompt: "Check the logs first." }));
+  let draft = "";
+  act(() => {
+    draft = before.control().onContinueDraft(AGENT, " Now add the dark variant. ", [notes]);
+  });
+  const fork = { agentId: AGENT, opening: "" };
+  assert.deepEqual(before.control().draft, {
+    id: draft,
+    prompt: "Check the logs first.\n\nNow add the dark variant.",
+    attachments: [notes],
+    choice: undefined,
+    disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+    fork,
+  });
+  assert.deepEqual(startPayloads(before.asked), [], "nothing is sent until the draft is");
+
+  await before.stand({ taskId: OTHER_TASK });
+  await before.stand({ taskId: TASK });
+  assert.equal(before.control().draft?.id, draft, "the draft holds while another task is open");
+  assert.deepEqual(before.control().draft?.fork, fork);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const after = mount({ taskId: TASK, repository: "acme/relay" });
+  after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [source] }, { agents: [continued] });
+  after.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { agent: continued },
+  );
+  await after.mount();
+  const kept = after.control().draft ?? assert.fail("the draft outlasts a relaunch");
+  assert.equal(kept.id, draft, "under the same key");
+  assert.deepEqual(kept.fork, fork, "still a continue");
+  assert.equal(kept.prompt, "Check the logs first.\n\nNow add the dark variant.");
+
+  // The developer empties the box and sends: the continue goes on nothing more.
+  let failed: Failure | undefined;
+  await act(async () => {
+    failed = await after.control().startFork(draft, fork, "", undefined, [], []);
+  });
+  assert.equal(failed?.text, "The agent could not be started. Try again.");
+  await act(async () => {
+    failed = await after.control().startFork(draft, fork, "", undefined, [], []);
+  });
+  assert.equal(failed, undefined);
+  const asked = {
+    taskId: TASK,
+    idempotencyKey: draft,
+    from: { agentId: AGENT },
+    disabledServers: [],
+  };
+  assert.deepEqual(startPayloads(after.asked), [asked, asked]);
+  assert.deepEqual(after.started, [CONTINUED]);
+  assert.equal(after.control().draft, undefined, "the started continue's draft is let go");
+});
+
+test("a second Continue of the agent the draft already continues keeps its key and its chips, laying any new words in after the draft's", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  await tab.mount();
+  let first = "";
+  act(() => {
+    first = tab.control().onContinueDraft(AGENT, "Carry on.", []);
+  });
+  act(() =>
+    tab.control().onDraftChange({ choice: { model: "openai/gpt-6.1-sol", effort: "low" } }),
+  );
+  let second = "";
+  act(() => {
+    second = tab.control().onContinueDraft(AGENT, "", []);
+  });
+  assert.equal(second, first);
+  assert.equal(tab.control().draft?.prompt, "Carry on.");
+  assert.deepEqual(tab.control().draft?.choice, { model: "openai/gpt-6.1-sol", effort: "low" });
+});
+
 test("continuing an agent starts on the task from its whole transcript under the agent's own key, a press asked again after no answer carrying the same key, and the new agent's tab opens as a Start's does", async () => {
   const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const continued = { ...STARTED, from: { agentId: SOURCE, steps: 3, totalSteps: 3 } };

@@ -825,6 +825,14 @@ function PlanDocument({
                               ? undefined
                               : (fork) => openColumnTab({ draft: agents.onForkDraft(fork) })
                           }
+                          onContinue={
+                            archived
+                              ? undefined
+                              : (agentId, words, attachments) =>
+                                  openColumnTab({
+                                    draft: agents.onContinueDraft(agentId, words, attachments),
+                                  })
+                          }
                         />
                       )}
                     </FindScope>

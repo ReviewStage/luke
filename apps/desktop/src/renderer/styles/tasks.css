@@ -3001,6 +3001,22 @@ button.pull-request-check:hover {
   color: var(--text-secondary);
 }
 
+/* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
+   and files faded, as words that did not go, and the quiet mark under
+   them in the danger red a failure note speaks in. */
+.agent-undelivered {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 12.5px;
+}
+
+.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
+  opacity: 0.6;
+}
+
 /* A finished turn's line (`working-time.tsx`) breaks between how long it
    worked and when it ended, never inside either. */
 [data-worked] > :is([data-worked-length], time) {
