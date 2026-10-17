@@ -9,7 +9,8 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
  * The hosted response vocabulary as an `HttpRouter` answers it, with the same
- * statuses and the same bytes `http.ts` answers with.
+ * statuses and the same bodies `http.ts` answers with. A JSON answer here also
+ * carries `cache-control: private, no-store`, which `http.ts` does not send.
  *
  * A refusal is the body itself rather than a `Schema.TaggedError`: `error` is
  * already the discriminant the desktop's hosted clients read, and the `_tag` a
@@ -17,11 +18,11 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  */
 
 /**
- * What a hosted answer is cached under unless its route says otherwise: an
- * answer is one account's data, so neither a browser nor a shared cache on the
- * way may keep a copy, which matters once a browser reads it on a cookie.
+ * What every hosted JSON answer is cached under: an answer is one account's
+ * data, so neither a browser nor a shared cache on the way may keep a copy,
+ * which matters once a browser reads it on a cookie.
  */
-const HOSTED_DEFAULT_CACHE_CONTROL = "private, no-store";
+const HOSTED_CACHE_CONTROL = "private, no-store";
 
 /** The status each refusal is answered with, which is a function of the refusal alone. */
 const HOSTED_REFUSAL_STATUS = {
@@ -220,23 +221,17 @@ export const effectPassthrough = /* @__PURE__ */ Effect.fn("web/effectPassthroug
     : HttpServerResponse.raw(answer);
 });
 
-/** What a route may set on its answer beside the body; a route whose answer is deliberately cacheable names its own `cacheControl`. */
-export interface HostedJsonOptions {
-  readonly cacheControl?: string;
-}
-
 /**
  * An answer as the response, the way `jsonResponse` answers one today, under
- * `private, no-store` unless the caller names another `cacheControl`.
+ * `private, no-store`.
  */
 export function hostedJsonResponse<Body extends object>(
   status: number,
   body: Body,
-  options: HostedJsonOptions = {},
 ): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.jsonUnsafe(body, {
     status,
-    headers: { "cache-control": options.cacheControl ?? HOSTED_DEFAULT_CACHE_CONTROL },
+    headers: { "cache-control": HOSTED_CACHE_CONTROL },
   });
 }
 
