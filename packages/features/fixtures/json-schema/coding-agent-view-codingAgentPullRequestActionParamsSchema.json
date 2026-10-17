@@ -36,6 +36,93 @@
             "action"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "merge"
+              ]
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "merge",
+                "squash",
+                "rebase"
+              ]
+            },
+            "headSha": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "action",
+            "method",
+            "headSha"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "enable-auto-merge"
+              ]
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "merge",
+                "squash",
+                "rebase"
+              ]
+            },
+            "headSha": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "action",
+            "headSha"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "disable-auto-merge"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "dequeue"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
         }
       ]
     }

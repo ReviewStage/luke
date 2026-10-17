@@ -16,7 +16,11 @@
  * Nothing of the token, the request, or GitHub's body reaches a log line.
  */
 
-import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
+import {
+  MERGE_METHOD,
+  type MergeMethod,
+  PULL_REQUEST_WRITE_BOUNDS,
+} from "@luke/features/pull-request-write-wire";
 import { Data, Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -170,4 +174,93 @@ export const setPullRequestDraft = /* @__PURE__ */ Effect.fn("web/setPullRequest
     { id: pullRequestId },
     Schema.Unknown,
   );
+});
+
+/** Each merge method as GitHub's GraphQL spells it. */
+const GRAPHQL_MERGE_METHOD = {
+  [MERGE_METHOD.MERGE]: "MERGE",
+  [MERGE_METHOD.SQUASH]: "SQUASH",
+  [MERGE_METHOD.REBASE]: "REBASE",
+} as const satisfies Record<MergeMethod, string>;
+
+const MERGE_MUTATION = `mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID!) {
+  mergePullRequest(input: { pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head }) {
+    pullRequest { merged }
+  }
+}`;
+
+/**
+ * The pull request merged now by the method given, on the member's token,
+ * against the head they saw: GitHub refuses it where the head has moved
+ * since, the method is not allowed, or a rule still stands in the way.
+ */
+export const mergePullRequest = /* @__PURE__ */ Effect.fn("web/mergePullRequest")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  method: MergeMethod,
+  headSha: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(
+    token,
+    MERGE_MUTATION,
+    { id: pullRequestId, method: GRAPHQL_MERGE_METHOD[method], head: headSha },
+    Schema.Unknown,
+  );
+});
+
+const ENABLE_AUTO_MERGE_MUTATION = `mutation($id: ID!, $method: PullRequestMergeMethod, $head: GitObjectID!) {
+  enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head }) {
+    clientMutationId
+  }
+}`;
+
+const DISABLE_AUTO_MERGE_MUTATION = `mutation($id: ID!) {
+  disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId }
+}`;
+
+/** What auto-merge is turned on with: the method, none on a base a merge queue merges, and the head the member saw. */
+interface AutoMerge {
+  readonly method: MergeMethod | undefined;
+  readonly headSha: string;
+}
+
+/**
+ * Auto-merge turned on for the pull request as given, or off where none is
+ * given, on the member's token. On a base merged through a merge queue,
+ * turning it on is how a pull request is added to the queue once it is
+ * ready, as `gh pr merge --auto` adds one, the queue's method standing.
+ */
+export const setAutoMerge = /* @__PURE__ */ Effect.fn("web/setAutoMerge")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  autoMerge: AutoMerge | undefined,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  if (autoMerge === undefined) {
+    yield* githubWrite(token, DISABLE_AUTO_MERGE_MUTATION, { id: pullRequestId }, Schema.Unknown);
+    return;
+  }
+  yield* githubWrite(
+    token,
+    ENABLE_AUTO_MERGE_MUTATION,
+    {
+      id: pullRequestId,
+      head: autoMerge.headSha,
+      ...(autoMerge.method === undefined
+        ? undefined
+        : { method: GRAPHQL_MERGE_METHOD[autoMerge.method] }),
+    },
+    Schema.Unknown,
+  );
+});
+
+const DEQUEUE_MUTATION = `mutation($id: ID!) {
+  dequeuePullRequest(input: { id: $id }) { clientMutationId }
+}`;
+
+/** The pull request taken out of its base's merge queue, on the member's token. */
+export const takeOutOfMergeQueue = /* @__PURE__ */ Effect.fn("web/takeOutOfMergeQueue")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(token, DEQUEUE_MUTATION, { id: pullRequestId }, Schema.Unknown);
 });

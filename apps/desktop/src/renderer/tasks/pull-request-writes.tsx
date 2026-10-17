@@ -45,10 +45,25 @@ import { PullRequestMark } from "./pull-request-mark";
  * drawn by whatever bar the tab wears, so they move with it.
  */
 
-/** What each change says on the menu, and while it is out. */
+/** The changes the pill's own menu makes. */
+type StateAction =
+  | typeof PULL_REQUEST_ACTION.READY_FOR_REVIEW
+  | typeof PULL_REQUEST_ACTION.CONVERT_TO_DRAFT;
+
+/** What each of the pill's changes says on its menu. */
 const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: "Ready for review",
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: "Convert to draft",
+} as const satisfies Record<StateAction, string>;
+
+/** What the pill says while a change is out, whichever control sent it. */
+const PENDING_WORDS = {
+  [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: "Marking ready",
+  [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: "Converting to draft",
+  [PULL_REQUEST_ACTION.MERGE]: "Merging",
+  [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Enabling auto-merge",
+  [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disabling auto-merge",
+  [PULL_REQUEST_ACTION.DEQUEUE]: "Leaving the queue",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
@@ -95,7 +110,8 @@ export interface PullRequestWrites {
   /** The change out now; none while nothing is. */
   readonly pending: PullRequestAction | undefined;
   readonly note: WriteNote | undefined;
-  readonly write: (request: PullRequestActionRequest) => void;
+  /** Sends the change; settles once GitHub answered and what it said is drawn. */
+  readonly write: (request: PullRequestActionRequest) => Promise<void>;
   readonly dismiss: () => void;
 }
 
@@ -125,7 +141,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
     (request: PullRequestActionRequest) => {
       setPending(request.action);
       setNote(undefined);
-      void act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request })
+      return act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request })
         .catch(
           (): CodingAgentPullRequestWriteAnswerView => ({
             failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
@@ -145,7 +161,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
 }
 
 /** The changes the pill's menu offers from where the pull request stands. */
-function actionsFrom(state: PullRequestState): readonly PullRequestAction[] {
+function actionsFrom(state: PullRequestState): readonly StateAction[] {
   switch (state) {
     case PULL_REQUEST_STATE.DRAFT:
       return [PULL_REQUEST_ACTION.READY_FOR_REVIEW];
@@ -160,7 +176,7 @@ function actionsFrom(state: PullRequestState): readonly PullRequestAction[] {
 const ACTION_GLYPHS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: <GitPullRequestIcon aria-hidden="true" />,
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: <GitPullRequestDraftIcon aria-hidden="true" />,
-} as const satisfies Record<PullRequestAction, React.JSX.Element>;
+} as const satisfies Record<StateAction, React.JSX.Element>;
 
 /**
  * The pill saying where the pull request stands, in its colour; a press
@@ -182,7 +198,7 @@ export function PullRequestStateMenu({
       <PullRequestMark pullRequest={pullRequest} />
       {writes.pending === undefined
         ? STATE_WORDS[pullRequest.state]
-        : `${ACTION_WORDS[writes.pending]}…`}
+        : `${PENDING_WORDS[writes.pending]}…`}
     </>
   );
   if (actions.length === 0) {
@@ -196,7 +212,7 @@ export function PullRequestStateMenu({
     label: ACTION_WORDS[action],
     icon: ACTION_GLYPHS[action],
     disabled: writes.pending !== undefined,
-    onSelect: () => writes.write({ action }),
+    onSelect: () => void writes.write({ action }),
   }));
   return (
     <>
