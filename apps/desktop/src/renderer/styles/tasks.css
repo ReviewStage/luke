@@ -1334,7 +1334,7 @@ button.file-ref:hover .file-ref-path {
     z-index: 1;
     inset-block: 0;
     right: 0;
-    width: min(264px, calc(100% - var(--space-48)));
+    width: min(264px, calc(100% - var(--luke-space-48)));
     box-shadow: var(--menu-shadow);
   }
 
@@ -4654,17 +4654,17 @@ button.attached-file-face:hover img {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-6);
-  padding-left: var(--space-4);
+  gap: var(--luke-space-6);
+  padding-left: var(--luke-space-4);
   overflow: hidden;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   white-space: nowrap;
 }
 
 .terminal-tab-title .agent-ref {
   flex: 0 1 auto;
-  color: var(--text-primary);
-  font-weight: 600;
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .terminal-tab-agent {
@@ -4716,7 +4716,7 @@ button.attached-file-face:hover img {
   min-width: 0;
   flex: 0 0 auto;
   flex-direction: column;
-  border-left: 1px solid var(--hairline);
+  border-left: 1px solid var(--luke-color-border);
   background: var(--desktop-well);
 }
 
@@ -4733,16 +4733,17 @@ button.attached-file-face:hover img {
   display: flex;
   min-height: 35px;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6) var(--space-4) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-4) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-semibold);
 }
 
-.terminal-shells-head .icon-button {
-  margin-left: auto;
+.terminal-shells-title {
+  flex: 1;
 }
 
 .terminal-shells-rows {
@@ -4752,7 +4753,7 @@ button.attached-file-face:hover img {
   flex-direction: column;
   gap: 1px;
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--luke-space-4);
   overflow-y: auto;
   list-style: none;
 }
@@ -4760,9 +4761,10 @@ button.attached-file-face:hover img {
 .terminal-shells-none {
   flex: 1;
   margin: 0;
-  padding: var(--space-8) var(--space-12);
-  color: var(--text-tertiary);
-  font-size: 12px;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .terminal-shell {
@@ -4770,24 +4772,24 @@ button.attached-file-face:hover img {
   display: flex;
   min-height: 40px;
   align-items: center;
-  gap: var(--space-8);
-  padding: 0 var(--space-4) 0 var(--space-8);
-  border-radius: 7px;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-4) 0 var(--luke-space-8);
+  border-radius: var(--luke-radius-8);
 }
 
 .terminal-shell:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .terminal-shell[aria-current="true"] {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .terminal-shell-glyph {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 /* The row's press covers its words; the glyph, mark, and × stand on it. */
@@ -4801,10 +4803,10 @@ button.attached-file-face:hover img {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font: inherit;
-  font-size: 12.5px;
-  line-height: 15px;
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
   text-align: left;
 }
 
@@ -4822,26 +4824,28 @@ button.attached-file-face:hover img {
 }
 
 .terminal-shell-name {
-  font-weight: 520;
+  font-weight: var(--luke-weight-medium);
 }
 
 .terminal-shell-detail {
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .terminal-shell-field {
   min-width: 0;
   flex: 1;
-  padding: 1px var(--space-4);
+  padding: 1px var(--luke-space-4);
   border: 0;
-  border-radius: 5px;
-  background: var(--input-fill);
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
-  color: var(--text-primary);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-input);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+  color: var(--luke-color-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
 }
 
 .terminal-shell-mark {
@@ -4854,15 +4858,15 @@ button.attached-file-face:hover img {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--state-working);
+  background: var(--luke-color-working);
 }
 
-/* The × stands in the mark's place while the row is pointed at or holds focus. */
+/* The × stands in the mark's place while the row is pointed at or holds
+   focus, its control's square centred where the mark's is. */
 .terminal-shell-kill {
   position: absolute;
-  right: var(--space-4);
-  width: 20px;
-  height: 20px;
+  right: calc(var(--luke-space-4) + 10px - var(--luke-control-height) / 2);
+  display: flex;
   visibility: hidden;
 }
 
@@ -4880,17 +4884,18 @@ button.attached-file-face:hover img {
 
 .terminal-shells-foot {
   display: flex;
-  padding: var(--space-8) var(--space-12);
-  border-top: 1px solid var(--hairline);
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .terminal-shells-foot .agent-ref .harness-mark,
 .terminal-shells-foot .agent-ref .working-mark {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .terminal-tab-screen[data-dim="true"] {
@@ -4899,10 +4904,11 @@ button.attached-file-face:hover img {
 
 .terminal-tab-failed {
   margin: 0;
-  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
-  color: var(--danger-text);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-8) var(--luke-space-16);
+  color: var(--luke-color-danger-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* Where the words and the action do not fit one line, the action drops to
@@ -4913,13 +4919,14 @@ button.attached-file-face:hover img {
   flex-wrap: wrap;
   min-height: 28px;
   align-items: center;
-  gap: var(--space-2) var(--space-8);
-  padding: var(--space-4) var(--space-12) var(--space-4) var(--space-16);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  gap: var(--luke-space-2) var(--luke-space-8);
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-16);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   white-space: nowrap;
 }
 
@@ -4940,7 +4947,7 @@ button.attached-file-face:hover img {
 }
 
 .terminal-bar-busy {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   letter-spacing: 1px;
 }
 
@@ -4953,24 +4960,24 @@ button.attached-file-face:hover img {
 .terminal-bar-end {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin-left: auto;
 }
 
 .terminal-bar-note {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .terminal-bar-action {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   padding: 0;
   border: 0;
   background: none;
-  color: var(--message-sent);
+  color: var(--luke-color-accent);
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .terminal-bar-key {
