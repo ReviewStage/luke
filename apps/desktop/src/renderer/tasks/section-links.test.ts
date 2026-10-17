@@ -51,7 +51,7 @@ const TASK: Task = {
 };
 
 /** A section's ⋯, as against the title's beside it. */
-const SECTION_MORE = '.plan-unit-more[aria-label="Section actions"]';
+const SECTION_MORE = '.plan-unit-more button[aria-label="Section actions"]';
 
 const roots: Root[] = [];
 const copied: string[] = [];
@@ -130,7 +130,7 @@ test("a section's ⋯ copies the section's link, its bare address, as a teammate
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more");
+  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more button");
   assert.ok(more, "the Rollout section has a ⋯");
   act(() => more.click());
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
@@ -266,7 +266,7 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more");
+  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more button");
   assert.ok(more);
 
   act(() => more.click());
@@ -289,7 +289,7 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
 test("only the ⋯ beside the document's one Tab stop is a Tab stop", () => {
   const container = drawnEditable();
 
-  const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more")].filter(
+  const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more button")].filter(
     (more) => more.tabIndex === 0,
   );
 

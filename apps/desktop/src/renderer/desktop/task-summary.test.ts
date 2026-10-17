@@ -332,6 +332,21 @@ test("a column too narrow to spare the rail draws none, and the toolbar's button
   assert.ok(card.querySelectorAll(".task-summary-row").length > 0, "the card lists the summary");
 });
 
+test("Escape takes the card the toolbar's button hung back down and hands the focus back to that button", () => {
+  const column = columnAt(280);
+  const toggle =
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
+    assert.fail("the toolbar's button stands");
+  act(() => toggle.click());
+  assert.ok(document.querySelector('[role="dialog"][aria-label="Summary"]'), "the card hangs");
+
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(toggle.getAttribute("aria-expanded"), "false", "the card is taken down");
+  assert.equal(document.activeElement, toggle, "the toolbar's button has the focus back");
+});
+
 test("a column with room for the rail draws it, and one widened to that room draws it again", () => {
   assert.equal(columnAt(600).rail()?.getAttribute("data-mode"), "rail");
   act(() => root?.unmount());

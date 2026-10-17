@@ -3102,7 +3102,7 @@ ul.actor-stack {
    the muted line it was, underlined only under the pointer or the keyboard. */
 .plan-edit-link {
   padding: 0;
-  border-radius: 4px;
+  border-radius: 4px; /* off-scale: the keyboard ring's corner around words */
   background: none;
   color: inherit;
   font: inherit;
@@ -3111,7 +3111,7 @@ ul.actor-stack {
 
 .plan-edit-link:hover,
 .plan-edit-link:focus-visible {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
@@ -6177,7 +6177,7 @@ button.automation-run:hover {
 }
 
 .task-page-head {
-  padding-top: var(--space-32);
+  padding-top: var(--luke-space-32);
 }
 
 /* A column too narrow for the name and the page's actions on one line
@@ -6188,15 +6188,17 @@ button.automation-run:hover {
   align-items: center;
 }
 
+/* The template's name in the page title role, where a Settings page's
+   title stands. */
 .template-document .task-page-head .markdown-heading[data-level="1"] {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--luke-type-title-size);
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.015em;
-  line-height: var(--control-height);
+  line-height: var(--luke-type-title-leading);
 }
 
 .task-page-head .plan-edit-note {
-  margin: var(--space-4) 0 0;
+  margin: var(--luke-space-4) 0 0;
 }
 
 /* A search landing on the note keeps the name over it in view. */
@@ -6608,6 +6610,12 @@ button.automation-run:hover {
 }
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */
+
+/* The toolbar's toggle stands in the toolbar's row as its button alone; its
+   box only marks it as the card's opener. */
+.summary-toggle {
+  display: contents;
+}
 
 /* What the column shows, beside the plan's summary: under the toolbar and
    over the call bar, which both span the column. The room the summary takes

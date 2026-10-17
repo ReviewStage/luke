@@ -210,9 +210,10 @@
 
 /* Who last edited the plan, over the document in the muted meta weight. */
 .plan-edit-note {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* Who last changed a section, and when: the writer's face and a few
@@ -290,8 +291,8 @@
    shown as the byline is. Note that it stays drawn while its menu stands, as
    every ⋯ does. */
 .plan-unit-more {
+  display: flex;
   flex: none;
-  height: var(--control-height);
   opacity: 0;
   pointer-events: auto;
   transition: opacity var(--duration-hover) ease;
@@ -299,7 +300,7 @@
 
 .plan-unit-attributed:hover .plan-unit-more,
 .plan-unit-attributed:focus-within .plan-unit-more,
-.plan-unit-more[aria-expanded="true"] {
+.plan-unit-more:has([aria-expanded="true"]) {
   opacity: 1;
 }
 
@@ -499,16 +500,18 @@
 }
 
 /* How many sections changed since the last look, under the "Edited by"
-   line in the same muted weight, with its dismissal, held to the line's
-   own height so the button does not push the document down. */
+   line in the caption role, with its dismissal. The line keeps the room it
+   always had and the Dismiss button overhangs it, so the button does not
+   push the document down. */
 .plan-changed-note {
-  --control-height: 22px;
   display: flex;
+  height: 22px; /* off-scale: the line's room under "Edited by", which the button overhangs */
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: -6px 0 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The text open in its editor, in the document's own type, so the words do
@@ -548,7 +551,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
 .task-title-line > .task-title {
@@ -559,7 +562,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 /* The title breaks inside a word only where the word is wider than the
@@ -571,7 +574,7 @@
 
 /* The title is edited where it is drawn: its caret in the accent and no box. */
 .task-title-text {
-  caret-color: var(--accent);
+  caret-color: var(--luke-color-accent);
   outline: none; /* no ring: the caret alone, edited where it is drawn */
 }
 
