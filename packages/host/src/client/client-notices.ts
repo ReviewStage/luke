@@ -57,13 +57,24 @@ function accountKey(account: AccountSnapshot): string | undefined {
  * forward reads the account's workspaces again.
  *
  * A refresh a callback asks for is forked into a set this scope owns, so it
- * runs on the services the client was built with and ends with the scope.
+ * runs on the services the client was built with and ends with the scope, and
+ * a defect in one is reported rather than left in a set nobody joins.
  */
 export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNotices")(function* (
   dependencies: ClientNoticesDependencies,
 ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
   const { state, host, presenter, onPanelFocusChanged, report } = dependencies;
   const fork = yield* FiberSet.makeRuntime();
+  // Note that a defect is reported here, because nothing joins the set a refresh is forked into.
+  const forkReported = (refresh: Effect.Effect<void>, what: string): void => {
+    fork(
+      Effect.catchDefect(refresh, (defect) =>
+        Effect.sync(() =>
+          report(`${what} failed: ${defect instanceof Error ? defect.message : String(defect)}`),
+        ),
+      ),
+    );
+  };
   const notices = yield* createAgentNotices({
     listAgents: (planId) => host.codingAgentList({ taskId: planId }),
     readAgent: (agentId) => host.codingAgentPage({ agentId }),
@@ -84,7 +95,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
       host.onAccountChanged((account) => listener(accountKey(account))),
     // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.
     onTaskAgentsMoved: () => {
-      fork(host.tasksRefresh());
+      forkReported(host.tasksRefresh(), "the task list refresh");
     },
     readAccountInbox: (after) => host.codingAgentAccountInbox({ after }),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
@@ -119,7 +130,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       onPanelFocusChanged((focused) => {
-        if (focused) fork(host.workspacesRefresh());
+        if (focused) forkReported(host.workspacesRefresh(), "the workspaces refresh");
       }),
     ),
     (unsubscribe) => Effect.sync(unsubscribe),
