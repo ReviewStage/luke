@@ -3001,6 +3001,14 @@ button.pull-request-check:hover {
   color: var(--text-secondary);
 }
 
+/* A box closed for good (`agent-composer.tsx`) wears the held look a box
+   sending does, faded and taking no press, so the note and Continue under
+   it read as the way on. */
+.agent-composer[data-closed] > form {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 /* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
    and files faded, as words that did not go, and the quiet mark under
    them in the danger red a failure note speaks in. */
@@ -3080,6 +3088,7 @@ button.pull-request-check:hover {
 
 .draft-fork-quote {
   min-width: 0;
+  background: none;
   overflow: hidden;
   color: var(--text-primary);
   text-overflow: ellipsis;
@@ -3098,6 +3107,7 @@ button.draft-fork-quote:hover {
   height: 20px;
   margin-left: auto;
   border-radius: 4px;
+  background: none;
   color: var(--text-tertiary);
 }
 

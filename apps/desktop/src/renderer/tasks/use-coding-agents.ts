@@ -752,15 +752,17 @@ export function useCodingAgents(input: {
 
   // Note that a continue joins the task's draft as a fork does, under a key
   // of its own for the same reason, unless the draft already continues the
-  // same agent, whose key it keeps, so a Start it sent and never heard
-  // answered is answered with the agent it made.
+  // same agent and nothing is laid in, when it keeps its key, so a Start it
+  // sent and never heard answered is answered with the agent it made; words
+  // or files laid in make another request, which that agent never had.
   const onContinueDraft = (
     sourceId: string,
     words: string,
     attachments: readonly CodingAgentAttachment[],
   ): string => {
     const joins = draft?.fork?.agentId === sourceId && draft.fork.messageId === undefined;
-    const id = joins && draft !== undefined ? draft.id : mintKey();
+    const adds = words.trim() !== "" || attachments.length > 0;
+    const id = joins && !adds && draft !== undefined ? draft.id : mintKey();
     if (taskId === undefined) return id;
     const source = held?.find((agent) => agent.id === sourceId);
     const fork = continueFork(sourceId);

@@ -21,6 +21,11 @@ const UndeliveredContext = createContext<ReadonlySet<string>>(new Set());
 /** Hands an agent's transcript the ids of the lines the agent refused for good. */
 export const UndeliveredLines = UndeliveredContext.Provider;
 
+/** The ids of the lines the agent refused for good, none of which is the brief its transcript opens on. */
+export function useUndeliveredLines(): ReadonlySet<string> {
+  return useContext(UndeliveredContext);
+}
+
 /** The mark under a line the agent refused for good; nothing under any other. */
 export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode {
   const undelivered = useContext(UndeliveredContext);

@@ -668,7 +668,7 @@ test("a continue opens the task's draft with the closed box's words and files af
   assert.equal(after.control().draft, undefined, "the started continue's draft is let go");
 });
 
-test("a second Continue of the agent the draft already continues keeps its key and its chips, laying any new words in after the draft's", async () => {
+test("a second Continue of the agent the draft already continues keeps its key and its chips where it lays nothing in, and takes a key of its own for new words, which a Start already sent never had", async () => {
   const tab = mount({ taskId: TASK, repository: "acme/relay" });
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
   await tab.mount();
@@ -686,6 +686,14 @@ test("a second Continue of the agent the draft already continues keeps its key a
   assert.equal(second, first);
   assert.equal(tab.control().draft?.prompt, "Carry on.");
   assert.deepEqual(tab.control().draft?.choice, { model: "openai/gpt-6.1-sol", effort: "low" });
+
+  let third = "";
+  act(() => {
+    third = tab.control().onContinueDraft(AGENT, "Fix lint too.", []);
+  });
+  assert.notEqual(third, first);
+  assert.equal(tab.control().draft?.id, third);
+  assert.equal(tab.control().draft?.prompt, "Carry on.\n\nFix lint too.");
 });
 
 test("continuing an agent starts on the task from its whole transcript under the agent's own key, a press asked again after no answer carrying the same key, and the new agent's tab opens as a Start's does", async () => {

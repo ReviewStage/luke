@@ -390,6 +390,10 @@ test("a box closed on an ended agent offers Continue in new agent beside its not
   );
   // The refused line stays where it went, marked, and the closed box does not draw its words again.
   assert.equal(composerEditor(tab.container).textContent, "", "the words show once");
+  assert.ok(
+    tab.container.querySelector(".agent-composer[data-closed]"),
+    "the box wears its held look",
+  );
   assert.equal(tab.lines("Now add the dark variant.").length, 1);
   const [line] = tab.lines("Now add the dark variant.");
   assert.match(
@@ -572,4 +576,23 @@ test("where the tab's place opens drafts, Continue on a closed box opens the con
   assert.deepEqual(tab.continued, [], "nothing is sent until the draft is");
   assert.equal(tab.lines("Now add the dark variant.").length, 1, "the refused line still stands");
   assert.equal(button.disabled, false, "nothing is out to hold the press for");
+});
+
+test("a message refused before the transcript has read anything stands as the developer's line marked Not delivered, never as the agent's plan", async () => {
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.COMPLETED,
+    message: { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED },
+    seed: { words: "Continue testing.", files: [NOTES] },
+    messages: [],
+  });
+  const send =
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ??
+    assert.fail("the box offers Send");
+  await act(async () => send.click());
+  await settle();
+
+  const [line] = tab.lines("Continue testing.");
+  assert.ok(line, "the refused line is the developer's");
+  assert.ok(line.querySelector("[data-undelivered]"), "marked as not delivered");
+  assert.match(line.textContent ?? "", /notes\.md/u, "with its file");
 });

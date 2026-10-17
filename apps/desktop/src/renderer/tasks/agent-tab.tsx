@@ -132,7 +132,7 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
-import { UndeliveredLines, UndeliveredMark } from "./undelivered-mark";
+import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
@@ -1184,6 +1184,7 @@ function AgentTranscriptView({
   endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
+  const undelivered = useUndeliveredLines();
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
@@ -1191,7 +1192,10 @@ function AgentTranscriptView({
     // any other is, but where something sent it, an automation, when it is
     // that sender's card; the rest the developer sent since.
     const first = messages.find(
-      (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+      (message) =>
+        message.role === MESSAGE_ROLE.USER &&
+        chatNoticeOf(message) === undefined &&
+        !undelivered.has(message.id),
     );
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
