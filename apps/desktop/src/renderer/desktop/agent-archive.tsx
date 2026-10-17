@@ -7,6 +7,7 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
@@ -15,7 +16,6 @@ import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 

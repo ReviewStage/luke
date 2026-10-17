@@ -11,7 +11,16 @@ import {
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
-import { CopyIcon, DownloadIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import {
+  CopyIcon,
+  DownloadIcon,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+} from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
   ClipboardCopyIcon,
@@ -23,7 +32,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
@@ -303,7 +311,7 @@ export function ChangesCard({
   const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
-      <CardHead
+      <HoverCardHead
         name={pullRequest.title}
         sub={<AgentActorRef subject={subject} models={models} onOpen={onOpenAgent} />}
         corner={
@@ -313,19 +321,19 @@ export function ChangesCard({
           </>
         }
       />
-      <CardNote>
+      <HoverCardNote>
         {count} {count === 1 ? "file" : "files"} changed{" "}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-      </CardNote>
+      </HoverCardNote>
       {people?.author === undefined ? null : (
-        <CardNote oneLine>
+        <HoverCardNote oneLine>
           <OpenedBy person={people.author} />
-        </CardNote>
+        </HoverCardNote>
       )}
       {reviewers.length === 0 ? null : (
-        <CardNote>
+        <HoverCardNote>
           <ReviewersLine reviewers={reviewers} />
-        </CardNote>
+        </HoverCardNote>
       )}
     </HoverCard>
   );

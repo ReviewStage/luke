@@ -1,5 +1,5 @@
+import { useClipped } from "@luke/ui/use-clipped";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 
 /**
  * one-line.tsx -- a row's words held to one line, an ellipsis where the row cuts them short, and the pointer resting on them reading them whole.

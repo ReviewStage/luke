@@ -72,6 +72,7 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
@@ -98,7 +99,6 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";

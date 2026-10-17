@@ -443,8 +443,8 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  assert.equal(card?.querySelector(".card-name")?.textContent, "Invoice export");
-  assert.equal(card?.querySelector(".card-corner")?.textContent, "Working…");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
+  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, "Working…");
   press("Invoice export · Billing usage alerts");
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
 });
@@ -798,8 +798,8 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.deepEqual(
     [
-      card?.querySelector(".card-name")?.textContent,
-      card?.querySelector(".card-note")?.textContent,
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      card?.querySelector(".luke-hover-card-note")?.textContent,
     ],
     [path, note],
   );

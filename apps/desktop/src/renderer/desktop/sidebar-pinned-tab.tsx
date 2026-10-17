@@ -1,11 +1,20 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
-import { CopyIcon, DocumentIcon, UnpinIcon, useMenu } from "@luke/ui";
+import {
+  CopyIcon,
+  DocumentIcon,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  HoverCardRule,
+  UnpinIcon,
+  useMenu,
+} from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
+import { useClipped } from "@luke/ui/use-clipped";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy";
 import type { PullRequestReader } from "../tasks/use-agent-pull-request";
@@ -13,7 +22,6 @@ import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { PinnedTab } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
@@ -208,17 +216,17 @@ function PinnedTabCard({
   const { openGitHub, pictures } = tasks.repositories;
   return (
     <HoverCard data-pinned-tab-card="">
-      <CardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
+      <HoverCardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
       <div className="task-card-rows">
         <CardDetail glyph={<DocumentIcon />} label={task.name} onPress={onOpenTask} />
         {repository === null ? null : (
           <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
         )}
       </div>
-      {gone ? <CardNote>{GONE_NOTE}</CardNote> : null}
+      {gone ? <HoverCardNote>{GONE_NOTE}</HoverCardNote> : null}
       {pullRequest === undefined ? null : (
         <>
-          <CardRule />
+          <HoverCardRule />
           <ul className="task-card-rows" aria-label="Pull request">
             <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
           </ul>

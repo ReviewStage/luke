@@ -189,10 +189,18 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   assert.equal(standing.length, 2, "the automation's card hangs over the agent's");
   const automation = standing[1]?.querySelector<HTMLElement>("[data-actor-card='automation']");
   assert.ok(automation, "the automation's card");
-  assert.equal(automation.querySelector(".card-name")?.textContent, "Morning Sentry triage");
-  assert.equal(automation.querySelector(".card-sub")?.textContent, "Weekdays at 9:00 · UTC");
-  assert.equal(automation.querySelector(".card-corner")?.textContent, "Acme");
-  const notes = [...automation.querySelectorAll(".card-note")].map((note) => note.textContent);
+  assert.equal(
+    automation.querySelector(".luke-hover-card-name")?.textContent,
+    "Morning Sentry triage",
+  );
+  assert.equal(
+    automation.querySelector(".luke-hover-card-sub")?.textContent,
+    "Weekdays at 9:00 · UTC",
+  );
+  assert.equal(automation.querySelector(".luke-hover-card-corner")?.textContent, "Acme");
+  const notes = [...automation.querySelectorAll(".luke-hover-card-note")].map(
+    (note) => note.textContent,
+  );
   assert.equal(notes[0], "Not scheduled");
   assert.match(notes[1] ?? "", /^Last ran .+ · Finished$/u);
 
@@ -226,7 +234,7 @@ test("an automation a GitHub event fires says where on its card, as its row in t
   hover(card.querySelector(".actor-words .actor-ref") ?? assert.fail("the automation is named"));
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(
-    automation?.querySelector(".card-sub")?.textContent,
+    automation?.querySelector(".luke-hover-card-sub")?.textContent,
     "When a pull request by people is opened in acme/relay or acme/ledger",
   );
 });

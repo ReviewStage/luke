@@ -22,6 +22,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { BackIcon, ChevronRightIcon, ErrorState } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
+import { useClipped } from "@luke/ui/use-clipped";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -37,7 +38,6 @@ import { SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import {
   AgentActorRef,
   AgentCard,

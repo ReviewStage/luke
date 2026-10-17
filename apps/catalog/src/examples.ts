@@ -14,6 +14,7 @@ import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
+import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
@@ -62,6 +63,7 @@ export const EXAMPLES: readonly Example[] = [
   ERROR_STATES_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   FORM_SECTION_EXAMPLE,
+  HOVER_CARDS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,

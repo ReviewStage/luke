@@ -2,6 +2,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -14,7 +15,6 @@ import { useCopyToast } from "../copy-feedback";
 import { FindScope } from "../find-in-tab";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import { CodeLineRows } from "./code-pane";
 import { LinesMenu } from "./file-menu";
 import { useLinesLook } from "./file-tab";
