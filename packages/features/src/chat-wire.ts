@@ -570,8 +570,11 @@ export const chatResolveRequestSchema = EffectSchema.Struct({
   }),
 });
 
-/** A person's window saying they have read to a place. */
-export const chatReadToRequestSchema = EffectSchema.Struct({ readTo: countedNumber });
+/** A person's window saying they have read to a place: in the channel named, or across every channel where none is. */
+export const chatReadToRequestSchema = EffectSchema.Struct({
+  readTo: countedNumber,
+  channelId: EffectSchema.optionalKey(wireUuidSchema),
+});
 
 /**
  * What the window writes to a workspace's chat (POST): a post, an answer to

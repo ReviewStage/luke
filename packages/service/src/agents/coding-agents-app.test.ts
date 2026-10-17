@@ -5319,6 +5319,11 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           readSeq: asked.message.seq,
         });
         assert.deepEqual(yield* chat.wrote({ readTo: 0 }), { readSeq: asked.message.seq });
+        // One channel's read is refused while the store keeps one cursor per member.
+        assert.deepEqual(
+          yield* chat.write({ readTo: asked.message.seq, channelId: chat.channel.id }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
         assert.equal((yield* chat.read).readSeq, asked.message.seq);
 
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);

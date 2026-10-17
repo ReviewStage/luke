@@ -149,6 +149,7 @@ test("a window's write is a post with its words one way and one place, an answer
     { answer: { seq: 41, revision: 2, reply: { reply: CHAT_REPLY.APPROVED } }, clientKey: key },
     { resolve: { seq: 41, reason: "Settled in the call." } },
     { readTo: 41 },
+    { readTo: 41, channelId: "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f" },
   ]) {
     assert.equal(takes(chatWriteRequestSchema, write), true, JSON.stringify(write));
   }
@@ -167,6 +168,7 @@ test("a window's write is a post with its words one way and one place, an answer
     { answer: { seq: 41, revision: 2, reply: { reply: CHAT_REPLY.APPROVED } } },
     { resolve: { seq: 41, reason: "" } },
     { readTo: -1 },
+    { readTo: 41, channelId: "general" },
   ]) {
     assert.equal(takes(chatWriteRequestSchema, write), false, JSON.stringify(write));
   }

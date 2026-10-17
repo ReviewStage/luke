@@ -10,7 +10,7 @@ import {
   findOrMakeDm,
   memberNamed,
   messageAt,
-  readTo,
+  readAllTo,
   resolveAsk,
 } from "@luke/database/models/chat-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -350,13 +350,22 @@ const resolveAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { resolved: messageOnWire(resolved.value) });
 });
 
-/** How far the person has read, moved on to the place given, never back. */
+/**
+ * How far the person has read, moved on to the place given across every
+ * channel, never back. Note that a read naming one channel is refused,
+ * because the store keeps one cursor per member until per-channel cursors
+ * land, and moving them all would tell the window a channel moved that it
+ * did not name.
+ */
 const readToAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Writer,
-  seq: number,
+  read: { readonly readTo: number; readonly channelId?: string },
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, DatabaseServices> {
   const { userId, organizationId, self } = writer;
-  const moved = yield* hostedStoreOrUnavailable(readTo(userId, organizationId, self.id, seq));
+  if (read.channelId !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const moved = yield* hostedStoreOrUnavailable(
+    readAllTo(userId, organizationId, self.id, read.readTo),
+  );
   if (Option.isNone(moved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { readSeq: moved.value });
 });
@@ -378,7 +387,7 @@ const writeChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   const writer = { userId, organizationId, self: self.value };
   const telling = tellingOf(seams, writer);
   const write = asked.success;
-  if ("readTo" in write) return yield* readToAsPerson(writer, write.readTo);
+  if ("readTo" in write) return yield* readToAsPerson(writer, write);
   if ("resolve" in write) {
     return yield* resolveAsPerson(writer, write.resolve.seq, write.resolve.reason);
   }

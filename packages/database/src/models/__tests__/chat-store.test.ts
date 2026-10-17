@@ -45,6 +45,7 @@ import {
   peekUnread,
   postAsk,
   postMessage,
+  readAllTo,
   readAttachment,
   readThrough,
   readTo,
@@ -753,7 +754,7 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
 
         assert.equal(yield* markNoticed(room.owner, room.workspace, room.ada.id, posted.seq), true);
         assert.deepEqual(
-          yield* readTo(room.owner, room.workspace, room.ada.id, posted.seq),
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, posted.seq),
           Option.some(posted.seq),
         );
         // The notice it passed is let go, so the next one is told.
@@ -762,20 +763,20 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
           true,
         );
         assert.deepEqual(
-          yield* readTo(room.owner, room.workspace, room.ada.id, 0),
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, 0),
           Option.some(posted.seq),
         );
         assert.deepEqual(
-          yield* readTo(room.owner, room.workspace, room.ada.id, 999),
+          yield* readAllTo(room.owner, room.workspace, room.ada.id, 999),
           Option.some(private_.seq),
         );
         // A person moves no other person's cursor.
         assert.deepEqual(
-          yield* readTo(room.teammate, room.workspace, room.ada.id, private_.seq),
+          yield* readAllTo(room.teammate, room.workspace, room.ada.id, private_.seq),
           Option.none(),
         );
         assert.deepEqual(
-          yield* readTo(yield* openAccount(), room.workspace, room.ada.id, 1),
+          yield* readAllTo(yield* openAccount(), room.workspace, room.ada.id, 1),
           Option.none(),
         );
       }),

@@ -2281,11 +2281,11 @@ export function messageAt(
 /**
  * Moves the member's cursor on to the place given, never back and never
  * past the workspace's head, letting go of a notice it passes: what a
- * person's window says they have read to. Answers where the cursor then
- * stands; nothing where the account is not in the workspace or may not act
- * as the member.
+ * person's window says they have read to, across every channel. Answers
+ * where the cursor then stands; nothing where the account is not in the
+ * workspace or may not act as the member.
  */
-export function readTo(
+export function readAllTo(
   userId: string,
   organizationId: string,
   readerId: string,

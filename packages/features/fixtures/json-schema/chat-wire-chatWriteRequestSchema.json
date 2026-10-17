@@ -259,6 +259,11 @@
         "readTo": {
           "type": "number",
           "minimum": 0
+        },
+        "channelId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
         }
       },
       "required": [
