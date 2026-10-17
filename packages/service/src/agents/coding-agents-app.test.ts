@@ -165,6 +165,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import { tasksApp } from "../tasks/tasks-app.js";
+import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -235,14 +236,6 @@ const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
 /** Where the group serves an image an agent's pull request's overview names. */
 const AGENT_GITHUB_IMAGE = "/api/agents/github-image";
-
-/**
- * The policy every byte the group serves is answered under: a page a browser
- * opens from them runs no script, loads nothing, and stands in an origin of
- * its own, so an SVG's markup never acts as this origin under the browser's
- * session cookie.
- */
-const SANDBOXED_BYTES = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 
 /** An SVG a repository might hold, with a script in it that must never run as a page of the service. */
 const SCRIPTED_SVG = new TextEncoder().encode(
@@ -1249,7 +1242,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
         assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(served.headers.get("content-type"), "image/svg+xml");
-        assert.equal(served.headers.get("content-security-policy"), SANDBOXED_BYTES);
+        assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
         assert.deepEqual(
@@ -3062,7 +3055,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
-        assert.equal(served.headers.get("content-security-policy"), SANDBOXED_BYTES);
+        assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
 
         assert.deepEqual(
@@ -3141,7 +3134,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
-        assert.equal(served.headers.get("content-security-policy"), SANDBOXED_BYTES);
+        assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.deepEqual(
           new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
           picture(1).bytes,

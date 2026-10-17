@@ -20,6 +20,11 @@ import {
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
+import {
+  type OpenedPagePolicy,
+  openedPagePolicy,
+  SANDBOXED_PAGE,
+} from "@luke/service/testing/content-policy";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -56,7 +61,7 @@ interface Answered {
   readonly status: number;
   readonly contentType: string | null;
   readonly cache: string | null;
-  readonly policy: string | null;
+  readonly policy: OpenedPagePolicy;
   readonly bytes: Uint8Array;
 }
 
@@ -96,7 +101,7 @@ const ask = (request: Request) =>
       status: response.status,
       contentType: response.headers.get("content-type"),
       cache: response.headers.get("cache-control"),
-      policy: response.headers.get("content-security-policy"),
+      policy: openedPagePolicy(response.headers),
       bytes,
     } satisfies Answered;
   });
@@ -155,7 +160,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
         assert.equal(served.contentType, PICTURE_TYPE.PNG);
         assert.equal(served.cache, "private, no-store");
         // Note that a page a browser opens from the bytes runs no script and stands in an origin of its own.
-        assert.equal(served.policy, "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        assert.deepEqual(served.policy, SANDBOXED_PAGE);
         assert.deepEqual([...served.bytes], [...PNG_BYTES]);
         assert.equal(
           (yield* ask(read(planId, answer.id, outsider))).status,
