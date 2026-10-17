@@ -1,6 +1,7 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
+import { CHANNEL_KIND } from "@luke/features/chat-wire";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -546,6 +547,8 @@ export interface TasksControl {
   onSectionRevealed: (ask: number) => void;
   /** Opens a task on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
   onShowInbox: (taskId: string) => void;
+  /** Opens a plan on its Chat tab, its channel of the workspace's chat, opening the tab where it was closed: what ⌘K's Chat row asks. */
+  onShowChat: (taskId: string) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
   inbox: readonly AppInboxTask[];
   /** The task whose Inbox is on screen, or none: what main is told, so an item it shows is not announced. */
@@ -1191,6 +1194,8 @@ export function useTasksTab(input: {
       setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU });
     }
   }
+  // The task's Chat tab on screen reads the task's plan channel, which the column below says once it knows its tab.
+  const [tabReading, setTabReading] = useState<string | undefined>(undefined);
   const liveChat = useWorkspaceChat({
     account: input.account,
     workspaceId: listedWorkspace?.id,
@@ -1198,7 +1203,7 @@ export function useTasksTab(input: {
     reading:
       shown && standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL
         ? standIn.place.channelId
-        : undefined,
+        : tabReading,
     readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
     writeChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_POST, params),
   });
@@ -1386,6 +1391,14 @@ export function useTasksTab(input: {
     standIn === undefined &&
     fixture === undefined &&
     !sidePanel.fullScreen;
+  // The task's Chat tab on screen is its plan channel read, as the window's Chat on a channel is.
+  const tabChannel =
+    columnShown && mainTabs.tab === MAIN_TAB.CHAT
+      ? liveChat.chat?.channels.find(
+          (channel) => channel.kind === CHANNEL_KIND.PLAN && channel.planId === viewed.activeTaskId,
+        )?.id
+      : undefined;
+  if (tabChannel !== tabReading) setTabReading(tabChannel);
   // An agent's page stands in the task's place, showing its agent as its tab would.
   const shownAgent =
     shown && fixture === undefined && agentView !== undefined
@@ -2864,6 +2877,7 @@ export function useTasksTab(input: {
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
     onShowInbox: guard((planId: string) => showColumnTab(planId, MAIN_TAB.INBOX)),
+    onShowChat: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.CHAT)),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
     onOpenPinnedTab: guard((pin: PinnedTab) => {
       const { tab } = pin;

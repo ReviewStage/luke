@@ -598,7 +598,10 @@ function AgentPartView({
       }
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
-      const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      // A chat call opens Chat only while the window offers it; otherwise its row folds open as any call's does.
+      const called = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      const target =
+        called?.kind === TOOL_TARGET.CHAT && delegation?.chatOn !== true ? undefined : called;
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
         return (

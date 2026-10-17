@@ -28,6 +28,7 @@ import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
+import { useChatOn } from "../tasks/chat-gate";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
@@ -65,6 +66,7 @@ import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { useExperiment } from "../use-app-state";
+import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
@@ -352,6 +354,7 @@ function PlanDocument({
   const { region } = tasks;
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
+  const chatOn = useChatOn();
   const { act } = useAct();
   const openLink = useOpenLink();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
@@ -566,6 +569,8 @@ function PlanDocument({
         return openColumnTab(MAIN_TAB.PLAN);
       case TOOL_TARGET.INBOX:
         return openColumnTab(MAIN_TAB.INBOX);
+      case TOOL_TARGET.CHAT:
+        return chatOn ? openColumnTab(MAIN_TAB.CHAT) : undefined;
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -667,6 +672,7 @@ function PlanDocument({
                         keys={tasks.shown && !sideFocused}
                         shown={tasks.shown}
                         inbox={inbox.board.open.length}
+                        chat={chatOn && tasks.chatView.available}
                         actionsSlot={actionsSlot}
                         onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
                         onOpenOnMac={openOnMac}
@@ -784,7 +790,14 @@ function PlanDocument({
                           }}
                         />
                       ) : null}
-                      {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
+                      {tab === MAIN_TAB.CHAT && chatOn ? (
+                        <section className="desktop-plan-chat" role="tabpanel" aria-label="Chat">
+                          <TaskChatTab tasks={tasks} taskId={task.id} />
+                        </section>
+                      ) : null}
+                      {tab === MAIN_TAB.PLAN ||
+                      tab === MAIN_TAB.INBOX ||
+                      tab === MAIN_TAB.CHAT ? null : (
                         <AgentPane
                           label={mainTabLabel(tab, agents)}
                           tabbed

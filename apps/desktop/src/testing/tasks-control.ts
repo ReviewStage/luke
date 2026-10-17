@@ -259,6 +259,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     sectionReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
+    onShowChat: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,
