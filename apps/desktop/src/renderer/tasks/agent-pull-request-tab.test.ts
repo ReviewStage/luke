@@ -696,8 +696,8 @@ test("a review that only left line comments draws each thread under it: its file
     endSide: "additions",
   });
   assert.deepEqual(
-    [preview?.look.layout, preview?.look.changedWords, preview?.excerpt],
-    ["unified", false, true],
+    [preview?.look.layout, preview?.look.inlineDiff, preview?.excerpt],
+    ["unified", "none", true],
     "a preview is an excerpt drawn unified, its lines tinted whole",
   );
   assert.equal(

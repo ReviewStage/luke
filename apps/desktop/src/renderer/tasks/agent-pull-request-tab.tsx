@@ -26,6 +26,7 @@ import {
 import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { INLINE_DIFF } from "@luke/settings/diff-view";
 import { CopyIcon, ProviderMark } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
@@ -727,7 +728,7 @@ function ThreadCard({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
-  const look = { ...useDiffLook(false), changedWords: false };
+  const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
   const openLink = useOpenLink();
   const preview = threadPreview(thread);
   const lines = threadLines(thread);

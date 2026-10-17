@@ -10,22 +10,32 @@
  * other is on or not: Hide bots the comments and reviews, Hide resolved
  * the threads.
  *
- * The choice is the window's own, as the File tabs' view settings are
- * (`file-view-settings.ts`): no other window draws a conversation and main
- * never reads it, so it is kept in the renderer's storage rather than
- * crossing to the settings file. One choice holds for every pull request,
+ * The choice is the window's own, as the sidebar's fold is
+ * (`../desktop/sidebar-collapse.ts`): no other window draws a conversation
+ * and main never reads it, so it is kept in the renderer's storage rather
+ * than crossing to the settings file. One choice holds for every pull request,
  * both off until changed, and a change in one tab is drawn at once in every
  * other. Each is read on its own, so one that no longer reads leaves the
  * other as it was kept.
  */
 
 import type { ConversationEntry, ReviewThread } from "@luke/features/coding-agent-wire";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { useSyncExternalStore } from "react";
-import { keptOr } from "./file-view-settings";
 
 /** The storage key the choice is kept under. */
 const CONVERSATION_FILTERS_KEY = "luke.conversation-filters";
+
+/** A kept filter read on its own: as kept where it reads, its default where it is missing or does not. */
+function keptOr<S extends Schema.Codec<unknown, unknown>>(
+  schema: S,
+  fallback: S["Type"] & S["Encoded"],
+) {
+  return schema.pipe(
+    Schema.catchDecoding(() => Effect.succeed(Option.some(fallback))),
+    Schema.withDecodingDefault(Effect.succeed(fallback)),
+  );
+}
 
 /** Both filters off, as the conversation draws until told otherwise. */
 const DEFAULT_FILTERS = { hideBots: false, hideResolved: false } as const;
