@@ -5,8 +5,8 @@ import type { Board } from "@luke/features/board-wire";
  *
  * Excalidraw is too large for the bundle every window parses, so it ships as
  * a bundle of its own (`whiteboard.js`, built from `./index.tsx`) that the
- * Tasks tab loads the first time a board is shown. That bundle sets one
- * global, `window.lukeWhiteboard`, and this file is the whole of what the two
+ * Tasks tab loads the first time a board is shown. That bundle exports one
+ * module, `whiteboard`, and this file is the whole of what the two
  * share: no Excalidraw type crosses, only the board's own wire shape, and
  * nothing here imports a value, so the whiteboard bundle carries none of the
  * panel's libraries.
@@ -42,7 +42,7 @@ export interface WhiteboardHandle {
   readonly unmount: () => void;
 }
 
-/** What the whiteboard bundle sets on `window` once it has loaded. */
+/** What the whiteboard bundle's entry exports, which the panel imports the first time it is needed (`../bundle-loader.ts`). */
 export interface WhiteboardModule {
   readonly mount: (host: HTMLElement, props: WhiteboardProps) => WhiteboardHandle;
   /**
@@ -52,18 +52,6 @@ export interface WhiteboardModule {
    */
   readonly render: (elements: readonly object[]) => Promise<string | undefined>;
 }
-
-declare global {
-  interface Window {
-    lukeWhiteboard?: WhiteboardModule;
-  }
-}
-
-/** The files the whiteboard bundle is, beside `index.html`. */
-export const WHITEBOARD_ASSET = {
-  SCRIPT: "whiteboard.js",
-  STYLESHEET: "whiteboard.css",
-} as const;
 
 /** The scene's identity for saving: its element count and the sum of their versions. */
 export function sceneSignature(elements: readonly { readonly version: number }[]): string {

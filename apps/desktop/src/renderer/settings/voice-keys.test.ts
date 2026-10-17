@@ -115,6 +115,23 @@ test("a chord no talk key may be is refused, and the recording stays open", () =
   assert.deepEqual(asked, []);
 });
 
+test("a refusal still standing describes the field when it is returned to", () => {
+  const container = draw([]);
+
+  const recording = record(container);
+  press(recording, { key: "a", code: "KeyA" });
+  press(recording, { key: "Escape", code: "Escape" });
+
+  const talk = field(container, TALK_FIELD);
+  const described = (talk.getAttribute("aria-describedby") ?? "")
+    .split(" ")
+    .map((id) => document.getElementById(id)?.textContent ?? "")
+    .join(" ");
+  assert.equal(talk.getAttribute("aria-invalid"), "true");
+  assert.match(described, /and press a letter or Space\./u);
+  assert.match(described, /Space/u);
+});
+
 test("a chord the window already answers is refused by name", () => {
   const asked: (string | undefined)[] = [];
   const container = draw(asked);

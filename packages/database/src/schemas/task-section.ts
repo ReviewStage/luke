@@ -26,7 +26,7 @@ export const taskSection = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    // One emoji or one of Luke's glyphs (`@luke/features/task-section-wire`); null for none.
+    // One emoji, or one Lucide glyph by name in a color of the palette or none (`@luke/features/task-section-wire`); null for none.
     icon: jsonb("icon").$type<TaskSectionIcon>(),
     // Where it stands among the account's sections once dragged, a fractional index (`@luke/features/pin-order`); null stands it by `createdAt`.
     position: text("position"),
