@@ -66,7 +66,9 @@ import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
   firstMessageText,
+  REPLAY_SENDER,
   REPLAY_STEP_KIND,
+  REPLAY_TOOL_STATE,
   START_NOTE_HEADING,
   stepsBytes,
 } from "@luke/features/agent-replay";
@@ -5077,13 +5079,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           text(`Step ${turn}. ${"x".repeat(5_000)}`),
         ]);
       }
-      const continueFrom = (agentId: string, body: WireBoundaryInput = {}) =>
+      const continueFrom = (
+        agentId: string,
+        body: Readonly<Record<string, WireBoundaryInput>> = {},
+      ) =>
         Effect.map(
           opened.ask(
             startAs(opened.owner, opened.task.id, {
               idempotencyKey: randomUUID(),
               from: { agentId },
-              ...(body as object),
+              ...body,
             }),
           ),
           (answered) =>
@@ -5097,13 +5102,14 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, eve, stored, source } = yield* sourceAgent;
-        const output = `${"line of output\n".repeat(400)}the end`;
+        // A result that reads like a failure and a subject that reads like a running call are neither.
+        const output = `Failed: nothing, this is what it printed\n${"line of output\n".repeat(400)}the end`;
         yield* transcriptRow(stored, 6, MESSAGE_ROLE.ASSISTANT, [
           {
             type: "tool-bash",
             toolCallId: "call-2",
             state: "output-available",
-            input: { command: `pnpm test ${"--flag ".repeat(200)}` },
+            input: { command: `pnpm test ${"--flag ".repeat(200)}(running)` },
             output,
           },
         ]);
@@ -5120,6 +5126,15 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.deepEqual(started.from, { agentId: source.id, steps: 6, totalSteps: 6 });
         assert.ok(steps.at(-1)?.words.endsWith(`Result: ${output}`));
         assert.ok(steps.at(-1)?.words.includes("--flag ".repeat(200)));
+        assert.deepEqual(
+          [steps.at(-1)?.state, steps.at(-1)?.output, steps.at(-1)?.input],
+          [
+            REPLAY_TOOL_STATE.DONE,
+            output,
+            JSON.stringify({ command: `pnpm test ${"--flag ".repeat(200)}(running)` }),
+          ],
+        );
+        assert.deepEqual(steps[0]?.sender, { kind: REPLAY_SENDER.DEVELOPER });
       }),
   );
 

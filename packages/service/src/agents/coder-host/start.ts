@@ -68,7 +68,7 @@ import { readMentioned } from "../mentioned-reads.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
-import { replayOf, type StartFrom, startFromOf } from "./replay.js";
+import { type FittedReplay, replayOf, type StartFrom, startFromOf } from "./replay.js";
 import {
   fitReplay,
   REPLAY_FIT,
@@ -272,13 +272,7 @@ interface StartLanding {
 /** The agent a Start takes over from as its landing reads it: the source's prompt, the new agent's brief in the plan's place where it was handed one, and how its replay is fitted to the words of the first message beside it. */
 interface ReplayFitter {
   readonly prompt: string | undefined;
-  readonly fit: (
-    firstMessageWords: string,
-  ) => Effect.Effect<
-    { readonly replay: Replay; readonly startedFrom: StoredStartedFrom },
-    never,
-    DatabaseServices
-  >;
+  readonly fit: (firstMessageWords: string) => Effect.Effect<FittedReplay, never, DatabaseServices>;
 }
 
 /** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one; in a workspace, the prompt. */

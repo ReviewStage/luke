@@ -15,12 +15,15 @@ import type { StoredStartedFrom } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageParts,
+  REPLAY_SENDER,
   REPLAY_STEP_KIND,
+  REPLAY_TOOL_STATE,
   type Replay,
   type ReplayStep,
   type ReplaySummary,
   START_NOTE_HEADING,
   type StartNoteHeading,
+  toolStep,
 } from "@luke/features/agent-replay";
 import {
   base64Bytes,
@@ -130,10 +133,6 @@ const CALL_ENTRY_WORDS = {
 
 const REPLAY_WORDS = {
   SAID: "Said",
-  INPUT: "Input",
-  RESULT: "Result",
-  FAILED: "Failed",
-  NO_RESULT: "(no result: the call was still under way)",
   DEVELOPER: "The developer",
   LUKE: "Luke",
   FORMER_MEMBER: "A former member",
@@ -197,21 +196,40 @@ function wordsOf(value: UnparsedWireValue): string {
   return isWireString(value) ? value : (JSON.stringify(value) ?? "");
 }
 
-/** One call as a step: its line, its input and its result whole, or its failure, or that it had none yet. */
+/** One call as a step: its line, where it stood, and its input and its output whole, its result or its error, none while it ran. */
 function callStep(part: StoredToolPart): ReplayStep {
-  const result =
-    part.state === "output-available"
-      ? // SAFETY: a stored part's output is the JSON the row carried, and it is only said, never read into.
-        wordsOf(part.output as UnparsedWireValue)
-      : part.state === "output-error"
-        ? `${REPLAY_WORDS.FAILED}: ${part.errorText}`
-        : REPLAY_WORDS.NO_RESULT;
-  return {
-    kind: REPLAY_STEP_KIND.TOOL,
-    summary: callEntry(part),
-    // SAFETY: a stored part's input is the JSON the row carried, and it is only said, never read into.
-    words: `${REPLAY_WORDS.INPUT}: ${wordsOf(part.input as UnparsedWireValue)}\n${REPLAY_WORDS.RESULT}: ${result}`,
-  };
+  // SAFETY: a stored part's input is the JSON the row carried, and it is only said, never read into.
+  const input = wordsOf(part.input as UnparsedWireValue);
+  const summary = callEntry(part);
+  if (part.state === "output-available") {
+    // SAFETY: a stored part's output is the JSON the row carried, and it is only said, never read into.
+    const output = wordsOf(part.output as UnparsedWireValue);
+    return toolStep({ summary, state: REPLAY_TOOL_STATE.DONE, input, output });
+  }
+  if (part.state === "output-error") {
+    return toolStep({ summary, state: REPLAY_TOOL_STATE.FAILED, input, output: part.errorText });
+  }
+  return toolStep({ summary, state: REPLAY_TOOL_STATE.RUNNING, input });
+}
+
+/** Who sent a line, as the replay's marker names them: a member with their account, or the kind of sender, the developer where the row kept none. */
+function senderOf(sent: LineSent | undefined): NonNullable<ReplayStep["sender"]> {
+  switch (sent?.kind) {
+    case undefined:
+      return { kind: REPLAY_SENDER.DEVELOPER };
+    case MESSAGE_SENDER.MEMBER:
+      return sent.member === undefined
+        ? { kind: REPLAY_SENDER.MEMBER }
+        : { kind: REPLAY_SENDER.MEMBER, memberId: sent.member.userId };
+    case MESSAGE_SENDER.LUKE:
+      return { kind: REPLAY_SENDER.LUKE };
+    case MESSAGE_SENDER.AUTOMATION:
+      return { kind: REPLAY_SENDER.AUTOMATION };
+    case MESSAGE_SENDER.GITHUB:
+      return { kind: REPLAY_SENDER.GITHUB };
+    case MESSAGE_SENDER.AGENT:
+      return { kind: REPLAY_SENDER.AGENT };
+  }
 }
 
 /** Who sent a line, by the name a reader knows them by; the developer where the row kept no sender. */
@@ -232,12 +250,17 @@ function senderName(sent: LineSent | undefined): string {
   }
 }
 
-/** A line sent to the agent as a step, under who sent it. */
-function lineStep(speaker: string, words: string): ReplayStep {
+/** A line sent to the agent as a step, under who sent it, by name and as the marker names them. */
+function lineStep(
+  speaker: string,
+  sender: NonNullable<ReplayStep["sender"]>,
+  words: string,
+): ReplayStep {
   return {
     kind: REPLAY_STEP_KIND.LINE,
     summary: `${speaker}: ${cutLine(words, REPLAY_BOUNDS.SUMMARY_CHARS)}`,
     words,
+    sender,
   };
 }
 
@@ -251,7 +274,9 @@ function rowSteps(record: StoredMessageRecord, sent: LineSent | undefined): read
         return [`${REPLAY_WORDS.ATTACHED}: ${part.filename ?? part.mediaType}`];
       return [];
     });
-    return words.length === 0 ? [] : [lineStep(senderName(sent), words.join("\n\n"))];
+    return words.length === 0
+      ? []
+      : [lineStep(senderName(sent), senderOf(sent), words.join("\n\n"))];
   }
   if (role !== MESSAGE_ROLE.ASSISTANT) return [];
   return parts.flatMap((part): readonly ReplayStep[] => {
@@ -291,7 +316,11 @@ function briefOf(handed: string): HandedBrief {
 
 /** The note a source was handed as the step it opens on. */
 function noteStep(heading: StartNoteHeading, text: string): ReplayStep {
-  return lineStep(NOTE_SPEAKER.get(heading) ?? REPLAY_WORDS.DEVELOPER, text);
+  const sender =
+    heading === START_NOTE_HEADING.AGENT
+      ? { kind: REPLAY_SENDER.AGENT }
+      : { kind: REPLAY_SENDER.DEVELOPER };
+  return lineStep(NOTE_SPEAKER.get(heading) ?? REPLAY_WORDS.DEVELOPER, sender, text);
 }
 
 /** A file the source's prompt carried, as a Start attaches one again; nothing where eve kept no bytes of it. */
@@ -535,6 +564,12 @@ interface ReplayTold {
   readonly messageId: string | undefined;
 }
 
+/** A replay fitted to the new agent's window, and what the new agent's row keeps of where it came from. */
+export interface FittedReplay {
+  readonly replay: Replay;
+  readonly startedFrom: StoredStartedFrom;
+}
+
 /**
  * The replay a Start hands on, and what the new agent's row keeps of where
  * it came from: the steps kept, the newest, with the summary of the ones
@@ -545,7 +580,7 @@ export function replayOf(
   from: StartFrom,
   kept: readonly ReplayStep[],
   summary: ReplaySummary | undefined,
-): { readonly replay: Replay; readonly startedFrom: StoredStartedFrom } {
+): FittedReplay {
   const { source, told, totalSteps } = from;
   const counts = { kept: kept.length, total: totalSteps, summarized: summary?.steps ?? 0 };
   const preamble = preambleOf(source, told.published, told.copy, told.forked, counts, told.unkept);

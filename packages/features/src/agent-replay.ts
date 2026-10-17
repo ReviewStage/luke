@@ -19,6 +19,10 @@
  * message, so a note is told from a brief whose prose holds its heading,
  * with a replay or without.
  *
+ * A tool call's step marker also names where the call stood and its
+ * input's length, so its input and its output are read apart from its words
+ * by length rather than by what they say, and a line's names who sent it.
+ *
  * Every marker that a run of text follows says that text's length in
  * `chars=N`, counted as JavaScript counts a string's length, in UTF-16
  * code units, on both sides. A reader then takes exactly that much text
@@ -50,11 +54,77 @@ export const REPLAY_STEP_KIND = {
 
 type ReplayStepKind = (typeof REPLAY_STEP_KIND)[keyof typeof REPLAY_STEP_KIND];
 
-/** One step: its kind, its summary on one line, and its words as sent, a tool call's input and result whole. */
+/** Where a tool call stood: done with its result, failed with its error, or still under way with none. */
+export const REPLAY_TOOL_STATE = {
+  DONE: "done",
+  FAILED: "failed",
+  RUNNING: "running",
+} as const;
+
+export type ReplayToolState = (typeof REPLAY_TOOL_STATE)[keyof typeof REPLAY_TOOL_STATE];
+
+/** Who sent a line: a member of the workspace, Luke, an automation, GitHub, another agent, or the developer where the row named none. */
+export const REPLAY_SENDER = {
+  DEVELOPER: "developer",
+  MEMBER: "member",
+  LUKE: "luke",
+  AUTOMATION: "automation",
+  GITHUB: "github",
+  AGENT: "agent",
+} as const;
+
+type ReplaySenderKind = (typeof REPLAY_SENDER)[keyof typeof REPLAY_SENDER];
+
+/** A line's sender, with the member's account where a member sent it. */
+interface ReplaySender {
+  readonly kind: ReplaySenderKind;
+  readonly memberId?: string;
+}
+
+/**
+ * One step: its kind, its summary on one line, and its words as sent, a
+ * tool call's input and result whole. A tool call also carries where it
+ * stood, its input, and its output, its result or its error, none while it
+ * ran; a line carries who sent it. Each is read from the step's marker, so
+ * a step written before the marker named them carries none of them.
+ */
 export interface ReplayStep {
   readonly kind: ReplayStepKind;
   readonly summary: string;
   readonly words: string;
+  readonly state?: ReplayToolState;
+  readonly input?: string;
+  readonly output?: string;
+  readonly sender?: ReplaySender;
+}
+
+/** The words a tool call's step says, as the model reads them: its input, then its result, its failure, or that it had none yet. */
+const TOOL_WORDS = {
+  INPUT: "Input: ",
+  RESULT: "\nResult: ",
+  FAILED: "Failed: ",
+  NO_RESULT: "(no result: the call was still under way)",
+} as const;
+
+/** A tool call as a step, its words spelled from where it stood, its input, and its output. */
+export function toolStep(call: {
+  readonly summary: string;
+  readonly state: ReplayToolState;
+  readonly input: string;
+  readonly output?: string;
+}): ReplayStep {
+  const result =
+    call.state === REPLAY_TOOL_STATE.RUNNING
+      ? TOOL_WORDS.NO_RESULT
+      : `${call.state === REPLAY_TOOL_STATE.FAILED ? TOOL_WORDS.FAILED : ""}${call.output ?? ""}`;
+  return {
+    kind: REPLAY_STEP_KIND.TOOL,
+    summary: call.summary,
+    words: `${TOOL_WORDS.INPUT}${call.input}${TOOL_WORDS.RESULT}${result}`,
+    state: call.state,
+    input: call.input,
+    ...(call.state === REPLAY_TOOL_STATE.RUNNING ? undefined : { output: call.output ?? "" }),
+  };
 }
 
 /** A summary Luke wrote of the oldest steps the replay could not keep: its words, which are not the agent's own, and how many steps it stands for. */
@@ -110,7 +180,12 @@ const NOTE_OPEN_START = "<!-- luke:note ";
 
 const REPLAY_OPEN =
   /^<!-- luke:replay agent=([0-9a-f-]+)(?: message=([0-9a-f-]+))? steps=(\d+) total-steps=(\d+) chars=(\d+) -->\n/u;
-const STEP_OPEN = /^<!-- luke:step kind=([a-z]+) chars=(\d+) -->\n/u;
+const STEP_OPEN =
+  /^<!-- luke:step kind=([a-z]+)((?: [a-z-]+=[A-Za-z0-9_.:@-]+)*) chars=(\d+) -->\n/u;
+const STEP_ATTRIBUTE = / ([a-z-]+)=([A-Za-z0-9_.:@-]+)/gu;
+const ATTRIBUTE_VALUE = /^[A-Za-z0-9_.:@-]+$/u;
+const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(REPLAY_TOOL_STATE));
+const SENDER_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_SENDER));
 const SUMMARY_OPEN = /^<!-- luke:summary by=luke steps=(\d+) chars=(\d+) -->\n/u;
 
 const STEP_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_STEP_KIND));
@@ -121,10 +196,56 @@ function oneLine(text: string): string {
   return text.replace(/\s+/gu, " ").trim();
 }
 
+/** What a step's marker names beside its kind: a tool call's state and its input's length, or a line's sender and member. */
+function stepAttributes(step: ReplayStep): string {
+  if (step.kind === REPLAY_STEP_KIND.TOOL && step.state !== undefined && step.input !== undefined) {
+    return ` state=${step.state} input-chars=${step.input.length}`;
+  }
+  if (step.kind !== REPLAY_STEP_KIND.LINE || step.sender === undefined) return "";
+  const member = step.sender.memberId;
+  // A member id the marker cannot spell is left out, and the line is still the member's.
+  const named = member !== undefined && ATTRIBUTE_VALUE.test(member) ? ` member=${member}` : "";
+  return ` sender=${step.sender.kind}${named}`;
+}
+
 /** One step as the block spells it. */
 function stepText(step: ReplayStep): string {
   const body = `${oneLine(step.summary)}\n${step.words}`;
-  return `<!-- luke:step kind=${step.kind} chars=${body.length}${MARKER_END}${body}\n`;
+  return `<!-- luke:step kind=${step.kind}${stepAttributes(step)} chars=${body.length}${MARKER_END}${body}\n`;
+}
+
+/** A tool call's state, input, and output read back from its marker and its words; none where they do not add up. */
+function toolFields(
+  attributes: ReadonlyMap<string, string>,
+  words: string,
+): Pick<ReplayStep, "state" | "input" | "output"> {
+  const state = attributes.get("state") ?? "";
+  const inputChars = Number(attributes.get("input-chars") ?? Number.NaN);
+  if (!TOOL_STATES.has(state) || !Number.isInteger(inputChars)) return {};
+  if (!words.startsWith(TOOL_WORDS.INPUT)) return {};
+  const inputEnd = TOOL_WORDS.INPUT.length + inputChars;
+  if (!words.startsWith(TOOL_WORDS.RESULT, inputEnd)) return {};
+  const input = words.slice(TOOL_WORDS.INPUT.length, inputEnd);
+  const result = words.slice(inputEnd + TOOL_WORDS.RESULT.length);
+  // SAFETY: the state was checked against the vocabulary just above.
+  const known = state as ReplayToolState;
+  if (known === REPLAY_TOOL_STATE.RUNNING) return { state: known, input };
+  if (known === REPLAY_TOOL_STATE.DONE) return { state: known, input, output: result };
+  if (!result.startsWith(TOOL_WORDS.FAILED)) return {};
+  return { state: known, input, output: result.slice(TOOL_WORDS.FAILED.length) };
+}
+
+/** A line's sender read back from its marker; none where it names none it knows. */
+function lineFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "sender"> {
+  const kind = attributes.get("sender") ?? "";
+  if (!SENDER_KINDS.has(kind)) return {};
+  const member = attributes.get("member");
+  // SAFETY: the kind was checked against the vocabulary just above.
+  const sender = {
+    kind: kind as ReplaySenderKind,
+    ...(member === undefined ? undefined : { memberId: member }),
+  };
+  return { sender };
 }
 
 /** The summary as the block spells it, marked as Luke's words rather than the agent's. */
@@ -230,18 +351,24 @@ function stepsFrom(
   const steps: ReplayStep[] = [];
   let at = start;
   while (!text.startsWith(REPLAY_CLOSE, at)) {
-    const open = STEP_OPEN.exec(text.slice(at, at + 64));
-    const [marker, kind = "", chars = ""] = open ?? [];
+    const open = STEP_OPEN.exec(text.slice(at, at + 512));
+    const [marker, kind = "", named = "", chars = ""] = open ?? [];
     if (marker === undefined || !STEP_KINDS.has(kind)) return undefined;
     const body = markedRun(text, at + marker.length, Number(chars));
     if (body === undefined) return undefined;
     const split = body.run.indexOf("\n");
     if (split < 0) return undefined;
+    const attributes = new Map(
+      [...named.matchAll(STEP_ATTRIBUTE)].map(([, key = "", value = ""]) => [key, value]),
+    );
+    const words = body.run.slice(split + 1);
     steps.push({
       // SAFETY: the kind was checked against the vocabulary just above.
       kind: kind as ReplayStepKind,
       summary: body.run.slice(0, split),
-      words: body.run.slice(split + 1),
+      words,
+      ...(kind === REPLAY_STEP_KIND.TOOL ? toolFields(attributes, words) : undefined),
+      ...(kind === REPLAY_STEP_KIND.LINE ? lineFields(attributes) : undefined),
     });
     at = body.next;
   }
