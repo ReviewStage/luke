@@ -1,9 +1,8 @@
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
+import { AnchoredPopover, CHIP_LOOK, Chip, type ChipLook, POPOVER_ALIGN } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
-import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { HarnessMark } from "../harness-marks";
 import { Tooltip } from "../tooltip";
 import { agentUsageLine, choiceLabel, providerOf } from "./coding-agent-model";
@@ -15,7 +14,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * agent-model-chip.tsx -- the chip at the agent box's foot that names what the agent runs on, and the menu that changes it.
  *
  * Drawn along the composer card's foot as the window's toolbar chip
- * (`../chip.tsx`), the task toolbar's repository chip's look, with no
+ * (`@luke/ui`'s `Chip`), the task toolbar's repository chip's look, with no
  * border and no fill until the pointer is on it or its menu is open:
  * "Opus 5.5 High" (`model-label.tsx`), with "Fast" after the effort where
  * the fast version is on and the standard context window's size where the
@@ -44,7 +43,6 @@ export function AgentModelChip({
   readModels,
   usage,
   look = CHIP_LOOK.TOOLBAR,
-  className,
 }: {
   model: AgentModelControl;
   /** The catalog as last read; nothing before the first read lands. */
@@ -53,10 +51,8 @@ export function AgentModelChip({
   readModels: () => void;
   /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
-  /** The chip's look: the agent box's toolbar chip, or a form row's field (`../chip.tsx`). */
+  /** The chip's look: the agent box's toolbar chip, or a form row's field (`@luke/ui`'s `Chip`). */
   look?: ChipLook;
-  /** A class for the chip itself, such as the width a form's column gives it. */
-  className?: string | undefined;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -89,7 +85,6 @@ export function AgentModelChip({
           ref={trigger}
           look={look}
           chevron
-          className={className}
           aria-label={label}
           aria-haspopup="dialog"
           aria-expanded={open}
