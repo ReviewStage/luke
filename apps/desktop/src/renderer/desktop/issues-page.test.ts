@@ -1464,3 +1464,21 @@ test("a card dragged onto Done whose change the service refused stays in Todo an
   assert.deepEqual(columns(page)[3], ["Done", []]);
   assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
 });
+
+test("a card is sent the status of the column it is let go over, though the last move reported another", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const card = cardOf(page, issue(1).id);
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", 350, 60));
+    window.dispatchEvent(pointer("pointermove", 750, 120));
+    window.dispatchEvent(pointer("pointerup", 1000, 120));
+  });
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+});

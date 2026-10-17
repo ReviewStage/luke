@@ -367,6 +367,10 @@ export function useRowDrag(
         lower(press, list, true);
         return;
       }
+      // The drag is drawn where the pointer was let go, which a move may not have reported.
+      press.pointer = event.clientY;
+      press.pointerX = event.clientX;
+      draw(press, list, out);
       const zone = press.zone;
       if (zone !== undefined) {
         // The row now stands in the zone's list, so it comes down there rather than settling here.
