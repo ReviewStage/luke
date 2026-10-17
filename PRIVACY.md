@@ -227,7 +227,8 @@ follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
 **Sidebar sections.** When you make a section in the sidebar, our service
-stores its title, its icon, its place among your sections, and the workspace
+stores its title, its icon (an emoji, or an icon's name and the color you
+chose for it), its place among your sections, and the workspace
 it is in under your account, and, for each task you put in it, which task and
 when, so your sections follow you to every Mac you sign in on. They are yours
 alone: no teammate sees them. Deleting a section deletes those records and none

@@ -601,8 +601,7 @@ function HeirChip({
 }): React.JSX.Element {
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
-  // Note that the chip stands in a container of its own, because the field's
-  // width, wide enough for a name, is its place's and not the chip's.
+  // Note that a container holds the chip wide enough for a name, because width is its place's.
   return (
     <>
       <div className="workspace-heir">

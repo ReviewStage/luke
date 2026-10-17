@@ -14,6 +14,7 @@ import {
 } from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
@@ -38,9 +39,11 @@ import {
 } from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
+import { appBridge } from "./app-bridge";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
+import { appPlatform } from "./app-platform";
+import { usePrefetchEditorBundle } from "./bundle-loader";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useCallCardVideo } from "./call/panel-avatar";
 import { useWindowFocused } from "./call/use-window-focused";
@@ -50,7 +53,6 @@ import { DesktopShell } from "./desktop/desktop-shell";
 import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
-import { prefetchEditorBundle } from "./editor-bundle";
 import { FeedbackDialog } from "./feedback-dialog";
 import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
@@ -148,7 +150,8 @@ export function App(): React.JSX.Element {
     applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
   // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
-  useEffect(prefetchEditorBundle, []);
+  const prefetchEditorBundle = usePrefetchEditorBundle();
+  useEffect(prefetchEditorBundle, [prefetchEditorBundle]);
   // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
   useEffect(prefetchMarkdownHtmlParser, []);
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
@@ -165,7 +168,7 @@ export function App(): React.JSX.Element {
         setSettingsView(SETTINGS_VIEW.ACCOUNT);
         // `PanelTab` and the counted tab are the same union: both are
         // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
-        window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+        appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
           panel_tab: tab,
         });
       })(next),
@@ -243,7 +246,7 @@ export function App(): React.JSX.Element {
     shortcutCapture.current = capturing;
     // The talk and stop keys are routed by the main process to a window that
     // is not this one, so the recording is reported there to be honored.
-    window.luke.setShortcutCapturing(capturing);
+    appPlatform().setShortcutCapturing(capturing);
   }, []);
 
   // A capture run stages its conversation from the launch profile, since no
@@ -334,7 +337,7 @@ export function App(): React.JSX.Element {
       })(),
     [changeTab, guardLeave],
   );
-  useEffect(() => window.luke.onShowAgent(openAgent), [openAgent]);
+  useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
@@ -363,7 +366,7 @@ export function App(): React.JSX.Element {
   // holds its own workspace, so none read means none read yet).
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
-  useEffect(() => window.luke.onShowLink(openLink), [openLink]);
+  useEffect(() => appBridge().onShowLink(openLink), [openLink]);
   // A failed run's notification clicked, or its toast's View: the run's own link, held as any link is until the workspaces are read, so it opens in its automation's workspace.
   const openRunLink = useRef(openLink);
   openRunLink.current = openLink;
@@ -375,14 +378,14 @@ export function App(): React.JSX.Element {
       }),
     [],
   );
-  useEffect(() => window.luke.onShowFailedRun(openFailedRun), [openFailedRun]);
+  useEffect(() => appBridge().onShowFailedRun(openFailedRun), [openFailedRun]);
   // The call card's way back: the Tasks tab, on the call's task's document,
   // opening it where another task, or none, is open.
   const showTask = useRef(tasks.onShowTask);
   showTask.current = tasks.onShowTask;
   useEffect(
     () =>
-      window.luke.onShowTask(({ taskId: planId }) =>
+      appBridge().onShowTask(({ taskId: planId }) =>
         guardLeave(() => {
           changeTab(PANEL_TAB.TASKS);
           showTask.current(planId);
@@ -430,14 +433,14 @@ export function App(): React.JSX.Element {
       })(),
     [changeTab, guardLeave],
   );
-  useEffect(() => window.luke.onShowInbox(({ taskId }) => openInbox(taskId)), [openInbox]);
+  useEffect(() => appBridge().onShowInbox(({ taskId }) => openInbox(taskId)), [openInbox]);
   // A notification of an item of an agent with no task clicked: the window's Inbox, on that item
   // in its own workspace's list, the item itself shown where the Inbox shows one column.
   const inboxDoors = useRef(tasks);
   inboxDoors.current = tasks;
   useEffect(
     () =>
-      window.luke.onShowInboxItem(({ agentId, itemId, workspaceId }) =>
+      appBridge().onShowInboxItem(({ agentId, itemId, workspaceId }) =>
         guardLeave(() => {
           const doors = inboxDoors.current;
           changeTab(PANEL_TAB.TASKS);
@@ -490,7 +493,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (opened.current || !state?.settings) return;
     opened.current = true;
-    window.luke.notifyReady();
+    appBridge().notifyReady();
   }, [state]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —

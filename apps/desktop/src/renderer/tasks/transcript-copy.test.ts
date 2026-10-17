@@ -218,3 +218,35 @@ test("an agent started from another that has done nothing yet previews no step, 
   });
   assert.equal(latestActivity(copied), undefined);
 });
+
+test("a summary Luke wrote of the source's oldest steps is copied under its line, as his words, and its steps are not counted as left out", () => {
+  const first = firstMessageText(
+    "Fix the tile.",
+    {
+      agentId: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
+      preamble: "This is the work you continue from.",
+      summary: { text: "Read the tile code.\n\nFound the radius bug.", steps: 40 },
+      steps: [{ kind: REPLAY_STEP_KIND.SAID, summary: "Said: Fixed.", words: "Fixed." }],
+      totalSteps: 41,
+    },
+    undefined,
+  );
+  const copied = agentTranscript({
+    title: "Tile (2)",
+    messages: [said("first", MESSAGE_ROLE.USER, first)],
+    brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
+  });
+  assert.equal(
+    transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Tile (2)",
+      "## Prompt",
+      "Fix the tile.",
+      "## Continued from an earlier agent · 1 of 41 steps",
+      "**Summary of 40 earlier steps (written by Luke)**",
+      "> Read the tile code.\n>\n> Found the radius bug.",
+      "- **Agent:** Fixed.",
+    ].join("\n\n") + "\n",
+  );
+});
