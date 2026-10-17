@@ -221,6 +221,7 @@ function summaryFields(
     ...(agent.automationOrigin === null
       ? undefined
       : { automationName: agent.automationOrigin.name }),
+    ...(agent.startedFrom === null ? undefined : { from: agent.startedFrom }),
   };
   const started = codingAgentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,
