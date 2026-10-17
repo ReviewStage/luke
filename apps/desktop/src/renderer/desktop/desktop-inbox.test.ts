@@ -26,7 +26,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { encodeMention, MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -34,6 +34,7 @@ import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-s
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -1488,6 +1489,106 @@ test("an answered item's note draws a mention it holds as the chip a sent messag
 
   assert.equal(note?.querySelector(".mention-chip")?.textContent, "rollout-store.ts");
   assert.equal(note?.textContent, "See rollout-store.ts");
+});
+
+test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {
+  // The strip draws still under reduced motion, which jsdom has no answer to.
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: true,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) =>
+        request.kind === ACT_KIND.MICROPHONE_REQUEST
+          ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
+          : bridge.act(request),
+    },
+  });
+  const { page } = mount();
+  await settle();
+  const alerts = () =>
+    [...itemPane(page).querySelectorAll('.agent-composer [role="alert"]')].map(
+      (alert) => alert.textContent,
+    );
+
+  const dictate =
+    itemPane(page).querySelector<HTMLButtonElement>('button[aria-label="Dictate"]') ??
+    assert.fail("the microphone is offered");
+  await act(async () => dictate.click());
+  await settle();
+  const refused = alerts();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+
+  assert.equal(refused.length, 1, "the dictation says why it left nothing");
+  assert.deepEqual(alerts(), [], "the next item's box says nothing of it");
+});
+
+test("in the window's Inbox a skill an answered note names is the chip a sent message draws, which opens its SKILL.md on GitHub", async () => {
+  const opened: string[] = [];
+  const answered: InboxItem = {
+    ...RETRY,
+    answer: {
+      reply: INBOX_REPLY.CHOSE,
+      choices: ["Retry 3 times over an hour"],
+      note: "Run /release first.",
+    },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, answered]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.TASKS_SKILLS) {
+          const release = {
+            name: "release",
+            description: "Use to cut a release.",
+            path: ".agents/skills/release/SKILL.md",
+          };
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
+          });
+        }
+        if (request.kind === ACT_KIND.GITHUB_OPEN) {
+          opened.push(request.payload.url);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        return bridge.act(request);
+      },
+    },
+  });
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  await settle();
+  const note = itemPane(page).querySelector("[data-inbox-answer] [data-inbox-note]");
+  const chip = [...(note?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (button) => button.textContent === "/release",
+  );
+  assert.ok(chip, "the skill is its chip");
+  act(() => chip.click());
+
+  assert.deepEqual(opened, [
+    encodeMention(
+      { kind: MENTION_KIND.FILE, path: ".agents/skills/release/SKILL.md" },
+      { workspace: BILLING.workspaceId, repository: "acme/relay" },
+    ),
+  ]);
 });
 
 test("an item that needs no reply says a bare press won't message the agent, and that a note typed in its box will", async () => {

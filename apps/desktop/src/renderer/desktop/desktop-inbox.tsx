@@ -3,6 +3,7 @@ import {
   type CodingAgentInboxParams,
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
@@ -41,6 +42,7 @@ import {
   planlessMentions,
   useMentionAgentsReader,
 } from "../tasks/plan-mentions";
+import { SkillFiles } from "../tasks/skill-chip";
 import { useMinute } from "../tasks/task-time";
 import { useCodingAgents } from "../tasks/use-coding-agents";
 import { useInboxItems } from "../tasks/use-inbox-items";
@@ -80,7 +82,10 @@ import { taskCardOf } from "./task-card";
  * on a row there the item again. K and J, and the pager where the
  * item stands alone, step through the list (`inbox-pager.tsx`). Everything in it that names a
  * person, an answer and an agent's starter, reads them against the listed
- * workspace's members (`member-directory.tsx`).
+ * workspace's members (`member-directory.tsx`). The chosen item's box
+ * mentions what its repository and workspace hold (`answerMentions`), and
+ * its skills are read through its holder and drawn as chips that open
+ * their `SKILL.md` on GitHub, since no File tab stands here.
  */
 
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
@@ -140,7 +145,7 @@ const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
 /** The window's Inbox, in the plan's place: every plan's items and every automation's, and the chosen one read beside them. */
 export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const view = tasks.inboxView;
-  const { act } = useAct();
+  const { act, tell } = useAct();
   const openLink = useOpenLink();
   const now = useMinute();
   const choices = useInboxViewChoices();
@@ -409,18 +414,31 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                 )}
               </section>
             ) : (
-              <InboxPane
-                holder={chosen.holder}
-                item={chosen.item}
-                control={live}
-                agents={named}
-                hidden={columns.shown === INBOX_COLUMNS.LIST}
-                onBack={columns.onBack}
-                pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-                next={next}
-                mentions={mentions}
-                doors={paneDoors(tasks, chosen.holder, { act, openLink, now, automationsOn })}
-              />
+              <SkillFiles
+                source={agents.readSkills}
+                onOpen={(skill) => {
+                  // Note that no File tab stands in the Inbox, so a skill's file opens on GitHub, as off any plan's page.
+                  if (mentions?.repository == null) return;
+                  const url = encodeMention(
+                    { kind: MENTION_KIND.FILE, path: skill.path },
+                    { workspace: mentions.workspace, repository: mentions.repository },
+                  );
+                  tell(ACT_KIND.GITHUB_OPEN, { url });
+                }}
+              >
+                <InboxPane
+                  holder={chosen.holder}
+                  item={chosen.item}
+                  control={live}
+                  agents={named}
+                  hidden={columns.shown === INBOX_COLUMNS.LIST}
+                  onBack={columns.onBack}
+                  pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+                  next={next}
+                  mentions={mentions}
+                  doors={paneDoors(tasks, chosen.holder, { act, openLink, now, automationsOn })}
+                />
+              </SkillFiles>
             )}
           </div>
         </AutomationDirectory>

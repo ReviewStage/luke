@@ -20,7 +20,7 @@ import {
   submitPromptInput,
 } from "../ai-elements/prompt-input";
 import { editorBundleAtom } from "../editor-bundle";
-import { useIntegrationStatuses } from "../integration-statuses";
+import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
 import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -146,14 +146,8 @@ function placeholderOf(response: InboxReadResponse): string {
   return NOTE_PLACEHOLDER[response.type];
 }
 
-/** The box an open item is answered in, as above, a note that it was not sent under the card as the composer's is. */
-export function InboxAnswerBox({
-  item,
-  control,
-  agent,
-  skills,
-  keywords,
-}: {
+/** What an item's box is drawn with, beside where the account's servers stand. */
+interface AnswerBoxProps {
   item: InboxItem;
   control: TaskInboxControl;
   /** The item's agent as its holder's read lists it, whose servers' switches a server's chip reads; none before the read lands. */
@@ -162,7 +156,17 @@ export function InboxAnswerBox({
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
   keywords: readonly string[];
-}): React.JSX.Element {
+}
+
+/** One item's box, its editor, its lists, its dictation, and what its note says all its own. */
+function AnswerCard({
+  item,
+  control,
+  agent,
+  skills,
+  keywords,
+  statuses,
+}: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -172,7 +176,6 @@ export function InboxAnswerBox({
   const placeholder = placeholderOf(item.response);
   const bundle = useAtomValue(editorBundleAtom);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
-  const statuses = useIntegrationStatuses();
   const pickers = useComposerPickers({
     editor,
     room,
@@ -213,8 +216,6 @@ export function InboxAnswerBox({
           onSubmit={() => (byPress ? undefined : answer())}
         >
           <ComposerField
-            // Each item's note is its own editor, so one item's undo never reaches another's words.
-            key={item.id}
             module={module}
             editor={editor}
             room={room}
@@ -271,4 +272,16 @@ export function InboxAnswerBox({
       )}
     </div>
   );
+}
+
+/**
+ * The box an open item is answered in, as above, a note that it was not
+ * sent under the card as the composer's is. Each item gets a card of its
+ * own, so a dictation, its note, and the editor's undo never follow the
+ * developer to another item; where the account's servers stand is read
+ * once for every item the pane shows.
+ */
+export function InboxAnswerBox(props: AnswerBoxProps): React.JSX.Element {
+  const statuses = useIntegrationStatuses();
+  return <AnswerCard key={props.item.id} {...props} statuses={statuses} />;
 }
