@@ -160,13 +160,17 @@ const GONE_REFUSALS: ReadonlySet<string> = new Set([
   HOSTED_REFUSAL.TASK_ARCHIVED.error,
 ]);
 
-/** What sent a notice, as the row keeps it: a person by their account, Luke for a planner, and an agent by its handle. */
+/** What sent a notice, as the row keeps it: a person by their account, Luke for a planner, and an agent by its handle and, where the member still names one, its agent. */
 function senderOf(from: ChatMemberRow): LineSender {
   if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
     return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId };
   }
   if (from.kind === MEMBER_KIND.PLANNER) return { kind: MESSAGE_SENDER.LUKE };
-  return { kind: MESSAGE_SENDER.AGENT, name: from.handle };
+  return {
+    kind: MESSAGE_SENDER.AGENT,
+    name: from.handle,
+    ...(from.agentId === null ? undefined : { agentId: from.agentId }),
+  };
 }
 
 /** The message author each kind of member speaks as, on the notice's row. */

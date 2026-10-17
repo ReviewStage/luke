@@ -308,8 +308,8 @@ type UserMessageWriteResult = Result.Result<
  * What sent a line to a coding agent, as its row keeps it: the member by
  * their account, Luke, an automation by its name as it stands at the send,
  * GitHub by the login of who caused what it tells of, or another coding
- * agent by its id, and its name and the model it runs on as they stand at
- * the send.
+ * agent by its name as it stands at the send, and by its id and the model
+ * it runs on then where the send knows them, as a chat notice may not.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
@@ -318,9 +318,9 @@ export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
       readonly kind: typeof MESSAGE_SENDER.AGENT;
-      readonly agentId: string;
+      readonly agentId?: string | undefined;
       readonly name: string;
-      readonly model: string;
+      readonly model?: string | undefined;
     };
 
 /** The name a line's row keeps beside its sender's kind: an automation's or an agent's, or the GitHub login; none for any other. */
@@ -1235,8 +1235,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: nullable(row.sender?.kind),
     senderUserId: row.sender?.kind === MESSAGE_SENDER.MEMBER ? row.sender.userId : null,
     senderName: senderNameOf(row.sender),
-    senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.model : null,
-    senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.agentId : null,
+    senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.model ?? null) : null,
+    senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.agentId ?? null) : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq };
