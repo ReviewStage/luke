@@ -291,7 +291,7 @@ export function SummaryButton({
   const pins = layout.wide && layout.card === undefined;
   const label = pins ? "Toggle pinned summary" : "Toggle summary";
   const state = pins
-    ? { "aria-pressed": layout.mode === SUMMARY_MODE.COLUMN }
+    ? { pressed: layout.mode === SUMMARY_MODE.COLUMN }
     : cardControl(layout, cardId);
   // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (

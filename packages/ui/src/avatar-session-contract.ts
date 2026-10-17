@@ -6,8 +6,8 @@
  * on, so it ships as a bundle of its own (`avatar-session.js`, built from
  * `apps/desktop/src/renderer/avatar-session/index.ts`) that the panel
  * loads the first time an avatar is shown
- * (`apps/desktop/src/renderer/call/avatar-session-bundle.ts`), as the whiteboard and a plan's
- * editor are. That bundle sets one global on `window`, `lukeAvatarSession`, and
+ * (`apps/desktop/src/renderer/bundle-loader.ts`), as the whiteboard and a plan's
+ * editor are. That bundle's entry exports one module, `avatarSession`, and
  * this file is the whole of what the two share. Nothing here imports a
  * value, so the renderer carries none of the SDK, and the bundle carries
  * none of Effect: the effect over the session (`./avatar-session.ts`) is the
@@ -54,16 +54,7 @@ export interface PersonaSessionSlice {
   close(): Promise<void>;
 }
 
-/** What the avatar session's bundle sets on `window` once it has loaded. */
+/** What the avatar session's bundle exports, which the panel imports the first time an avatar is shown. */
 export interface AvatarSessionModule {
   readonly createSession: (options: PersonaSessionOptions) => PersonaSessionSlice;
 }
-
-declare global {
-  interface Window {
-    lukeAvatarSession?: AvatarSessionModule;
-  }
-}
-
-/** The file the avatar session's bundle is, beside `index.html`. */
-export const AVATAR_SESSION_ASSET = { SCRIPT: "avatar-session.js" } as const;

@@ -1,7 +1,7 @@
-import type { ExperimentChoices } from "@luke/settings";
+import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SettingsRow, SettingsSection } from "@luke/ui";
-import { APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
+import { APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
+import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection } from "@luke/ui";
 import { Shortcut } from "../shortcut";
 
 /**
@@ -16,25 +16,29 @@ import { Shortcut } from "../shortcut";
  * answers only while Luke's window has the keyboard, so they are fixed and
  * listed here to be found, not chosen, under the groups the table keeps —
  * the menu bar's own — each row the command's name and its chord. A gated
- * feature's shortcut is listed only while the account has its experiment on.
+ * feature's shortcut is listed only while the account has its experiment on,
+ * and a platform feature's only where the platform offers it.
  *
  * Each group is `@luke/ui`'s `SettingsSection` and each command its
- * `SettingsRow`, the chord in the row's controls. Note that each row stands
+ * `SettingsRow` at the list density, a reference's line rather than a
+ * setting's, the chord in the row's controls. Note that each row stands
  * in a wrapper wearing its search anchor, because the shared row takes no
  * attribute of a caller's.
  */
 export function WindowShortcutSections({
   experiments,
+  capabilities,
 }: {
   experiments: ExperimentChoices;
+  capabilities: readonly HostCapability[];
 }): React.JSX.Element {
   return (
     <>
-      {shownShortcutGroups(experiments).map((group) => (
+      {shownShortcutGroups(experiments, capabilities).map((group) => (
         <SettingsSection key={group.title} title={group.title}>
           {group.commands.map((command) => (
             <div key={command} {...searchAnchorProps(command)}>
-              <SettingsRow label={APP_SHORTCUTS[command].label}>
+              <SettingsRow density={SETTINGS_ROW_DENSITY.LIST} label={APP_SHORTCUTS[command].label}>
                 {() => (
                   <Shortcut
                     className="shortcut-value"
