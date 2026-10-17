@@ -4,7 +4,6 @@
 
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
@@ -53,11 +52,11 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
-    window: { role: WINDOW_ROLE.PANEL, fullScreen: false },
+    window: { fullScreen: false },
   };
 }
 
-/** Main's document with the account's experiments as given and the slices patched: a call standing, its avatar, the window's role. */
+/** Main's document with the account's experiments as given and the slices patched: a call standing, its avatar, the window's facts. */
 export function stateWith(
   experiments: ExperimentChoices,
   patch: Partial<AppStateSnapshot>,
