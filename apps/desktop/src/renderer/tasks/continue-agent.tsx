@@ -84,7 +84,7 @@ export function ContinueAgent({
         <span className="agent-continue">
           <button
             type="button"
-            className="toolbar-button bordered-button"
+            className="toolbar-button bordered-button failure-note-remedy"
             disabled={busy}
             aria-busy={busy}
             onClick={press}
