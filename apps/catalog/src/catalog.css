@@ -245,6 +245,16 @@ body {
   border-radius: var(--luke-radius-8);
 }
 
+/* A row of attachment chips, with room above for the discs on their corners. */
+.catalog-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-12);
+  margin: 0;
+  padding: var(--luke-space-12) 0 0;
+  list-style: none;
+}
+
 /* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;

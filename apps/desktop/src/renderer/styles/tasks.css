@@ -3671,8 +3671,10 @@ button.skill-chip:hover,
   height: 14px;
 }
 
-/* The files on a message: a row of chips over the box's words, and over
-   the developer's bubble in the transcript, at its right as the bubble is. */
+/* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over
+   the box's words, and over the developer's bubble in the transcript, at its
+   right as the bubble is; and the pictures a call answered
+   (`agent-pictures.tsx`), whose chips are drawn by the rules below. */
 .attached-files {
   display: flex;
   flex-wrap: wrap;
@@ -3690,9 +3692,9 @@ button.skill-chip:hover,
   justify-content: flex-end;
 }
 
-/* An image is its thumbnail; any other file its type's icon, its name, and
-   its size, on a chip as tall as the thumbnail. The chip's face is the
-   press that opens the file, washed under the pointer as a row is. */
+/* A call's picture is its thumbnail, or why it is not there, on a chip as
+   tall as the thumbnail. The chip's face is the press that opens the
+   picture, washed under the pointer as a row is. */
 .attached-file {
   position: relative;
   display: flex;

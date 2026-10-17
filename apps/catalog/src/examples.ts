@@ -1,5 +1,6 @@
 import { ANCHORED_POPOVER_EXAMPLE } from "./examples/anchored-popover";
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
+import { ATTACHMENT_CHIPS_EXAMPLE } from "./examples/attachment-chips";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
@@ -54,6 +55,7 @@ export const EXAMPLES: readonly Example[] = [
   ANCHORED_POPOVER_EXAMPLE,
   TYPOGRAPHY_EXAMPLE,
   LAYOUT_EXAMPLE,
+  ATTACHMENT_CHIPS_EXAMPLE,
   AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
   BUTTONS_EXAMPLE,

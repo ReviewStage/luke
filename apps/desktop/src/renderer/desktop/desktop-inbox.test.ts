@@ -1526,6 +1526,13 @@ function itemPane(page: HTMLElement): HTMLElement {
   return page.querySelector<HTMLElement>(".inbox-view-items") ?? assert.fail("the pane is drawn");
 }
 
+/** The names of the files attached in `within`, as each chip names its file. */
+function attachedNames(within: Element): (string | null)[] {
+  return [...within.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
+    chip.getAttribute("title"),
+  );
+}
+
 test("an item's box is the agent's message box: it takes no caret as the item opens, so K and J stay the list's; Enter sends its note, Shift+Enter is a new line, and Escape leaves the box but not the item", async () => {
   const { page } = mount();
   await settle();
@@ -1575,10 +1582,7 @@ test("files picked or dropped in an item's box are drawn as chips and go with it
 
   await handFiles(page, [new File(["threshold: 0.9\n"], "alerts.yml", { type: "" })], "pick");
   await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "drop");
-  assert.deepEqual(
-    [...pane.querySelectorAll(".attached-file-name")].map((name) => name.textContent),
-    ["alerts.yml", "spec.pdf"],
-  );
+  assert.deepEqual(attachedNames(pane), ["alerts.yml", "spec.pdf"]);
 
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
@@ -1622,10 +1626,7 @@ test("files whose reads land together both stand in the box", async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   await settle();
-  assert.deepEqual(
-    [...itemPane(page).querySelectorAll(".attached-file-name")].map((name) => name.textContent),
-    ["a.txt", "b.txt"],
-  );
+  assert.deepEqual(attachedNames(itemPane(page)), ["a.txt", "b.txt"]);
 });
 
 test("files read for an item its agent changed meanwhile land nowhere, and the box says to attach them again", async () => {
@@ -1653,7 +1654,7 @@ test("files read for an item its agent changed meanwhile land nowhere, and the b
   });
   await settle();
   const pane = itemPane(page);
-  assert.equal(pane.querySelector(".attached-file"), null, "the file lands on no revision");
+  assert.deepEqual(attachedNames(pane), [], "the file lands on no revision");
   assert.match(pane.querySelector('[role="alert"]')?.textContent ?? "", /Attach them again/u);
 });
 
@@ -1745,10 +1746,7 @@ test("an answered item draws the files its answer carried as a sent message's ar
   const comment = () =>
     itemPane(page).querySelector('[data-inbox-comment="answered"]') ??
     assert.fail("the answer is drawn");
-  assert.deepEqual(
-    [...comment().querySelectorAll(".attached-file")].map((chip) => chip.getAttribute("title")),
-    ["alerts.png", "spec.pdf"],
-  );
+  assert.deepEqual(attachedNames(comment()), ["alerts.png", "spec.pdf"]);
   assert.equal(comment().querySelector("[data-inbox-pick]"), null, "no chip says it was answered");
   assert.equal(comment().querySelector("[data-inbox-note]"), null, "no empty note stands");
 
@@ -1757,7 +1755,7 @@ test("an answered item draws the files its answer carried as a sent message's ar
   });
   await settle();
   assert.equal(
-    comment().querySelector(".attached-file img")?.getAttribute("src"),
+    comment().querySelector('[aria-label="Attached files"] img')?.getAttribute("src"),
     "data:image/png;base64,iVBORw0KGgo=",
   );
 });
