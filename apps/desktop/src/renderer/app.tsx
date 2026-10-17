@@ -469,7 +469,7 @@ export function App(): React.JSX.Element {
     showChat.current();
   }, [changeTab]);
   useEffect(() => appBridge().onShowChat(() => openChat()), [openChat]);
-  useChatToasts(openChat, tasks.chatView.open);
+  useChatToasts(openChat, tasks.chatView.open ? (tasks.workspace?.id ?? null) : null);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

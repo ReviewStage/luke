@@ -200,6 +200,8 @@ const CHAT_NOTICE_TITLE = "Chat";
 /** A chat message that came to wait as the window's own toast says it: the message, the words, and the plan's name under them. */
 export interface ChatMessageToast {
   messageId: string;
+  /** The workspace whose chat it waits in, whose Chat on screen withdraws the toast. */
+  workspaceId: string;
   words: string;
   detail: string;
 }
@@ -746,7 +748,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         entry.planId === null ? undefined : taskName(entry.planId),
       );
       if (focused) {
-        doors.toastChat({ messageId: entry.messageId, words: text.body, detail: text.title });
+        doors.toastChat({
+          messageId: entry.messageId,
+          workspaceId: entry.workspaceId,
+          words: text.body,
+          detail: text.title,
+        });
         return;
       }
       if (dependencies.notifying()) doors.post({ ...text, onClick: dependencies.openChat });
@@ -816,11 +823,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       publishWaiting(answer);
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
-      // A chat message is news once, as it first waits: the first answer is where the account stands,
-      // and one changed before the last answer was read, as an open ask of a workspace just joined, is no news.
+      // A chat message is news once, as it first waits: the first answer is where the account stands.
+      // Note that an ask changed before the last answer was read, as an open one of a workspace just
+      // joined, is no news, where a direct message or a mention is: it waits only once its person was
+      // stamped, which may be well after it was posted, and a stamp is always news.
       for (const entry of chat) {
         if (since === undefined || was?.chat.has(entry.messageId) === true) continue;
-        if (entry.updatedAt > since) announceChat(entry);
+        if (entry.reason !== ACCOUNT_CHAT_REASON.ASK || entry.updatedAt > since)
+          announceChat(entry);
       }
       for (const item of answer.items) {
         const known = seenRevision.get(item.id);

@@ -491,10 +491,11 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:chat-message-waiting",
     args: noArgs,
-    result: result<{ messageId: string; words: string; detail: string }>(
+    result: result<{ messageId: string; workspaceId: string; words: string; detail: string }>(
       (value) =>
         isRecord(value) &&
         isWireString(value.messageId) &&
+        isWireString(value.workspaceId) &&
         isWireString(value.words) &&
         isWireString(value.detail),
     ),

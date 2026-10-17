@@ -998,7 +998,12 @@ it.effect(
       });
       yield* settled;
       assert.deepEqual(f.chatToasted, [
-        { messageId: chatEntry(51).messageId, words: "@agent-2 asked you", detail: "Chat" },
+        {
+          messageId: chatEntry(51).messageId,
+          workspaceId: "workspace-acme",
+          words: "@agent-2 asked you",
+          detail: "Chat",
+        },
       ]);
 
       notices.shownChat("workspace-acme");
@@ -1048,7 +1053,7 @@ it.effect(
 );
 
 it.effect(
-  "an open ask that comes to the read changed before the last answer was read, as one of a workspace just joined, is no news",
+  "an open ask that comes to the read changed before the last answer was read, as one of a workspace just joined, is no news, where a mention stamped late still is",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -1061,11 +1066,16 @@ it.effect(
         chat: [
           chatEntry(30, { reason: ACCOUNT_CHAT_REASON.ASK, updatedAt: READ_AT - 4 * 86_400_000 }),
           chatEntry(31, { updatedAt: READ_AT + 60_000 }),
+          // A mention its person was stamped for only now, after a retried post, is news however old.
+          chatEntry(32, { reason: ACCOUNT_CHAT_REASON.MENTION, updatedAt: READ_AT - 86_400_000 }),
         ],
         cursor: "2",
         readAt: READ_AT + 120_000,
       });
       yield* settled;
-      assert.deepEqual(f.said(), [{ title: TASK_NAME, body: "@agent-2 messaged you" }]);
+      assert.deepEqual(f.said(), [
+        { title: TASK_NAME, body: "@agent-2 messaged you" },
+        { title: TASK_NAME, body: "@agent-2 mentioned you" },
+      ]);
     }),
 );
