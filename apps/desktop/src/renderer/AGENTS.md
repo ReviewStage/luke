@@ -19,7 +19,7 @@ a fiber of its own runs under the services it was built over, read through
 `rendererServicesNow`, so nothing here builds a second runtime to fork on.
 
 Effects leave on `app:act` alone, one invoke carrying one `{kind, payload}` from
-`ACT_KIND`, parsed here and again in `main/act-router.ts`, answered as an
+`ACT_KIND`, parsed here and again in `@luke/host/act-router`, answered as an
 `ActOutcome` so nothing an exception happened to carry ever crosses back.
 `renderer/act.ts` is the only caller — `act` when a row reads the answer, `tell`
 when nothing does. **A new command is a new `ACT_KIND` entry with its payload

@@ -48,9 +48,10 @@ fi
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
 #
-# `@luke/host` and `@luke/host/effect` are walked the same way, because the
-# host is meant to load in a browser tab: their graphs name no `node:` module,
-# no `ws`, and no `Buffer` or `process` global, and what needs one sits behind
+# `@luke/host`, `@luke/host/effect`, and `@luke/host/act-router` are walked
+# the same way, because the host and its act table are meant to load in a
+# browser tab: their graphs name no `node:` module, no `ws`, and no `Buffer`
+# or `process` global, and what needs one sits behind
 # `@luke/host/node`. The walk crosses into `@luke/credentials` through the
 # doors the host names (its barrel and `/snapshot`), since the account's
 # sign-in lives there: the loopback consent sits behind
@@ -67,9 +68,9 @@ node --input-type=module -e '
       forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
     },
     {
-      name: "@luke/host and @luke/host/effect",
+      name: "@luke/host, @luke/host/effect, and @luke/host/act-router",
       root: "packages/host/src",
-      entries: ["index.ts", "effect/index.ts"],
+      entries: ["index.ts", "effect/index.ts", "act-router/index.ts"],
       forbidden: /^(node:|ws$|@effect\/platform-node)/,
       globals: /\b(Buffer|process)\.\w+/,
       follows: ["@luke/credentials"],

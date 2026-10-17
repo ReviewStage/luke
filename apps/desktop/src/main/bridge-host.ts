@@ -1,3 +1,4 @@
+import type { ActRouter, ActSender } from "@luke/host/act-router";
 import { type Act, parsedAct } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import {
@@ -10,7 +11,6 @@ import {
 import type { UnparsedWireValue } from "@luke/wire";
 import type { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
-import type { ActRouter, ActSender } from "./act-router";
 import { windowAppState } from "./app-state";
 
 /** Which window a report came from, which is all a report's handler is told. */
@@ -42,8 +42,8 @@ export interface BridgeHostDependencies {
   /** Only this build's own renderer may reach any channel here. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   /** Which of the three surfaces asked, decided by the windows this process opened. */
-  senderOf: (sender: WebContents) => ActSender;
-  router: ActRouter;
+  senderOf: (sender: WebContents) => ActSender<WebContents>;
+  router: ActRouter<WebContents>;
   /** Every act's Effect, run on the desktop's own runtime rather than a second one. */
   run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   reports: ReportHandlers;

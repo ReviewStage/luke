@@ -1,8 +1,8 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACT_KIND } from "@luke/host/acts";
-import type { HostOperator } from "@luke/host/host-operator";
 import { Effect } from "effect";
-import type { ActRows } from "../act-router";
+import { ACT_KIND } from "../acts.js";
+import type { HostOperator } from "../host-operator.js";
+import type { ActRows } from "./router.js";
 
 /**
  * The account rows, proxied to the host that owns the account: the sign-in
@@ -11,7 +11,7 @@ import type { ActRows } from "../act-router";
  * here is what only the client can do about them — stopping the recording
  * its renderers run before the account they file under is gone.
  */
-export interface AccountSessionDependencies {
+export interface AccountActsDependencies {
   host: Pick<
     HostOperator,
     "beginSignIn" | "signInAgain" | "cancelSignIn" | "signOut" | "deleteAccount"
@@ -33,7 +33,7 @@ export interface AccountSessionDependencies {
   resumeSessionReplay: () => void;
 }
 
-type AccountActKind =
+export type AccountActKind =
   | typeof ACT_KIND.ACCOUNT_BEGIN_SIGN_IN
   | typeof ACT_KIND.ACCOUNT_SIGN_IN_AGAIN
   | typeof ACT_KIND.ACCOUNT_CANCEL_SIGN_IN
@@ -41,7 +41,7 @@ type AccountActKind =
   | typeof ACT_KIND.ACCOUNT_DELETE;
 
 export function accountActRows(
-  dependencies: AccountSessionDependencies,
+  dependencies: AccountActsDependencies,
 ): Pick<ActRows, AccountActKind> {
   const { host, haltSessionReplay, resumeSessionReplay } = dependencies;
   /** The halt, the host's answer, and the resume an answer that never came owes. */
