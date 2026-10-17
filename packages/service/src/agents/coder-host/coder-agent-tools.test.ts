@@ -232,16 +232,17 @@ async function claimed(
  * eve's coding-agent service as a script beside the fake GitHub, whose
  * installation reaching the repository is connected to the workspace:
  * every message to a session answered taken, or refused as a session eve
- * no longer runs where `retired` says, every cancel answered as
- * `cancelStatus` says, and each written down.
+ * no longer runs where `retired` says or once `retire` is called, every
+ * cancel answered as `cancelStatus` says, and each written down.
  */
 async function fakeCoderEve(
   workspaceId: string,
   branches: readonly string[] = [],
   beforeGitHub?: () => Promise<void>,
   cancelStatus = "accepted",
-  retired = false,
+  retiredFromStart = false,
 ) {
+  let retired = retiredFromStart;
   installations += 1;
   const installation: InstallationFixture = {
     id: 70 + installations,
@@ -280,7 +281,13 @@ async function fakeCoderEve(
       { status: 202 },
     );
   });
-  return { services: github.layer, sent };
+  return {
+    services: github.layer,
+    sent,
+    retire: () => {
+      retired = true;
+    },
+  };
 }
 
 /** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog unless another is given. */
@@ -1519,6 +1526,29 @@ test("list_agents and read_agent say why each failed agent failed: a turn failed
     await standingAsRead(call, afterCompleted.id),
     failed(CODING_AGENT_FAILURE.MODEL),
   );
+});
+
+test("a message eve took that no turn received before the session ended keeps the agent from reading as running once a later message is refused as ended for good", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  await turnOn(agents.teammates, false);
+  const taken = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE });
+  assert.equal(taken.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(taken));
+  eve.retire();
+
+  assert.deepEqual(
+    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }, "call-2"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.RETIRED },
+  );
+  assert.deepEqual(await standingAsRead(call, agents.teammates.id), [
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_FAILURE.SESSION_ENDED,
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_FAILURE.SESSION_ENDED,
+  ]);
+  const archived = await call(CODER_TOOL.ARCHIVE_AGENT, { agentId: agents.teammates.id }, "call-3");
+  assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
 });
 
 test("a message refused as ended for good leaves an agent whose turn had already ended as that turn ended", async () => {
