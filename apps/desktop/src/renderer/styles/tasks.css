@@ -5825,6 +5825,20 @@ button.picture-frame {
   white-space: pre-wrap;
 }
 
+/* A comment drawn as Markdown: its blocks close together, as a short
+   message's are, rather than with a page's breaks between them. */
+.comment-words.markdown {
+  white-space: normal;
+}
+
+.comment-words.markdown :is(p, ul, ol, pre, blockquote) {
+  margin: 0;
+}
+
+.comment-words.markdown > * + * {
+  margin-top: var(--luke-space-6);
+}
+
 .comment-words[data-clamped="true"] {
   display: -webkit-box;
   overflow: hidden;
@@ -5972,6 +5986,22 @@ button.picture-frame {
 
 .comment-text::placeholder {
   color: var(--luke-color-text-muted);
+}
+
+/* The agent box's editor as a comment's field: its placeholder and its
+   paragraphs at the comment field's padding and type. */
+.comment-field .agent-composer-placeholder {
+  padding: var(--luke-space-8) var(--luke-space-8) 0;
+  font-size: 13px;
+}
+
+/* The box's editor at the comment field's own padding and type. */
+.comment-field .agent-composer-input {
+  min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
+  max-height: calc(8 * 1.45em + 10px); /* off-scale: eight lines and the padding */
+  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-2);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .comment-field-foot {
