@@ -21,7 +21,7 @@ import {
 import { TOOL_STATE } from "../ai-elements/tool";
 import { AGENT_PART, type AgentPart, agentParts, agentRows, delegates } from "./coding-agent-model";
 import { delegationView, toolCallView } from "./tool-call-model";
-import { workerOf, workFailed, workRowsOf } from "./work-model";
+import { newTaskCallIds, workerOf, workFailed, workRowsOf } from "./work-model";
 
 /** What a reader scans a part as: words, a thought, a call, or a subagent. */
 const SCANNED = {
@@ -464,4 +464,20 @@ test("a turn whose older steps the service left out says so, and a worker whose 
 
   assert.equal(row?.earlierOmitted, true);
   assert.equal(workFailed(workerOf(row === undefined ? [] : [row], "w")?.session?.record), true);
+});
+
+test("the starts of Luke's work that made a new task are named by call id once answered, and no other start, call still out, or unread work names one", () => {
+  const made = { status: "accepted", agent: { id: "agent-2" }, newTask: { id: "task-2" } };
+  const onTask = { status: "accepted", agent: { id: "agent-3" } };
+  const conversation = conversationOf([
+    workTurn(TASK_WORK_STATE.DONE, [
+      toolCall(AGENT_TOOL.START_AGENT, "c1", { newTask: "Expiry" }, { output: made }),
+      toolCall(AGENT_TOOL.START_AGENT, "c2", {}, { output: onTask }),
+      toolCall(AGENT_TOOL.START_AGENT, "c3", { newTask: "Billing" }),
+      toolCall(AGENT_TOOL.ARCHIVE_AGENT, "c4", {}, { output: made }),
+    ]),
+  ]);
+
+  assert.deepEqual(newTaskCallIds(conversation), ["c1"]);
+  assert.deepEqual(newTaskCallIds(undefined), []);
 });

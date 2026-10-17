@@ -21,6 +21,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";
@@ -80,10 +81,7 @@ beforeEach(() => {
     configurable: true,
     value: () => ({ matches: false, addEventListener: ignore, removeEventListener: ignore }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, onMenuCommand: () => ignore, recordSurfaceEvent: ignore },
-  });
+  fakeAppBridge({ act: answer });
 });
 
 const unmounts: (() => void)[] = [];

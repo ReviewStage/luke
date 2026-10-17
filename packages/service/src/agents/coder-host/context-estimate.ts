@@ -9,6 +9,7 @@ import {
   ARCHIVE_AGENT_TOOL,
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
+  LIST_MODELS_TOOL,
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
   READ_PAGE_TOOL,
@@ -107,6 +108,10 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
+  [CODER_TOOL.REPLY_INBOX]: {
+    description: INBOX_TOOLS.REPLY.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.REPLY.inputSchema),
+  },
   [CODER_TOOL.OPEN_PULL_REQUEST]: {
     description: OPEN_PULL_REQUEST_TOOL.description,
     inputSchema: emitJsonSchema(OPEN_PULL_REQUEST_TOOL.inputSchema),
@@ -150,6 +155,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.RESOLVE_ASK]: {
     description: CHAT_TOOLS.RESOLVE.description,
     inputSchema: emitJsonSchema(CHAT_TOOLS.RESOLVE.inputSchema),
+  },
+  [CODER_TOOL.LIST_MODELS]: {
+    description: LIST_MODELS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_MODELS_TOOL.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {

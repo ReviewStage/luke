@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
-import { forkStart, forksOf, messageOpening } from "./fork-model";
+import { forkStart, forksOf, messageOpening, startingWords } from "./fork-model";
 
 /**
  * fork-model.test.ts -- what a fork's chip quotes of the message, the Start
@@ -76,6 +76,17 @@ test("a forked draft's send is from the source at its message, under the draft's
     attachments: [notes],
     disabledServers: [],
   });
+  // A fork of a reply still being written names where it was cut, so the cut does not grow after the press.
+  assert.deepEqual(
+    forkStart({
+      ...base,
+      fork: { ...fork, messageSteps: 3, messageStepParts: 1 },
+      words: "",
+      attachments: [],
+      choice: undefined,
+    }).from,
+    { ...from, messageSteps: 3, messageStepParts: 1 },
+  );
 });
 
 test("where each of an agent's messages was forked to is read off the task's agents in the order started, archived ones among them, a continue and another source's forks left out", () => {
@@ -101,4 +112,11 @@ test("where each of an agent's messages was forked to is read off the task's age
     ]),
   );
   assert.deepEqual(forksOf(listed, "fork-later"), new Map());
+});
+
+test("a fork's working line names the copy of the source's work first, then the new agent starting once the copy has had its time", () => {
+  assert.equal(startingWords("Fix the tile", undefined), "Copying Fix the tile's work…");
+  assert.equal(startingWords("Fix the tile", 1_000), "Copying Fix the tile's work…");
+  assert.equal(startingWords("Fix the tile", 3_000), "Starting the new agent…");
+  assert.equal(startingWords("Fix the tile", 60_000), "Starting the new agent…");
 });

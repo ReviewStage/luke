@@ -6,6 +6,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { TOAST_HOLD, ToastHost } from "../toast";
 import { type AgentPlace, useAgentEndToasts } from "./agent-end-toast";
@@ -26,15 +27,12 @@ let registry: AtomRegistry.AtomRegistry | undefined;
 
 beforeEach(() => {
   viewed = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onAgentEnded: (listener: (end: AgentEnded) => void) => {
-        ended = listener;
-        return () => {
-          ended = undefined;
-        };
-      },
+  fakeAppBridge({
+    onAgentEnded: (listener: (end: AgentEnded) => void) => {
+      ended = listener;
+      return () => {
+        ended = undefined;
+      };
     },
   });
 });

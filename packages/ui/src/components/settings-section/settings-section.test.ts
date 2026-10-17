@@ -5,12 +5,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Button } from "../button/button.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
-import { SettingsSection } from "./settings-section.js";
+import { SETTINGS_SECTION_FRAME, SettingsSection } from "./settings-section.js";
 
 /**
  * settings-section.test.ts -- a headed section is a region its heading
  * names, holding its rows; a section with no heading, or an empty one, draws
- * its rows with no heading and names no region.
+ * its rows with no heading and names no region; one with no card is still
+ * the region its heading names.
  */
 
 declare global {
@@ -73,4 +74,23 @@ test("a section with no heading, or an empty one, draws no heading and names no 
     expect(section === null ? "no section" : regionName(section)).toBeUndefined();
     expect(container.querySelector("button")?.textContent).toBe("Change Launch at login");
   }
+});
+
+test("a section with no card is still a region named by its heading, holding the control it is handed", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(SettingsSection, {
+        title: "Prompt",
+        frame: SETTINGS_SECTION_FRAME.NONE,
+        children: createElement(Button, { children: "Write the prompt" }),
+      }),
+    ),
+  );
+  const section = container.querySelector("section");
+  expect(section === null ? undefined : regionName(section)).toBe("Prompt");
+  expect(section?.querySelector("button")?.textContent).toBe("Write the prompt");
 });

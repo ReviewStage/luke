@@ -4,6 +4,7 @@ import { MessageAction, MessageActions } from "../ai-elements/message";
 import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback";
 import { useCopyLink } from "../copy-link-item";
 import { ForkMessageAction } from "./fork-action";
+import type { ForkCut } from "./fork-model";
 import { useMessagePlace } from "./message-links";
 
 /**
@@ -20,15 +21,21 @@ const COPY_LABEL = "Copy";
 
 export function CopyMessageAction({
   words,
+  copyable = true,
   messageId,
   forkable = false,
+  forkCut,
   className,
 }: {
   words: string;
+  /** Whether its words are whole and there are any, which its Copy needs; a turn still running, or one with no words, is offered no Copy. */
+  copyable?: boolean;
   /** The message's id, by which its transcript names it for its Copy link; none where it has no link. */
   messageId?: string | undefined;
-  /** Whether the message is the agent's own and settled, which its tab may offer to fork. */
+  /** Whether the message is the agent's own, which its tab may offer to fork. */
   forkable?: boolean;
+  /** Where its fork cuts it, where it is a reply still being written; none where a fork keeps it whole. */
+  forkCut?: ForkCut | undefined;
   className?: string;
 }): ReactNode {
   const { state, copy } = useCopyFeedback();
@@ -36,14 +43,16 @@ export function CopyMessageAction({
   const copyLink = useCopyLink();
   return (
     <MessageActions className={className}>
-      <MessageAction
-        label={COPY_LABEL}
-        tooltip={copyHint(state, COPY_LABEL)}
-        className="[&_svg]:size-4"
-        onClick={() => copy(words)}
-      >
-        <CopyGlyph state={state} />
-      </MessageAction>
+      {copyable ? (
+        <MessageAction
+          label={COPY_LABEL}
+          tooltip={copyHint(state, COPY_LABEL)}
+          className="[&_svg]:size-4"
+          onClick={() => copy(words)}
+        >
+          <CopyGlyph state={state} />
+        </MessageAction>
+      ) : null}
       {messageId === undefined || place === undefined || copyLink === undefined ? null : (
         <MessageAction
           label={LINK_COPY.LABEL}
@@ -55,7 +64,7 @@ export function CopyMessageAction({
         </MessageAction>
       )}
       {!forkable || messageId === undefined ? null : (
-        <ForkMessageAction messageId={messageId} words={words} />
+        <ForkMessageAction messageId={messageId} words={words} cut={forkCut} />
       )}
     </MessageActions>
   );
