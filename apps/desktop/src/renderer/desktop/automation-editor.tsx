@@ -72,7 +72,9 @@ import {
   IconButton,
   POPOVER_ALIGN,
   ProviderMark,
+  SETTINGS_SECTION_FRAME,
   SettingsRow,
+  SettingsSection,
   SidePanelIcon,
   Switch,
   TEXT_ELEMENT,
@@ -101,7 +103,6 @@ import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
-import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
 import { Spinner } from "../spinner";
 import { AgentModelChip } from "../tasks/agent-model-chip";
@@ -846,7 +847,7 @@ function CodeReviewGroup({
   // The rules file's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
   const rulesFile = useRef<HTMLInputElement>(null);
   return (
-    <SettingsGroup title="Code review">
+    <SettingsSection title="Code review">
       <SwitchRow
         label="Comment when no issues are found"
         detail="Only on a pull request's first review."
@@ -886,7 +887,7 @@ function CodeReviewGroup({
         checked={settings.fix}
         onChange={(fix) => onSettings({ ...settings, fix })}
       />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -1283,7 +1284,7 @@ function RunsGroup({
   // The other repositories as a save would send them: the one shown first left out.
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
-    <SettingsGroup title="Runs">
+    <SettingsSection title="Runs">
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Repository</strong>
@@ -1335,7 +1336,7 @@ function RunsGroup({
         </>
       )}
       <Problem problem={problems[DRAFT_FIELD.AGENT]} />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -1389,7 +1390,7 @@ function EditorForm({
   return (
     <div className="automation-form">
       {offersOwner ? (
-        <SettingsGroup title="Sharing">
+        <SettingsSection title="Sharing">
           <OwnerRow
             owner={draft.owner}
             owners={owners}
@@ -1397,9 +1398,9 @@ function EditorForm({
             workspace={workspace}
             onOwner={(owner) => onDraft({ owner })}
           />
-        </SettingsGroup>
+        </SettingsSection>
       ) : null}
-      <SettingsGroup title="Trigger">
+      <SettingsSection title="Trigger">
         <SelectRow
           label="Type"
           detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
@@ -1439,14 +1440,14 @@ function EditorForm({
           />
         )}
         <Problem problem={problems[DRAFT_FIELD.SCHEDULE]} />
-      </SettingsGroup>
+      </SettingsSection>
       {review === undefined ? null : (
         <CodeReviewGroup
           settings={review}
           onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
         />
       )}
-      <SettingsGroup title="Prompt" framed={false}>
+      <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
         <TextArea
           ref={prompt}
           label="Prompt"
@@ -1457,7 +1458,7 @@ function EditorForm({
           onChange={(text) => onDraft({ prompt: text })}
         />
         <Problem problem={problems[DRAFT_FIELD.PROMPT]} />
-      </SettingsGroup>
+      </SettingsSection>
       <RunsGroup
         draft={draft}
         mine={automation === undefined || automation.mine === true}
