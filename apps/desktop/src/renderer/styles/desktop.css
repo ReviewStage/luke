@@ -8262,11 +8262,16 @@ button.automation-run:hover {
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* Create plan's chord and the home page's New plan's, muted against its own
-   fill rather than the card's. */
-.new-task-dialog .primary-button .shortcut,
-.home .primary-button .shortcut {
+/* Create plan's chord, muted against its own fill rather than the card's. */
+.new-task-dialog .primary-button .shortcut {
   --shortcut-ink: var(--on-accent-muted);
+}
+
+/* The home page's New task's chord, a glyph's gap after its word, muted
+   against its own fill rather than the page's. */
+.home .luke-button .shortcut {
+  --shortcut-ink: var(--luke-color-on-accent-muted);
+  margin-inline-start: var(--luke-icon-gap);
 }
 
 /* The home page (`desktop-home.tsx`): one column at a reading measure, a
@@ -8304,14 +8309,6 @@ button.automation-run:hover {
   padding: 0 var(--row-inset);
 }
 
-.home-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-}
-
 .home-section {
   display: flex;
   flex-direction: column;
@@ -8327,6 +8324,11 @@ button.automation-run:hover {
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
+}
+
+/* A section's note, nothing waiting or a read refused, on its rows' inset. */
+.home-note {
+  margin: var(--luke-space-4) var(--row-inset);
 }
 
 /* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
