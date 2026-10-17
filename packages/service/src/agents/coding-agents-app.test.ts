@@ -65,6 +65,7 @@ import { HOSTED_API_ERROR } from "@luke/features";
 import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
+  firstMessageText,
   newestStepsWithin,
   REPLAY_STEP_KIND,
   START_NOTE_HEADING,
@@ -200,8 +201,10 @@ import {
 } from "./brain-host/eve-sessions.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
+  CHAT_DIGEST_HEADING,
   CHAT_TOOL_REFUSAL,
   type ChatAgent,
+  chatDigest,
   postAsAgent,
   readAsAgent,
   resolveAsAgent,
@@ -4213,6 +4216,74 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok(missing.reason.endsWith("missing.png"), missing.reason);
       }),
   );
+
+  it.effect(
+    "a turn opens with the chat the agent has not read, once, leaving out the message a notice already told it, and with nothing once it has read",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const { first: one, second: two } = chat.handles;
+        assert.equal(yield* chatDigest(chat.second), undefined, "nothing waits yet");
+
+        const plain = yield* chat.post(chat.first, { text: "Starting on the emails." });
+        const root = yield* chat.post(chat.first, QUEUE_ASK);
+        const dm = yield* chat.post(chat.first, { text: "Is the table yours?", to: two });
+        assert.ok("seq" in plain && "seq" in root && "told" in dm);
+        assert.deepEqual(dm.told, [two], "the DM is told as a notice");
+        assert.equal(
+          yield* chatDigest(chat.second),
+          [
+            CHAT_DIGEST_HEADING,
+            `m ${plain.seq} · ${one} in #teammate-invitations: Starting on the emails.`,
+            `m ${root.seq} · ${one} in #teammate-invitations asks (${CHAT_ASK.CHOICE}): ${QUEUE_ASK.text}`,
+          ].join("\n"),
+        );
+        assert.equal(yield* chatDigest(chat.second), undefined, "a digest is a read");
+
+        const long = "Every invitation carries its sender, its workspace, and its expiry. ".repeat(
+          12,
+        );
+        const reply = yield* chat.post(chat.first, { text: long, replyTo: plain.seq });
+        assert.ok("seq" in reply);
+        const cut = yield* chatDigest(chat.second);
+        assert.ok(cut !== undefined);
+        assert.ok(
+          cut.endsWith(`… (read_chat({ thread: ${plain.seq} }) reads the rest)`),
+          "a message cut short names the read that carries it whole",
+        );
+        const thread = yield* chat.read(chat.second, { thread: plain.seq });
+        assert.ok("messages" in thread);
+        assert.equal(thread.messages.at(-1)?.text, long);
+
+        yield* chat.post(chat.first, { text: "One more.", replyTo: plain.seq });
+        const read = yield* chat.read(chat.second);
+        assert.ok("messages" in read);
+        assert.equal(read.messages.length, 1);
+        assert.equal(yield* chatDigest(chat.second), undefined, "what a read took waits no more");
+      }),
+  );
+
+  it.effect(
+    "an agent that joins the chat joins at its head, so its first turn opens with nothing that was said before it, and with what is said after",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        yield* chat.post(chat.first, { text: "Said before the newcomer." });
+        const started = yield* startedAgent(chat.owner, chat.task.id, chat.ask);
+        const newcomer: ChatAgent = {
+          ...chat.first,
+          self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
+        };
+        assert.equal(yield* chatDigest(newcomer), undefined);
+        const after = yield* chat.post(chat.first, { text: "Said after." });
+        assert.ok("seq" in after);
+        assert.equal(
+          yield* chatDigest(newcomer),
+          `${CHAT_DIGEST_HEADING}\nm ${after.seq} · ${chat.handles.first} in #teammate-invitations: Said after.`,
+        );
+      }),
+  );
 });
 
 /** A row of an agent's transcript as the relay leaves it, written straight to the store at the sequence given, answering its id. */
@@ -4672,7 +4743,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
         const { parts, files } = openedWithFiles(eve);
 
-        assert.deepEqual(parts.note, { heading: START_NOTE_HEADING.DEVELOPER, text: note });
+        assert.deepEqual(parts.note, {
+          heading: START_NOTE_HEADING.DEVELOPER,
+          text: note,
+          files: { text: 0, other: 1 },
+        });
         assert.equal(parts.replay?.steps.length, 6);
         assert.deepEqual(files, ["flow.png"]);
         const kept = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
@@ -4828,6 +4903,130 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
         assert.equal(again.id, first.id);
         assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  it.effect(
+    "a source whose prompt holds a note's heading in its prose hands on its brief whole, and a note it was handed behind its marker becomes its first step",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const prose = `Write the guide.\n\n${START_NOTE_HEADING.DEVELOPER}\n\nExplain this heading in the guide.`;
+        const sourceOf = (handed: string) =>
+          Effect.gen(function* () {
+            const made = Option.getOrThrow(
+              yield* createCodingAgent(owner, {
+                taskId: task.id,
+                planSnapshot: null,
+                prompt: handed,
+                idempotencyKey: randomUUID(),
+                model: SOL,
+                effort: "low",
+                repository: RELAY_FULL_NAME,
+              }),
+            ).agent;
+            yield* transcriptRow(made, 1, MESSAGE_ROLE.USER, [text(handed)]);
+            return made;
+          });
+        const continueFrom = (agentId: string) =>
+          ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } }));
+
+        yield* continueFrom((yield* sourceOf(prose)).id);
+        assert.equal(openedParts(eve).parts.brief, prose);
+        assert.deepEqual(openedParts(eve).parts.replay?.steps, []);
+
+        yield* continueFrom(
+          (yield* sourceOf(firstMessageText(prose, undefined, "Keep it short."))).id,
+        );
+        const read = openedParts(eve).parts;
+        assert.equal(read.brief, prose);
+        assert.deepEqual(
+          read.replay?.steps.map((step) => step.summary),
+          ["The developer: Keep it short."],
+        );
+      }),
+  );
+
+  it.effect(
+    "a transcript of more rows than are read keeps its newest rows, so a continue replays where it ended and a fork at a late message is found, and an unreadable row past a fork's cut refuses only a continue",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const source = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
+        const turns = REPLAY_BOUNDS.MAX_ROWS + 50;
+        const ids: string[] = [];
+        // Note that the rows go in by the thousand, because one insert a row would take minutes.
+        for (let from = 0; from < turns; from += 1_000) {
+          const rows = Array.from({ length: Math.min(1_000, turns - from) }, (_, at) => ({
+            userId: stored.userId,
+            conversationId: stored.conversationId,
+            seq: from + at + 2,
+            clientId: randomUUID(),
+            role: MESSAGE_ROLE.ASSISTANT,
+            // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
+            parts: [text(`Step ${from + at}.`)] as never,
+            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            placedAt: new Date(),
+          }));
+          const written = yield* Database.use((db) =>
+            db.insert(messages).values(rows).returning({ id: messages.id }),
+          );
+          ids.push(...written.map((row) => row.id));
+        }
+        const startFrom = (from: WireBoundaryInput) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+
+        yield* startFrom({ agentId: source.id });
+        assert.equal(
+          openedParts(eve).parts.replay?.steps.at(-1)?.summary,
+          `Said: Step ${turns - 1}.`,
+        );
+        const late = turns - 10;
+        yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
+        assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
+
+        // A fork with more rows after it than are read names no files as if they were all it edited.
+        yield* startFrom({ agentId: source.id, messageId: ids[10] ?? "" });
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Which files it edited after that message could not all be read/u,
+        );
+
+        // A fork with exactly as many rows after it as are read still names what they edited, here nothing.
+        yield* startFrom({
+          agentId: source.id,
+          messageId: ids[turns - 1 - REPLAY_BOUNDS.MAX_ROWS] ?? "",
+        });
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Its file tools edited no file after that message/u,
+        );
+
+        // A row past the cut that does not read refuses a continue, but not a fork that needs none of it.
+        yield* transcriptRow(stored, turns + 2, MESSAGE_ROLE.ASSISTANT, [{ type: "text" }]);
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        const fork = yield* startFrom({ agentId: source.id, messageId: ids[late] ?? "" });
+        assert.equal(fork.from?.steps, openedParts(eve).parts.replay?.steps.length);
+        assert.equal(openedParts(eve).parts.replay?.steps.at(-1)?.summary, `Said: Step ${late}.`);
+        assert.match(
+          openedParts(eve).parts.replay?.preamble ?? "",
+          /Which files it edited after that message could not all be read/u,
+        );
       }),
   );
 

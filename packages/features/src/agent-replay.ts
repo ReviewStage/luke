@@ -10,7 +10,11 @@
  * agent, the message it was forked at where it was, and how many of the
  * source's steps the block keeps of how many there were. A preamble follows
  * for the model, then each step behind a marker of its own naming its kind,
- * then the closing marker.
+ * then the closing marker. The note stands under its heading behind a
+ * marker of its own naming how many of the message's files are the note's,
+ * text files apart from images and PDFs, and its length, which ends the
+ * message, so a note is told from a brief whose prose holds its heading,
+ * with a replay or without.
  *
  * Every marker that a run of text follows says that text's length in
  * `chars=N`, counted as JavaScript counts a string's length, in UTF-16
@@ -59,11 +63,30 @@ export interface Replay {
   readonly totalSteps: number;
 }
 
-/** A first message read back: the brief, the replay where one follows it, and the note where one ends the message, with whose note it is. */
+/**
+ * How many of a first message's files are its note's, in the two groups the
+ * service hands files in: text files, inlined, and images and PDFs. The
+ * note's are the last of each group, since the brief's go first.
+ */
+export interface NoteFiles {
+  readonly text: number;
+  readonly other: number;
+}
+
+const NO_NOTE_FILES: NoteFiles = { text: 0, other: 0 };
+
+/** A note read back: whose it is, its words, and how many of the message's files are its own. */
+interface FirstMessageNote {
+  readonly heading: StartNoteHeading;
+  readonly text: string;
+  readonly files: NoteFiles;
+}
+
+/** A first message read back: the brief, the replay where one follows it, and the note where one ends the message. */
 export interface FirstMessage {
   readonly brief: string;
   readonly replay?: Replay;
-  readonly note?: { readonly heading: StartNoteHeading; readonly text: string };
+  readonly note?: FirstMessageNote;
 }
 
 const REPLAY_CLOSE = "<!-- /luke:replay -->";
@@ -71,6 +94,9 @@ const REPLAY_OPEN_START = "<!-- luke:replay ";
 const REPLAY_LEAD = `\n\n${REPLAY_HEADING}\n\n${REPLAY_OPEN_START}`;
 const MARKER_END = " -->\n";
 const SECTION_GAP = "\n\n";
+
+const NOTE_OPEN = /^<!-- luke:note text-files=(\d+) other-files=(\d+) chars=(\d+) -->\n/u;
+const NOTE_OPEN_START = "<!-- luke:note ";
 
 const REPLAY_OPEN =
   /^<!-- luke:replay agent=([0-9a-f-]+)(?: message=([0-9a-f-]+))? steps=(\d+) total-steps=(\d+) chars=(\d+) -->\n/u;
@@ -99,15 +125,22 @@ function replayText(replay: Replay): string {
   return `${REPLAY_HEADING}\n\n${open}${replay.preamble}\n${replay.steps.map(stepText).join("")}${REPLAY_CLOSE}`;
 }
 
-/** The first message an agent is handed: the brief, the replay where there is one, and the note under its heading where there is one. */
+/** The note as it ends a first message: its heading, then a marker naming its files and its length, then its words. */
+function noteText(note: string, heading: StartNoteHeading, files: NoteFiles): string {
+  const marker = `${NOTE_OPEN_START}text-files=${files.text} other-files=${files.other} chars=${note.length}${MARKER_END}`;
+  return `${SECTION_GAP}${heading}${SECTION_GAP}${marker}${note}`;
+}
+
+/** The first message an agent is handed: the brief, the replay where there is one, and the note under its heading and marker where there is one, with how many of the message's files are the note's. */
 export function firstMessageText(
   brief: string,
   replay: Replay | undefined,
   note: string | undefined,
   heading: StartNoteHeading = START_NOTE_HEADING.DEVELOPER,
+  noteFiles: NoteFiles = NO_NOTE_FILES,
 ): string {
   const replayed = replay === undefined ? brief : `${brief}${SECTION_GAP}${replayText(replay)}`;
-  return note === undefined ? replayed : `${replayed}${SECTION_GAP}${heading}${SECTION_GAP}${note}`;
+  return note === undefined ? replayed : `${replayed}${noteText(note, heading, noteFiles)}`;
 }
 
 /**
@@ -168,12 +201,57 @@ function stepsFrom(
   return { steps, next: at + REPLAY_CLOSE.length };
 }
 
-/** The note that ends the message from `at`, or none where nothing follows; nothing where something follows that is no note. */
-function noteFrom(text: string, at: number): FirstMessage["note"] | null | undefined {
-  if (at === text.length) return null;
+/** The marked note whose heading starts at `at` and that ends the message exactly; nothing where its marker does not add up. */
+function markedNoteAt(text: string, at: number): FirstMessageNote | undefined {
   for (const heading of NOTE_HEADINGS) {
     const lead = `${SECTION_GAP}${heading}${SECTION_GAP}`;
-    if (text.startsWith(lead, at)) return { heading, text: text.slice(at + lead.length) };
+    if (!text.startsWith(lead, at)) continue;
+    const start = at + lead.length;
+    const open = NOTE_OPEN.exec(text.slice(start, start + 96));
+    if (open === null) return undefined;
+    const [marker, textFiles = "", otherFiles = "", chars = ""] = open;
+    if (start + marker.length + Number(chars) !== text.length) return undefined;
+    const files = { text: Number(textFiles), other: Number(otherFiles) };
+    return { heading, text: text.slice(start + marker.length), files };
+  }
+  return undefined;
+}
+
+/**
+ * The note that ends the message from `at`, or none where nothing follows;
+ * nothing where something follows that is no note. A note behind no
+ * marker, as agents started before the marker were handed, is read as the
+ * rest of the message, with none of the files.
+ */
+function noteFrom(text: string, at: number): FirstMessageNote | null | undefined {
+  if (at === text.length) return null;
+  const marked = markedNoteAt(text, at);
+  if (marked !== undefined) return marked;
+  for (const heading of NOTE_HEADINGS) {
+    const lead = `${SECTION_GAP}${heading}${SECTION_GAP}`;
+    if (!text.startsWith(lead, at)) continue;
+    // A whole marker that does not add up is a note damaged, never one from before the marker,
+    // whose words may still open with the marker's first words.
+    const start = at + lead.length;
+    if (NOTE_OPEN.test(text.slice(start, start + 96))) return undefined;
+    return { heading, text: text.slice(at + lead.length), files: NO_NOTE_FILES };
+  }
+  return undefined;
+}
+
+/** The first marked note that ends the message, with the brief before it; nothing where none adds up. */
+function markedNoteIn(text: string): FirstMessage | undefined {
+  let at = text.indexOf(NOTE_OPEN_START);
+  while (at >= 0) {
+    // The marker stands after its heading, so the note starts at the gap before that heading.
+    for (const heading of NOTE_HEADINGS) {
+      const lead = `${SECTION_GAP}${heading}${SECTION_GAP}`;
+      const from = at - lead.length;
+      if (from < 0 || !text.startsWith(lead, from)) continue;
+      const note = markedNoteAt(text, from);
+      if (note !== undefined) return { brief: text.slice(0, from), note };
+    }
+    at = text.indexOf(NOTE_OPEN_START, at + 1);
   }
   return undefined;
 }
@@ -201,11 +279,11 @@ function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undef
 }
 
 /**
- * A first message read back into its brief, its replay, and its note. A
- * message with no replay is its brief whole, since a note alone is not
- * told apart from a brief that holds its heading. The first heading whose
- * block adds up is the replay, so a brief that quotes one is still read as
- * the brief.
+ * A first message read back into its brief, its replay, and its note. The
+ * first heading whose block adds up is the replay, so a brief that quotes
+ * one is still read as the brief. With no replay, a note is read only
+ * behind its marker, whose length must end the message exactly, so a brief
+ * that only holds a note's heading in its prose is read whole.
  */
 export function firstMessageParts(text: string): FirstMessage {
   let at = text.indexOf(REPLAY_LEAD);
@@ -214,5 +292,5 @@ export function firstMessageParts(text: string): FirstMessage {
     if (read !== undefined) return { brief: text.slice(0, at), ...read };
     at = text.indexOf(REPLAY_LEAD, at + 1);
   }
-  return { brief: text };
+  return markedNoteIn(text) ?? { brief: text };
 }

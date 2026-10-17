@@ -7,6 +7,7 @@ import {
   PIN_POSITION_BOUNDS,
   type PinPlace,
   pinPositionSchema,
+  pinPositionsForInsert,
   pinPositionsForMove,
 } from "./pin-order.js";
 
@@ -131,6 +132,50 @@ describe("pinPositionsForMove", () => {
     for (let drop = 0; drop < 400; drop += 1) pins = afterMove(pins, drop % 2 === 0 ? 2 : 1, 1);
     assert.ok(pins.every((pin) => (pin.position?.length ?? 0) <= PIN_POSITION_BOUNDS.MAX_CHARS));
     assert.equal(new Set(pins.map((pin) => pin.position)).size, pins.length);
+  });
+});
+
+/** The pins with `fresh` dropped among them at `to` and the positions the insert answered written in, drawn again. */
+function afterInsert(pins: readonly Pin[], fresh: Pin, to: number): Pin[] {
+  const order = inPinOrder(pins, place);
+  const positions = pinPositionsForInsert(order, fresh, to, place);
+  return inPinOrder(
+    [...order, fresh].map((pin) => {
+      const position = positions.get(pin);
+      return position === undefined ? pin : { ...pin, position };
+    }),
+    place,
+  );
+}
+
+describe("pinPositionsForInsert", () => {
+  it("holds a pin dropped on top there though a pin below it was stamped later", () => {
+    const pins = [
+      { name: "later", at: 9, position: "a0" },
+      { name: "loose", at: 8 },
+    ];
+    assert.deepEqual(names(afterInsert(pins, { name: "dropped", at: 5 }, 0)), [
+      "dropped",
+      "later",
+      "loose",
+    ]);
+  });
+
+  it("stands a pin dropped between two others between them, and one dropped past the end last", () => {
+    const pins = [
+      { name: "first", at: 1, position: "a0" },
+      { name: "second", at: 2, position: "a1" },
+    ];
+    assert.deepEqual(names(afterInsert(pins, { name: "middle", at: 3 }, 1)), [
+      "first",
+      "middle",
+      "second",
+    ]);
+    assert.deepEqual(names(afterInsert(pins, { name: "last", at: 3 }, 9)), [
+      "first",
+      "second",
+      "last",
+    ]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/luke-link";
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { ACT_KIND, isGitHubAddress, isWebAddress } from "@luke/host/acts";
+import { pullRequestAgentOf } from "@luke/ui/pull-request-link";
 import { createContext, useCallback, useContext, useMemo } from "react";
 import { useAct } from "../act";
 
@@ -27,7 +28,9 @@ import { useAct } from "../act";
  * A place may open some links where it stands before the window does
  * (`OpenHereProvider`), as the window's Inbox opens a file, a page, or a pull
  * request of the item's task in the panel beside the item rather than
- * leaving for the task.
+ * leaving for the task, and a task, or an agent with no task, opens a pull
+ * request one of its agents opened in that agent's Pull request tab rather
+ * than on GitHub (`openPullRequestsHere`).
  */
 
 const OpenLinkContext = createContext<((link: ReadLink) => void) | undefined>(undefined);
@@ -42,6 +45,33 @@ const OpenHereContext = createContext<OpenHere | undefined>(undefined);
 
 /** Hands everything under it the place's own opener, asked first of every link opened there. */
 export const OpenHereProvider = OpenHereContext.Provider;
+
+/**
+ * A place's opener for its agents' pull requests: a link to the page on
+ * GitHub of one of them, however it is spelled, opens through `open`, the
+ * agent's Pull request tab, and any other link is the window's. `drawn` is
+ * the agents whose tabs the place draws, none before they are read. Note that
+ * an agent's pull request whose tab the place no longer draws, an archived
+ * agent's on a task, is the window's, since claiming it would open nothing.
+ */
+export function openPullRequestsHere(
+  agents: {
+    readonly pullRequests: ReadonlyMap<string, { readonly url: string }>;
+    readonly agentIds: readonly string[] | undefined;
+  },
+  open: (agentId: string) => void,
+): OpenHere {
+  return (href) => {
+    const { pullRequests, agentIds: drawn } = agents;
+    const opened = [...pullRequests].flatMap(([agentId, { url }]) =>
+      drawn === undefined || drawn.includes(agentId) ? [{ agentId, url }] : [],
+    );
+    const agentId = pullRequestAgentOf(href, opened);
+    if (agentId === undefined) return false;
+    open(agentId);
+    return true;
+  };
+}
 
 /** The place a mention of a plan, or of one of its sections, names. */
 function placeOfMention(mention: PlanMention): LinkPlace {

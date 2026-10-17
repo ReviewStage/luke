@@ -28,8 +28,8 @@ the Inbox; and the words of a message you typed to a coding agent and have
 not sent, mentions and skills among them, kept per agent until you send it
 or empty its box, and an inbox answer you have not sent, kept per item until
 you send it or the agent changes the item, each shown only while the account
-that wrote it is signed in. The files attached to such a message stay in
-memory only.
+that wrote it is signed in. The files attached to such a message or answer
+stay in memory only.
 None of it is sent anywhere.
 
 **Run on this Mac.** Run, in an agent tab's ⋯, opens a terminal inside
@@ -294,7 +294,7 @@ deletes your messages (others' replies to them stay), and deleting the
 workspace deletes its chat.
 
 **Files you attach to a coding agent.** You can attach files to a coding
-agent's message, or to the prompt you start one with, by picking them with +,
+agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,
 dropping, or pasting: images, PDFs up to 3 MB, and text files up to 100 KB, up
 to ten files and 3 MB a message. A PNG, JPEG, or WebP up to 1.5 MB is sent as
 it is; any other image, or a larger one, is first made into a smaller WebP on
