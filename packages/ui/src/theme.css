@@ -16,7 +16,6 @@
      --color-primary           --color-primary-foreground
 
    A token outside that list belongs to one app, and a module that reads one
-   is drawn by that app alone: `auth-surface.ts`'s pill and
-   `admin-format.ts`'s trend tone read the site's attention and complete
-   inks. */
+   is drawn by that app alone: `admin-format.ts`'s trend tone reads the
+   site's attention and complete inks. */
 @source "./";

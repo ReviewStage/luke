@@ -12,11 +12,10 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { ProviderMark, useMenu } from "@luke/ui";
+import { EmptyState, ProviderMark, useMenu } from "@luke/ui";
 import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";

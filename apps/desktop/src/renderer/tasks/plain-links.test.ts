@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
@@ -13,7 +14,6 @@ import { installEditorBundle, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
-import { useConfirmDialog } from "../settings/confirm-dialog";
 import { notesBefore } from "./file-note";
 import { PlanBody } from "./plan-body";
 import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
@@ -25,8 +25,7 @@ import { VersionView } from "./version-view";
  * plain-links.test.ts -- a link the window has no chip for is one plain
  * link wherever words are drawn: a transcript, the plan read and edited, a
  * version, and Luke's note. A bare address says its host and path with a
- * ↗, a labelled one its label, a chip never wears the plain link's look,
- * and a plain link pressed in the plan, a version, or a note opens in the
+ * ↗, a labelled one its label, and a plain link pressed in the plan, a version, or a note opens in the
  * browser without opening the section's editor. Synthetic plan and
  * repository.
  */
@@ -122,13 +121,6 @@ function plainLinks(container: HTMLElement): [string | null, boolean][] {
   ]);
 }
 
-/** Whether any chip wears the plain link's look, or stands inside one. */
-function chipLooksPlain(container: HTMLElement): boolean {
-  return [...container.querySelectorAll(".mention-chip, .plan-mention-link")].some(
-    (chip) => chip.closest(".text-link") !== null,
-  );
-}
-
 /** A plan's version, read and ready, as the version history draws it. */
 function Version(): ReactNode {
   const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
@@ -171,11 +163,10 @@ test("a transcript, the plan, a version, and a note draw a link they have no chi
   for (const surface of surfaces) {
     assert.deepEqual(plainLinks(surface), PLAIN);
     assert.equal(surface.querySelectorAll(".mention-chip").length, 2);
-    assert.equal(chipLooksPlain(surface), false);
   }
 });
 
-test("the plan's editor draws a plain link as every place does, whole, and a link naming a mention in a chip's look alone", async () => {
+test("the plan's editor draws a plain link as every place does, whole", async () => {
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
@@ -190,16 +181,8 @@ test("the plan's editor draws a plain link as every place does, whole, and a lin
   await act(async () => undefined);
 
   assert.deepEqual(
-    [...container.querySelectorAll(".plan-document-text a")].map((link) => [
-      link.textContent,
-      link.className,
-    ]),
-    [
-      ["the rollout", "plan-mention-link"],
-      ["the store", "plan-mention-link"],
-      ["the docs", "text-link"],
-      [BARE, "text-link"],
-    ],
+    [...container.querySelectorAll(".plan-document-text a")].map((link) => link.textContent),
+    ["the rollout", "the store", "the docs", BARE],
   );
 });
 

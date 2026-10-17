@@ -64,10 +64,12 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   AnchoredPopover,
+  ConfirmDialog,
   EllipsisIcon,
   POPOVER_ALIGN,
   ProviderMark,
   SidePanelIcon,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -83,7 +85,6 @@ import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
-import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
 import { SettingsGroup } from "../settings/settings-group";
@@ -109,7 +110,7 @@ import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choic
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
  *
- * It stands where the list stood, in the plan's place, and the first crumb
+ * It stands where the list stood, in the task's place, and the first crumb
  * goes back to the list. Its form is drawn as a Settings page is, from
  * Settings' own rows: a group per part, each a card of rows naming a
  * setting and why on the left and its control on the right, every pick a

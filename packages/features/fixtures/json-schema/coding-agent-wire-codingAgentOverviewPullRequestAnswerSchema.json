@@ -1,0 +1,150 @@
+{
+  "type": "object",
+  "properties": {
+    "pullRequest": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "number",
+              "minimum": 0
+            },
+            "title": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "draft",
+                "merged",
+                "closed"
+              ]
+            },
+            "html": {
+              "type": "string"
+            },
+            "base": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "head": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "createdAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "mergedAt": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "merge": {
+              "type": "string",
+              "enum": [
+                "clean",
+                "unstable",
+                "blocked",
+                "behind",
+                "conflicts",
+                "draft",
+                "unknown"
+              ]
+            },
+            "author": {
+              "type": "object",
+              "properties": {
+                "login": {
+                  "type": "string"
+                },
+                "avatarUrl": {
+                  "type": "string"
+                },
+                "bot": {
+                  "type": "boolean"
+                },
+                "userId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "login",
+                "bot"
+              ],
+              "additionalProperties": false
+            },
+            "writtenAs": {
+              "type": "string",
+              "enum": [
+                "developer",
+                "app-unlinked",
+                "app-no-push",
+                "app-automation",
+                "app-unread"
+              ]
+            },
+            "requested": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "login": {
+                    "type": "string"
+                  },
+                  "avatarUrl": {
+                    "type": "string"
+                  },
+                  "bot": {
+                    "type": "boolean"
+                  },
+                  "userId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "login",
+                  "bot"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 50
+            }
+          },
+          "required": [
+            "number",
+            "title",
+            "url",
+            "state",
+            "html",
+            "base",
+            "head",
+            "createdAt",
+            "mergedAt",
+            "merge",
+            "requested"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "pullRequest"
+  ],
+  "additionalProperties": false
+}

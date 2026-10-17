@@ -141,7 +141,7 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
   act(() => {
     page.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-page-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's tab's card is hung");
   assert.equal(card.querySelector(".card-name")?.textContent, "Invite funnel");
   assert.equal(card.querySelector(".card-sub")?.textContent, "Version 2");

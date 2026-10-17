@@ -9,7 +9,7 @@ import { index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { task } from "./plan.js";
+import { task } from "./task.js";
 
 /**
  * plan-comment.ts -- comments on a task's plan: a thread anchored to words of the plan's text, and each of its entries.
@@ -35,7 +35,7 @@ export const planCommentThread = pgTable(
   "plan_comment_thread",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    taskId: uuid("plan_id")
+    taskId: uuid("task_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
     scope: text("scope").$type<PlanCommentScope>().notNull(),
@@ -52,7 +52,7 @@ export const planCommentThread = pgTable(
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
   },
-  (table) => [index("plan_comment_thread_plan_created").on(table.taskId, table.createdAt)],
+  (table) => [index("plan_comment_thread_task_created").on(table.taskId, table.createdAt)],
 );
 
 export const planComment = pgTable(
@@ -63,7 +63,7 @@ export const planComment = pgTable(
       .notNull()
       .references(() => planCommentThread.id, { onDelete: "cascade" }),
     /** The thread's plan, kept on the row so a plan's entries are read by one index. */
-    taskId: uuid("plan_id")
+    taskId: uuid("task_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
     /** Where the entry stands in its thread: the thread's revision its write moved it to. */
@@ -89,7 +89,7 @@ export const planComment = pgTable(
   },
   (table) => [
     index("plan_comment_thread_seq").on(table.threadId, table.seq),
-    index("plan_comment_plan").on(table.taskId),
+    index("plan_comment_task").on(table.taskId),
     uniqueIndex("plan_comment_client_key")
       .on(table.taskId, table.clientKey)
       .where(sql`${table.clientKey} is not null`),

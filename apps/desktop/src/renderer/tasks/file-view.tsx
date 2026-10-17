@@ -32,7 +32,7 @@ import { keptListings, type ListFolder, listingOf } from "./folder-listings";
 import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel";
 
 /**
- * file-view.tsx -- a File tab with the plan's repository beside it: one bar across both, the file under it, and the collapsible tree on its right.
+ * file-view.tsx -- a File tab with the task's repository beside it: one bar across both, the file under it, and the collapsible tree on its right.
  *
  * The bar is the whole view's, the tree's column included, as an editor's
  * is: Back and Forward through the files this tab showed, the file's path
@@ -52,7 +52,7 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * breadcrumb's tree being the same tree, rooted where the crumb stands. The
  * tree is open or closed for every File tab alike, as the
  * panel holds it, and stands across them, since the tab beside it is keyed
- * by its file and the tree is not. A plan with no repository draws the tab
+ * by its file and the tree is not. A task with no repository draws the tab
  * alone, its path plain in the bar. A file opened at a commit, as an inbox
  * item's code or a snippet Luke read from his checkout opens it, is read at
  * that commit, its GitHub page and its copy too, the commit named quietly
@@ -450,12 +450,12 @@ export function FileView({
   onShowNote,
 }: {
   taskId: string;
-  /** The plan's repository, `owner/name`, which the tree browses; none draws the tab alone. */
+  /** The task's repository, `owner/name`, which the tree browses; none draws the tab alone. */
   repository: string | null;
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
   snippet: TaskCode | undefined;
-  /** Every code Luke showed on the plan, whose files of this repository the tree's filter narrows to. */
+  /** Every code Luke showed on the task, whose files of this repository the tree's filter narrows to. */
   shownCode: readonly TaskCodeShowing[] | undefined;
   readFile: ReadFileWindow;
   /** Lists one folder of the repository through the service. */
@@ -473,7 +473,7 @@ export function FileView({
   /** Shows the card the call's code stands on in the Code tab. */
   onShowNote: FileNotes["onShow"];
 }): React.JSX.Element {
-  // The view's store of listings, one per plan and repository. Note that
+  // The view's store of listings, one per task and repository. Note that
   // it lists through a ref to the latest door, so a parent drawing a fresh
   // door neither forgets the listings nor lists the root again.
   const latestRead = useRef(readFolder);
@@ -491,7 +491,7 @@ export function FileView({
     return () => kept("");
   }, [taskId, repository]);
 
-  // Note that the list is kept while the plan shows nothing new, because
+  // Note that the list is kept while the task shows nothing new, because
   // a fresh one would have the tree draw its filter anew.
   const shown = useMemo(
     () =>

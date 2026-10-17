@@ -49,7 +49,7 @@ import { setInstallationStatus } from "./github-installations.js";
  * agents whose rows stand on it, of whichever account, and what each
  * published is read again from GitHub on its owner's own token, exactly as
  * the agent's tab reads it (`packages/service/src/agents/coder-host/published.ts`), which writes
- * it on the agent's row for the plan list. A delivery is therefore
+ * it on the agent's row for the task list. A delivery is therefore
  * idempotent: GitHub redelivering it reads the same pull request again. A
  * read that fails is logged by its kind alone and the delivery is still
  * answered, since GitHub retries nothing on its own and the next delivery
@@ -59,7 +59,7 @@ import { setInstallationStatus } from "./github-installations.js";
  * its subscribing, move the status of the workspace that stands for it
  * (`@luke/service/github/github-installations`): removed or suspended marks it
  * inactive, and unsuspended active again. Nothing is deleted, so an installation
- * suspended and brought back keeps its members and its plans. GitHub never
+ * suspended and brought back keeps its members and its tasks. GitHub never
  * redelivers a failed delivery on its own, so a status one missed is mended
  * by the next read of the installation from GitHub (`github-app.ts`). Its
  * `installation_repositories` deliveries, a repository given or taken, are
@@ -75,7 +75,7 @@ import { setInstallationStatus } from "./github-installations.js";
  * Every delivery is also read as an automation's trigger
  * (`packages/service/src/automations/automation-github.ts`): a pull request or issue opened or
  * labelled, a check suite that failed, or a push queues a run, under the
- * delivery's own id, for each automation on a plan of the repository that
+ * delivery's own id, for each automation on a task of the repository that
  * listens for it, and the minute sweep starts each one's agent. And a
  * review, a comment on a pull request, or a check that failed on an
  * agent's branch is told to the agents on that pull request as a message
@@ -125,7 +125,7 @@ const INSTALLATION_ACTION_STATUS: ReadonlyMap<string, GitHubInstallationStatus> 
   ["unsuspend", GITHUB_INSTALLATION_STATUS.ACTIVE],
 ]);
 
-/** A pull request's actions that change what a plan's row says of it: where it stands, its title, or its size. */
+/** A pull request's actions that change what a task's row says of it: where it stands, its title, or its size. */
 const PULL_REQUEST_ACTIONS: ReadonlySet<string> = new Set([
   "opened",
   "reopened",

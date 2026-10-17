@@ -9,8 +9,10 @@ import { githubImage } from "./github-images.js";
  * github-images.test.ts -- an image GitHub's rendering of a pull request
  * names is read for the window as ReviewStage/stage's proxy reads it: an
  * upload re-signed by its asset's id in the agent's repository on the App's
- * token, then read from the signed address with no credential; a public
- * image on GitHub's image proxy read as it stands; and an answer naming
+ * token, then read from the signed address with no credential; a file of
+ * the agent's own repository read through its contents on the token, and
+ * one of any other repository never asked for; a public image on GitHub's
+ * image proxy read as it stands; and an answer naming
  * another asset, of a type the window does not draw, or past the bound,
  * read as none. A scripted GitHub; synthetic ids.
  */
@@ -116,5 +118,80 @@ it.effect(
         image("image/png", new Uint8Array(GITHUB_IMAGE_BOUNDS.MAX_BYTES + 1)),
       );
       assert.ok(Option.isNone(large.result));
+    }),
+);
+
+/** A whole PNG file's signature, as a repository's file must open to be read as one. */
+const PNG_FILE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+
+/** A repository's file as the contents API answers its raw bytes, under GitHub's own type. */
+function raw(bytes: Uint8Array<ArrayBuffer> = PNG_FILE): Response {
+  return new Response(bytes, {
+    headers: {
+      "content-type": "application/vnd.github.raw; charset=utf-8",
+      "content-length": String(bytes.byteLength),
+    },
+  });
+}
+
+it.effect(
+  "a file of the agent's repository is read through its contents on the App's token, as its extension's type",
+  () =>
+    Effect.gen(function* () {
+      const { result, sent } = yield* read(
+        "https://raw.githubusercontent.com/acme/relay/pr-assets/pr-42/before%20and%20after.png",
+        () => raw(),
+      );
+
+      assert.ok(Option.isSome(result));
+      assert.equal(result.value.contentType, GITHUB_IMAGE_TYPE.PNG);
+      assert.deepEqual([...result.value.bytes], [...PNG_FILE]);
+      const [contents] = sent;
+      assert.equal(
+        contents?.url,
+        "https://api.github.com/repos/acme/relay/contents/pr-42/before%20and%20after.png?ref=pr-assets",
+      );
+      assert.equal(contents?.headers.get("accept"), "application/vnd.github.raw");
+      assert.equal(contents?.headers.get("authorization"), "Bearer ghs_fixture_installation_token");
+
+      const licensed = new TextEncoder().encode(
+        `<?xml version="1.0"?><!-- ${"license ".repeat(1_000)}--><svg xmlns="http://www.w3.org/2000/svg"/>`,
+      );
+      const svg = yield* read("https://raw.githubusercontent.com/acme/relay/main/logo.svg", () =>
+        raw(licensed),
+      );
+      assert.ok(Option.isSome(svg.result), "an SVG with a long comment before its root is read");
+      assert.equal(svg.result.value.contentType, GITHUB_IMAGE_TYPE.SVG);
+    }),
+);
+
+it.effect(
+  "a file of another repository is never asked for, and a contents answer that is not the file's bytes, or bytes of another kind than its extension names, is none",
+  () =>
+    Effect.gen(function* () {
+      const elsewhere = yield* read(
+        "https://raw.githubusercontent.com/acme/vault/main/secret.png",
+        () => raw(),
+      );
+      assert.ok(Option.isNone(elsewhere.result));
+      assert.deepEqual(elsewhere.sent, [], "GitHub is asked nothing for another repository");
+
+      const listing = yield* read("https://github.com/acme/relay/raw/main/shots.png", () =>
+        Response.json([{ name: "a.png" }]),
+      );
+      assert.ok(Option.isNone(listing.result));
+
+      const large = yield* read("https://github.com/acme/relay/raw/main/shot.png", () =>
+        raw(new Uint8Array(GITHUB_IMAGE_BOUNDS.MAX_BYTES + 1)),
+      );
+      assert.ok(Option.isNone(large.result));
+
+      const page = new TextEncoder().encode("<html><script>alert(1)</script></html>");
+      for (const name of ["shot.png", "shot.svg", "shot.webp"]) {
+        const disguised = yield* read(`https://github.com/acme/relay/raw/main/${name}`, () =>
+          raw(page),
+        );
+        assert.ok(Option.isNone(disguised.result), name);
+      }
     }),
 );

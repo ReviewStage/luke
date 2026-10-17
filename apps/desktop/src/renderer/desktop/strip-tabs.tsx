@@ -29,7 +29,7 @@ import { ActionMenu, type MenuAction } from "./action-menu";
 import { MenuTab } from "./tab-strip";
 
 /**
- * strip-tabs.tsx -- what the plan's column's strip and the side panel's draw alike: a tab with its actions, the "+" after the last tab and the menu it drops, a transcript's copy, and what the agents' tabs last drew.
+ * strip-tabs.tsx -- what the task's column's strip and the side panel's draw alike: a tab with its actions, the "+" after the last tab and the menu it drops, a transcript's copy, and what the agents' tabs last drew.
  *
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
@@ -43,7 +43,7 @@ import { MenuTab } from "./tab-strip";
  * (`main-tabs.tsx`, `side-panel.tsx`).
  *
  * What an agent's or a delegated worker's tab last drew is held here for as
- * long as the plan's page is drawn, whichever column the tab stands in, so
+ * long as the task's page is drawn, whichever column the tab stands in, so
  * its card can preview its latest step once another tab is shown, and a
  * delegated worker's card can read its model from the call its agent's tab
  * last drew. Where a delegated worker stands is what its own tab's pages
@@ -262,7 +262,7 @@ export interface TabLook {
  * One tab of either strip, whatever its kind, with its menu
  * (`tabActionGroups`), and, while it is the chosen one and acts on what it
  * shows, its ⋯ in its toolbar's `slot`. A strip passes no slot for a tab
- * whose toolbar draws a ⋯ of its own, as the plan's column does the plan's.
+ * whose toolbar draws a ⋯ of its own, as the task's column does the task's.
  */
 export function DoorsTab({
   look,
@@ -300,7 +300,7 @@ export interface AddEntry {
   /** The mark at the row's end where the row says where its work stands, as the summary and the palette draw it: a failure's (`state-glyph.tsx`). */
   endMark?: React.JSX.Element | undefined;
   onPick: () => void;
-  /** The agent the row names, for a row of the plan's agents, whose menu archives it. */
+  /** The agent the row names, for a row of the task's agents, whose menu archives it. */
   agent?: CodingAgentSummary | undefined;
 }
 
@@ -462,7 +462,7 @@ export interface TabViews {
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
 }
 
-/** What the agents' and the workers' tabs last drew and said, held for as long as the plan's page is drawn. */
+/** What the agents' and the workers' tabs last drew and said, held for as long as the task's page is drawn. */
 export function useTabViews(): TabViews {
   const [standings, setStandings] = useState<WorkerStandings>(() => new Map());
   const [held, setHeld] = useState<HeldTranscripts>(() => ({

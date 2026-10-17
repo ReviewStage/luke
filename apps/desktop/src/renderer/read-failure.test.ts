@@ -33,10 +33,10 @@ import { AgentChangesTab } from "./tasks/agent-changes-tab";
 
 /**
  * A read that did not land says so alike on every surface that reads: the
- * sidebar's plans, the Inbox's list, a side panel tab, and a Settings
- * page's card each draw one alert in the one fault red, a sentence of the
- * shape "The inbox could not be read.", and one Retry, whose press reads
- * again. Synthetic plans and keys.
+ * sidebar's tasks, the Inbox's list, a side panel tab, and a Settings
+ * page's card each draw one alert, a sentence of the shape "The inbox
+ * could not be read.", and one Retry, whose press reads again. Synthetic
+ * tasks and keys.
  */
 
 const ignore = () => undefined;
@@ -111,7 +111,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The surface's one read failure as a reader meets it: its words, whether it wears the fault red, and its presses. */
+/** The surface's one read failure as a reader meets it: its words and its presses. */
 function readFailure(page: HTMLElement) {
   const alerts = [...page.querySelectorAll<HTMLElement>('[role="alert"]')];
   assert.equal(alerts.length, 1, "one alert says the read failed");
@@ -124,21 +124,19 @@ function readFailure(page: HTMLElement) {
     .join("");
   return {
     words,
-    red: alert.classList.contains("error-message"),
     presses: presses.map((each) => each.textContent),
     retry: () => act(() => presses[0]?.click()),
   };
 }
 
-/** Asserts the failure is said as every other is: the fault red, one sentence of the shape, one Retry. */
+/** Asserts the failure is said as every other is: one sentence of the shape, one Retry. */
 function assertSaidAlike(failure: ReturnType<typeof readFailure>, words: string): void {
   assert.equal(failure.words, words);
   assert.match(failure.words, /^[A-Z][^.]* could not be read\.$/u);
-  assert.equal(failure.red, true, `${words} wears the fault red`);
   assert.deepEqual(failure.presses, ["Retry"]);
 }
 
-test("the sidebar's plans that could not be read say so in the fault red, and Retry reads the list again", async () => {
+test("the sidebar's plans that could not be read say so, and Retry reads the list again", async () => {
   let retried = 0;
   const page = await mount(
     createElement(DesktopSidebar, {
@@ -202,6 +200,8 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
           onOpen: ignore,
           onClose: ignore,
           onChoose: ignore,
+          pages: undefined,
+          onRereadPages: () => undefined,
         },
       }),
     }),
@@ -214,7 +214,7 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
   assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
 });
 
-test("a side panel tab whose read failed says so alike, centred where its files would stand, and Retry reads them again", async () => {
+test("a side panel tab whose read failed says so alike, and Retry reads them again", async () => {
   let reads = 0;
   const readChanges = (): Promise<CodingAgentChangesAnswerView> => {
     reads += 1;

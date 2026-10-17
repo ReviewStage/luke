@@ -7,7 +7,7 @@ import {
 } from "./task-wire.js";
 
 /**
- * plan-document-template.ts -- the Markdown an account's new plans start from, and how `/api/account/plan-template` reads and writes it.
+ * plan-document-template.ts -- the Markdown an account's new tasks start from, and how `/api/account/plan-template` reads and writes it.
  *
  * Each account keeps one starter template on the service, so every Mac it
  * signs in on sees the same one. `GET` answers the template with whether the

@@ -229,7 +229,7 @@ async function cardOf(chip: Element | undefined) {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   await settle();
-  const card = [...document.querySelectorAll(".tooltip-card > *")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
     tab: card.matches("[data-tab-card]"),

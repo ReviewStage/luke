@@ -64,9 +64,27 @@ const AutomationsPage = lazy(() =>
 );
 
 /**
+ * The Issues page, loaded as a chunk of its own the first time it opens,
+ * as the Automations pages are and for the same reason.
+ */
+const IssuesPage = lazy(() =>
+  import("./issues-page").then((loaded) => ({ default: loaded.IssuesPage })),
+);
+
+/**
+ * What stands while the Issues page's chunk loads: its empty frame, and its
+ * own way out, so Escape pressed in that frame closes Issues as the list
+ * would rather than falling through to the plan behind it.
+ */
+function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_ISSUES, onExit);
+  return <section className="automations-view" aria-label="Issues" />;
+}
+
+/**
  * What stands while the Automations pages' chunk loads: their empty frame,
  * and their own way out, so Escape pressed in that frame closes Automations
- * as the list would rather than falling through to the plan behind it.
+ * as the list would rather than falling through to the task behind it.
  */
 function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onExit);
@@ -76,7 +94,7 @@ function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Eleme
 /**
  * What stands while Settings' chunk loads: nothing drawn, but Settings' own
  * way out, so Escape pressed in that frame leaves Settings as it would once
- * drawn, rather than falling through to the plan behind it. It is gone as
+ * drawn, rather than falling through to the task behind it. It is gone as
  * Settings stands and offers the same command itself.
  */
 function SettingsLoading({ onExit }: { onExit: () => void }): null {
@@ -100,7 +118,7 @@ export interface DesktopGates {
  * Folds the sidebar away and back, or in a window too narrow to pin it,
  * floats it open over the work and puts it away. It stands beside the
  * traffic lights rather than in the sidebar, so it is in the same place
- * whichever way the sidebar is, and the plan's toolbar leaves it room while
+ * whichever way the sidebar is, and the task's toolbar leaves it room while
  * the sidebar is folded; in full screen, where macOS hides the lights, it
  * takes their place at the window's edge (`window-full-screen.ts`). It
  * stands only where there is a sidebar to fold, so it offers the chord too.
@@ -121,8 +139,8 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
 
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
- * plan, Settings, the home page, the Inbox, the tab closed latest, opened again on its
- * plan, the Keyboard shortcuts page that lists them all, and back and
+ * task, Settings, the home page, the Inbox, the tab closed latest, opened again on its
+ * task, the Keyboard shortcuts page that lists them all, and back and
  * forward, which answer whether or not their buttons are drawn.
  */
 function usePlaceCommands(
@@ -163,6 +181,17 @@ function usePlaceCommands(
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           tasks.inboxView.onOpen();
+        }
+      : undefined,
+  );
+  // The Issues page is an experiment on the same terms as Factory.
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  useAppCommand(
+    APP_COMMAND.ISSUES,
+    pastGate && tasks.signedIn && issuesOn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.issuesView.onOpen();
         }
       : undefined,
   );
@@ -212,9 +241,9 @@ function usePlaceCommands(
 }
 
 /**
- * The sidebar's New plan, kept in reach while the sidebar is folded: an icon
+ * The sidebar's New task, kept in reach while the sidebar is folded: an icon
  * beside the toggle, the way a chat app keeps its compose button beside its
- * own. It asks for exactly what the sidebar's button asks for: the New plan
+ * own. It asks for exactly what the sidebar's button asks for: the New task
  * dialog, over whatever stands.
  */
 function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element {
@@ -234,7 +263,7 @@ function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element 
 }
 
 /**
- * Whether the open plan's Transcript is on screen with its words, streaming
+ * Whether the open task's Transcript is on screen with its words, streaming
  * a call's as they are said. A Call tab standing behind another chosen
  * tab is not on screen, and one still reading, or failed, shows no words.
  */
@@ -249,8 +278,8 @@ function transcriptStreaming(tasks: TasksControl): boolean {
 
 /**
  * What the window's title names: Settings alone, whose pages are not one
- * workspace's; the Inbox in the listed workspace, whatever plan its item is
- * from; Factory, the Automations page, and Chat in the listed workspace; the plan on screen in its own workspace, or alone while that is not
+ * workspace's; the Inbox in the listed workspace, whatever task its item is
+ * from; Factory, the Automations page, and Chat in the listed workspace; the task on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
@@ -272,8 +301,9 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
+  if (tasks.issuesView.open) return { signedIn, subject: "Issues", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
-  // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
+  // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
   return { signedIn, subject: shownTask.name, workspace };
 }
@@ -288,26 +318,26 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
  * keeps its page list whatever the sidebar's collapse says, and hands the
- * plans back folded or not as it found them. The side panel's toggle is the
- * mirror of the sidebar's, at the window's top right on a plan's page, so
+ * tasks back folded or not as it found them. The side panel's toggle is the
+ * mirror of the sidebar's, at the window's top right on a task's page, so
  * neither pane carries the button that moves it. A plan's version history
  * takes the whole window as Settings does, its versions listed where the
- * sidebar was, and leaves the same way; the Inbox stands in the plan's
- * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the plan, so
+ * sidebar was, and leaves the same way; the Inbox stands in the task's
+ * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the task, so
  * what changed since the developer last looked is held here, across it,
- * rather than by the plan's page (`use-task-looks.ts`). Folding the sidebar,
- * opening, shutting, or growing the side panel, or the plan's summary pinned
+ * rather than by the task's page (`use-task-looks.ts`). Folding the sidebar,
+ * opening, shutting, or growing the side panel, or the task's summary pinned
  * or folded to its rail, by a press or by its column's room
  * (task-summary.tsx), glides the work beside them (pane-motion.tsx). A
  * window too narrow to pin the sidebar folds it, and a folded sidebar floats
  * over the work rather than beside it (`sidebar-collapse.ts`), put away by a
  * press outside it and its toggle. Back and forward ride the left column's title-bar row,
- * the plans' sidebar or Settings' page list alike, and leaving Settings is
- * going back to wherever it was opened from, or to the plans when nothing
- * stands behind it. New plan's dialog stands over the plans or a version
- * history, whichever is drawn (`new-task-dialog.tsx`). The live captions ride the call bar while the plan's
+ * the tasks' sidebar or Settings' page list alike, and leaving Settings is
+ * going back to wherever it was opened from, or to the tasks when nothing
+ * stands behind it. New task's dialog stands over the tasks or a version
+ * history, whichever is drawn (`new-task-dialog.tsx`). The live captions ride the call bar while the task's
  * column is drawn, and float at the window's foot wherever else a call can
- * still be heard; they hold back spoken words while the plan's Transcript
+ * still be heard; they hold back spoken words while the task's Transcript
  * is on screen streaming the same ones.
  */
 export function DesktopShell({
@@ -339,7 +369,7 @@ export function DesktopShell({
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
-  // Factory switched off while it stands, here or on another Mac, gives the plan's place back.
+  // Factory switched off while it stands, here or on another Mac, gives the task's place back.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const { open: factoryShown, onClose: closeFactory } = tasks.factoryView;
   useEffect(() => {
@@ -356,12 +386,17 @@ export function DesktopShell({
   useEffect(() => {
     if (chatShown && !chatOn) closeChat();
   }, [chatShown, chatOn, closeChat]);
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  const { open: issuesShown, onClose: closeIssues } = tasks.issuesView;
+  useEffect(() => {
+    if (issuesShown && !issuesOn) closeIssues();
+  }, [issuesShown, issuesOn, closeIssues]);
   const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${sidebar.collapsed}`,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.issuesView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
@@ -371,7 +406,8 @@ export function DesktopShell({
     tasks.personView.userId !== undefined ||
     tasks.factoryView.open ||
     tasks.automationsView.open ||
-    tasks.chatView.open;
+    tasks.chatView.open ||
+    tasks.issuesView.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -413,7 +449,7 @@ export function DesktopShell({
       </div>
     );
   }
-  // Settings takes the whole window, its pages listed where the plans were.
+  // Settings takes the whole window, its pages listed where the tasks were.
   if (tab === PANEL_TAB.SETTINGS) {
     const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
     return (
@@ -431,10 +467,10 @@ export function DesktopShell({
       </div>
     );
   }
-  // New plan asks over whatever stands, the plans or a version history.
+  // New task asks over whatever stands, the tasks or a version history.
   const newTaskDialog = <NewTaskDialog newTask={tasks.newTask} />;
   // A plan's version history takes the whole window too, its versions listed
-  // where the sidebar was, and hands the plan back as it found it.
+  // where the sidebar was, and hands the task back as it found it.
   if (tasks.history.open) {
     return (
       <div className="desktop-shell">
@@ -458,19 +494,22 @@ export function DesktopShell({
     );
   }
   // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then. The Inbox,
-  // Factory, the Automations page, and Chat stand in the plan's place, so they
-  // draw no panel to toggle; an agent's page draws the agent's own.
+  // toolbar beneath it leaves the toggle room then and only then. Factory,
+  // the Automations page, and Chat stand in the plan's place, so they draw
+  // no panel to toggle; an agent's page draws the agent's own, and the Inbox
+  // the chosen item's task's.
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const factoryOpen = tasks.factoryView.open && factoryOn;
   const automationsOpen = tasks.automationsView.open && automationsOn;
   const chatOpen = tasks.chatView.open && chatOn;
+  const issuesOpen = tasks.issuesView.open && issuesOn;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  const panelToggle = planToggle || pageAgent !== undefined;
+  const panelToggle =
+    planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
-  // Note that a panel filling the window hides the plan's column, call bar
+  // Note that a panel filling the window hides the task's column, call bar
   // and all, so the captions float in its place then.
   const captionsInColumn = taskDrawn && !tasks.sidePanel.fullScreen;
   const captionStrip = (
@@ -506,9 +545,7 @@ export function DesktopShell({
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             ) : inboxOpen ? (
-              <PageFind page={FIND_PAGE.INBOX} active={tasks.shown}>
-                <DesktopInbox tasks={tasks} />
-              </PageFind>
+              <DesktopInbox tasks={tasks} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />
@@ -530,6 +567,12 @@ export function DesktopShell({
             ) : factoryOpen ? (
               <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
                 <DesktopFactory tasks={tasks} />
+              </PageFind>
+            ) : issuesOpen ? (
+              <PageFind page={FIND_PAGE.ISSUES} active={tasks.shown}>
+                <Suspense fallback={<IssuesLoading onExit={tasks.issuesView.onClose} />}>
+                  <IssuesPage tasks={tasks} />
+                </Suspense>
               </PageFind>
             ) : automationsOpen ? (
               <PageFind

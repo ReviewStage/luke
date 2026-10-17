@@ -285,7 +285,7 @@ export const asks = pgTable(
     /** The Live API's id of the voice session a spoken ask was delegated in; null for a typed ask. */
     voiceSessionId: text("voice_session_id"),
     /** The spoken ask's place in its voice session's order of delegations: a higher revision supersedes a lower. */
-    askRevision: integer("task_revision"),
+    askRevision: integer("ask_revision"),
     /** The last event of the ask's turn told to the voice under this ask short of its end, written before it is told. */
     toldSeq: integer("told_seq").notNull().default(0),
     /** When the run's end was told to the voice under this ask, written before it is told. */

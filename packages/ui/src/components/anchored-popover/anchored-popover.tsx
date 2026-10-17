@@ -1,4 +1,14 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { cssCustomProperties } from "../../css.js";
+import {
+  type Box,
+  POPOVER_ALIGN,
+  POPOVER_SIDE,
+  type PopoverAlign,
+  type PopoverPlace,
+  popoverPlace,
+  samePlace,
+} from "./popover-place.js";
 
 /**
  * anchored-popover.tsx -- the layer a popover hangs from its own button in: above it, a small gap off, from one of its edges, inside the room around it.
@@ -23,91 +33,29 @@ import { useLayoutEffect, useRef, useState } from "react";
  * the resize is measured.
  */
 
-/** Which side of its anchor a popover hangs on. */
-const POPOVER_SIDE = {
-  ABOVE: "above",
-  BELOW: "below",
-} as const;
+export { POPOVER_ALIGN, type PopoverAlign } from "./popover-place.js";
 
-type PopoverSide = (typeof POPOVER_SIDE)[keyof typeof POPOVER_SIDE];
-
-/** Which of its anchor's edges a popover lines up with: the leading one, growing rightward, or the trailing one, growing leftward. */
-export const POPOVER_ALIGN = {
-  START: "start",
-  END: "end",
-} as const;
-
-export type PopoverAlign = (typeof POPOVER_ALIGN)[keyof typeof POPOVER_ALIGN];
-
-/** The gap between the anchor and its popover, which is the stylesheet's `--luke-space-4`. */
-const POPOVER_GAP = 4;
-
-/** The width a popover asks for, the desktop's searchable menu's own, which the room may narrow. */
+/** The width a popover asks for unless its owner asks another, the desktop's searchable menu's own, which the room may narrow. */
 const POPOVER_WIDTH = 340;
-
-/** The least gap a popover keeps from its room's edges, as the desktop's action menu keeps from the window's. */
-const POPOVER_MARGIN = 8;
 
 /** The box that bounds a popover beside the window's: the desktop's side panel, which marks itself so. */
 const POPOVER_ROOM = "[data-popover-room]";
 
-/** A box in window coordinates. */
-interface Box {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-}
-
-/** Where a popover stands: its side, how far its asked edge stands in from its anchor's, and its width. */
-interface PopoverPlace {
-  side: PopoverSide;
-  inset: number;
-  width: number;
-}
-
-function clamp(value: number, low: number, high: number): number {
-  return Math.max(low, Math.min(value, high));
-}
-
 /**
- * Where a popover of this width and height stands against its anchor in
- * its room: above unless only below has room for it, at the asked edge
- * unless only the other keeps it inside, else pushed back inside.
+ * The layer's inline place: its asked edge's inset, as `left` or `right`,
+ * its width, and, once measured, the height its side leaves it as
+ * `--luke-popover-room`, which a popover taller than a menu bounds itself by.
  */
-function popoverPlace(input: {
-  anchor: Box;
-  room: Box;
-  width: number;
-  height: number;
-  align: PopoverAlign;
-}): PopoverPlace {
-  const { anchor, room, align } = input;
-  const width = Math.min(input.width, room.right - room.left - 2 * POPOVER_MARGIN);
-  const low = room.left + POPOVER_MARGIN;
-  const high = room.right - POPOVER_MARGIN - width;
-  const startLeft = anchor.left;
-  const endLeft = anchor.right - width;
-  const [asked, other] =
-    align === POPOVER_ALIGN.START ? [startLeft, endLeft] : [endLeft, startLeft];
-  const fits = (left: number) => left >= low && left <= high;
-  const left = fits(asked) ? asked : fits(other) ? other : clamp(asked, low, high);
-  const above = anchor.top - room.top - POPOVER_GAP - POPOVER_MARGIN;
-  const below = room.bottom - anchor.bottom - POPOVER_GAP - POPOVER_MARGIN;
-  const side =
-    above < input.height && below >= input.height ? POPOVER_SIDE.BELOW : POPOVER_SIDE.ABOVE;
-  const inset = align === POPOVER_ALIGN.START ? left - anchor.left : anchor.right - left - width;
-  return { side, inset, width };
-}
-
-/** Whether two places draw the layer alike, so a scroll that moves nothing renders nothing. */
-function samePlace(a: PopoverPlace | undefined, b: PopoverPlace): boolean {
-  return a !== undefined && a.side === b.side && a.inset === b.inset && a.width === b.width;
-}
-
-/** The layer's inline place: its asked edge's inset, as `left` or `right`, and its width. */
-function placeStyle(align: PopoverAlign, inset: number, width: number): React.CSSProperties {
-  return align === POPOVER_ALIGN.START ? { left: inset, width } : { right: inset, width };
+function placeStyle(
+  align: PopoverAlign,
+  inset: number,
+  width: number,
+  room?: number,
+): React.CSSProperties {
+  const edge = align === POPOVER_ALIGN.START ? { left: inset, width } : { right: inset, width };
+  return room === undefined
+    ? edge
+    : { ...edge, ...cssCustomProperties({ "--luke-popover-room": `${room}px` }) };
 }
 
 /** The room a popover inside `element` may fill: its marked room cut to the window, or the window. */
@@ -129,9 +77,12 @@ function roomAround(element: HTMLElement): Box {
  */
 export function AnchoredPopover({
   align,
+  width = POPOVER_WIDTH,
   children,
 }: {
   align: PopoverAlign;
+  /** The width it asks for, a form's wider than a menu's. */
+  width?: number;
   children: React.ReactNode;
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
@@ -145,7 +96,7 @@ export function AnchoredPopover({
       const next = popoverPlace({
         anchor: anchor.getBoundingClientRect(),
         room: roomAround(anchor),
-        width: POPOVER_WIDTH,
+        width,
         height: drawn.getBoundingClientRect().height,
         align,
       });
@@ -170,7 +121,7 @@ export function AnchoredPopover({
       window.removeEventListener("resize", measure);
       document.removeEventListener("scroll", measure, { capture: true });
     };
-  }, [align]);
+  }, [align, width]);
 
   return (
     <div
@@ -179,8 +130,8 @@ export function AnchoredPopover({
       data-side={place?.side ?? POPOVER_SIDE.ABOVE}
       style={
         place === undefined
-          ? placeStyle(align, 0, POPOVER_WIDTH)
-          : placeStyle(align, place.inset, place.width)
+          ? placeStyle(align, 0, width)
+          : placeStyle(align, place.inset, place.width, place.room)
       }
     >
       {children}

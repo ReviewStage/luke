@@ -18,7 +18,7 @@ import { TASK_BOUNDS, taskSchema } from "./task-wire.js";
  * answered with what the text holds now, and nothing is changed: the
  * developer chooses whether their text stands.
  *
- * Note that `plan` keep the wire's legacy spelling of a task, because a
+ * Note that `plan` keeps the wire's legacy spelling of a task, because a
  * released desktop sends and reads them; they are renamed with the wire in a
  * follow-up, with no alias.
  */

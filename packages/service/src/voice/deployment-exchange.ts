@@ -104,7 +104,7 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
     const { deploymentSecret, origin } = yield* configuredSeams(seams);
     // The writer's composition probes every declared output schema, so a warm
     // instance pays that walk once rather than once per session.
-    // A call writes into a plan conversation, whose rows name the planning
+    // A call writes into a task conversation, whose rows name the brain's
     // tools, so the writer holds rows to the hosted set as the brain's does.
     const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
     // eve's client is composed once per instance too, over the client the seam names; a test's

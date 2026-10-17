@@ -17,13 +17,12 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { useMenu } from "@luke/ui";
+import { EmptyState, useMenu } from "@luke/ui";
 import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
@@ -42,7 +41,7 @@ import { useAutomations } from "./use-automations";
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
  *
- * It stands in the plan's place beside the sidebar, as Factory does, and
+ * It stands in the task's place beside the sidebar, as Factory does, and
  * its sidebar row is marked while it does. Who owns an automation is the
  * one thing the list must never leave in doubt, so the workspace's
  * automations stand first and the account's personal ones after, under a
@@ -376,7 +375,7 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
 }
 
 /**
- * The window's Automations pages, in the plan's place: the list, or one
+ * The window's Automations pages, in the task's place: the list, or one
  * automation's editor, or a new one's. The list is read once for all of
  * them, so an automation opened from it opens as it was listed, and an
  * edit is in the list the moment it lands.

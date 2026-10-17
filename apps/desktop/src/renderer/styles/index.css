@@ -33,5 +33,7 @@
 /* After everything: the window's own layout restages the shared surface's
    elements, and its overrides have to win. */
 @import "./desktop.css";
+/* The Issues page, over the window's layout it stands in. */
+@import "./issues.css";
 /* The call card, and its floating window over the desktop's ground, which it must not have. */
 @import "./call.css";

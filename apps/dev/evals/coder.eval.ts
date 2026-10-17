@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { sqlClientOverUrl } from "@luke/database/core/sql-client";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { type CodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { user } from "@luke/database/schemas/auth";
@@ -17,6 +18,10 @@ import { CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
 import { TODOS_SAVED } from "@luke/service/agents/coder-host/todos";
 import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import {
+  SCRIPTED_CHAT_HEARD,
+  SCRIPTED_CHAT_POST,
+  SCRIPTED_CHAT_POSTED,
+  SCRIPTED_CHAT_READ,
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,
   SCRIPTED_DELEGATED_REPLY,
@@ -26,6 +31,7 @@ import {
   SCRIPTED_TODOS_REPLY,
   SCRIPTED_WORKER_CHOICE,
 } from "@luke/service/testing/coder-scripted-model";
+import { EXPERIMENT } from "@luke/settings";
 import {
   EXCESS_KEYS,
   MESSAGE_AUTHOR,
@@ -55,7 +61,9 @@ import { defineEval } from "eve/evals";
  * names, on that pair, and the worker's answer is read back. Handed
  * to-dos, it writes the list, which eve holds to the schema the model is
  * shown and the writer keeps as a tool part the agent's tab draws. Told
- * a skill's `/name`, it loads the skill the session was offered. The
+ * a skill's `/name`, it loads the skill the session was offered. Told to
+ * post in chat, it posts in its plan's channel, and another agent on the
+ * plan told to read the chat reads that post as unread. The
  * eve server runs in this process with the database the environment names,
  * so the eval reads the rows back from the same Postgres. Where no database
  * is named the eval skips rather than pretending.
@@ -71,6 +79,7 @@ const PLAN_SNAPSHOT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by
 const REPOSITORY = "acme/relay";
 const DELEGATED_TASK = "Count the invitation routes";
 const TODO_WORDS = "Read the guide; Add the invitation route";
+const CHAT_WORDS = "The invite table is mine; please leave its migration to me.";
 
 /** How long the eval waits for a turn to settle, in polls of the interval below. */
 const SETTLE_POLLS = 120;
@@ -320,6 +329,58 @@ export default defineEval({
             isTextUIPart(part) &&
             part.text === `${SCRIPTED_SKILL_REPLY} Write one line per change, newest first.`,
         ),
+      );
+
+      // A chat post is a tool part of the agent's answer, accepted in its
+      // plan's channel, and another agent on the plan reads it as unread,
+      // named by its poster's handle.
+      // The reader is started first: a member joins the chat at its head, and the poster's first post
+      // seats every agent of the plan not yet seated, so the reader stands before the post lands.
+      // Chat is an experiment: the account turns it on, as Settings › Experimental does.
+      await run(
+        Effect.asVoid(
+          writeAccountPreferences(LOCAL_DEV_PRINCIPAL, {
+            experiments: { [EXPERIMENT.CHAT]: true },
+          }),
+        ),
+      );
+      const reader = await startAgent(run, task.id);
+      const poster = await startAgent(run, task.id);
+      const posting = await openSession(
+        poster.conversationId,
+        `${SCRIPTED_CHAT_POST}${CHAT_WORDS}`,
+      );
+      (await t.target.attachSession(posting.sessionId)).succeeded();
+      const postAnswer = (await readMessagesByConversationTyped(run, poster.conversationId)).at(-1);
+      assert.ok(postAnswer);
+      const post = postAnswer.parts.find((part) => isToolUIPart(part));
+      assert.ok(post);
+      assert.equal(post.type, `tool-${CODER_TOOL.POST_CHAT}`);
+      assert.equal(post.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+      assert.deepEqual(post.input, { text: CHAT_WORDS });
+      assert.match(JSON.stringify(post.output), /"status":"accepted"/u);
+      // A plan of the same name already standing in the workspace, from an earlier run, takes the next name.
+      assert.match(JSON.stringify(post.output), /"in":"#teammate-invitations(-\d+)?"/u);
+      assert.ok(
+        postAnswer.parts.some(
+          (part) => isTextUIPart(part) && part.text.startsWith(SCRIPTED_CHAT_POSTED),
+        ),
+      );
+      const reading = await openSession(reader.conversationId, SCRIPTED_CHAT_READ);
+      (await t.target.attachSession(reading.sessionId)).succeeded();
+      const readAnswer = (await readMessagesByConversationTyped(run, reader.conversationId)).at(-1);
+      assert.ok(readAnswer);
+      const read = readAnswer.parts.find((part) => isToolUIPart(part));
+      assert.ok(read);
+      assert.equal(read.type, `tool-${CODER_TOOL.READ_CHAT}`);
+      assert.ok(
+        readAnswer.parts.some(
+          (part) =>
+            isTextUIPart(part) &&
+            part.text.startsWith(`${SCRIPTED_CHAT_HEARD} @agent-`) &&
+            part.text.endsWith(`: ${CHAT_WORDS}`),
+        ),
+        "the other agent reads the post as unread, named by its poster's handle",
       );
     } finally {
       await runtime.dispose();

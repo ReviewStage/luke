@@ -1,5 +1,6 @@
 {
   "name": "@luke/wire",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "The vocabulary every side speaks and the Schema tooling it is declared with: JSON, action results, turns, message metadata, UI message parts, conversation lines, app-setting ids",

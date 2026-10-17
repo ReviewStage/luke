@@ -41,6 +41,7 @@ import {
   type TasksLinearIssuesAnswer,
   type TasksMoveAnswer,
   type TasksPageAnswer,
+  type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPullRequestAnswer,
@@ -69,6 +70,7 @@ import {
   tasksMessagesParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
+  tasksPagesParamsSchema,
   tasksPictureKeepParamsSchema,
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
@@ -93,6 +95,7 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceTransferParamsSchema,
+  tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
 import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -128,48 +131,48 @@ import type { RunMode } from "./run-mode.js";
 import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
 
 /**
- * compose-tasks.ts -- the panel's named plans, read from the service: the list, the one active plan, and its document, drawn as the notetaker writes it during a call.
+ * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document, drawn as the notetaker writes it during a call.
  *
  * Nothing here writes a document but a restore the developer asks for: the
- * plan's notetaker and coding agents are its writers, on the service. What
- * this concern owes the panel is to show those writes as they happen. Every write happens during a planning call, and the notetaker's
+ * task's notetaker and coding agents are its writers, on the service. What
+ * this concern owes the panel is to show those writes as they happen. Every write happens during a task's call, and the notetaker's
  * drafts arrive on that call's own socket and are drawn in place: the list
- * and the open plan are read when the Plans tab shows, when a plan opens, and
- * when one starts, and never on a clock. The open plan's whiteboard is read
+ * and the open task are read when the Tasks tab shows, when a task opens, and
+ * when one starts, and never on a clock. The open task's whiteboard is read
  * with its document, and again whenever the call's activity says a draw by
- * the planning model just settled or the planning model stopped working, since
+ * the brain just settled or the brain stopped working, since
  * a draw happens only inside its turn; the panel saves the board's scene
  * through here and the view takes the board as the service answered it. What
- * was said on the open plan's calls is read with its document, and again
+ * was said on the open task's calls is read with its document, and again
  * whenever a call about it ends, once at the end and once more when the
  * call's last words have had time to reach the record; while a call stands,
  * its words are the voice window's to report.
  * The loops here are those board and transcript reads. The code Luke puts
  * on screen during a call arrives on the call's socket with its lines, read
- * by the service from the plan's repository, and is coloured here
+ * by the service from the task's repository, and is coloured here
  * (`task-code.ts`) and drawn in place; nothing of the repository is read on
- * this Mac. What the planning model wrote and ran on the plan's calls, and
+ * this Mac. What the brain wrote and ran on the task's calls, and
  * every code shown on them, are read from the service with the document, so
- * a plan opened after a restart or a switch shows them; its older work is
+ * a task opened after a restart or a switch shows them; its older work is
  * read a page at a time as the Work tab asks, and each turn a call tells and
- * each code it shows lands over those reads and stays past the call's end. The repositories the account reaches, and a plan's repository
+ * each code it shows lands over those reads and stays past the call's end. The repositories the account reaches, and a task's repository
  * given or taken away, are the service's too, asked through here, as are a
- * plan pinned or archived: the list holds the archived plans beside the
+ * task pinned or archived: the list holds the archived tasks beside the
  * rest, each flagged, and which the window draws where is the window's. A
  * plan's history is read for the version history that asks and held nowhere
  * here; a revision restored is the one write this concern carries to the
- * service on the developer's word, and the view takes the plan it answers.
- * The pages agents wrote for the open plan are listed with its document, by
+ * service on the developer's word, and the view takes the task it answers.
+ * The pages agents wrote for the open task are listed with its document, by
  * title and newest version alone, and again whenever the call's activity
- * says a page the planning model showed just settled or it stopped working;
+ * says a page the brain showed just settled or it stopped working;
  * a page's HTML is answered to the frame that draws it and held nowhere
- * here. Beside the work, the open plan's planning conversation is read as
+ * here. Beside the work, the open task's conversation is read as
  * an agent's transcript is, on the service's held read, and held on the
- * view for the Call tab to switch to; a planning worker's transcript is
+ * view for the Call tab to switch to; the brain's worker's transcript is
  * answered to the tab that asks for it and held nowhere here.
  *
  * The workspaces the account is a member of are carried on the view beside
- * the plans and read apart from them, so the plans never wait on them: on
+ * the tasks and read apart from them, so the tasks never wait on them: on
  * the first refresh after a launch or a sign-in, when the panel comes
  * forward, at most once a minute either way, and after a workspace call
  * moved them. A workspace made, renamed, or given a photo, a GitHub
@@ -202,18 +205,18 @@ const CONVERSATION_BACKOFF = Schedule.exponential(CONVERSATION_RETRY.FIRST).pipe
   ),
 );
 
-/** The statuses a conversation page reads as still writing: a planning turn, or a worker of one, that may add to it. */
+/** The statuses a conversation page reads as still writing: a brain's turn, or a worker of one, that may add to it. */
 const CONVERSATION_WRITING: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.STARTING,
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** A read of a plan's conversation the service did not answer, as the backoff retries it. */
+/** A read of a task's conversation the service did not answer, as the backoff retries it. */
 class ConversationUnanswered extends Data.TaggedError("ConversationUnanswered")<{
   readonly failure: CodingAgentCallFailure;
 }> {}
 
-/** Whether a page says the planner, or a worker of its, may still add to the conversation. */
+/** Whether a page says the brain, or a worker of its, may still add to the conversation. */
 function conversationWriting(page: CodingAgentMessagesAnswer): boolean {
   return (
     CONVERSATION_WRITING.has(page.status) ||
@@ -225,7 +228,7 @@ function conversationWriting(page: CodingAgentMessagesAnswer): boolean {
  * The entries held of a conversation's workers with a page's joined in by
  * the call that started each: the page's in place of one held under the
  * same call, and a new one after the rest. Note that the list is joined
- * rather than replaced, because a planning conversation's page names only
+ * rather than replaced, because a task's conversation's page names only
  * the workers of the turns it carries and of its newest few.
  */
 function joinedByCall<Entry extends { readonly callId: string }>(
@@ -252,7 +255,7 @@ function withWorkers(
   };
 }
 
-/** A plan's pin, where it stands, and its archive as the list carries them, each only where it stands. */
+/** A task's pin, where it stands, and its archive as the list carries them, each only where it stands. */
 type TaskMarkStamps = Pick<Task, "pinnedAt" | "pinPosition" | "archivedAt">;
 
 /**
@@ -269,10 +272,10 @@ const GITHUB_PAGE_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as cons
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
-/** Opening or deleting a plan names it and nothing else. */
+/** Opening or deleting a task names it and nothing else. */
 const tasksOpenParamsSchema = Schema.Struct({ taskId: Schema.NonEmptyString });
 
-/** The service's side of the plans, and the workspaces they live in, as this concern asks it. */
+/** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
   HostedTaskClient,
   | "list"
@@ -283,6 +286,8 @@ export type TasksClient = Pick<
   | "mark"
   | "repositoryPins"
   | "pinRepository"
+  | "taskSections"
+  | "writeTaskSection"
   | "readBoard"
   | "saveBoard"
   | "readTranscript"
@@ -332,7 +337,7 @@ export type TasksClient = Pick<
   github: Pick<HostedGitHubConnectionClient, "status" | "connect" | "disconnect">;
 };
 
-/** The service's side of a plan's planning conversation, read as an agent's transcript is. */
+/** The service's side of a task's conversation, read as an agent's transcript is. */
 export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
 
 export interface TasksDependencies {
@@ -341,8 +346,8 @@ export interface TasksDependencies {
   client: TasksClient;
   conversations: TasksConversationClient;
   /**
-   * Ends the planning call standing about `taskId`, or whatever it is about
-   * where none is named, and waits for it to end. A call about another plan
+   * Ends the call standing about `taskId`, or whatever it is about
+   * where none is named, and waits for it to end. A call about another task
    * is left standing.
    */
   endTaskCall: (taskId: string | undefined) => Effect.Effect<void>;
@@ -351,34 +356,34 @@ export interface TasksDependencies {
 export interface TasksComposer extends Composer {
   /** The view as this Mac holds it now. */
   snapshot: () => TasksView;
-  /** The one active plan, which a voice session binds to; nothing while the panel has none open. */
+  /** The one active task, which a voice session binds to; nothing while the panel has none open. */
   activeTaskId: () => string | undefined;
   /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
   reset: Effect.Effect<void>;
   /**
-   * Shows a draft of the open plan the service's notetaker sent while a
-   * planning call writes it, in place of the document held; a draft of any
-   * other plan, or with no document of that plan held, is dropped.
+   * Shows a draft of the open task the service's notetaker sent while a
+   * task's call writes it, in place of the document held; a draft of any
+   * other task, or with no document of that task held, is dropped.
    */
   showDraft: (draft: PlanDraftFrame) => void;
   /**
-   * Shows what each part of Luke is doing on the call about the open plan,
-   * as the service last said it; a word about any other plan is dropped.
-   * Leaving or switching plans clears it, and the call's end says nothing
+   * Shows what each part of Luke is doing on the call about the open task,
+   * as the service last said it; a word about any other task is dropped.
+   * Leaving or switching tasks clears it, and the call's end says nothing
    * doing.
    */
   showActivity: (activity: TaskActivityFrame) => void;
   /**
-   * Puts code on screen as Luke named it on the open plan's call, with the
-   * lines the service read from the plan's repository: coloured here and
+   * Puts code on screen as Luke named it on the open task's call, with the
+   * lines the service read from the task's repository: coloured here and
    * drawn after every code shown before it, where it stays past the call's
-   * end. Code about any other plan, or of a call already held, is dropped.
+   * end. Code about any other task, or of a call already held, is dropped.
    */
   showCode: (taskId: string, shown: TaskShownCode) => void;
   /**
-   * Shows a planning turn's work on the call about the open plan, in place
+   * Shows a brain turn's work on the call about the open task, in place
    * of the same turn as last told, the newest turns kept; work about any
-   * other plan is dropped. Leaving or switching plans clears it, and the
+   * other task is dropped. Leaving or switching tasks clears it, and the
    * call's end keeps it.
    */
   showWork: (taskId: string, turn: TaskWorkTurn) => void;
@@ -387,30 +392,30 @@ export interface TasksComposer extends Composer {
 }
 
 /**
- * The panel's plans as one concern. The view is told to every client whole
- * whenever it moves, and exactly one plan is active at a time: opening or
+ * The panel's tasks as one concern. The view is told to every client whole
+ * whenever it moves, and exactly one task is active at a time: opening or
  * starting one replaces whichever was, and a read still out for the replaced
- * plan is dropped when it lands. Only one plan is ever the spoken
- * conversation, so opening another plan, starting one, leaving the open plan,
- * or a sign-out ends the call about the plan that was open before anything
- * else moves. The Plans tab showing reads the list and the open plan again,
- * while the open plan and its call stand through the tab hiding. Behind a
+ * task is dropped when it lands. Only one task is ever the spoken
+ * conversation, so opening another task, starting one, leaving the open task,
+ * or a sign-out ends the call about the task that was open before anything
+ * else moves. The Tasks tab showing reads the list and the open task again,
+ * while the open task and its call stand through the tab hiding. Behind a
  * closed account gate, or on a run that sends nothing, nothing is read.
  *
- * The open plan's conversation is read the way an agent's tab reads its
- * transcript: its newest page when the plan opens, starts, or is refreshed,
+ * The open task's conversation is read the way an agent's tab reads its
+ * transcript: its newest page when the task opens, starts, or is refreshed,
  * then one held read past the cursor after another, which the service holds
- * open while a planning turn or one of its workers runs and nothing new
- * stands. The read follows while the last page says the planner or a worker
+ * open while a brain turn or one of its workers runs and nothing new
+ * stands. The read follows while the last page says the brain or a worker
  * still writes, and parks once a page says neither, because the service
  * answers an idle conversation at once and asking again would be a loop on
  * no clock at all. Note that it reads the workers the page names rather
  * than the list held, because a worker no page names any more reads as it
- * last did and would keep the read asking. Any word of the open plan's call (its activity, or its
+ * last did and would keep the read asking. Any word of the open task's call (its activity, or its
  * end) wakes a parked read, from the cursor held, since a turn begins only
  * on a call and its activity says so. One read stands at a time: opening
- * another plan replaces it, and leaving the plan or a sign-out stops it. A
- * read the service did not answer is asked again after a backoff; a plan the
+ * another task replaces it, and leaving the task or a sign-out stops it. A
+ * read the service did not answer is asked again after a backoff; a task the
  * service no longer holds parks it.
  */
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
@@ -423,7 +428,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * One read of the service at a time, whichever ask made it. Note that the
    * answers are applied in the order the reads were made, because a list
-   * that left before a plan started, or a document read that left before a
+   * that left before a task started, or a document read that left before a
    * newer one, would otherwise land last and roll the view back.
    */
   const serial = (yield* Semaphore.make(1)).withPermits(1);
@@ -442,7 +447,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The view with no activity, no board, no transcript, no code, no work, no conversation, and no pages read or told, as a plan left behind leaves it. */
+  /** The view with no activity, no board, no transcript, no code, no work, no conversation, and no pages read or told, as a task left behind leaves it. */
   function withoutActivity({
     activity: _activity,
     board: _board,
@@ -457,23 +462,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return rest;
   }
 
-  /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
+  /** The tasks whose board a settled draw may have moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
 
-  /** The plans whose pages a settled `show_page` may have moved, read one at a time by the loop below. */
+  /** The tasks whose pages a settled `show_page` may have moved, read one at a time by the loop below. */
   const pageReads = yield* Queue.sliding<string>(1);
 
-  /** The plans a call just ended about, whose transcript and work are read again by the loop below. */
+  /** The tasks a call just ended about, whose transcript and work are read again by the loop below. */
   const callEndReads = yield* Queue.sliding<string>(1);
 
-  /** The one read of the open plan's conversation; running another interrupts it. */
+  /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
 
-  /** The plans whose call just said something, whose parked conversation read the loop below wakes. */
+  /** The tasks whose call just said something, whose parked conversation read the loop below wakes. */
   const conversationWakes = yield* Queue.sliding<string>(1);
 
   /**
-   * Whether the open plan's call said something since the conversation read
+   * Whether the open task's call said something since the conversation read
    * last asked. Note that a read already out when a turn began can answer
    * the conversation idle, so the read checks this before it parks rather
    * than miss the turn until the call's next word.
@@ -481,7 +486,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   let conversationWoken = false;
 
   /**
-   * The plan whose call is telling its turns' work as they run, and the
+   * The task whose call is telling its turns' work as they run, and the
    * turns that call told, which stand over the record's running copies; none
    * once that call ended, since nothing it told is ahead of the record any
    * more. A turn an earlier call told is not among them.
@@ -489,20 +494,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   let telling: { readonly taskId: string; readonly turnIds: Set<string> } | undefined;
 
   /**
-   * The developer's newest save of an edit, and the plan it was of. A draft
+   * The developer's newest save of an edit, and the task it was of. A draft
    * the notetaker drew over a save older than it does not hold the edit, so
    * it is dropped rather than drawn: the edit would vanish until the
-   * notetaker's next save, which takes it in under the plan's lock.
+   * notetaker's next save, which takes it in under the task's lock.
    */
   let developerSaved: { readonly taskId: string; readonly at: number } | undefined;
 
-  /** The document of `taskId` as held now, if the held one is that plan's. */
+  /** The document of `taskId` as held now, if the held one is that task's. */
   function heldTaskOf(taskId: string): TasksDocument["task"] {
     const held = view.document.task;
     return held?.id === taskId ? held : undefined;
   }
 
-  /** A plan's row of the list: everything but its document and what is written of it. */
+  /** A task's row of the list: everything but its document and what is written of it. */
   function summaryOf({
     document: _document,
     agentEdits: _agentEdits,
@@ -515,7 +520,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const readList = Effect.gen(function* () {
     const listed = yield* Effect.provide(client.list(), FetchHttpClient.layer);
     // A failed read keeps the list it last read: the panel says the read
-    // failed beside the plans it already drew rather than emptying them.
+    // failed beside the tasks it already drew rather than emptying them.
     write(
       listed.ok
         ? {
@@ -537,12 +542,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * Reads the account's workspaces, and whether its GitHub is connected
-   * beside them, apart from the plans, which never wait on it. Note that the
+   * beside them, apart from the tasks, which never wait on it. Note that the
    * connection is read with the workspaces, because both move in the
    * browser and the panel coming forward is when either is read again; each
    * lands on the view as soon as it is read, so a slow connection read never
    * holds back the workspaces. A failed read keeps what it last read, as a
-   * failed list read keeps the plans.
+   * failed list read keeps the tasks.
    *
    * Note that only the latest read started is drawn, because reads overlap
    * (a refresh, a write's read after it) and an older one answering last
@@ -581,14 +586,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (!fresh) yield* readWorkspaces;
   });
 
-  // A failed read keeps the pins it last read, as a failed list read keeps the plans.
+  // A failed read keeps the pins it last read, as a failed list read keeps the tasks.
   const readRepositoryPins = Effect.gen(function* () {
     const pins = yield* Effect.provide(client.repositoryPins(), FetchHttpClient.layer);
     if (pins !== undefined) write({ repositoryPins: pins });
   });
 
+  // A failed read keeps the sections it last read, as the pins' does.
+  const readTaskSections = Effect.gen(function* () {
+    const sections = yield* Effect.provide(client.taskSections(), FetchHttpClient.layer);
+    if (sections !== undefined) write({ taskSections: sections });
+  });
+
   /**
-   * Reads the active plan's document. A copy of the same plan already held
+   * Reads the active task's document. A copy of the same task already held
    * stays drawn while the read is out, and stays drawn through a read that
    * failed, so a save redraws in place and a moment offline blanks nothing;
    * with no copy held, the failure is what the panel draws.
@@ -598,7 +609,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const held = heldTaskOf(taskId);
       if (held === undefined) write({ document: { status: TASKS_READ.READING } });
       const opened = yield* Effect.provide(client.open(taskId), FetchHttpClient.layer);
-      // Another plan opened while this read was out: its answer is not the panel's any more.
+      // Another task opened while this read was out: its answer is not the panel's any more.
       if (view.activeTaskId !== taskId) return;
       if (opened.ok) {
         write({ document: { status: TASKS_READ.READY, task: opened.answer } });
@@ -617,7 +628,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** Reads the active plan's board; a failed read keeps the board drawn. */
+  /** Reads the active task's board; a failed read keeps the board drawn. */
   function readBoard(taskId: string) {
     return Effect.gen(function* () {
       const board = yield* Effect.provide(client.readBoard(taskId), FetchHttpClient.layer);
@@ -627,7 +638,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Reads what was said on the active plan's calls. A transcript already
+   * Reads what was said on the active task's calls. A transcript already
    * held stays drawn while the read is out and through a read that failed,
    * as the document does; with none held, the failure is what the panel
    * draws.
@@ -655,7 +666,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * The plan a restore just replaced the content of, and the restore's save,
+   * The task a restore just replaced the content of, and the restore's save,
    * until the notetaker saves after it. Note that the drafts of its turn in
    * flight were written over the content the restore replaced, so a draft,
    * or a save from before the restore landing late, would draw that content
@@ -696,7 +707,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     write({ document: { status: TASKS_READ.READY, task } });
   }
 
-  /** Takes the active plan's work as it now stands, and where its next older page is read from, none where no older turn stands. */
+  /** Takes the active task's work as it now stands, and where its next older page is read from, none where no older turn stands. */
   function writeWork(next: Pick<TasksView, "work" | "workEarlier" | "shownCode">): void {
     const { workEarlier: _was, ...rest } = view;
     view = { ...rest, ...next };
@@ -705,7 +716,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * The held turns with a page the service answered laid among them, in the
-   * order the turns began. Note that a turn the open plan's call told stands
+   * order the turns began. Note that a turn the open task's call told stands
    * over the record's copy while that copy still runs and that call still
    * tells, because the call is ahead of the record there; once the call has
    * ended, a turn still running on record, parked on a worker, is the
@@ -733,7 +744,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * The code the record holds, oldest first, then each a call showed that
    * the record does not hold yet. Note that a showing already held is kept
-   * rather than coloured again, because the plan's work is read again on
+   * rather than coloured again, because the task's work is read again on
    * every refresh and colouring the windows is what costs.
    */
   function withShownCode(recorded: readonly TaskShownCode[]): TaskCodeShowing[] {
@@ -745,7 +756,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Reads the active plan's pages, each by its newest version. A failed read
+   * Reads the active task's pages, each by its newest version. A failed read
    * keeps the pages held, as a failed board read keeps the board.
    */
   function readPages(taskId: string) {
@@ -759,9 +770,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Reads the newest page of the active plan's work, and every code shown
+   * Reads the newest page of the active task's work, and every code shown
    * on it, as the service keeps them. Older pages already read stay, with
-   * the place the next one is read from; a plan read for the first time
+   * the place the next one is read from; a task read for the first time
    * takes the service's. Code a call put on screen that the record does not
    * hold yet stays after the record's. A failed read keeps whatever is held.
    */
@@ -783,7 +794,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** Reads the page of the active plan's work before the oldest turn held, where one stands; a failed read keeps what is held. */
+  /** Reads the page of the active task's work before the oldest turn held, where one stands; a failed read keeps what is held. */
   function readEarlierWork(taskId: string) {
     return Effect.gen(function* () {
       const before = view.workEarlier;
@@ -797,7 +808,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** One page of a plan's conversation, or why the service did not answer it. */
+  /** One page of a task's conversation, or why the service did not answer it. */
   function askConversation(taskId: string, page: { after?: string; before?: string }) {
     return Effect.flatMap(
       Effect.provide(conversations.taskMessages(taskId, page), FetchHttpClient.layer),
@@ -811,7 +822,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * The held conversation with a page read from its newest turns or past its
    * cursor joined in by message id and its workers by call, the cursor and
-   * where the planner stands taken from the page. Note that the turn the next older page
+   * where the brain stands taken from the page. Note that the turn the next older page
    * is read before stays the held one once a page older than this one is
    * held, because the page's own names a turn already read.
    */
@@ -832,10 +843,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Follows `taskId`'s conversation while it is the open plan: from its
+   * Follows `taskId`'s conversation while it is the open task: from its
    * newest page, or past the cursor held, then past each page's cursor while
    * the page says it is still written or the call woke it meanwhile. A read
-   * the service did not answer is asked again after the backoff; a plan it
+   * the service did not answer is asked again after the backoff; a task it
    * no longer holds, or a gate that closed, ends the follow.
    */
   function followConversation(taskId: string, newest: boolean) {
@@ -864,7 +875,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.asVoid(FiberHandle.run(conversationRead, followConversation(taskId, true)));
   }
 
-  /** Wakes the open plan's parked conversation read, where `taskId` is the open plan. */
+  /** Wakes the open task's parked conversation read, where `taskId` is the open task. */
   function wakeConversation(taskId: string): void {
     if (view.activeTaskId !== taskId) return;
     conversationWoken = true;
@@ -872,9 +883,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Reads the page of the active plan's conversation before the oldest turn
+   * Reads the page of the active task's conversation before the oldest turn
    * held, where one stands, and lays it before the rest, its workers joined
-   * by call. Note that the cursor and where the planner stands stay the held
+   * by call. Note that the cursor and where the brain stands stay the held
    * read's, because the page's cursor is the conversation's now and would
    * skip what the held read has not heard yet. A failed read keeps what is held.
    */
@@ -887,7 +898,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         FetchHttpClient.layer,
       );
       const held = view.conversation;
-      // The plan was left, or opened again, while this read was out.
+      // The task was left, or opened again, while this read was out.
       if ("failure" in answer || view.activeTaskId !== taskId || held?.earlier !== before) return;
       const { earlier: _read, subagents: _workers, subagentTitles: _titles, ...rest } = held;
       write({
@@ -903,15 +914,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /**
    * Shows the call's activity, and asks for the board again where it says a
-   * draw just settled: the planning model's pending call was a draw and is
-   * not any more, or the planning model stopped working, which also covers a
+   * draw just settled: the brain's pending call was a draw and is
+   * not any more, or the brain stopped working, which also covers a
    * draw that settled between two words about it. A look that just became
    * the pending call asks too, because a draw made in the same step never
    * shows as pending, and the look waits on the board holding it.
    */
   function showActivity({ type: _type, planId: taskId, ...activity }: TaskActivityFrame): void {
-    // The call's own copy is kept whatever plan is open, for the floating
-    // call window; the panel's is the active plan's alone.
+    // The call's own copy is kept whatever task is open, for the floating
+    // call window; the panel's is the active task's alone.
     if (view.activeTaskId !== taskId) {
       write({ callActivity: activity });
       return;
@@ -973,7 +984,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     );
   }
 
-  /** The pin and the archive a plan answered carries, each only where it stands. */
+  /** The pin and the archive a task answered carries, each only where it stands. */
   function marksOf(task: Task): TaskMarkStamps {
     return {
       ...(task.pinnedAt === undefined ? undefined : { pinnedAt: task.pinnedAt }),
@@ -985,7 +996,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * Draws the pin and the archive `task` was answered with on its row of the
    * list, and on the open document where it is the one held. Note that the
-   * row keeps what the list said of the plan's coding agents, which only the
+   * row keeps what the list said of the task's coding agents, which only the
    * list answers, and the held document keeps everything else it holds,
    * because a draft drawn during a call may be ahead of the copy the service
    * answered.
@@ -1011,7 +1022,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** Pins or archives one plan on the service, or undoes either, and draws what it answered. */
+  /** Pins or archives one task on the service, or undoes either, and draws what it answered. */
   function markTask(taskId: string, marks: TaskMarks) {
     return serial(
       Effect.gen(function* () {
@@ -1027,7 +1038,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * One workspace call, then what it may have moved read again, whatever it
    * answered, since a refusal can find it already moved elsewhere: the
    * workspaces after a workspace made, a disconnection, or a removal, and the
-   * plans beside them after a leave, which takes a workspace's plans out of
+   * tasks beside them after a leave, which takes a workspace's tasks out of
    * the list.
    */
   function workspaceCall<Answer>(
@@ -1064,7 +1075,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   const methods: GatewayMethodTable = {
-    // The workspaces are read beside the plans rather than before them, and
+    // The workspaces are read beside the tasks rather than before them, and
     // only where the last read is stale: the first refresh after a launch or
     // a sign-in reads them, and the rest seldom.
     [GATEWAY_METHOD.TASKS_REFRESH]: () =>
@@ -1076,6 +1087,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             yield* readList;
             yield* readRepositoryPins;
+            yield* readTaskSections;
             const taskId = view.activeTaskId;
             if (taskId !== undefined) yield* readDocument(taskId);
             if (taskId !== undefined) yield* readBoard(taskId);
@@ -1100,9 +1112,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (Result.isFailure(read)) return yield* invalid("opening a plan names one plan");
         if (!gate()) return { opened: false };
         const { taskId } = read.success;
-        // Note that a call about the plan left behind goes on standing,
-        // because the call outlives the plan on screen: moving it to this
-        // plan is this plan's own Talk press.
+        // Note that a call about the task left behind goes on standing,
+        // because the call outlives the task on screen: moving it to this
+        // task is this task's own Talk press.
         if (view.activeTaskId !== taskId) {
           view = {
             ...withoutActivity(view),
@@ -1137,7 +1149,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* serial(readEarlierConversation(taskId));
         return {};
       }),
-    // A page of a plan's conversation, or of a planning worker's, is answered
+    // A page of a task's conversation, or of a brain's worker's, is answered
     // to the tab that asked and held nowhere: the tab keeps what it read.
     [GATEWAY_METHOD.TASKS_MESSAGES]: (params) =>
       Effect.gen(function* () {
@@ -1265,7 +1277,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps
-    // what it read, and reads again as the plan moves on.
+    // what it read, and reads again as the task moves on.
     [GATEWAY_METHOD.TASKS_REVISIONS]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksRevisionsParamsSchema)(unparsedWire(params));
@@ -1318,6 +1330,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
         );
       }),
+    // A plan's pages are answered to the Inbox that asked and held nowhere,
+    // since the view holds the active plan's alone.
+    [GATEWAY_METHOD.TASKS_PAGES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading a plan's pages names the plan");
+        if (!gate()) return carried<TasksPagesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const pages = yield* Effect.provide(
+          client.readPages(read.success.taskId),
+          FetchHttpClient.layer,
+        );
+        return carried<TasksPagesAnswer>(
+          pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
+        );
+      }),
     // A picture's bytes are answered to the window that asked and held
     // nowhere, so they never enter the view every window is told.
     [GATEWAY_METHOD.TASKS_PICTURE]: (params) =>
@@ -1350,7 +1377,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksPictureKeepAnswer>(kept);
       }),
-    // The service answers the plan as restored, so the list's row and the
+    // The service answers the task as restored, so the list's row and the
     // open document take it in place and nothing is read again.
     [GATEWAY_METHOD.TASKS_RESTORE]: (params) =>
       Effect.gen(function* () {
@@ -1372,8 +1399,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
       }),
-    // Leaving the plan returns to the list, which was read when the tab
-    // showed, and leaves its call standing, as opening another plan does.
+    // Leaving the task returns to the list, which was read when the tab
+    // showed, and leaves its call standing, as opening another task does.
     [GATEWAY_METHOD.TASKS_CLOSE]: () =>
       Effect.gen(function* () {
         yield* FiberHandle.clear(conversationRead);
@@ -1399,7 +1426,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             const started = yield* Effect.provide(client.create(request), FetchHttpClient.layer);
             if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
             const task = started.answer;
-            // A plan just started has had no call. A call about another plan
+            // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.
             view = {
               ...withoutActivity(view),
@@ -1414,7 +1441,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
       }),
-    // Note that the plan's call ends before the plan is deleted, open or not,
+    // Note that the task's call ends before the task is deleted, open or not,
     // because a call still standing would go on writing a document that is gone.
     [GATEWAY_METHOD.TASKS_DELETE]: (params) =>
       Effect.gen(function* () {
@@ -1439,7 +1466,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
       }),
-    // The service answers the plan as renamed, so the list's row and the
+    // The service answers the task as renamed, so the list's row and the
     // open document take it in place and nothing is read again.
     [GATEWAY_METHOD.TASKS_RENAME]: (params) =>
       Effect.gen(function* () {
@@ -1508,8 +1535,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
       }),
-    // Note that an archived plan stays open where it is the open one: leaving
-    // it is the window's to ask, as it is for any plan.
+    // The service answers the sections as they then stand, as it does the pins.
+    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksWriteSectionParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("a change to a section names what it changes");
+        }
+        if (!gate()) return { changed: false };
+        const asked = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const sections = yield* Effect.provide(
+              client.writeTaskSection(asked),
+              FetchHttpClient.layer,
+            );
+            if (sections === undefined) return { changed: false };
+            write({ taskSections: sections });
+            return { changed: true };
+          }),
+        );
+      }),
+    // Note that an archived task stays open where it is the open one: leaving
+    // it is the window's to ask, as it is for any task.
     [GATEWAY_METHOD.TASKS_ARCHIVE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksArchiveParamsSchema)(unparsedWire(params));
@@ -1539,7 +1587,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
         );
       }),
-    // The service answers the plan as changed, so the list's row and the
+    // The service answers the task as changed, so the list's row and the
     // open document take it in place and nothing is read again.
     [GATEWAY_METHOD.TASKS_SET_REPOSITORY]: (params) =>
       Effect.gen(function* () {
@@ -1563,7 +1611,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
       }),
-    // The service answers the plan as moved, so the list's row and the open
+    // The service answers the task as moved, so the list's row and the open
     // document take its workspace in place and nothing is read again.
     [GATEWAY_METHOD.TASKS_MOVE]: (params) =>
       Effect.gen(function* () {
@@ -1587,7 +1635,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
       }),
-    // The plan the service answered is drawn in place, so the edit stands on
+    // The task the service answered is drawn in place, so the edit stands on
     // the document at once and the notetaker's drafts drawn before it drop.
     [GATEWAY_METHOD.TASKS_EDIT]: (params) =>
       Effect.gen(function* () {
@@ -1654,7 +1702,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           made.ok ? { workspace: made.answer } : { failure: made.failure },
         );
       }),
-    // A rename moves no plan, so the workspaces alone are read again, and
+    // A rename moves no task, so the workspaces alone are read again, and
     // the new name arrives on the document with them.
     [GATEWAY_METHOD.WORKSPACES_RENAME]: (params) =>
       Effect.gen(function* () {
@@ -1668,7 +1716,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           yield* workspaceWrite(client.workspaces.rename(workspaceId, name)),
         );
       }),
-    // A photo moves no plan either, so it is a rename's twin: the answered
+    // A photo moves no task either, so it is a rename's twin: the answered
     // workspace, its photo's new version or none, lands, and the
     // workspaces are read again; the window's tiles read the photo by it.
     [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
@@ -1813,7 +1861,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
         );
       }),
-    // A role changed moves no plan, so the workspaces alone are read again,
+    // A role changed moves no task, so the workspaces alone are read again,
     // as after a removal.
     [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: (params) =>
       Effect.gen(function* () {
@@ -1833,7 +1881,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // Note that a handover changes the account's own role in the workspace,
     // which the view's workspaces carry and every owner's and admin's act is
-    // drawn from, so the workspaces are read again; it moves no plan.
+    // drawn from, so the workspaces are read again; it moves no task.
     [GATEWAY_METHOD.WORKSPACES_TRANSFER]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceTransferParamsSchema)(unparsedWire(params));
@@ -1849,10 +1897,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           handedOver.ok ? { members: handedOver.answer } : { failure: handedOver.failure },
         );
       }),
-    // Note that a leave ends a call about any plan of the workspace left,
-    // the open one or one closed since, and closes the open plan where it is
+    // Note that a leave ends a call about any task of the workspace left,
+    // the open one or one closed since, and closes the open task where it is
     // that workspace's, as a delete of it does, because the account can no
-    // longer read or write a plan of a workspace it left; a refused leave
+    // longer read or write a task of a workspace it left; a refused leave
     // ends and closes nothing.
     [GATEWAY_METHOD.WORKSPACES_LEAVE]: (params) =>
       Effect.gen(function* () {
@@ -1865,7 +1913,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const departedTaskIds = view.tasks
           .filter((task) => task.workspaceId === workspaceId)
           .map((task) => task.id);
-        // A standing call is ended only by its own plan's id, so each plan left is named.
+        // A standing call is ended only by its own task's id, so each task left is named.
         const endDepartedCalls = Effect.forEach(departedTaskIds, (taskId) => endTaskCall(taskId), {
           discard: true,
         });
@@ -1894,7 +1942,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // An invitation is answered to the window that asked and held nowhere,
-    // and moves no workspace or plan, so nothing else is read with it.
+    // and moves no workspace or task, so nothing else is read with it.
     [GATEWAY_METHOD.WORKSPACES_INVITATIONS]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
@@ -1940,7 +1988,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
         );
       }),
-    // A save of another plan than the open one is dropped: its board is not drawn.
+    // A save of another task than the open one is dropped: its board is not drawn.
     [GATEWAY_METHOD.TASKS_BOARD_SAVE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksBoardSaveParamsSchema)(unparsedWire(params));
@@ -1986,7 +2034,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // The board and page reads a settled draw or page asks for, the
     // transcript and work reads a call's end asks for, and the wake of a
     // parked conversation read the call's words ask for; every other read of
-    // the plans is an ask's.
+    // the tasks is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(
         Effect.forever(

@@ -8,9 +8,9 @@ import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 
 /**
- * action-menu.tsx -- the window's own drop-down menu: a plan's actions, a repository's, a side panel tab's, and the account's.
+ * action-menu.tsx -- the window's own drop-down menu: a task's actions, a repository's, a side panel tab's, and the account's.
  *
- * The one menu the plan's ⋯ and right-click, a repository header's ⋯ and
+ * The one menu the task's ⋯ and right-click, a repository header's ⋯ and
  * right-click, a tab's right-click, and the sidebar's account row draw, whose
  * items the empty side panel also lists as buttons of their own. It is
  * drawn rather than asked of the system so that every door draws it the same

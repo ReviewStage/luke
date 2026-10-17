@@ -1,5 +1,6 @@
 {
   "name": "@luke/ui",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "Shared React for the desktop panel: Luke's face and glyphs, traced from the brand's generated art",
@@ -23,15 +24,18 @@
     "./skill-mention": "./src/skill-mention.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
     "./task-list-model": "./src/task-list-model.js",
+    "./task-sections-model": "./src/task-sections-model.js",
     "./integration-search": "./src/integration-search.js",
     "./agent-servers-model": "./src/agent-servers-model.js",
     "./github-html": "./src/github-html.js",
     "./held-link": "./src/held-link.js",
     "./link-route": "./src/link-route.js",
+    "./inbox-panel-link": "./src/inbox-panel-link.js",
     "./link-glue": "./src/link-glue.js",
     "./link-face": "./src/link-face.js",
     "./quote-face": "./src/quote-face.js",
     "./picture-cache": "./src/picture-cache.js",
+    "./image-zoom": "./src/image-zoom.js",
     "./confirm-state": "./src/confirm-state.js",
     "./use-setting-write": "./src/use-setting-write.js",
     "./use-state-with-ref": "./src/use-state-with-ref.js",
@@ -46,7 +50,7 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "test:vitest": "vitest run && vitest run --config vitest.browser.config.ts",
+    "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -59,6 +63,7 @@
     "clsx": "2.1.1",
     "effect": "catalog:",
     "react": "catalog:",
+    "react-dom": "catalog:",
     "recharts": "3.8.0",
     "tailwind-merge": "3.7.0"
   },
@@ -67,11 +72,7 @@
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "@vitest/browser-playwright": "5.0.0",
-    "axe-core": "4.14.0",
     "jsdom": "^30.0.1",
-    "playwright": "1.64.1",
-    "react-dom": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

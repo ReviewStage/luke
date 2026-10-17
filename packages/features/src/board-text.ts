@@ -2,7 +2,7 @@ import { BOARD_ELEMENT_TYPE } from "./board-vocabulary.js";
 import type { Board, BoardElement } from "./board-wire.js";
 
 /**
- * board-text.ts -- a board as the planning model reads it: one line per kind of element, each element by id with its words and where it stands.
+ * board-text.ts -- a board as the brain reads it: one line per kind of element, each element by id with its words and where it stands.
  *
  * The model cannot see the canvas, so this is the whole of what it knows of
  * the board: what the developer drew is here on its next turn, beside what
@@ -13,7 +13,7 @@ import type { Board, BoardElement } from "./board-wire.js";
  * folded into what it labels rather than listed on its own. Coordinates are
  * rounded to whole pixels. The text is cut at `BOARD_TEXT_MAX_CHARS`, saying
  * how many elements were left out, so a crowded board cannot take over the
- * planning turn's context. A drawing of the model's that the developer's Mac
+ * brain turn's context. A drawing of the model's that the developer's Mac
  * has not put on the board yet is said to be on its way, since its elements
  * are not in the scene.
  */
@@ -91,7 +91,7 @@ const LINE_ORDER = [
   { title: "lines", has: (element: BoardElement) => element.type === BOARD_ELEMENT_TYPE.LINE },
 ] as const;
 
-/** The board as the planning model reads it. */
+/** The board as the brain reads it. */
 export function boardText(board: Board): string {
   const { elements } = board;
   const pending = board.drawing !== undefined && board.drawing.number > board.appliedDrawing;

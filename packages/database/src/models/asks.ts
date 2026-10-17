@@ -37,7 +37,7 @@ export interface AskRow {
   readonly cancelRequestedAt?: Date;
 }
 
-/** Where a spoken ask came from: the voice session it was delegated in and its task revision there. */
+/** Where a spoken ask came from: the voice session it was delegated in and its ask revision there. */
 export interface AskVoice {
   readonly sessionId: string;
   readonly revision: number;

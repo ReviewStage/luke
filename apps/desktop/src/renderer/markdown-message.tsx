@@ -369,7 +369,7 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  *
  * A link is drawn as a plain link (`text-link.tsx`), naming its destination
  * on hover. It is pressed only where the place showing the words hands an
- * opener (`openLink`), as the plan's page, its versions, and Luke's notes
+ * opener (`openLink`), as the task's page, its versions, and Luke's notes
  * do; elsewhere, as in a caption, it is words going nowhere, so a message's
  * words become an action only where a reader expects a link to open. Only
  * HTTP and HTTPS destinations survive `urlTransform` below, so anything else
@@ -413,7 +413,7 @@ function plainLink(
 
 /**
  * Draws a link the place showing the words knows better than as words, a
- * mention's chip (`planning/mention-chip.tsx`) say, from its destination
+ * mention's chip (`tasks/mention-chip.tsx`) say, from its destination
  * and its label's words; nothing for one it leaves drawn as any link is.
  */
 export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;

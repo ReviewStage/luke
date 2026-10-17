@@ -37,7 +37,7 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
-import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
+import type { VideoAvatar } from "@luke/features/video-avatar";
 import {
   decodeLivePayload,
   isLiveVoice,
@@ -104,7 +104,7 @@ const UNAVAILABLE_STATUS = 503;
 export interface LiveSessionCreateInput {
   /** The renderer's SDP offer, as written. */
   sdpOffer: string;
-  /** The plan the call is about. */
+  /** The task the call is about. */
   taskId: string;
 }
 
@@ -155,7 +155,7 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    */
   hangUp(): void;
   /**
-   * Tells the listener each draft of a planning call's plan the service's
+   * Tells the listener each draft of a task call's plan the service's
    * notetaker sends as it writes, as the service's own frame on the same
    * socket says it; the sideband never sees that frame. Optional on the same
    * terms as `reportActivity`.
@@ -163,14 +163,14 @@ export interface LiveSessionOpened extends LiveSessionCreated {
   onPlanDraft?(listener: (draft: PlanDraftFrame) => void): void;
   /**
    * Tells the listener each time the service says what each part of Luke is
-   * doing on a planning call, on the same terms as `onPlanDraft`.
+   * doing on a task call, on the same terms as `onPlanDraft`.
    */
   onTaskActivity?(listener: (activity: TaskActivityFrame) => void): void;
-  /** Tells the listener each time Luke puts code on screen on a planning call, on the same terms as `onPlanDraft`. */
+  /** Tells the listener each time Luke puts code on screen on a task call, on the same terms as `onPlanDraft`. */
   onTaskCode?(listener: (code: TaskCodeFrame) => void): void;
-  /** Tells the listener each planning turn's work as it changes on a planning call, on the same terms as `onPlanDraft`. */
+  /** Tells the listener each brain turn's work as it changes on a task call, on the same terms as `onPlanDraft`. */
   onTaskWork?(listener: (work: TaskWorkFrame) => void): void;
-  /** Tells the listener Luke is ending a planning call once his goodbye has played, on the same terms as `onPlanDraft`. */
+  /** Tells the listener Luke is ending a task call once his goodbye has played, on the same terms as `onPlanDraft`. */
   onTaskCallEnding?(listener: (ending: TaskCallEndingFrame) => void): void;
   /**
    * Asks the service for Luke's avatar on this session, in its own
@@ -419,8 +419,8 @@ class ServiceLiveSessionSource {
         type: VOICE_SERVICE_FRAME.SESSION_CREATE,
         sdp: input.sdpOffer,
         voice: this.#voice,
-        // A planning call is seeded with nothing from here: the service seeds
-        // it with the plan and what was said on the plan's earlier calls.
+        // A task call is seeded with nothing from here: the service seeds
+        // it with the plan and what was said on the task's earlier calls.
         input: [],
         planId: input.taskId,
       };
@@ -998,7 +998,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           const frame: AvatarStartFrame = {
             type: VOICE_SERVICE_FRAME.AVATAR_START,
             requestId,
-            ...(avatar === VIDEO_AVATAR.DEFAULT ? undefined : { avatar }),
+            avatar,
           };
           socket.send(JSON.stringify(frame));
         },

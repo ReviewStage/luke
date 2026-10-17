@@ -49,16 +49,16 @@ import {
   chaseView,
   type UnitView,
 } from "./task-reveal";
-import { agoText, useMinute } from "./task-time";
+import { agoText, momentText, sinceText, useMinute } from "./task-time";
 import { PlanTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
 
 /**
- * plan-body.tsx -- the open plan's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
+ * plan-body.tsx -- the open task's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
  *
- * Every document the host hands over for the open plan becomes the chase's
+ * Every document the host hands over for the open task becomes the chase's
  * target, whether a saved plan or a draft still being written, so a stream of
  * drafts is worked in by one continuous hand rather than restarting on each.
  * The view follows the caret, bringing a jump to the middle, unless the
@@ -70,35 +70,37 @@ import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
  * card (`edit-ref.tsx`), whose call it was on where Luke wrote it on one,
  * and how long ago, moved on once a minute. The time opens the plan's
  * version history, where each earlier version is. Each section says the
- * same of the save that last changed it, quietly, while the pointer or the
- * keyboard is on it, leading with the writer's face, and its time opens the
- * version history on the revision that save made. The words before the
+ * same of the save that last changed it in fewer letters, quietly, while the
+ * pointer or the keyboard is on it: the writer's face, whose card names them,
+ * and the time, "2h", at the end of a heading that always keeps room for
+ * them, so they never stand over its words. Its time opens the version
+ * history on the revision that save made. The words before the
  * first heading have no heading's line for it to stand at, so they carry no
  * line in the text, where it would stand over their words or a picture; a
  * picture of the plan, opened over the window, says who last changed its
  * section in the viewer's header instead. The sections changed since
- * the developer last looked at the plan on this Mac wear a still tint,
+ * the developer last looked at the task on this Mac wear a still tint,
  * counted under that line beside a face for each who changed them, until
- * they dismiss them or leave the plan (`use-task-looks.ts`).
- * The plan's name is drawn as the title over its text (`task-title.tsx`),
+ * they dismiss them or leave the task (`use-task-looks.ts`).
+ * The task's name is drawn as the title over its text (`task-title.tsx`),
  * and each section is known by its heading, and its link by the heading's
  * anchor (`sectionAnchors`). A Mermaid fence draws as its diagram once Luke
  * has finished typing it (`../plan-diagram.tsx`).
  *
- * On a plan's own page each section has a link: its ⋯, shown while the
+ * On a task's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's address
  * (`@luke/features/mention-link`), which a transcript or the plan draws as
  * the section's chip wherever it is pasted, and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. The title has a ⋯ of its own, drawn as a section's is,
- * which copies the plan's link and offers Rename, where the title can be
+ * which copies the task's link and offers Rename, where the title can be
  * edited, and Version history, where the window opens it
  * (`task-menu-items.tsx`). Asked to show a section, the document scrolls
  * its own scroller to it, never `scrollIntoView`, which would scroll every box
  * around it too; a section the plan no longer holds leaves it at its top.
  */
 
-/** What a plan's own page does with its sections' links and its mentions: the slug of the workspace its links are written under, what opens the plan or a section a mention names, or a file's tab, and the section it was last asked to show. */
+/** What a task's own page does with its sections' links and its mentions: the slug of the workspace its links are written under, what opens the task or a section a mention names, or a file's tab, and the section it was last asked to show. */
 export interface SectionLinks {
   readonly workspace: string;
   readonly onOpen: (mention: PlanMention) => void;
@@ -114,7 +116,7 @@ export interface SectionReveal {
   readonly ask: number;
 }
 
-/** The plan a page's sections link to, and where its links are written. */
+/** The task a page's sections link to, and where its links are written. */
 interface LinkedTask {
   readonly taskId: string;
   readonly place: MentionPlace;
@@ -184,35 +186,42 @@ type ShowHistory = (save: number | undefined) => void;
 /**
  * How long ago an edit was, in a line naming it, as the press that opens the
  * version history on it where the window offers one, and as words otherwise.
- * `label` is what the press is called. Note that the press stops there,
- * because a click into a section opens its editor.
+ * `label` is what the press is called. `short` says it in a row's few
+ * letters, "2h", a date without its year, with the full moment on hover,
+ * for a section's byline, which keeps to a fixed room. Note that the press
+ * stops there, because a click into a section opens its editor.
  */
 function EditTime({
   at,
   now,
   label,
   onShow,
+  short = false,
 }: {
   at: number;
   now: number;
   label: string;
   onShow: (() => void) | undefined;
+  short?: boolean;
 }): React.JSX.Element {
-  const ago = agoText(at, now);
-  if (onShow === undefined) return <span>{ago}</span>;
-  return (
-    <button
-      type="button"
-      className="plan-edit-link"
-      aria-label={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onShow();
-      }}
-    >
-      {ago}
-    </button>
-  );
+  const words = short ? sinceText(at, now, { year: false }) : agoText(at, now);
+  const time =
+    onShow === undefined ? (
+      <span>{words}</span>
+    ) : (
+      <button
+        type="button"
+        className="plan-edit-link"
+        aria-label={label}
+        onClick={(event) => {
+          event.stopPropagation();
+          onShow();
+        }}
+      >
+        {words}
+      </button>
+    );
+  return short ? <Tooltip label={momentText(at)}>{time}</Tooltip> : time;
 }
 
 /**
@@ -301,29 +310,33 @@ interface SectionMarks {
 }
 
 /**
- * The section's quiet line: who last changed the section under `heading`,
- * on their face, and when, "[Luke] Luke during Charles Pan’s call · 2h ago",
- * shown while the pointer or the keyboard is on it; none where no save has,
- * or for the words before the first heading, which have no heading's line
- * for it to stand at. Where the window offers the version history, the time
- * opens it on the revision that save made.
+ * The section's quiet line: the face of who last changed the section under
+ * `heading`, hanging their card, which names them and whose call it was,
+ * and when in a row's few letters, "[Luke] 2h", shown while the pointer or
+ * the keyboard is on it, at the end of a heading that keeps room for it;
+ * none where no save has, or for the words before the first heading, which
+ * have no heading's line for it to stand at. Where the window offers the
+ * version history, the time opens it on the revision that save made.
  */
 function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
   if (heading === "") return null;
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
   const { onShowHistory, place } = marks;
-  const ago = agoText(edit.at, place.now);
-  const named = heading === "" ? `Edited ${ago}` : `${heading}: edited ${ago}`;
+  const named = `${heading}: edited ${agoText(edit.at, place.now)}`;
   return (
     <span className="plan-unit-byline actor-line">
-      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : <EditedBy edit={edit} place={place} />}
-      {" · "}
+      {edit.actor === PLAN_ACTOR.EARLIER ? (
+        "Edited"
+      ) : (
+        <EditedBy edit={edit} place={place} faceOnly />
+      )}{" "}
       <EditTime
         at={edit.at}
         now={place.now}
         label={`${named}. Show version history`}
         onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
+        short
       />
     </span>
   );
@@ -395,7 +408,7 @@ function opened(plan: Task): Chase {
 
 /**
  * The chase aimed at the plan as handed over now: a new target for the same
- * plan, a fresh start for another. Note that only the reader's own edit lands
+ * task, a fresh start for another. Note that only the reader's own edit lands
  * at once, because a teammate's arrives unseen and types in as Luke's does.
  */
 function aimed(chase: Chase, task: Task, reader: TaskReader): Chase {
@@ -457,10 +470,10 @@ function unitClass(view: UnitView, changed: boolean): string {
 }
 
 /**
- * What draws the plan's mentions as chips, on a plan's own page: a link
+ * What draws the plan's mentions as chips, on a task's own page: a link
  * whose destination names a mention, whoever wrote it (`linkMention`),
  * drawn against the anchors of the plan's headings as they stand; nothing
- * off a plan's page, where mentions stay words. Note that it is made again
+ * off a task's page, where mentions stay words. Note that it is made again
  * only when a heading changes, since every unit's words are drawn again
  * when it is, and that what opening one does is read as it is pressed.
  */
@@ -494,7 +507,7 @@ function useMentionChips(
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
 const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
 
-/** Where a title's draft goes when nothing else names the plan: nowhere. */
+/** Where a title's draft goes when nothing else names the task: nowhere. */
 const NO_DRAFT = (_name: string | undefined): void => undefined;
 
 /** A unit drawn with its section's byline, where a save has changed the section, and its ⋯, where it has a link. */
@@ -630,7 +643,7 @@ function DocumentUnit({
   marks: SectionMarks;
   /** Draws the plan's mentions as chips; links are drawn as words without it. */
   link: LinkDrawer | undefined;
-  /** The plan whose sections have links, which each section's ⋯ copies; none off a plan's own page. */
+  /** The task whose sections have links, which each section's ⋯ copies; none off a task's own page. */
   linked: LinkedTask | undefined;
   /** The section's anchor, empty where its heading spells none. */
   anchor: string;
@@ -659,22 +672,21 @@ function DocumentUnit({
 }
 
 /**
- * The plan's document: its name as the title over its text. `live` is the
- * plan's call in progress, which keeps the caret waiting where the typing
+ * The task's document: its name as the title over its text. `live` is the
+ * task's call in progress, which keeps the caret waiting where the typing
  * last stopped; `onShowHistory` opens the plan's version history from the
  * "Edited by" line, on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
- * place, and with `onRename` the title too, its words drawn as the plan's
+ * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed; without them the document is
  * drawn read-only. An editable plan with no text yet opens it, the caret at
  * its start, from a click anywhere on the panel's empty room, since it has no
  * section to click into. With `page` the document is drawn as a Settings page,
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
- * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
- * none are. `crumb`, where given, stands over the "Edited by" line and
- * says where the plan lives (`task-crumb.tsx`). `readMark` is whether the
- * plan is marked unread, which the title's ⋯ offers to flip.
+ * looked, which the task's region keeps (`use-task-looks.ts`); without them
+ * none are. `readMark` is whether the plan is marked unread, which the
+ * title's ⋯ offers to flip.
  */
 export function PlanBody({
   task,
@@ -689,29 +701,26 @@ export function PlanBody({
   sectionLinks,
   reader = NO_READER,
   agents,
-  crumb,
 }: {
   task: Task;
   live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;
-  /** Renames the plan, from its title, answering whether the name was taken. */
+  /** Renames the task, from its title, answering whether the name was taken. */
   onRename?: (name: string) => Promise<boolean>;
-  /** Draws the name typed into the title wherever the plan is named, or none once it is left. */
+  /** Draws the name typed into the title wherever the task is named, or none once it is left. */
   onDraftName?: (name: string | undefined) => void;
   looks?: TaskLooks;
   /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
   readMark?: ReadMark;
   /** The Settings page the document is drawn as: its actions and its note. */
   page?: { actions: React.ReactNode; note: React.ReactNode };
-  /** What the plan's own page does with its sections' links; without it, sections have none and mentions are words. */
+  /** What the task's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
   reader?: TaskReader;
-  /** The plan's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
+  /** The task's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
   agents?: EditAgents;
-  /** Where the plan lives and who can edit it, over the "Edited by" line; a Settings page draws none. */
-  crumb?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -902,7 +911,6 @@ export function PlanBody({
             : undefined
         }
       >
-        {page === undefined ? crumb : null}
         {page === undefined ? editedNote : null}
         <ChangedLine looks={looks} marks={marks} />
         <div className={BODY_CLASS}>

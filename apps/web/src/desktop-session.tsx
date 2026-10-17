@@ -21,12 +21,12 @@ import {
   desktopSessionPageQuery,
   desktopSessionReturnUrl,
 } from "@luke/features/desktop-session-wire";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { AuthPage } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { SignInChoices } from "./sign-in-choices";
+import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
 const authClient = createAuthClient();
@@ -80,9 +80,17 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
   return WORKING;
 }
 
+/**
+ * The page is one AuthPage card with no artwork, as it had none before: the
+ * title says where the hand-off stands, the description what to do about
+ * it, and the body holds the providers when a sign-in comes first. A
+ * sign-in that cannot start is said in the card's alert region rather than
+ * under the choices.
+ */
 function DesktopSession(): React.JSX.Element {
   const [view, setView] = useState<View>(WORKING);
   const started = useRef(false);
+  const signInChoices = useSocialSignIn(authClient);
 
   // Note that the hand-off runs once even where StrictMode runs an effect
   // twice, because each transfer mints a code of its own.
@@ -93,17 +101,15 @@ function DesktopSession(): React.JSX.Element {
   }, []);
 
   return (
-    <main className={AUTH_SHELL}>
-      <section className={AUTH_CARD} aria-labelledby="hand-off-title">
-        <h1 id="hand-off-title" className={AUTH_TITLE}>
-          {view.kind === VIEW.WORKING ? "Finishing sign-in…" : view.title}
-        </h1>
-        {view.kind === VIEW.WORKING ? null : (
-          <p className="m-0 text-muted-foreground">{view.body}</p>
-        )}
-        {view.kind === VIEW.SIGN_IN ? <SignInChoices client={authClient} /> : null}
-      </section>
-    </main>
+    <AuthPage
+      title={view.kind === VIEW.WORKING ? "Finishing sign-in…" : view.title}
+      description={view.kind === VIEW.WORKING ? undefined : view.body}
+      error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}
+    >
+      {view.kind === VIEW.SIGN_IN ? (
+        <ProviderChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
+      ) : null}
+    </AuthPage>
   );
 }
 

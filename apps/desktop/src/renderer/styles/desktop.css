@@ -17,6 +17,12 @@
      deepened until its white exclamation holds on it, in the dark as in the
      light, where the orange is deep already. */
   --attention-mark-ground: #c4620c;
+  --attention-mark-ink: #fff;
+  /* The veil over a picture set's last tile that counts the pictures past
+     it (`.picture-set-more`), the same in either appearance, since it lies
+     over a picture rather than the window. */
+  --picture-veil: rgba(0, 0, 0, 0.52);
+  --picture-veil-ink: #fff;
   /* An actor's tile (`actor-ref.tsx`): under a person's circle, a pile's
      count, and, in a facepile alone, Luke's face in his own blue, an agent's
      harness, or an automation's clock, so the face a square overlaps never
@@ -31,6 +37,11 @@
   --desktop-well: #0f0f12;
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
+  /* A tab's own bar under a tab strip and its hairline: a control's height
+     with --space-4 above and below it. Every tab that leads with a bar, in
+     the side panel or in a task's column, stands it this tall, so moving
+     between tabs never moves the content under the bar. */
+  --secondary-bar-height: calc(var(--control-height) + 2 * var(--space-4) + 1px);
   /* The call bar's own row, which the passing notices stand clear of. */
   --call-row-height: 36px;
   /* The spacing scale, one control's box, corner, and glyph, the gaps
@@ -437,21 +448,23 @@ body,
 .sidebar-home:disabled,
 .sidebar-inbox:disabled,
 .sidebar-factory:disabled,
-.sidebar-automations:disabled {
+.sidebar-automations:disabled,
+.sidebar-issues:disabled {
   opacity: 0.45;
 }
 
 /* The Home row is the place shown while the home page stands, the Inbox
    row while the window's Inbox does, Factory's while Factory does, and the
-   Automations row while the Automations page does, each
-   filled as the open plan's row is.
+   Automations row while the Automations page does, and the Issues row
+   while the Issues page does, each filled as the open plan's row is.
    The Inbox's count of what waits on the developer stands at its end in a
    group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-home[aria-current="page"],
 .sidebar-inbox[aria-current="page"],
 .sidebar-factory[aria-current="page"],
-.sidebar-automations[aria-current="page"] {
+.sidebar-automations[aria-current="page"],
+.sidebar-issues[aria-current="page"] {
   background: var(--raised-strong);
 }
 
@@ -1173,7 +1186,7 @@ ul.actor-stack {
 }
 
 .actor-stack > :is(.actor-mark, .actor-stack-more, .actor-stack-face) {
-  margin-left: -5px;
+  margin-left: -5px; /* off-scale: each face overlaps the one before it */
   box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
 }
 
@@ -1280,7 +1293,7 @@ ul.actor-stack {
   display: inline-grid;
   height: 18px;
   min-width: 18px;
-  padding: 0 5px;
+  padding: 0 5px; /* off-scale */
   place-items: center;
   border-radius: 9px;
   background: var(--actor-tile);
@@ -1725,6 +1738,143 @@ ul.actor-stack {
   opacity: 1;
 }
 
+/* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
+   Each is dragged among the others by its header, on the rows' own timing,
+   and lifted while held as a row is. */
+.sidebar-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar-sections > .sidebar-sections-item {
+  position: relative;
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+.sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
+  z-index: 3;
+  border-radius: 9px;
+  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-sidebar);
+  box-shadow: 0 4px 12px var(--shadow);
+  transition: none;
+}
+
+.sidebar-sections[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+/* A section's emoji stands where a glyph would, in the glyph's square. */
+.sidebar-section-emoji {
+  display: grid;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* An open section with nothing in it says how to fill it, under its header. */
+.sidebar-section-empty {
+  margin: 0;
+  padding: var(--space-4) var(--row-inset) var(--space-6)
+    calc(var(--row-inset) + var(--control-glyph) + var(--space-8));
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* The section, or Tasks, a row is carried over is washed while it is, and a
+   line stands where the row would land among a section's tasks. */
+[data-row-drop][data-drop-target="true"] {
+  border-radius: 9px;
+  background: var(--raised);
+}
+
+.sidebar-tasks > .sidebar-task-item:is([data-drop-before="true"], [data-drop-after="true"])::after {
+  position: absolute;
+  right: var(--row-inset);
+  left: var(--row-inset);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--focus-ring);
+  content: "";
+  pointer-events: none;
+}
+
+.sidebar-tasks > .sidebar-task-item[data-drop-before="true"]::after {
+  top: -2px;
+}
+
+.sidebar-tasks > .sidebar-task-item[data-drop-after="true"]::after {
+  bottom: -2px;
+}
+
+/* The section dialog's icons: none, each glyph, and a few emoji, one row
+   that wraps, the one chosen ringed, and a field for any other emoji. */
+.section-icon-picker {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: var(--space-12) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.section-icon-legend {
+  margin-bottom: var(--space-4);
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.section-icon-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.section-icon-choice {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease;
+}
+
+.section-icon-choice svg {
+  width: 15px;
+  height: 15px;
+}
+
+.section-icon-choice:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.section-icon-choice[aria-pressed="true"] {
+  border-color: var(--focus-ring);
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.section-emoji-field {
+  font-size: 13px;
+}
+
 /* A pinned repository says so after its name, quietly, since the pin is
    what holds it above groups updated more lately. */
 .sidebar-repository-pinned {
@@ -2121,7 +2271,7 @@ ul.actor-stack {
    fill until the pointer is on them, and the labelled one fills with the
    accent (`.primary-button`) for the act a place exists for, or with red
    (`.danger-button`) for one that destroys. Every button that is not one of
-   these is a row, a tab, or a call control, and says why where it is drawn.
+   these is a row, a tab, or a round control, and says why where it is drawn.
 
    A button's hover lays the translucent fill over `--button-ground`, which is
    nothing unless the button stands over something moving beneath it: the
@@ -2692,62 +2842,18 @@ ul.actor-stack {
   line-height: 1.55;
 }
 
-/* A whole tab with nothing in it yet (empty-state.tsx) fills the room its
-   pane leaves under the pane's header and stands a little above that room's
-   middle, where the eye takes the middle to be: the room above it and the
-   room below it are shared two to three. Where the pane is shorter than the
-   state, both shares are nothing and the state scrolls rather than run under
-   the header. */
-.empty-state {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 0;
-  flex-direction: column;
-  align-items: center;
-  overflow-y: auto;
-}
-
-.empty-state::before,
-.empty-state::after {
-  content: "";
-}
-
-.empty-state::before {
-  flex: 2 1 0;
-}
-
-.empty-state::after {
-  flex: 3 1 0;
-}
-
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. Settings' column holds its page's name over the
    page, which keep their measure. */
 :is(.automations-scroll, .factory-scroll, .inbox-tasks-scroll, .settings-page-scroll):has(
-  .empty-state
+  .luke-empty-state
 ) {
   display: flex;
   flex-direction: column;
 }
 
-.settings-page-scroll:has(.empty-state) > * {
+.settings-page-scroll:has(.luke-empty-state) > * {
   width: 100%;
-}
-
-/* A whole tab with nothing in it yet (empty-state.tsx): the tab's glyph,
-   large and fainter than the faintest ink, which no token is, over its one
-   line. The stroke is thinned so the glyph keeps the weight of the tab's
-   own at more than twice its size. */
-.empty-state-icon {
-  display: flex;
-  color: var(--text-tertiary);
-  opacity: 0.6;
-}
-
-.empty-state-icon svg {
-  width: 40px;
-  height: 40px;
-  stroke-width: 1.4;
 }
 
 /* Something wanting a hand (`attention-mark.tsx`): a white exclamation on a
@@ -2760,7 +2866,7 @@ ul.actor-stack {
   place-items: center;
   border-radius: 50%;
   background: var(--attention-mark-ground);
-  color: #fff;
+  color: var(--attention-mark-ink);
 }
 
 .attention-mark svg {
@@ -3065,6 +3171,15 @@ ul.actor-stack {
   text-overflow: ellipsis;
 }
 
+/* Or its chip, as the transcript draws one, which cuts its own name to the
+   line: held to the line's width so a narrow line cuts the title, never the
+   state after it. */
+.agent-origin-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* A teammate's call at its divider: their mark and name, then when it
    started, centred on the mark, every space kept. */
 .call-caller {
@@ -3144,7 +3259,6 @@ ul.actor-stack {
 }
 
 .desktop-document .plan-body,
-.desktop-document .task-crumb,
 .desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
@@ -3183,15 +3297,6 @@ ul.actor-stack {
 
 .desktop-document .markdown-heading[data-level="3"] {
   font-size: 1.05em;
-}
-
-/* In a column under 480px the crumb wraps rather than cutting its names to a
-   letter: the workspace, then the repository with its separator, then who
-   can edit, each on a line of its own where they do not fit together. */
-@container plan-document (width < 480px) {
-  .task-crumb {
-    flex-wrap: wrap;
-  }
 }
 
 /* In a column under 400px the title steps down to a section's size and a
@@ -3787,8 +3892,8 @@ body:has(.app-stage[data-capture="true"])
   width: 100%;
   min-width: 0;
   flex-direction: column;
-  gap: 1px;
-  padding: var(--space-4) calc(var(--row-inset) + 16px) var(--space-4) var(--row-inset);
+  gap: 1px; /* off-scale */
+  padding: var(--space-4) calc(var(--row-inset) + var(--space-16)) var(--space-4) var(--row-inset);
   border-radius: var(--menu-row-radius);
   background: none;
   color: inherit;
@@ -3954,7 +4059,7 @@ button.integration-tool-head:hover,
   padding: var(--space-8) var(--space-12) var(--space-12);
   overflow-y: auto;
   overscroll-behavior: contain;
-  outline: none;
+  outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
 }
 
 .integration-tool-hints {
@@ -4038,7 +4143,7 @@ button.integration-tool-head:hover,
 .integration-tool-parameter {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
   padding: var(--space-6) 0;
   border-top: 1px solid var(--hairline);
 }
@@ -4128,11 +4233,11 @@ button.integration-tool-head:hover,
 /* The window's Inbox, in the plan's place beside the sidebar, and a plan's
    own Inbox tab: the items in a column on the Inbox's own ground, so the
    list and the item read as one surface parted by a hairline, under a bar
-   the work column's height, and the chosen item beside it, at the Inbox's
-   own measure (`.desktop-inbox`). The column is as wide as it was last
-   dragged (`inbox-list.tsx`), held to what the Inbox's own width leaves the
-   pane, which is why the Inbox is the container it measures; its edge is
-   drawn as the sidebar's is. */
+   the work column's height (a tab's bar's in a task's tab), and the chosen
+   item beside it, at the Inbox's own measure (`.desktop-inbox`). The column
+   is as wide as it was last dragged (`inbox-list.tsx`), held to what the
+   Inbox's own width leaves the pane, which is why the Inbox is the
+   container it measures; its edge is drawn as the sidebar's is. */
 .inbox-view {
   container-type: inline-size;
   display: grid;
@@ -4171,6 +4276,13 @@ button.integration-tool-head:hover,
   padding-right: var(--column-inset);
 }
 
+/* Split beside the item, the list's bar ends at the item's edge rather than
+   the window's, so it keeps its own inset though the side panel's toggle
+   stands at the window's top right. */
+.desktop-shell .inbox-view[data-columns="both"] .inbox-tasks-bar {
+  padding-right: var(--column-inset);
+}
+
 /* While the sidebar is folded the window's Inbox's list is its first column, so its
    name stands centred over the list, as a sidebar's title does, rather than
    pushed past the title bar's buttons. Each side of the name holds at least
@@ -4180,6 +4292,7 @@ button.integration-tool-head:hover,
    on both sides, so centred in the bar is centred in the list. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view
   .inbox-tasks-bar {
@@ -4193,6 +4306,7 @@ button.integration-tool-head:hover,
 
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view
   .inbox-tasks-bar
@@ -4202,6 +4316,7 @@ button.integration-tool-head:hover,
 
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view
   .inbox-tasks-bar
@@ -4218,10 +4333,18 @@ button.integration-tool-head:hover,
   padding-inline: var(--column-inset);
 }
 
+/* Under the strip, its list's head and its item's bar are the tab's own bar,
+   as tall as every other tab's (`.file-view-bar`), rather than a top row. */
+.desktop-task-main .inbox-view .desktop-toolbar {
+  min-height: var(--secondary-bar-height);
+  padding-block: var(--space-4);
+}
+
 /* The list standing alone is a page rather than a column, so its name leads
    its bar past the title bar's buttons, as a page's title does. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view[data-columns="list"]
   .inbox-tasks-bar {
@@ -4274,22 +4397,230 @@ button.integration-tool-head:hover,
   transform: translateY(-50%);
 }
 
-/* The agent's byline names it in the thread's own ink, as a message's sender is named. */
-.inbox-byline-agent {
+/* A teammate's open item waits on them, not on the reader: the dot's place
+   holds a hollow ring in the time's ink, so the column still says something
+   is open there without the blue that means the reader is asked. */
+.inbox-row-dot[data-hollow="true"] {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--text-tertiary); /* off-scale: a hairline ring at the dot's size */
+}
+
+/* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
+   as a plan leads with its title: the title at a document heading's size,
+   then a muted line of its agent, when it asked, and where it stands, over a
+   hairline that parts it from the comments. */
+.inbox-subject {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.inbox-subject-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.inbox-subject-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.inbox-subject-agent {
   display: flex;
   min-width: 0;
   color: var(--text-primary);
+}
+
+/* An item that needs the reader wears the attention mark beside its
+   words, in the primary ink, since it is the one standing that asks for
+   their hand; a teammate's open item names whom it waits on, and a settled
+   one says where it stands, in the line's muted ink. */
+.inbox-standing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.inbox-standing[data-status="open"]:not([data-waiting]) {
+  color: var(--text-primary);
+}
+
+/* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
+   its writer's face in a column of its own, a list row's 20px, then its
+   name and when on one line and its words under it, and a line down from
+   the face to the next comment's, as an issue's timeline joins them. */
+.inbox-thread {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-comment {
+  --inbox-face: 20px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--inbox-face) minmax(0, 1fr);
+  column-gap: var(--space-12);
+  padding-bottom: var(--space-20);
+}
+
+.inbox-comment:last-child {
+  padding-bottom: 0;
+}
+
+.inbox-comment:not(:last-child)::before {
+  position: absolute;
+  top: calc(var(--inbox-face) + var(--space-6));
+  bottom: var(--space-6);
+  left: calc(var(--inbox-face) / 2 - 1px);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--hairline);
+  content: "";
+}
+
+.inbox-comment-face {
+  display: flex;
+  height: var(--inbox-face);
+}
+
+.inbox-comment-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.inbox-comment-head {
+  display: flex;
+  min-width: 0;
+  min-height: var(--inbox-face);
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* The writer is named by name alone in the thread's own ink, since their
+   face already stands in the column beside it. */
+.inbox-comment-name {
+  display: flex;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 500;
 }
 
-/* The pane's words under the agent's byline start where its name does, past
-   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). They clip
-   what runs past them, as a message does, though not the keyboard's ring on
-   an option laid edge to edge in them. */
-.inbox-indent {
+.inbox-comment-name .actor-ref > .actor-mark {
+  display: none;
+}
+
+.inbox-comment-when {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-4);
+}
+
+/* A comment's words are set as a message's are, and clip what runs past
+   them as a message does, though not the keyboard's ring on an option laid
+   edge to edge in them. */
+.inbox-comment-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-8);
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
-  padding-left: 21px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.625;
+}
+
+/* What the developer picked leads their comment as a chip, a check and the
+   option's label, so the pick is said once. A label too long for the
+   comment, a path or an identifier, wraps anywhere inside the chip, as an
+   option's does, rather than running past the comment's clip; the check
+   stays on its first line. */
+.inbox-pick {
+  display: inline-flex;
+  max-width: 100%;
+  align-self: flex-start;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: 1px var(--space-6); /* off-scale */
+  border-radius: 6px;
+  background: var(--raised-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.inbox-pick > span,
+.inbox-offered > summary > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-pick svg {
+  margin-top: calc((1lh - 12px) / 2); /* off-scale: centres the glyph on the first line */
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* What a settled item offered, folded to one line as the transcript folds a
+   finished step (`inbox-pane.tsx`'s `Offered`): its chevron turns down once
+   it is opened, on transform alone. */
+.inbox-offered > summary {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: flex-start;
+  gap: var(--space-6);
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  cursor: default;
+  list-style: none;
+}
+
+.inbox-offered > summary::-webkit-details-marker {
+  display: none;
+}
+
+.inbox-offered > summary:hover {
+  color: var(--text-primary);
+}
+
+.inbox-offered > summary svg {
+  margin-top: calc((1lh - 14px) / 2); /* off-scale: centres the glyph on the first line */
+  width: 14px;
+  height: 14px;
+  flex: none;
+  transition: transform var(--duration-hover) ease;
+}
+
+.inbox-offered[open] > summary {
+  margin-bottom: var(--space-6);
+}
+
+.inbox-offered[open] > summary svg {
+  transform: rotate(90deg);
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
@@ -4467,6 +4798,7 @@ button.integration-tool-head:hover,
    bar, led by the way back, leaves the title bar's buttons their room. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .desktop-task
   > .page-find
   > .inbox-view[data-columns="item"]
   .inbox-view-items
@@ -4755,7 +5087,7 @@ button.integration-tool-head:hover,
   flex: 3 1 0;
 }
 
-.automations-empty > .empty-state {
+.automations-empty > .luke-empty-state {
   flex: none;
   overflow: visible;
 }
@@ -4922,7 +5254,7 @@ button.integration-tool-head:hover,
 }
 
 .automation-suggestion:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the keyboard's is drawn inside the card's edge, below */
 }
 
 :root[data-keyboard="true"] .automation-suggestion:focus-visible {
@@ -5336,7 +5668,7 @@ button.automation-run:hover {
 
 .chat-rail-count {
   margin-left: auto;
-  padding: 0 7px;
+  padding: 0 var(--space-6);
   border-radius: 9px;
   background: var(--raised-strong);
   color: var(--text-primary);
@@ -5423,12 +5755,12 @@ button.automation-run:hover {
 .chat-reply {
   display: flex;
   gap: var(--space-12);
-  padding: 10px var(--space-12);
+  padding: var(--space-8) var(--space-12);
   border-radius: 10px;
 }
 
 .chat-reply {
-  gap: 10px;
+  gap: var(--space-8);
   padding: var(--space-6) 0;
 }
 
@@ -5483,7 +5815,7 @@ button.automation-run:hover {
 
 .chat-code {
   display: flex;
-  gap: 10px;
+  gap: var(--space-8);
   margin: 0;
   padding: var(--space-6) var(--space-12);
   border: 1px solid var(--hairline);
@@ -5542,7 +5874,7 @@ button.automation-run:hover {
 }
 
 .chat-ask-option {
-  padding: 10px var(--space-12);
+  padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline);
   border-radius: 9px;
   background: var(--raised);
@@ -5596,14 +5928,14 @@ button.automation-run:hover {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
-  padding: var(--space-12) 14px;
+  padding: var(--space-12);
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
   background: var(--raised);
 }
 
 .chat-composer[data-compact="true"] .chat-composer-box {
-  padding: var(--space-6) 10px;
+  padding: var(--space-6) var(--space-8);
   border-radius: 10px;
 }
 
@@ -5618,23 +5950,27 @@ button.automation-run:hover {
   font: inherit;
   font-size: 14px;
   resize: none;
-  outline: none;
+  outline: none; /* no ring: the box around it rings (`.field-well`) */
 }
 
 .chat-composer-bar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-12);
   color: var(--text-tertiary);
   font-size: 12.5px;
 }
 
 .chat-composer[data-compact="true"] .chat-composer-bar {
   position: absolute;
-  right: 10px;
+  right: var(--space-8);
   bottom: 6px;
 }
 
+/* Chat's send is round rather than an icon button's square, as a chat's own
+   send is drawn everywhere, and fills with the accent once there is
+   something to send, so the one press that sends stands apart from the
+   bar's hints. */
 .chat-send {
   display: inline-grid;
   width: 26px;
@@ -5649,7 +5985,7 @@ button.automation-run:hover {
 
 .chat-send:not(:disabled) {
   background: var(--message-sent);
-  color: white;
+  color: var(--on-accent);
 }
 
 .chat-send svg {
@@ -5676,7 +6012,7 @@ button.automation-run:hover {
   align-items: center;
   gap: var(--space-8);
   margin: var(--space-4) 0 0;
-  padding: 10px 14px;
+  padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline);
   border-radius: 10px;
   background: var(--desktop-sidebar);
@@ -5701,6 +6037,69 @@ button.automation-run:hover {
 
 .chat-ask-settled-note {
   color: var(--text-primary);
+}
+
+/* A chat notice in an agent's transcript: a card across the column washed
+   in Luke's blue, headed by its sender and the message's place, Open in
+   Chat at the head's end. */
+.chat-notice {
+  margin: var(--space-8) 0;
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--voice-luke) 25%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--voice-luke) 5%, transparent);
+}
+
+.chat-notice-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.chat-notice-from {
+  color: var(--voice-luke);
+  font-weight: 600;
+}
+
+/* A person's handle reads in the developer's green, as their words do on a call. */
+.chat-notice[data-author="human"] .chat-notice-from {
+  color: var(--voice-developer);
+}
+
+.chat-notice-words {
+  font-size: 14px;
+}
+
+.chat-notice-place {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-notice-open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.chat-notice-open:hover {
+  color: var(--text-primary);
+}
+
+.chat-notice-open svg {
+  width: 12px;
+  height: 12px;
 }
 
 .chat-empty {
@@ -5757,7 +6156,7 @@ button.automation-run:hover {
   align-items: center;
   gap: var(--glyph-gap);
   height: 30px;
-  padding: 0 var(--space-2) 0 calc(var(--row-inset) - 1px);
+  padding: 0 var(--space-2) 0 calc(var(--row-inset) - 1px); /* off-scale: less the well's edge */
   border: 1px solid var(--hairline);
   border-radius: 8px;
   background: var(--raised);
@@ -5876,7 +6275,7 @@ button.automation-run:hover {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4);
+  padding: var(--menu-inset);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--menu-radius);
   background: var(--surface-popover);
@@ -6407,9 +6806,10 @@ button.automation-run:hover {
 
 /* Hidden, not removed, while the panel fills the window: it keeps its layout
    beneath the panel, and is hidden only once the panel has grown over it. An
-   agent's page beside its panel is hidden alike. */
+   agent's page and the window's Inbox beside their panel are hidden alike. */
 .desktop-task-main[hidden],
-.desktop-task > .agent-page[hidden] {
+.desktop-task > .agent-page[hidden],
+.desktop-task > .page-find[hidden] {
   visibility: hidden;
   transition: visibility 0s linear var(--duration-pane);
 }
@@ -6898,7 +7298,8 @@ button.automation-run:hover {
   min-height: 0;
   flex-direction: column;
   overflow-y: auto;
-  padding: var(--space-48) max(var(--space-16), calc((100% - 300px) / 2 + var(--space-16)));
+  /* The 300px is the column's measure rather than a step of the scale. */
+  padding: var(--space-48) max(var(--space-16), calc((100% - 300px) / 2 + var(--space-16))); /* off-scale */
 }
 
 .side-panel-no-tabs-line {
@@ -7313,39 +7714,15 @@ button.automation-run:hover {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-/* A control with more to say than a pill hangs a card in the pill's place
-   (`tooltip.tsx`'s `card`), as a browser's tab hover card hangs: a small
-   panel of the window's own, light in the light, hung from the control's
-   start. Every card says what it says in the same parts (`hover-card.tsx`),
-   in one type scale: its head is its glyph where it wears one, on the name's
-   first line, then the name in the medium weight wrapped to two lines, or a
-   task standing in for one on a single line faded at its end, a quieter line
-   under the name a size down, and the corner muted a size down at the head's
-   right; under the head, its notes, read whole and so wrapped to three
-   lines, or one line of a latest step faded at its end, and a hairline
-   before what it lists. Its words stand as far in from its sides as a
-   menu's do, so a row it lists (`.task-card-line`) washes off its edge as a
-   menu item does. */
-.tooltip-card {
-  display: flex;
-  width: 280px;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-4);
-  padding: var(--space-6) calc(var(--menu-inset) + var(--row-inset));
-  border-color: var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
-  box-shadow: var(--menu-shadow);
-  color: var(--text-primary);
-  font-weight: 400;
-  white-space: normal;
-}
-
-.tooltip-card[data-side="below"] {
-  transform-origin: top left;
-}
-
+/* Every card the window hangs in a pill's place (`tooltip.tsx`'s `card`,
+   drawn as `@luke/ui`'s `TooltipCard`) says what it says in the same parts
+   (`hover-card.tsx`), in one type scale: its head is its glyph where it
+   wears one, on the name's first line, then the name in the medium weight
+   wrapped to two lines, or a task standing in for one on a single line
+   faded at its end, a quieter line under the name a size down, and the
+   corner muted a size down at the head's right; under the head, its notes,
+   read whole and so wrapped to three lines, or one line of a latest step
+   faded at its end, and a hairline before what it lists. */
 .card {
   display: flex;
   flex-direction: column;
@@ -7457,6 +7834,87 @@ button.automation-run:hover {
 .card-note code {
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+/* A pull request's branches on its card stand as inline code does in words
+   (`.markdown code`): mono on a tint, rounded. */
+.card-note .card-code {
+  padding: 0.08em 0.36em;
+  border-radius: 0.36em;
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Who opened a pull request on its card, and how long ago it moved after
+   them (`tasks/pull-request-card-notes.tsx`): the time wraps under the name
+   as one piece where a long login leaves it no room, so the name is never
+   cut for it, as an agent's origin line wraps. Only the line holding that
+   time wraps, so every other card's line naming an actor, a one-line
+   starter's among them, keeps to its one row. */
+.card-note .actor-words:has(> .card-when) {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+.card-when {
+  white-space: pre;
+}
+
+/* A pull request's comment and commit counts, each its glyph and its
+   number, apart as a row of stats. */
+.card-counts {
+  display: flex;
+  gap: var(--space-8);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.card-count > svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each its
+   name beside a dot of the colour GitHub gives it, a size under the notes,
+   wrapping where they run past the card's width. The dot carries the
+   colour rather than the words, since a label may be any colour, a dark one
+   the card's words could not be read in. */
+.card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 6px; /* off-scale */
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 16px; /* off-scale */
+  overflow-wrap: anywhere;
+}
+
+.card-label-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-tertiary);
 }
 
 .card-rule {
@@ -7639,50 +8097,14 @@ button.automation-run:hover {
   border-radius: var(--control-radius);
 }
 
-/* Confirm dialog -------------------------------------------------------------- */
+/* Dialog parts ---------------------------------------------------------------- */
 
-/* An irreversible act asks the way every desktop app asks: the window dims
-   behind a centred card. Over the menu and the window's drag strip alike, so
-   it claims its own presses back from the frame. Its motion is spent from the
-   tokens, which reduced motion and a capture run already hold still. The
-   card is never taller than the window less its margins: its body (the
-   question, a list of choices, a note being written) is the part that gives
-   way and scrolls, so its title and its answers stay on screen however short
-   the window is. */
-.confirm-dialog-backdrop {
-  position: fixed;
-  z-index: var(--z-dialog);
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: var(--space-24);
-  background: var(--scrim);
-  animation: confirm-dialog-dim var(--duration-quick) ease-out;
-  -webkit-app-region: no-drag;
-}
-
-.confirm-dialog {
-  display: flex;
-  width: min(400px, 100%);
-  max-height: calc(100vh - 2 * var(--space-24));
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-20);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 14px;
-  background: var(--surface-popover);
-  box-shadow: 0 24px 64px var(--shadow-deep);
-  color: var(--text-primary);
-  font-size: 13px;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit),
-    confirm-dialog-rise var(--duration-fast) var(--spring-fast);
-}
-
-.confirm-dialog:focus {
-  outline: none; /* no ring: a dialog holding focus for its controls */
-}
-
+/* The title, body, and answers of the window's dialogs not yet on
+   `@luke/ui`'s `ConfirmDialog` (New task, Send feedback, Move to
+   workspace), in `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a
+   list of choices, a note being written) is the part that gives way and
+   scrolls, so its title and its answers stay on screen however short the
+   window is. */
 .confirm-dialog-title {
   margin: 0;
   font-size: 15px;
@@ -7717,12 +8139,6 @@ button.automation-run:hover {
   }
 }
 
-@keyframes confirm-dialog-rise {
-  from {
-    transform: scale(0.96);
-  }
-}
-
 /* Command palette --------------------------------------------------------- */
 
 /* ⌘K over the window: the dialog's dimmed window and card, a third of the
@@ -7749,7 +8165,7 @@ button.automation-run:hover {
   max-height: 64vh;
   flex-direction: column;
   border: 1px solid var(--hairline-strong);
-  border-radius: 14px;
+  border-radius: var(--luke-dialog-radius);
   background: var(--surface-popover);
   box-shadow: 0 24px 64px var(--shadow-deep);
   color: var(--text-primary);
@@ -8229,8 +8645,10 @@ button.automation-run:hover {
 }
 
 /* A person's page (`person-page.tsx`): Home's column, headed by their face
-   at the page's size beside their name and who they are here. */
-.person-column {
+   at the page's size beside their name and who they are here. It and the
+   Issues page stand that column under their toolbar, not Home's way down. */
+.person-column,
+.issues-column {
   margin-top: 0;
   gap: var(--space-24);
 }
@@ -8505,13 +8923,13 @@ button.automation-run:hover {
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
-   its bottom-right corner, newest at the bottom. Over a dock at the
-   window's foot (a plan's call bar, an agent's composer or its to-do list)
-   the stack stands just above the highest of them, the window's step clear
-   of it, as the folded sidebar's call card does in the other corner. It
-   measures nothing: each dock names itself an anchor (below), and the
-   stack's foot stands on the anchor's top, or in the corner where none
-   stands. The window is never narrow enough for the two to meet.
+   its bottom-right corner, newest at the bottom, always the window's step
+   in from its corner whatever docks at its foot (a plan's call bar, an
+   agent's composer or its to-do list). A card over one of them stands
+   there only for its hold, and one with something to press can always be
+   dismissed to reach what is under it. The folded sidebar's call card
+   holds the other corner, and the window is never narrow enough for the
+   two to meet.
    Each rises in on the spring and fades first on its way out; the stack
    itself takes no pointer, so only a card with something to press stands in
    the way of what is under it, and that card is always one the developer
@@ -8520,34 +8938,9 @@ button.automation-run:hover {
   position: fixed;
   z-index: var(--z-toast);
   right: var(--space-16);
-  bottom: max(
-    var(--space-16),
-    calc(anchor(--dock-call top, 0px) + var(--space-8)),
-    calc(anchor(--dock-composer top, 0px) + var(--space-8)),
-    calc(anchor(--dock-todos top, 0px) + var(--space-8))
-  );
+  bottom: var(--space-16);
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
-}
-
-/* What docks at a column's foot names itself, by kind, the anchor the
-   toasts stand on; a column hidden under the side panel filling the window
-   leaves its docks unnamed, since nothing of it stands under the toasts. */
-.desktop-call-bar {
-  anchor-name: --dock-call;
-}
-
-.agent-composer {
-  anchor-name: --dock-composer;
-}
-
-.agent-todos-dock {
-  anchor-name: --dock-todos;
-}
-
-:is(.desktop-task-main[hidden], .desktop-task > .agent-page[hidden])
-  :is(.desktop-call-bar, .agent-composer, .agent-todos-dock) {
-  anchor-name: none;
 }
 
 .toast-stack > ol {
@@ -8662,7 +9055,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 /* A modal's question is answered before anything behind it changes, so
    while one stands an action toast lets the pointer through to the dimmed
    window, as the modal's own Tab already keeps focus off it. */
-body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
+body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: none;
 }
 

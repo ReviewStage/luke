@@ -29,7 +29,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { OpenSettingsProvider } from "../open-settings";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
@@ -286,6 +285,8 @@ function mountWith(
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      pages: undefined,
+      onRereadPages: () => undefined,
     },
     ...overrides,
   });
@@ -346,18 +347,6 @@ test("a teammate's page names them as the members read does and lists their work
     Created: ["Relay retries on 502", "Retry budget dashboard"],
     Agents: ["Tenant cache keys"],
   });
-});
-
-test("a teammate's page fades into the window's drag strip as it scrolls up under it, as Home does", async () => {
-  const { page } = mount(CHARLES.userId);
-  await settle();
-  const sheets = layFades();
-  try {
-    const scroller = page.querySelector(".home-scroll") ?? assert.fail("the page scrolls");
-    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
-  } finally {
-    sheets.remove();
-  }
 });
 
 test("the reader's own page says You and what waits on them", async () => {
@@ -548,12 +537,11 @@ test("a page for someone neither the members nor those who left name, as a link 
   assert.equal(page.querySelector('button[aria-label="More"]'), null);
 });
 
-test("someone who left heads their page with their own picture, grayed", async () => {
+test("someone who left heads their page with their own picture", async () => {
   const { page } = mount(PRIYA.userId);
   await settle();
 
   const face = page.querySelector<HTMLElement>(".person-head .actor-mark");
-  assert.equal(face?.dataset.left, "true");
   assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
 });
 
