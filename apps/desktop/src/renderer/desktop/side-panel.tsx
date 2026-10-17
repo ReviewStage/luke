@@ -217,11 +217,16 @@ const NO_PAGES: readonly PageLine[] = [];
  * of tab, or the page of an agent no plan holds, whose panel holds that
  * agent's workers, its Pull request, and its Terminal, and no plan's Board,
  * Code, Call, files, or pages. A tab of an agent's page is no plan's to
- * pin, so none is offered.
+ * pin, so none is offered. Beside the window's Inbox it stands for the
+ * chosen item's task, holding what the item opened there, the task's
+ * files, pages, and Pull requests, and none of the kinds its page draws
+ * from what it holds, the fixed three and Terminal; nor is a tab of it
+ * pinned there, since the Inbox is no plan's page.
  */
 export const SIDE_PANEL_HOLDER = {
   PLAN: "plan",
   AGENT: "agent",
+  INBOX: "inbox",
 } as const;
 
 type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
@@ -229,10 +234,14 @@ type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER
 /** No fixed kind, the same array every render. */
 const NO_KINDS: readonly FixedSidePanelTab[] = [];
 
+/** No Terminal tab, as the Inbox's panel draws. */
+const NO_TERMINALS: readonly TerminalStripTab[] = [];
+
 /** The fixed kinds each holder's panel offers. */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.PLAN]: SIDE_PANEL_TABS,
   [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
+  [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
 
 /** Which of a page's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to: its own, or the side panel beside it. */
@@ -1757,10 +1766,11 @@ export function SidePanel({
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.agentIds }),
   );
-  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does.
-  const terminals = panel.terminals.filter((each) =>
-    drawsTerminal(each, { taskAgents: agents.agentIds }),
-  );
+  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox.
+  const terminals =
+    holder === SIDE_PANEL_HOLDER.INBOX
+      ? NO_TERMINALS
+      : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {
@@ -1807,10 +1817,15 @@ export function SidePanel({
     files: offered,
     changes: changesOffers(agents, changes),
     pages: taskPages,
-    terminals: {
-      offers: terminalOffers(agents, panel),
-      onNew: (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW),
-    },
+    // Note that the Inbox's panel offers no Terminal, since it draws none.
+    ...(holder === SIDE_PANEL_HOLDER.INBOX
+      ? undefined
+      : {
+          terminals: {
+            offers: terminalOffers(agents, panel),
+            onNew: (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW),
+          },
+        }),
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);

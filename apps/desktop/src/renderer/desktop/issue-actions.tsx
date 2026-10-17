@@ -1,11 +1,11 @@
 import { ISSUE_PRIORITY_WORDS, ISSUE_STATUS_WORDS } from "@luke/features/issue-list-model";
 import { ISSUE_STATUS_ORDER, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
+import { ConfirmDialog, type DialogQuestion, useConfirmDialog, type useMenu } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ArchiveIcon } from "lucide-react";
 import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction, type MenuEntry, type useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { PRIORITY_ORDER, PriorityGlyph, StatusGlyph } from "./issue-pickers";
 import type { IssueChange } from "./use-issues";
 
@@ -87,7 +87,7 @@ export function IssueActions({
 }: {
   issue: Issue;
   identifier: string;
-  menu: ReturnType<typeof useActionMenu>;
+  menu: ReturnType<typeof useMenu>;
   /** Whether the page stands, which a question asked on it does not outlive. */
   shown: boolean;
   /** Sends a change, answering whether it was kept. */

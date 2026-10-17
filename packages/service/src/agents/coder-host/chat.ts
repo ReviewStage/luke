@@ -2,9 +2,11 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   agentWorkspace,
+  attachMessageImages,
   CHAT_REFUSAL,
   type ChatChannelRow,
   type ChatMemberRow,
+  type ChatMemberSubject,
   type ChatMessageRow,
   type ChatPost,
   type ChatPosted,
@@ -19,8 +21,13 @@ import {
   findOrMakeDm,
   history,
   memberNamed,
+  openAsksOf,
   openTopicChannel,
+  peekUnread,
+  postAsk,
   postMessage,
+  readThrough,
+  resolveAsk,
   roster,
   seqsOf,
   unreadFor,
@@ -29,17 +36,19 @@ import { type CodingAgent, listCodingAgents } from "@luke/database/models/coding
 import { readTask } from "@luke/database/models/task-store";
 import {
   CHANNEL_KIND,
-  CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
   CHAT_TOOL,
   type ChannelKind,
+  chatAskSchema,
+  chatPostBlocksSchema,
   GENERAL_CHANNEL,
   MEMBER_KIND,
   type MemberKind,
-  mentionedHandles,
+  postChatAskInputSchema,
   postChatInputSchema,
   readChatInputSchema,
+  resolveAskInputSchema,
 } from "@luke/features/chat-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
@@ -48,16 +57,28 @@ import { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure, type StoreFailure } from "../../http/store-failure.js";
+import {
+  ASK_REFUSAL,
+  type AskLine,
+  askLineOf,
+  askPostRefusal,
+  type PostPictures,
+  postMentions,
+  postPictures,
+} from "./chat-ask.js";
 import { blockWords, type ChatReceipt, type ChatTelling, tellMessage } from "./chat-notify.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
- * chat.ts -- the coding agent's chat tools: post a message in its workspace's chat, and read it.
+ * chat.ts -- the chat tools of a coding agent and of its plan's Luke: post a message in the workspace's chat, and read it.
  *
  * A coding agent is a member of its plan's workspace's chat, `@agent-N`,
  * minted the first time it posts or reads (`chat-store.ts`), and talks
  * there with the other agents, the plan's Luke, and the people of the
- * workspace. A post goes to the agent's plan channel, or a planless
- * agent's to its workspace's general channel, unless it names a
+ * workspace. The plan's Luke, `@luke`, runs the same tools as the agent of
+ * this module's words, bound in the planner's own host
+ * (`../brain-host/chat.ts`). A post goes to the agent's plan channel, or a
+ * planless agent's to its workspace's general channel, unless it names a
  * channel by `#name`, which a name no channel holds opens as a topic
  * channel, a member's DM by `@handle`, or a message to answer in its
  * thread; it is told to the members it addresses through the one door a
@@ -68,7 +89,10 @@ import { blockWords, type ChatReceipt, type ChatTelling, tellMessage } from "./c
  * and then the messages: what it has not read, which the read marks read,
  * or a channel's, a thread's, or what came before a place, which marks
  * nothing. Every message is named by its place in the workspace's
- * sequence, which is what a reply and a read name it by. A post is the
+ * sequence, which is what a reply and a read name it by. A post may carry
+ * an ask under a key of the agent's (`chat-ask.ts`), which the agent
+ * resolves by the key once it no longer needs it, and every read, ask, and
+ * resolve answers the agent's asks as they stand. A post is the
  * service's words on the agent's behalf, so a turn posts at most
  * `MAX_POSTS_PER_TURN` times, counted in the session's own state as
  * `edit_plan` counts its notes (`plan-edit.ts`); a repeat of one call is
@@ -92,8 +116,26 @@ export const CHAT_TOOLS = {
       `at most ${CHAT_BOUNDS.MAX_STEERS_PER_POST}; a plain post tells nobody, and is read when they next read the chat. ` +
       "The call answers with the message's number, who was told now, who reads it when they next read, who has left, " +
       "and any @handle that named no member. Post what another agent or person must know or decide, never a running log " +
-      `of your work: you may post at most ${CHAT_BOUNDS.MAX_POSTS_PER_TURN} times a turn.`,
-    inputSchema: postChatInputSchema,
+      `of your work: you may post at most ${CHAT_BOUNDS.MAX_POSTS_PER_TURN} times a turn. ` +
+      "blocks go under the words: link blocks naming a page, such as the GitHub settings page a task is done on; code " +
+      "blocks pointing at the exact lines a decision is about, where repo is your repository as owner/name, path is from " +
+      `its root, startLine to endLine spans at most ${CHAT_BOUNDS.MAX_CODE_LINES} lines, and sha is the full 40-character ` +
+      "commit you read them at, one already on GitHub; and image blocks showing a picture, such as a screenshot of a UI you " +
+      "rendered, where path is the file in your sandbox, relative to the checkout or absolute, a PNG, JPEG, or WebP of at " +
+      `most ${(CHAT_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt says in a sentence what it shows. ` +
+      "ask makes the message something you need answered; an ask needs a key, your own short lowercase slug for it, such as " +
+      "branch-protection: posting under a key you used before updates that ask where it was first posted and opens it " +
+      "again, so keep an ask current under its key and never ask it twice. ask.response is what you ask: choice (two to " +
+      "six options, each a short label and an optional detail; name the label you recommend; multiple lets them pick " +
+      "several), approval (a yes or no on one step you propose), text (an open answer in their words), task (something " +
+      "only a person can do by hand, such as changing a GitHub setting or adding a secret: say exactly what to do), form " +
+      "(one to eight typed fields, text, number, select with its options, or boolean, each named by its label and " +
+      "required where it must be filled; never ask for a credential or a secret in a form, since the answer reaches your " +
+      "transcript: that is a task done by hand), or none (something the room should know; it is acknowledged). " +
+      "ask.title is a one-line heading where your words are not one. ask.needsReply is whether you need to hear the " +
+      "answer; set it false for a task you only need done or an ask that asks nothing. Any member may answer, as a reply " +
+      "in the ask's thread, which tells you; the call answers with your asks as they stand.",
+    inputSchema: postChatAskInputSchema,
   },
   READ: {
     name: CHAT_TOOL.READ,
@@ -106,13 +148,24 @@ export const CHAT_TOOLS = {
       "replies in.",
     inputSchema: readChatInputSchema,
   },
+  RESOLVE: {
+    name: CHAT_TOOL.RESOLVE,
+    description:
+      "Resolve an ask of yours by its key, with why: you no longer need it, you found the answer yourself, or you " +
+      "checked that the task is done. The call answers with your asks as they stand.",
+    inputSchema: resolveAskInputSchema,
+  },
 } as const;
 
 /** Why a call did nothing, in the words the model reads. */
 export const CHAT_TOOL_REFUSAL = {
   UNREADABLE_POST:
     `Not posted: the post does not read. text is Markdown of at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters; ` +
-    "to is #name for a channel or @handle for a member, lowercase; replyTo is a message's number.",
+    "to is #name for a channel or @handle for a member, lowercase; replyTo is a message's number; blocks are link, code, " +
+    "or image, a code block's sha the full 40-character lowercase commit, an image naming its path and alt; an ask " +
+    "needs a key, a lowercase slug of letters, digits, dots, dashes, and underscores, and its response, one of choice, " +
+    `approval, text, task, form, or none; a choice and a select field offer between two and ${CHAT_BOUNDS.MAX_OPTIONS} options.`,
+  UNREADABLE_RESOLVE: "Not resolved: name the ask's key and why you resolve it.",
   UNREADABLE_READ:
     "Not read: channel is #name or @handle, lowercase, and thread and before are messages' numbers.",
   REPLY_AND_TO:
@@ -135,40 +188,42 @@ export const CHAT_TOOL_REFUSAL = {
 } as const;
 
 /** A member as a read lists it: its handle, its kind, and whether it has left. */
-interface MemberLine {
+type MemberLine = {
   readonly handle: string;
   readonly kind: MemberKind;
   readonly left?: true;
-}
+};
 
 /** A channel as a read lists it: how a post names it, its kind, and what the reader has not read in it. */
-interface ChannelLine {
+type ChannelLine = {
   readonly name: string;
   readonly kind: ChannelKind;
   readonly unread: number;
-}
+};
 
 /** A message as the agent reads it: its place, where it was said, who said it, the thread it replies in by its root's place, and its words. */
-interface MessageLine {
+export type MessageLine = {
   readonly seq: number;
   readonly in: string;
   readonly from: string;
   readonly thread?: number;
   readonly text: string;
-}
+};
 
 /**
  * What a post answers: its place, where it was said or the root of the
  * thread it replies in, and the receipt, every member named by its
  * `@handle`; `untold` where the post stands but telling the members it
- * addresses failed, who read it when they next read.
+ * addresses failed, who read it when they next read; and the agent's asks
+ * where it asked.
  */
-interface PostedLine extends ChatReceipt {
+type PostedLine = ChatReceipt & {
   readonly seq: number;
   readonly in?: string;
   readonly thread?: number;
   readonly untold?: true;
-}
+  readonly asks?: readonly AskLine[];
+};
 
 /** What a call answers, as the model reads it: the post's receipt, the chat as read, or why the call did nothing. */
 export type ChatToolResult =
@@ -180,18 +235,24 @@ export type ChatToolResult =
       readonly channels: readonly ChannelLine[];
       readonly messages: readonly MessageLine[];
       readonly more?: true;
+      readonly asks: readonly AskLine[];
     }
+  | { readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED; readonly asks: readonly AskLine[] }
   | { readonly status: typeof ACTION_RESULT_STATUS.REJECTED; readonly reason: string };
 
-/** The agent a read is made for: the account that started it, whose standing reaches the chat, the agent, and its plan, none for a planless agent. */
+/** Who a call speaks as: a coding agent, or the plan's Luke. */
+type ChatSelf = Exclude<ChatMemberSubject, { readonly kind: typeof MEMBER_KIND.HUMAN }>;
+
+/** The agent a read is made for: the account whose standing reaches the chat, the plan the agent is on, none for a planless agent, and the member it speaks as. */
 export interface ChatReader {
   readonly userId: string;
-  readonly agentId: string;
   readonly planId: string | null;
+  readonly self: ChatSelf;
 }
 
-/** The agent a post is made for, and how its posts are told. */
+/** The agent a post is made for: its repository as `owner/name`, which its code blocks must name, nothing where it has none, and how its posts are told. */
 export interface ChatAgent extends ChatReader {
+  readonly repository: string | null;
   readonly telling: Omit<ChatTelling, "userId" | "organizationId">;
 }
 
@@ -227,13 +288,16 @@ const POST_REFUSAL = {
   [CHAT_REFUSAL.AUTHOR_LEFT]: CHAT_TOOL_REFUSAL.LEFT,
   [CHAT_REFUSAL.CHANNEL_ARCHIVED]: CHAT_TOOL_REFUSAL.CHANNEL_ARCHIVED,
   [CHAT_REFUSAL.KEY_TAKEN]: CHAT_TOOL_REFUSAL.UNAVAILABLE,
-  [CHAT_REFUSAL.ASK_ELSEWHERE]: CHAT_TOOL_REFUSAL.UNAVAILABLE,
+  [CHAT_REFUSAL.ASK_ELSEWHERE]: ASK_REFUSAL.ELSEWHERE,
 } as const satisfies Record<ChatRefusal, string>;
+
+/** The most settled asks a call answers beside the open ones: the latest, enough to see what came of what the agent asked last. */
+const SETTLED_ASKS_SHOWN = 5;
 
 /** A receipt that told no one, as a post whose telling failed answers. */
 const NO_RECEIPT: ChatReceipt = { told: [], held: [], left: [], unresolved: [] };
 
-const readPost = readEither(postChatInputSchema, { excess: EXCESS_KEYS.DROP });
+const readPost = readEither(postChatAskInputSchema, { excess: EXCESS_KEYS.DROP });
 
 /** What a post names of where it goes, read apart so one naming both a reply and a target is refused in words the model can mend by. */
 const readPlaces = readEither(
@@ -251,7 +315,38 @@ function replyAndTarget(input: UnparsedWireValue): boolean {
     Result.isSuccess(read) && read.success.to !== undefined && read.success.replyTo !== undefined
   );
 }
+
+/**
+ * A post with an ask as it reads without its key: every field of the post
+ * held to its own shape, the ask whole among them, and no key, so only a
+ * post the key alone would mend reads.
+ */
+const readAskWithoutKey = readEither(
+  Schema.Struct({
+    ...postChatInputSchema.fields,
+    ask: chatAskSchema,
+    blocks: Schema.optionalKey(chatPostBlocksSchema),
+  }),
+  { excess: EXCESS_KEYS.DROP },
+);
+
+/**
+ * Whether a post fails for want of its ask's key alone, which the input's
+ * JSON Schema cannot say it refuses; a post whose ask or other fields do not
+ * read is refused as unreadable, since a key would not mend it.
+ */
+function askWithoutKey(input: UnparsedWireValue): boolean {
+  return Result.isSuccess(readAskWithoutKey(input));
+}
+
+/** Why a post that does not read was refused: naming both a reply and a target, an ask with no key, or otherwise not the post's shape. */
+function unreadPostRefusal(input: UnparsedWireValue): string {
+  if (replyAndTarget(input)) return CHAT_TOOL_REFUSAL.REPLY_AND_TO;
+  if (askWithoutKey(input)) return ASK_REFUSAL.NEEDS_KEY;
+  return CHAT_TOOL_REFUSAL.UNREADABLE_POST;
+}
 const readRead = readEither(readChatInputSchema, { excess: EXCESS_KEYS.DROP });
+const readResolve = readEither(resolveAskInputSchema, { excess: EXCESS_KEYS.DROP });
 
 export function chatRejected(reason: string): ChatToolResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
@@ -277,7 +372,9 @@ function atHandle(handle: string): string {
 function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return Effect.gen(function* () {
     if (agent.planId !== null) return yield* ensurePlanChannel(agent.userId, agent.planId);
-    const workspace = yield* agentWorkspace(agent.userId, agent.agentId);
+    // Only a coding agent is planless; a plan's Luke always stands on its plan.
+    if (agent.self.kind !== MEMBER_KIND.AGENT) return Option.none();
+    const workspace = yield* agentWorkspace(agent.userId, agent.self.agentId);
     if (Option.isNone(workspace)) return Option.none();
     return yield* ensureGeneral(agent.userId, workspace.value);
   });
@@ -308,10 +405,7 @@ function seatOf(
     yield* Effect.forEach(unminted, (each) =>
       ensureMember(userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId: each.id }),
     );
-    const self = yield* ensureMember(userId, organizationId, {
-      kind: MEMBER_KIND.AGENT,
-      agentId: agent.agentId,
-    });
+    const self = yield* ensureMember(userId, organizationId, agent.self);
     return Option.map(self, (member) => ({ organizationId, home: home.value, self: member }));
   });
 }
@@ -396,7 +490,7 @@ function dmWith(
 function placeOf(
   agent: ChatReader,
   seat: ChatSeat,
-  post: typeof postChatInputSchema.Type,
+  post: typeof postChatAskInputSchema.Type,
 ): ChatStoreEffect<Result.Result<PostPlace, string>> {
   if (post.replyTo !== undefined) {
     return Effect.succeed(
@@ -415,6 +509,51 @@ function placeOf(
   return Effect.map(channel, (found) =>
     Result.map(found, (row) => ({ to: { channelId: row.id }, named: { in: to } })),
   );
+}
+
+/**
+ * The post written as the agent at its place, an ask under its key or a
+ * message, and its pictures kept once it stands. Note that an ask posted
+ * again keeps exactly the pictures it now names, none among them, so one it
+ * dropped is dropped from the store; a repeat of one call, which writes
+ * nothing, keeps them again only where it names some.
+ */
+function writePost(
+  agent: ChatReader,
+  seat: ChatSeat,
+  post: typeof postChatAskInputSchema.Type,
+  written: {
+    readonly to: ChatPost["to"];
+    readonly clientKey: string;
+    readonly pictures: PostPictures;
+  },
+): ChatStoreEffect<Result.Result<ChatPosted, ChatRefusal>> {
+  return Effect.gen(function* () {
+    const { userId } = agent;
+    const message = {
+      authorMemberId: seat.self.id,
+      to: written.to,
+      blocks: written.pictures.blocks,
+      mentions: postMentions(post),
+      clientKey: written.clientKey,
+    };
+    const asked =
+      post.ask === undefined || post.key === undefined
+        ? undefined
+        : yield* postAsk(userId, seat.organizationId, { ...message, key: post.key, ask: post.ask });
+    const posted = asked ?? (yield* postMessage(userId, seat.organizationId, message));
+    const { images } = written.pictures;
+    if (Result.isFailure(posted)) return posted;
+    const revised =
+      asked !== undefined &&
+      Result.isSuccess(asked) &&
+      !asked.success.created &&
+      !asked.success.repeated;
+    if (images.length === 0 && !revised) return posted;
+    const { id } = posted.success.message;
+    yield* attachMessageImages(userId, seat.organizationId, seat.self.id, id, images);
+    return posted;
+  });
 }
 
 /**
@@ -482,47 +621,113 @@ export function agentAway(
 }
 
 /**
- * Runs one post: its place found, the message posted as the agent and told
- * to the members it addresses, and the receipt answered, or why not. A
+ * Runs one post: its shape held to what a message carries, its place
+ * found, its pictures read from the sandbox, the message or the ask
+ * written as the agent and told to the members it addresses, and the
+ * receipt answered, with the agent's asks where it asked, or why not. A
  * turn that has posted its bound already posts nothing; the call's own id
- * is the post's key, so a call replayed answers the message it made.
+ * is the post's key, so a call replayed answers the message it made and
+ * tells no one again.
  */
 export function postAsAgent(
   agent: ChatAgent,
   input: UnparsedWireValue,
-  clientKey: string,
-  postsInTurn: number,
+  call: {
+    readonly clientKey: string;
+    readonly postsInTurn: number;
+    readonly sandbox: InboxSandboxDoor;
+  },
 ): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
-  if (postsInTurn >= CHAT_BOUNDS.MAX_POSTS_PER_TURN) {
+  if (call.postsInTurn >= CHAT_BOUNDS.MAX_POSTS_PER_TURN) {
     return Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.TOO_MANY_POSTS));
   }
   const read = readPost(input);
   if (Result.isFailure(read)) {
-    const refusal = replyAndTarget(input)
-      ? CHAT_TOOL_REFUSAL.REPLY_AND_TO
-      : CHAT_TOOL_REFUSAL.UNREADABLE_POST;
-    return Effect.succeed(chatRejected(refusal));
+    return Effect.succeed(chatRejected(unreadPostRefusal(input)));
   }
   const post = read.success;
+  const refused = askPostRefusal(post, agent.repository);
+  if (refused !== undefined) return Effect.succeed(chatRejected(refused));
   return Effect.gen(function* () {
     const seat = yield* seatOf(agent);
     if (Option.isNone(seat)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
     const place = yield* placeOf(agent, seat.value, post);
     if (Result.isFailure(place)) return chatRejected(place.failure);
-    const posted = yield* postMessage(agent.userId, seat.value.organizationId, {
-      authorMemberId: seat.value.self.id,
+    const pictures = yield* postPictures(post, call.clientKey, call.sandbox);
+    if (Result.isFailure(pictures)) return chatRejected(pictures.failure);
+    const posted = yield* writePost(agent, seat.value, post, {
       to: place.success.to,
-      blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: post.text }],
-      mentions: mentionedHandles(post.text),
-      clientKey,
+      clientKey: call.clientKey,
+      pictures: pictures.success,
     });
     if (Result.isFailure(posted)) return chatRejected(POST_REFUSAL[posted.failure]);
     const line = yield* postedLine(agent, seat.value, posted.success, place.success.named);
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, ...line } satisfies ChatToolResult;
+    const asks = post.ask === undefined ? undefined : yield* asksOf(agent, seat.value);
+    return {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      ...line,
+      ...(asks === undefined ? undefined : { asks }),
+    } satisfies ChatToolResult;
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
   );
+}
+
+/** Runs one resolve: the agent's ask under the key resolved with why, and its asks answered as they stand, or why not. */
+export function resolveAsAgent(
+  agent: ChatReader,
+  input: UnparsedWireValue,
+): Effect.Effect<ChatToolResult, never, DatabaseServices> {
+  const read = readResolve(input);
+  if (Result.isFailure(read)) {
+    return Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNREADABLE_RESOLVE));
+  }
+  const { key, reason } = read.success;
+  return Effect.gen(function* () {
+    const seat = yield* seatOf(agent);
+    if (Option.isNone(seat)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
+    const { organizationId, self } = seat.value;
+    const resolved = yield* resolveAsk(agent.userId, organizationId, self.id, key, reason);
+    if (Option.isNone(resolved)) return chatRejected(ASK_REFUSAL.NO_ASK);
+    const asks = yield* asksOf(agent, seat.value);
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, asks } satisfies ChatToolResult;
+  }).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
+  );
+}
+
+/** How a post names each channel, by the channel's id. */
+function channelNames(
+  channels: readonly ChatChannelRow[],
+  self: ChatMemberRow,
+  members: ReadonlyMap<string, ChatMemberRow>,
+): ReadonlyMap<string, string> {
+  return new Map(channels.map((channel) => [channel.id, channelName(channel, self, members)]));
+}
+
+/** The agent's asks as it reads them, named where each was asked and who answered it. */
+function askLines(
+  rows: readonly ChatMessageRow[],
+  names: ReadonlyMap<string, string>,
+  members: ReadonlyMap<string, ChatMemberRow>,
+): readonly AskLine[] {
+  const handleOf = (memberId: string) => atHandle(members.get(memberId)?.handle ?? "");
+  return rows.flatMap((row) => askLineOf(row, names.get(row.channelId) ?? "", handleOf) ?? []);
+}
+
+/** The asks of the agent's member, every open one, then the latest settled, as `askLines` reads them. */
+function asksOf(agent: ChatReader, seat: ChatSeat): ChatStoreEffect<readonly AskLine[]> {
+  return Effect.gen(function* () {
+    const { userId } = agent;
+    const { organizationId, self } = seat;
+    const scope = { authorMemberId: self.id };
+    const rows = yield* openAsksOf(userId, organizationId, scope, SETTLED_ASKS_SHOWN);
+    const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
+    const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
+    return askLines(rows, names, members);
+  });
 }
 
 /** The channel a read's `channel` names among the ones the agent sees: by `#name`, or the DM with the member an `@handle` names. */
@@ -611,10 +816,11 @@ function unreadByChannel(
 /**
  * Runs one read: the messages first, since reading what is unread moves
  * the cursor the counts are read past, then the roster, the channels the
- * agent sees with what it has not read in each, and the messages as lines.
- * The read is one transaction, so a read that fails moves no cursor and
- * the agent reads the same messages again. The counts are read from one
- * page past the cursor, so a backlog past it counts as the page does.
+ * agent sees with what it has not read in each, the messages as lines, and
+ * the agent's asks. The read is one transaction, so a read that fails
+ * moves no cursor and the agent reads the same messages again. The counts
+ * are read from one page past the cursor, so a backlog past it counts as
+ * the page does.
  */
 export function readAsAgent(
   agent: ChatReader,
@@ -656,8 +862,12 @@ export function readAsAgent(
         seat.organizationId,
         messages.flatMap((message) => (message.parentId === null ? [] : [message.parentId])),
       );
-      const names = new Map(
-        channels.map((channel) => [channel.id, channelName(channel, self, byId)]),
+      const names = channelNames(channels, self, byId);
+      const asks = yield* openAsksOf(
+        userId,
+        seat.organizationId,
+        { authorMemberId: self.id },
+        SETTLED_ASKS_SHOWN,
       );
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -674,10 +884,59 @@ export function readAsAgent(
         })),
         messages: messages.map((message) => lineOf(message, { names, members: byId, roots })),
         ...(more ? { more: true as const } : undefined),
+        asks: askLines(asks, names, byId),
       } satisfies ChatToolResult;
     }),
   ).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
   );
+}
+
+/**
+ * What the agent has not read, as lines, marking nothing: at most the
+ * bound, oldest change first, whether more wait past them, and the place
+ * `readThroughAsAgent` moves its cursor to once they are taken in. What a
+ * turn opens with, where its tools would read the same; nothing where the
+ * agent has no seat.
+ */
+export function peekAsAgent(
+  agent: ChatReader,
+  limit: number,
+): ChatStoreEffect<
+  Option.Option<{
+    readonly messages: readonly MessageLine[];
+    readonly more: boolean;
+    readonly through: number;
+  }>
+> {
+  return Effect.gen(function* () {
+    const { userId } = agent;
+    const found = yield* seatOf(agent);
+    if (Option.isNone(found)) return Option.none();
+    const { organizationId, self } = found.value;
+    const unread = yield* peekUnread(userId, organizationId, self.id, limit);
+    if (Option.isNone(unread)) return Option.none();
+    const { messages, more, through } = unread.value;
+    const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
+    const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
+    const roots = yield* seqsOf(
+      userId,
+      organizationId,
+      messages.flatMap((message) => (message.parentId === null ? [] : [message.parentId])),
+    );
+    const named = { names, members, roots };
+    const lines = messages.map((message) => lineOf(message, named));
+    return Option.some({ messages: lines, more, through });
+  });
+}
+
+/** Marks what the agent has not read as read through the place a peek named, never back; nothing where the agent has no seat. */
+export function readThroughAsAgent(agent: ChatReader, through: number): ChatStoreEffect<void> {
+  return Effect.gen(function* () {
+    const found = yield* seatOf(agent);
+    if (Option.isNone(found)) return;
+    const { organizationId, self } = found.value;
+    yield* readThrough(agent.userId, organizationId, self.id, through);
+  });
 }

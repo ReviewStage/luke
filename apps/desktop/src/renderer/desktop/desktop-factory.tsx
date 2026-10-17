@@ -2,7 +2,7 @@ import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-ag
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState } from "@luke/ui";
+import { EmptyState, useMenu } from "@luke/ui";
 import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
@@ -35,7 +35,7 @@ import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import {
   agentMovedAt,
   FACTORY_BLOCK,
@@ -295,7 +295,7 @@ function FactoryRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useRowLinkItem()(link);
   return (
     <li className="sidebar-task-item home-row inbox-row factory-row" data-factory-row={slide}>

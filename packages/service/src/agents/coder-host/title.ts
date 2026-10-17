@@ -8,6 +8,7 @@ import {
 } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
+import { firstMessageParts } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { failureKind } from "@luke/runtime/effect";
@@ -33,6 +34,9 @@ import { CURSOR_START } from "./transcript.js";
  * named from its opening rather than from the plan it was started under:
  * an agent started from the plan said the plan first, so the plan is what
  * names it, and one started on a prompt of its own is named for that prompt.
+ * An agent started from another is named from the brief and the note it
+ * was handed, never from the other agent's transcript replayed between
+ * them (`@luke/features/agent-replay`), whose words are that agent's.
  * An automation's run is named from the automation's prompt alone in its
  * opening's place, without the lines Luke adds of the firing, which would
  * name every run of it alike, and the GitHub event's subject where one
@@ -88,11 +92,18 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
   return title.length === 0 ? Option.none() : Option.some(title);
 }
 
-/** A message's words as the call reads them: its text alone, cut to the excerpt; a file it carries is no word of it. */
+/** A part's words without the replay of another agent: the brief and the note where a replay stands between them, the part whole otherwise. */
+function withoutReplay(text: string): string {
+  const read = firstMessageParts(text);
+  if (read.replay === undefined) return text;
+  return read.note === undefined ? read.brief : `${read.brief}\n${read.note.text}`;
+}
+
+/** A message's words as the call reads them: its text alone, any replay of another agent left out, cut to the excerpt; a file it carries is no word of it. */
 function excerptOf(message: StoredUIMessage | undefined): string {
   const words = (message?.parts ?? [])
     .filter((part) => isTextUIPart(part))
-    .map((part) => part.text.trim())
+    .map((part) => withoutReplay(part.text).trim())
     .filter((text) => text.length > 0)
     .join("\n");
   return words.slice(0, AGENT_TITLE.EXCERPT_CHARS);

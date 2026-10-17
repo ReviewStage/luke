@@ -285,6 +285,8 @@ function mountWith(
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      pages: undefined,
+      onRereadPages: () => undefined,
     },
     ...overrides,
   });

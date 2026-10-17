@@ -146,6 +146,8 @@ import {
   type TasksMoveParams,
   type TasksPageAnswer,
   type TasksPageParams,
+  type TasksPagesAnswer,
+  type TasksPagesParams,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPictureKeepParams,
@@ -198,6 +200,7 @@ import {
   tasksLinearIssuesAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
+  tasksPagesAnswerSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
   tasksRepositoriesAnswerSchema,
@@ -401,6 +404,8 @@ export interface HostOperator {
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
+  /** One plan's pages, each by its newest version; or that the service did not answer. */
+  tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
   /** One picture of one plan as its bytes in base64, or why there is none. */
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
@@ -1165,6 +1170,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
+    tasksPages: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_PAGES, { taskId: params.taskId }),
+        (answer): TasksPagesAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksPagesAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
     tasksRestore: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
@@ -1411,6 +1426,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("disabledServers" in params
             ? { disabledServers: params.disabledServers }
             : undefined),
+          ...("from" in params ? { from: params.from } : undefined),
+          ...("note" in params ? { note: params.note } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

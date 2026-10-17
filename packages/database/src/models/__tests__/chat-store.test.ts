@@ -40,9 +40,11 @@ import {
   memberNamed,
   openAsksOf,
   openTopicChannel,
+  peekUnread,
   postAsk,
   postMessage,
   readAttachment,
+  readThrough,
   readTo,
   releaseNotice,
   resolveAsk,
@@ -527,6 +529,45 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
         assert.deepEqual(
           textsOf((yield* unread()).messages),
           textsOf([{ blocks: words("Four.") }]),
+        );
+      }),
+  );
+
+  it.effect(
+    "a peek at a member's unread moves nothing, and reading through the place it named passes what it answered and nothing posted since",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        yield* room.posted(room.first, "One.");
+        yield* room.posted(room.first, "Two.");
+        const peek = () =>
+          Effect.map(peekUnread(room.owner, room.workspace, room.second.id), Option.getOrThrow);
+
+        const seen = yield* peek();
+        assert.deepEqual(
+          textsOf(seen.messages),
+          textsOf([{ blocks: words("One.") }, { blocks: words("Two.") }]),
+        );
+        assert.deepEqual(textsOf((yield* peek()).messages), textsOf(seen.messages));
+
+        yield* room.posted(room.first, "Three.");
+        assert.equal(
+          yield* readThrough(room.owner, room.workspace, room.second.id, seen.through),
+          true,
+        );
+        assert.deepEqual(textsOf((yield* peek()).messages), textsOf([{ blocks: words("Three.") }]));
+        // The cursor never moves back.
+        yield* readThrough(room.owner, room.workspace, room.second.id, 0);
+        assert.deepEqual(textsOf((yield* peek()).messages), textsOf([{ blocks: words("Three.") }]));
+
+        const stranger = yield* openAccount("Stranger");
+        assert.equal(
+          yield* readThrough(stranger, room.workspace, room.second.id, seen.through),
+          false,
+        );
+        assert.deepEqual(
+          yield* peekUnread(stranger, room.workspace, room.second.id),
+          Option.none(),
         );
       }),
   );

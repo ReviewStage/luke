@@ -439,16 +439,19 @@ export function PageFind({
   page,
   at,
   active,
+  hidden,
   children,
 }: {
   page: FindPage;
   at?: string | undefined;
   /** Whether the page holds the window's keys: the window's Plans tab on screen. */
   active: boolean;
+  /** Whether the page is hidden under a side panel filling the window beside it, as the Inbox's is. */
+  hidden?: boolean | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <FindScope className="page-find" active={active} subject={{ page, at }}>
+    <FindScope className="page-find" active={active} subject={{ page, at }} hidden={hidden}>
       {children}
     </FindScope>
   );

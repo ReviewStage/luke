@@ -14,7 +14,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
  * takes nothing away. Reduced motion and a capture run zero the tokens an
  * exit is timed on, and an element that runs no motion is taken out at once.
  *
- * The motion itself is the stylesheet's. base.css also draws an optional
+ * The motion itself is the stylesheet's. The desktop's base.css also draws an optional
  * layer for a disclosure that opens downward over content, which a caller
  * asks for by marking the root `data-disclosure` (`disclosureMotion`) and
  * its body `.disclosure-body`, the root's own child: `opening` unrolls

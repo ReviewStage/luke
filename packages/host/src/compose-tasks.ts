@@ -41,6 +41,7 @@ import {
   type TasksLinearIssuesAnswer,
   type TasksMoveAnswer,
   type TasksPageAnswer,
+  type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPullRequestAnswer,
@@ -69,6 +70,7 @@ import {
   tasksMessagesParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
+  tasksPagesParamsSchema,
   tasksPictureKeepParamsSchema,
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
@@ -1326,6 +1328,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksPageAnswer>(
           page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
+        );
+      }),
+    // A plan's pages are answered to the Inbox that asked and held nowhere,
+    // since the view holds the active plan's alone.
+    [GATEWAY_METHOD.TASKS_PAGES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading a plan's pages names the plan");
+        if (!gate()) return carried<TasksPagesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const pages = yield* Effect.provide(
+          client.readPages(read.success.taskId),
+          FetchHttpClient.layer,
+        );
+        return carried<TasksPagesAnswer>(
+          pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
         );
       }),
     // A picture's bytes are answered to the window that asked and held

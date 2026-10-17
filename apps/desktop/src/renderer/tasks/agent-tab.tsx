@@ -92,6 +92,8 @@ import {
 } from "./message-links";
 import { useMentionDoors } from "./plan-mentions";
 import { PlanPictures } from "./plan-pictures";
+import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
+import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
@@ -444,9 +446,11 @@ function DelegationRow({
 function TodosRow({
   part,
   open,
+  live,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   open: boolean;
+  live: boolean;
 }): ReactNode {
   const todos = todosView(part.input);
   if (todos === undefined) return <ToolCallView part={part} />;
@@ -459,24 +463,30 @@ function TodosRow({
       subject={todosSummary(todos)}
       todos={todos}
       errorText={part.errorText}
+      live={live}
     />
   );
 }
 
-/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, and the call whose list is drawn open, none while the list is docked above the composer. */
+/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, the call whose list is drawn open, none while the list is docked above the composer, and the call whose list the agent is at, none once it stops. */
 interface TodosPlace {
   readonly kept: string | undefined;
   readonly open: string | undefined;
+  readonly live: string | undefined;
 }
 
 /** A transcript that holds no to-do list, as the brain's does not. */
-const NO_TODOS: TodosPlace = { kept: undefined, open: undefined };
+const NO_TODOS: TodosPlace = { kept: undefined, open: undefined, live: undefined };
 
-/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it. */
+/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it, and live while the agent works. */
 function todosPlace(messages: readonly CodingAgentMessage[], working: boolean): TodosPlace {
   const standing = newestTodos(messages);
   const docked = dockedTodos(standing, working);
-  return { kept: standing?.callId, open: docked === undefined ? standing?.callId : undefined };
+  return {
+    kept: standing?.callId,
+    open: docked === undefined ? standing?.callId : undefined,
+    live: working ? standing?.callId : undefined,
+  };
 }
 
 /** The list the agent is working through, docked above the composer; nothing where none is (`dockedTodos`). */
@@ -598,7 +608,13 @@ function AgentPartView({
         );
       }
       if (part.tool === AGENT_TOOL.WRITE_TODOS) {
-        return <TodosRow part={part} open={part.callId === todos.open} />;
+        return (
+          <TodosRow
+            part={part}
+            open={part.callId === todos.open}
+            live={part.callId === todos.live}
+          />
+        );
       }
       return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
         <LoadedSkillView part={part} />
@@ -1117,6 +1133,7 @@ function AgentTranscriptView({
   origin,
   readerId,
   planId,
+  replay,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
@@ -1156,6 +1173,8 @@ function AgentTranscriptView({
   readerId?: string | undefined;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
   planId?: string | undefined;
+  /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
+  replay?: ReplayPlace | undefined;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   if (messages.length > 0) {
@@ -1170,6 +1189,8 @@ function AgentTranscriptView({
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
     const task = carded ? undefined : first;
+    // An agent started from another opens on the brief as its source's did, then the replay's card, then the note.
+    const opening = replay === undefined || first === undefined ? undefined : replayOpening(first);
     // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
     const placed = placedMessages(messages);
     return (
@@ -1185,7 +1206,7 @@ function AgentTranscriptView({
           {placed.map(({ message, arrived }, index) => (
             <Fragment key={message.id}>
               <AgentMessage
-                message={message}
+                message={message === first && opening !== undefined ? opening.brief : message}
                 plan={message === plan}
                 planId={message === plan ? planId : undefined}
                 lead={lead}
@@ -1204,6 +1225,21 @@ function AgentTranscriptView({
                   sender: lineSender(line.sentBy, readerId, members, former),
                 }))}
               />
+              {message === first && opening !== undefined && replay !== undefined ? (
+                <>
+                  <ReplayCard replay={opening.replay} place={replay} planId={planId} />
+                  {opening.note === undefined ? null : (
+                    <AgentMessage
+                      message={opening.note}
+                      plan={false}
+                      lead={lead}
+                      moving={false}
+                      delegation={delegation}
+                      sender={briefSender}
+                    />
+                  )}
+                </>
+              ) : null}
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
               ) : null}
@@ -1283,8 +1319,11 @@ function AgentTabView({
   starter,
   readerId,
   run,
+  replay,
 }: {
   agent: CodingAgentSummary;
+  /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
+  replay?: ReplayPlace | undefined;
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
   run?: CodingAgentOrigin | undefined;
   models: readonly CatalogModel[] | undefined;
@@ -1334,7 +1373,8 @@ function AgentTabView({
   // The door the box hands Reply, which lays a quote in at its caret.
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const origin = agentOrigin({
-    agent,
+    // An agent started from an automation's run opens on the run's prompt under the automation.
+    agent: replay === undefined ? agent : briefAgent(agent, replay.agents),
     run,
     task: cards?.task,
     onOpenTask: onOpenTarget === undefined ? undefined : () => onOpenTarget(TASK_TARGET),
@@ -1357,6 +1397,7 @@ function AgentTabView({
               origin={origin}
               readerId={readerId}
               planId={agent.planId ?? undefined}
+              replay={replay}
               delegation={{
                 models,
                 own: { model: agent.model, effort: agent.effort },
@@ -1569,6 +1610,14 @@ export function AgentTab({
         starter={teammateStarter(agent.startedBy, control.me)}
         readerId={control.me}
         run={run}
+        replay={replayPlace({
+          agent,
+          control,
+          tile: cards?.agent,
+          target: cards?.target,
+          onOpenTarget,
+          openGitHub,
+        })}
       />
     </MessagePlaceProvider>
   );

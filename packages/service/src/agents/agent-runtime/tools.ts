@@ -73,6 +73,7 @@ const TOOL_ROLES = {
   [AGENT_TOOL.SLEEP]: [CODER],
   [AGENT_TOOL.POST_CHAT]: [BRAIN, CODER],
   [AGENT_TOOL.READ_CHAT]: [BRAIN, CODER],
+  [AGENT_TOOL.RESOLVE_ASK]: [BRAIN, CODER],
 } as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };
 
 /** The tools a role is offered, in the registry's order. */

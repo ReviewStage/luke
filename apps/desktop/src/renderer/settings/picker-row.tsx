@@ -1,9 +1,9 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { cssCustomProperties } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
 import { CHIP_LOOK, Chip } from "../chip";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
-import { useDisclosure } from "../use-disclosure";
 
 /**
  * picker-row.tsx -- the one control a settings row picks a value with: a chip naming the value, and the app's own menu under it.

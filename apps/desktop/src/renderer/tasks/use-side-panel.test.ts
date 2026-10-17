@@ -297,3 +297,46 @@ test("a plan whose strip holds no tab draws no panel, and the next plan with a t
   panel.render({ task: TASK, taskAgents: [] });
   assert.equal(panel.control().open, false, "hidden by the toggle, not by the empty strip");
 });
+
+test("beside the window's Inbox the panel stands for the item's plan with none of its fixed tabs, holds what the item opens there, and the plan's page finds its strip as it left it, a fixed tab it closed still closed and one it opened still open", () => {
+  const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+  let control: SidePanelControl | undefined;
+  function Probe({ inbox }: { inbox: boolean }) {
+    control = useSidePanel(
+      undefined,
+      inbox ? { id: TASK, holds: {}, bare: true } : usedTask(TASK),
+      inbox ? [] : [AGENT],
+      [],
+      [],
+      [],
+      inbox ? undefined : [AGENT],
+    );
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = (inbox: boolean) => act(() => root.render(createElement(Probe, { inbox })));
+  const panel = () => {
+    assert.ok(control);
+    return control;
+  };
+
+  render(false);
+  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose({ changes: AGENT }));
+
+  render(true);
+  assert.deepEqual(panel().strip, [{ changes: AGENT }], "no fixed tab stands beside the Inbox");
+  act(() => panel().onOpenFile({ path: "src/invites.ts", startLine: 3, endLine: 5 }, COMMIT));
+  assert.deepEqual(panel().strip, [{ changes: AGENT }, { file: "src/invites.ts" }]);
+  assert.deepEqual(panel().tab, { file: "src/invites.ts" });
+
+  render(false);
+  assert.deepEqual(panel().strip, [
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CALL,
+    { changes: AGENT },
+    { file: "src/invites.ts" },
+  ]);
+});

@@ -49,6 +49,7 @@
 import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import { TOOLTIP_LEAVING, TooltipCard, type TooltipLeaving, TooltipPill } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -73,7 +74,6 @@ import {
 } from "#shared/shortcuts";
 import { rendererRuntime } from "./renderer-runtime";
 import { Shortcut } from "./shortcut";
-import { useDisclosure } from "./use-disclosure";
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the

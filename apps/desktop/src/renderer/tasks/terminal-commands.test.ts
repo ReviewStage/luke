@@ -302,11 +302,11 @@ function menuItem(label: string) {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".task-menu-label")?.textContent === label,
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === label,
   );
   assert.ok(item, `the menu offers ${label}`);
   return {
-    hint: item.querySelector(".menu-item-hint")?.textContent,
+    hint: item.querySelector(".luke-menu-item-hint")?.textContent,
     press: async () => {
       await act(async () => item.click());
       await settle();

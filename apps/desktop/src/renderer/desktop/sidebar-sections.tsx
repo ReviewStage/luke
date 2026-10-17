@@ -19,6 +19,7 @@ import {
   PencilIcon,
   TrashIcon,
   useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
 import {
   placeWrites,
@@ -48,7 +49,7 @@ import {
 import { useRef, useState } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { SidebarGroupHeader } from "./sidebar-group-header";
 import { useRowDrag } from "./use-row-drag";
 
@@ -415,7 +416,7 @@ function SidebarSection({
       },
     },
   );
-  const menu = useActionMenu(tasks.shown && context.inSight);
+  const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const groups: MenuAction[][] = [
     [{ label: "Edit section", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(section) }],

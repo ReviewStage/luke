@@ -839,13 +839,16 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           host
             .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
             .pipe(Effect.provide(reachingRelay()));
-        assert.equal(yield* host.chatOffered(admitted), false);
+        assert.equal(yield* host.chatOffered(admitted, { chatOn: true }), false);
         assert.deepEqual(yield* read(), {
           status: ACTION_RESULT_STATUS.REJECTED,
           reason: CHAT_TOOL_REFUSAL.OFF,
         });
         yield* chatOn(userId);
-        assert.equal(yield* host.chatOffered(admitted), true);
+        assert.equal(yield* host.chatOffered(admitted, { chatOn: true }), true);
+        // A session started before Chat was on was told nothing of it, so it is offered no chat tool.
+        assert.equal(yield* host.chatOffered(admitted, { chatOn: false }), false);
+        assert.equal(yield* host.chatOffered(admitted, {}), false);
         const answered = yield* read();
         assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED);
       }),
@@ -863,6 +866,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
               input: unparsedWire({ text: "Still here." }),
               clientKey: "call-left",
               postsInTurn: 0,
+              sandbox: () => Promise.reject(new Error("the sandbox was opened")),
             })
             .pipe(Effect.provide(reachingRelay()));
         const stamped = (userId: string, agentId: string) =>
@@ -892,6 +896,34 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           yield* post(onArchivedTask.admitted),
           refused,
           "brought back, it posts",
+        );
+      }),
+  );
+
+  it.effect(
+    "a chat post lands where the deployment names no secret or no origin for eve, the members it addresses left to read it next",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, admitted } = yield* openAgent(host);
+        yield* chatOn(userId);
+        const posted = yield* host
+          .chat(admitted, {
+            tool: CHAT_TOOL.POST,
+            input: unparsedWire({ text: "Taking the invite table." }),
+            clientKey: "call-1",
+            postsInTurn: 0,
+            sandbox: () => Promise.reject(new Error("the sandbox was opened")),
+          })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* host
+          .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.ok("channels" in read);
+        assert.deepEqual(
+          read.channels.map((channel) => channel.name),
+          ["#teammate-invitations"],
         );
       }),
   );
