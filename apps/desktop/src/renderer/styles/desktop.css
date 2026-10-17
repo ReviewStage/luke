@@ -8621,20 +8621,23 @@ button.automation-run:hover {
   user-select: none;
 }
 
-/* Move to workspace (`move-plan-dialog.tsx`): the other workspaces as rows,
-   a tile and two lines each, the chosen one ringed and one that cannot take
-   the plan dimmed, then what the move does in a well under them. The rows
-   are the card's body, which scrolls where the window is too short for all
-   of them, padded by the ring's reach so a row's ring is never cut off. */
+/* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
+   card: the other workspaces as rows, a tile and two lines each, the chosen
+   one ringed and one that cannot take the task dimmed, then what the move
+   does in a well under them, and the answers at its foot. The rows are the
+   card's body, which scrolls where the window is too short for all of them,
+   padded by the ring's reach so a row's ring is never cut off. */
 .move-dialog {
-  width: min(440px, 100%);
-  gap: var(--space-12);
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
 }
 
 .move-list {
   display: grid;
   min-height: 0;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
   margin: calc(-1 * var(--focus-ring-reach));
   padding: var(--focus-ring-reach);
   overflow-x: hidden;
@@ -8646,10 +8649,10 @@ button.automation-run:hover {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-12);
-  padding: var(--space-8);
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-8);
   border: 0;
-  border-radius: var(--control-radius);
+  border-radius: var(--luke-control-radius);
   background: none;
   color: inherit;
   font: inherit;
@@ -8658,12 +8661,12 @@ button.automation-run:hover {
 }
 
 .move-row:hover:not(:disabled) {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .move-row[aria-checked="true"] {
-  background: var(--raised-strong);
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  background: var(--luke-color-fill-strong);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
 .move-row:disabled {
@@ -8671,20 +8674,31 @@ button.automation-run:hover {
 }
 
 .move-row .workspace-ref-name {
-  color: var(--text-primary);
-  font-weight: 600;
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .move-effects {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   margin: 0;
-  padding: var(--space-12) var(--space-12) var(--space-12) var(--space-24);
-  border-radius: var(--control-radius);
-  background: var(--raised);
-  color: var(--text-body);
-  font-size: 12px;
-  line-height: 1.45;
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-24);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-body);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.move-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--luke-dialog-action-gap);
+  margin-top: var(--luke-space-12);
+}
+
+.move-dialog-actions > * {
+  min-width: var(--luke-dialog-action-width);
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
