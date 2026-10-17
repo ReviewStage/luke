@@ -55,6 +55,7 @@ export function SchemaSettingRows({
         changed={changed}
         value={control.value}
         options={control.options.map((option) => ({ ...option }))}
+        placeholder={control.search}
         parse={(raw) => (control.options.some((option) => option.value === raw) ? raw : undefined)}
         onChange={(token) => writes.setting(field, settingFromOption(field, token, view))}
       />,

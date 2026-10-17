@@ -1,4 +1,11 @@
-import { BUTTON_VARIANT, Button, SettingsRow, SettingsSection, Switch } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  SettingsRow,
+  type SettingsRowControl,
+  SettingsSection,
+  Switch,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -10,15 +17,24 @@ import { CatalogSection } from "../section";
  * under.
  */
 
-function HeldSwitch({ label, describedBy }: { label: string; describedBy: string | undefined }) {
+/** A switch holding its own state, named `label` and described and failed by its row. */
+function HeldSwitch({ label, control }: { label: string; control: SettingsRowControl }) {
   const [on, setOn] = useState(true);
-  return <Switch checked={on} label={label} describedBy={describedBy} onChange={setOn} />;
+  return (
+    <Switch
+      checked={on}
+      label={label}
+      describedBy={control["aria-describedby"]}
+      aria-invalid={control["aria-invalid"]}
+      onChange={setOn}
+    />
+  );
 }
 
 function SwitchRow({ label, description }: { label: string; description?: string }) {
   return (
     <SettingsRow label={label} description={description}>
-      {(control) => <HeldSwitch label={label} describedBy={control["aria-describedby"]} />}
+      {(control) => <HeldSwitch label={label} control={control} />}
     </SettingsRow>
   );
 }

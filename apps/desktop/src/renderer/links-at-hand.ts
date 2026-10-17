@@ -8,7 +8,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { LINK_COPY, useCopyToast } from "./copy-feedback";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel";
-import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab";
+import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-tasks-tab";
 
 /**
  * links-at-hand.ts -- the links the window can copy right now: what is open or focused, the most specific first.
@@ -19,7 +19,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "./tasks/use-tasks-tab";
  * fills the window, else the
  * work column's agent, then the side panel's tab, then the task under them;
  * what stands in the plan's place (an agent's page, the Inbox on an item,
- * an automation, Factory) before the list it is in; and a page of Settings
+ * an automation, an issue, Factory) before the list it is in; and a page of Settings
  * while Settings stands. A tab with nothing of its own to link to, a
  * file's, the board, the code, or a terminal, is passed over for the task.
  * Each link is written under its workspace's slug, or its id until the
@@ -47,6 +47,7 @@ const LINK_THING = {
   FACTORY: "Factory",
   SETTINGS: "settings page",
   PERSON: "profile",
+  ISSUE: "issue",
 } as const;
 
 type LinkThing = (typeof LINK_THING)[keyof typeof LINK_THING];
@@ -211,6 +212,13 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       : [list];
   }
   if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
+  // The Issues list has no link of its own, and the task it stands over is not in sight, so it offers none.
+  const issues = tasks.issuesView;
+  if (issues.open) {
+    return issues.place.kind === ISSUES_PAGE.ISSUE
+      ? [at_({ kind: LINK_PLACE.ISSUE, issueId: issues.place.issueId }, LINK_THING.ISSUE)]
+      : [];
+  }
   return taskLinks(tasks, at);
 }
 

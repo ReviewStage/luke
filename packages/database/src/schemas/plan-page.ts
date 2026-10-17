@@ -1,7 +1,7 @@
 import type { PageShower } from "@luke/features/page-wire";
 import { index, integer, jsonb, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { task } from "./plan.js";
+import { task } from "./task.js";
 
 /**
  * plan-page.ts -- a plan's pages, one row per version of a page.
@@ -20,7 +20,7 @@ export const planPageVersion = pgTable(
   {
     /** The version's own id. */
     id: uuid("id").primaryKey().defaultRandom(),
-    taskId: uuid("plan_id")
+    taskId: uuid("task_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
     /** The page the version is of, the same on each of its versions. */
@@ -37,6 +37,6 @@ export const planPageVersion = pgTable(
   (table) => [
     unique("plan_page_version_page_version").on(table.pageId, table.version),
     // A plan's pages are read together, each by its newest version.
-    index("plan_page_version_plan").on(table.taskId),
+    index("plan_page_version_task").on(table.taskId),
   ],
 );

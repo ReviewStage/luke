@@ -1,5 +1,5 @@
 /**
- * agent-end-toast.ts -- says in the window's toast that a coding agent's turn ended while the window was focused elsewhere in it, with a View that opens the agent, until that agent is seen.
+ * agent-end-toast.ts -- says in the window's toast that a coding agent's turn ended while the window was focused elsewhere in it, with a View that opens the agent, for the news's hold or until that agent is seen.
  *
  * Main decides which ends the window hears (`@luke/host/agent-notices`): one
  * for each turn, and only while the window is focused, the OS's
@@ -7,15 +7,16 @@
  * the notification would, the plan's name on its second line, or the
  * automation's for an agent with no plan, and its View does what the
  * notification's click does: the plan on the agent's tab, or the agent's own
- * page. It stands until it is dismissed,
- * as the agent's unseen dot does, and goes with that dot: once the agent's
- * tab is shown, by any route, the toast has nothing left to say. Several
+ * page. It stands for the news's hold and leaves by itself, since the
+ * agent's unseen dot goes on saying it, and goes sooner with that dot: once
+ * the agent's tab is shown, by any route, the toast has nothing left to
+ * say. Several
  * agents may end in one read, so each end waits for room rather than
  * pushing out an earlier one, whose View would go with it.
  */
 
 import { useEffect, useRef } from "react";
-import { TOAST_TONE, useToast, useWithdrawToast } from "../toast";
+import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 
 /** What an agent's end offers, to open the agent it was. */
 const VIEW_LABEL = "View";
@@ -48,7 +49,7 @@ export function useAgentEndToasts(
           words,
           detail,
           waits: true,
-          persists: true,
+          hold: TOAST_HOLD.NEWS,
           subject: agentId,
           tone: failed ? TOAST_TONE.FAILED : TOAST_TONE.DONE,
           action: { label: VIEW_LABEL, onPress: () => viewing.current({ taskId, agentId }) },

@@ -27,6 +27,7 @@
         "src/renderer/whiteboard/index.css",
         "src/renderer/plan-editor/index.ts",
         "src/renderer/diagram/index.ts",
+        "src/renderer/diff-view/index.ts",
         "src/renderer/session-recorder/index.ts",
         "src/renderer/terminal/index.ts",
         "src/renderer/terminal/index.css",
@@ -81,6 +82,7 @@
         "{,subagents/*/}instructions.ts",
         "{,subagents/*/}instructions/*.ts",
         "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "instrumentation/*.ts",
         "evals/evals.config.ts",
         "evals/*.eval.ts"
       ],
@@ -105,6 +107,7 @@
         "{,subagents/*/}instructions.ts",
         "{,subagents/*/}instructions/*.ts",
         "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "instrumentation/*.ts",
         "evals/evals.config.ts",
         "evals/*.eval.ts"
       ],

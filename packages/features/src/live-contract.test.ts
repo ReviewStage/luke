@@ -122,10 +122,10 @@ test("the desktop's avatar frames are a start naming at most an avatar, or a sto
   assert.equal(avatarRequestFrameFromWire({ ...start, personaId: "p_1" }), undefined);
   const chosen = { ...start, avatar: VIDEO_AVATAR.CELIA };
   assert.deepEqual(avatarRequestFrameFromWire(chosen), chosen);
-  // An avatar a newer Mac lists reads as the default, so the start is still answered.
+  // An avatar a newer Mac lists reads as none, so the start is still answered with the deployment's own.
   assert.deepEqual(avatarRequestFrameFromWire({ ...start, avatar: "nova" }), {
     ...start,
-    avatar: VIDEO_AVATAR.DEFAULT,
+    avatar: undefined,
   });
   const longAvatar = "a".repeat(AVATAR_FRAME_BOUNDS.AVATAR_CHARS + 1);
   assert.equal(avatarRequestFrameFromWire({ ...start, avatar: longAvatar }), undefined);
