@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { CloseIcon, SearchIcon } from "@luke/ui";
+import { IconButton, SearchField } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -63,43 +63,23 @@ function TreeSearch({
   floating: boolean;
   onQuery: (query: string) => void;
 }): React.JSX.Element {
+  // Note that a floating tree hears an Escape with nothing typed, to put
+  // itself away, so the field answers none then; any other Escape is the
+  // field's, kept from the window's own, which would close the panel.
+  const answerEscape =
+    query.length === 0 && floating
+      ? undefined
+      : () => (query.length > 0 ? onQuery("") : field.current?.blur());
   return (
-    <label className="settings-search-well field-well file-tree-search-well">
-      <SearchIcon />
-      <input
-        ref={field}
-        className="settings-search-input"
-        aria-label="Search files"
-        placeholder={scope === SEARCH_SCOPE.OPENED ? "Search opened folders" : "Search files"}
-        autoComplete="off"
-        spellCheck={false}
-        value={query}
-        onChange={(event) => onQuery(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
-          // A floating tree hears an Escape with nothing typed, to put itself away.
-          if (query.length === 0 && floating) return;
-          // Note that an Escape is stopped here, because the window's own
-          // Escape would close the panel behind the field.
-          event.stopPropagation();
-          if (query.length > 0) onQuery("");
-          else field.current?.blur();
-        }}
-      />
-      {query.length > 0 ? (
-        <button
-          type="button"
-          className="icon-button settings-search-clear"
-          aria-label="Clear search"
-          onClick={() => {
-            onQuery("");
-            field.current?.focus();
-          }}
-        >
-          <CloseIcon />
-        </button>
-      ) : null}
-    </label>
+    <SearchField
+      ref={field}
+      label="Search files"
+      placeholder={scope === SEARCH_SCOPE.OPENED ? "Search opened folders" : "Search files"}
+      value={query}
+      onChange={onQuery}
+      onClear={() => onQuery("")}
+      onEscape={answerEscape}
+    />
   );
 }
 
@@ -249,16 +229,13 @@ export function FileTreePane({
         />
         {shown === undefined ? null : (
           <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
-            <button
-              type="button"
-              className="icon-button file-tree-filter"
-              aria-label="Only files Luke showed"
-              aria-pressed={onlyShown}
+            <IconButton
+              icon={<ListFilterIcon aria-hidden="true" />}
+              label="Only files Luke showed"
+              pressed={onlyShown}
               disabled={shown.length === 0}
               onClick={() => setOnlyShown((on) => !on)}
-            >
-              <ListFilterIcon aria-hidden="true" />
-            </button>
+            />
           </Tooltip>
         )}
       </search>
