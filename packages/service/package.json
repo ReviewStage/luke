@@ -140,6 +140,7 @@
     "./github/workspace-repository": "./src/github/workspace-repository.js",
     "./http/http": "./src/http/http.js",
     "./http/http-effect": "./src/http/http-effect.js",
+    "./http/origin-guard": "./src/http/origin-guard.js",
     "./http/rate-brake": "./src/http/rate-brake.js",
     "./http/store-failure": "./src/http/store-failure.js",
     "./inbox/inbox-store": "./src/inbox/inbox-store.js",

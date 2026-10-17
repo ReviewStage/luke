@@ -85,6 +85,13 @@ export interface AuthDeployment {
   /** The address this deployment calls itself, and the origin it trusts by default. */
   baseURL: string;
   /**
+   * The origins this deployment's own pages are served from: its base URL's,
+   * and on a preview its remaining hostname's. Unlike `trustedOrigins`, never
+   * another deployment's, so this is what a check that a request came from
+   * one of this deployment's own pages reads.
+   */
+  ownOrigins: string[];
+  /**
    * The origins trusted beyond the base URL: on a preview, its remaining
    * hostnames; on production, every preview's and the dev server's, which
    * sign in through it.
@@ -193,9 +200,13 @@ export function authDeployment(variables: Record<string, string | undefined>): A
         ]
       : [];
   const [previewBaseURL, ...previewAliases] = previewOrigins;
+  const baseURL = previewBaseURL ?? productionURL ?? LOCAL_AUTH_URL;
 
   return {
-    baseURL: previewBaseURL ?? productionURL ?? LOCAL_AUTH_URL,
+    baseURL,
+    ownOrigins: [deploymentOrigin(baseURL), ...previewAliases].filter(
+      (origin): origin is string => origin !== undefined,
+    ),
     trustedOrigins:
       variables[AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT] === DEPLOYMENT_ENVIRONMENT.PRODUCTION
         ? [...PROXIED_ORIGINS]

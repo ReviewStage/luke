@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { authApp } from "@luke/service/auth/auth-app";
 import { HostedEnvironment } from "@luke/service/environment";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
@@ -20,7 +21,8 @@ import { disposeWebRuntime } from "../server/runtime.js";
  * The adaptor's proof: a route built from a route layer reads the request it
  * was handed and the services the web runtime built, answers the gate's own
  * refusals, and answers the bounded body read's statuses on the answer and on
- * every refusal.
+ * every refusal; and a state-changing request a browser's cookie carried from
+ * a page the deployment does not serve is refused before any route answers it.
  */
 
 /**
@@ -47,6 +49,22 @@ const GATE = `https://luke.test${GATE_PATH}`;
 const API_KEY = "sk-test";
 const USER_ID = "user-1";
 const AUTHORIZATION = "Bearer token";
+
+/** The deployment's own origin, which the guard reads from the address production registers. */
+const OWN_ORIGIN = "https://luke.test";
+const FOREIGN_ORIGIN = "https://evil.example";
+const SESSION_COOKIE = "__Secure-better-auth.session_token=fixture";
+const WRITE_PATH = "/api/write";
+
+/** Names the deployment production at its own origin, whatever environment the suite runs in. */
+function stubProduction(): void {
+  vi.stubEnv("VERCEL_ENV", "production");
+  vi.stubEnv("BETTER_AUTH_URL", OWN_ORIGIN);
+}
+
+function post(path: string, headers: Record<string, string>): Request {
+  return new Request(`${OWN_ORIGIN}${path}`, { method: "POST", headers });
+}
 
 /**
  * The gate every hosted group runs its requests through, as one route: the
@@ -124,4 +142,39 @@ test("the route built from a route layer answers the gate's own refusals", async
     gate,
     CASES.map((entry) => entry.status),
   );
+});
+
+test("a route refuses a cookie POST a foreign page sent, and answers its own page's and a bearer's", async () => {
+  stubProduction();
+  const route = routeFromHttpRouter(
+    HttpRouter.add(ANY_METHOD, WRITE_PATH, hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {})),
+  );
+
+  const foreign = await route.fetch(
+    post(WRITE_PATH, { cookie: SESSION_COOKIE, origin: FOREIGN_ORIGIN }),
+  );
+  assert.equal(foreign.status, HOSTED_HTTP_STATUS.FORBIDDEN);
+  assert.deepEqual(await foreign.json(), { error: HOSTED_API_ERROR.NOT_PERMITTED });
+
+  const unnamed = await route.fetch(post(WRITE_PATH, { cookie: SESSION_COOKIE }));
+  assert.equal(unnamed.status, HOSTED_HTTP_STATUS.FORBIDDEN);
+
+  const own = await route.fetch(post(WRITE_PATH, { cookie: SESSION_COOKIE, origin: OWN_ORIGIN }));
+  assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
+
+  const bearer = await route.fetch(post(WRITE_PATH, { authorization: AUTHORIZATION }));
+  assert.equal(bearer.status, HOSTED_HTTP_STATUS.OK);
+});
+
+test("Better Auth's own route takes a cookie POST a foreign page sent, and answers it itself", async () => {
+  stubProduction();
+  const route = routeFromHttpRouter(
+    authApp(async () => Response.json({ handled: true }, { status: HOSTED_HTTP_STATUS.OK })),
+  );
+
+  const answered = await route.fetch(
+    post("/api/auth/sign-in/social", { cookie: SESSION_COOKIE, origin: FOREIGN_ORIGIN }),
+  );
+  assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+  assert.deepEqual(await answered.json(), { handled: true });
 });

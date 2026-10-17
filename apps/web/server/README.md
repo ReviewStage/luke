@@ -591,6 +591,25 @@ rather than as a `Schema.TaggedError`, because `error` is already the
 discriminant the desktop's hosted clients read and a `_tag` beside it would be
 a byte they never asked for.
 
+Every request meets the cookie origin guard
+(`packages/service/src/http/origin-guard.ts`) before the handler is built or
+the router reads it. A state-changing request, any method but GET, HEAD, and
+OPTIONS, that carries a cookie and no `Authorization` header is refused with
+the vocabulary's `not-permitted` (403) unless its `Origin` is one of the
+deployment's own, `authDeployment`'s `ownOrigins`: production's registered
+address, or a Preview's two hostnames. Where a browser names no `Origin`, a
+`Sec-Fetch-Site` of `same-origin` stands in for it. A request that carries
+`Authorization`, where the desktop names its account, goes on untouched,
+since a browser never attaches that header on its own, and so does one that
+carries no cookie, which holds no session to ride on. The list is the guard's
+own rather than Better Auth's `trustedOrigins`, which on production trusts
+every preview and the dev server for the OAuth proxy. Two kinds of path are
+let through from any page: Better Auth's own `/api/auth/*`, which checks a
+request's origin itself, and the four addresses a provider returns the
+browser to (`/api/github/installed`, `/api/github/installed/authorized`,
+`/api/account/integrations/connected`, `/api/workspaces/linear/connected`),
+each admitted by its connect's `state` and never by the cookie.
+
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so
@@ -740,4 +759,3 @@ Luke's planning brain is its own eve app, `apps/luke`, and the coding agent
 is another, `apps/dev`; their layout, deployment, and evals are in
 `apps/luke/README.md`, which `apps/dev` follows, and `packages/service/README.md`'s
 "The coding-agent service".
-
