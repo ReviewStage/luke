@@ -3,7 +3,9 @@
    controls dropping below the words to the row's end once the row is
    narrower than 380px, a leading mark staying beside the words. A compact
    row stands bare, at a menu row's height, and keeps its controls beside
-   its words at any width. */
+   its words at any width. A list row stands in the card as a card's row
+   does, shorter and with its label at body weight, a line of a reference
+   list rather than a setting. */
 
 @layer components {
   /* Note that the row is its own container, and its padding is its body's,
@@ -28,6 +30,15 @@
   .luke-settings-row[data-density="compact"] > .luke-settings-row-body {
     min-height: var(--luke-settings-row-compact-min-height);
     padding: var(--luke-settings-row-compact-block) var(--luke-settings-row-compact-inline);
+  }
+
+  .luke-settings-row[data-density="list"] > .luke-settings-row-body {
+    min-height: var(--luke-settings-row-list-min-height);
+    padding-block: var(--luke-settings-row-list-block);
+  }
+
+  .luke-settings-row[data-density="list"] .luke-settings-row-label {
+    font-weight: var(--luke-weight-regular);
   }
 
   /* A compact row keeps its controls beside its words at any width, since

@@ -521,20 +521,12 @@
   margin-top: var(--luke-space-4);
 }
 
-/* The Keyboard shortcuts page: a reference list more than a form, so the
-   window's own rows sit at a list's density rather than a form's, each the
-   command's name in regular weight and its chord at the row's end. The chord
-   is the row's value, so it is set at the row's own size in the value's ink,
-   the way System Settings lists its keyboard shortcuts. */
-.settings-card {
-  --shortcut-text: 13px;
-  --shortcut-ink: var(--text-secondary);
-}
-
-.settings-card > .shortcut-row {
-  min-height: 40px;
-  padding-top: var(--space-8);
-  padding-bottom: var(--space-8);
+/* A chord that is a Keyboard shortcuts row's whole value: set at the row's
+   label size in the value's ink, the way System Settings lists its keyboard
+   shortcuts. */
+.shortcut-value {
+  --shortcut-text: var(--luke-type-label-size);
+  --shortcut-ink: var(--luke-color-text-muted);
 }
 
 /* A changeable key's chord is a field, as a text field is drawn, so a key
@@ -568,12 +560,6 @@
 .shortcut-field[aria-pressed="true"] {
   outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
   outline-offset: -1px;
-}
-
-.shortcut-name {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 400;
 }
 
 /* What the field says where there is no chord to draw: none having
