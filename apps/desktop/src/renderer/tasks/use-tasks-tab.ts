@@ -167,7 +167,7 @@ import {
 } from "./use-side-panel";
 import { useWorkspaceChat } from "./use-workspace-chat";
 import { sayRestored } from "./version-view";
-import { agentListCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { agentListCallIds, newTaskCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /** A change to the sections drawn before the service answered it, and when it was asked. */
 interface PendingSectionWrite {
@@ -1295,6 +1295,20 @@ export function useTasksTab(input: {
     startsSeen.current = { planId: taskId, ids: new Set(startedByLuke) };
     if (landed) readAgents();
   }, [startedByLuke, viewed.activeTaskId, readAgents]);
+  // A start of Luke's that made a new task adds it to the sidebar only once the tasks are read
+  // again, as one lands in the work of the task it was made on.
+  const newTasksByLuke = useMemo(() => newTaskCallIds(viewed.conversation), [viewed.conversation]);
+  const newTasksSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
+    planId: undefined,
+    ids: new Set(),
+  });
+  useEffect(() => {
+    const seen = newTasksSeen.current;
+    const taskId = viewed.activeTaskId;
+    const landed = seen.planId === taskId && newTasksByLuke.some((callId) => !seen.ids.has(callId));
+    newTasksSeen.current = { planId: taskId, ids: new Set(newTasksByLuke) };
+    if (landed) tell(ACT_KIND.TASKS_REFRESH);
+  }, [newTasksByLuke, viewed.activeTaskId, tell]);
   // A file's tab is held to the files Luke showed on the task the same way.
   const files = useMemo(
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),

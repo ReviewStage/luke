@@ -1172,6 +1172,20 @@ export function agentListCallIds(messages: readonly CodingAgentMessage[]): reado
     );
 }
 
+/** The answered starts of a transcript that made a new task, by call id: what the tasks are read again on as each lands, so the new task stands in the sidebar. */
+export function newTaskCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+  return messages
+    .flatMap(agentParts)
+    .flatMap((part) =>
+      part.kind === AGENT_PART.TOOL &&
+      part.tool === AGENT_TOOL.START_AGENT &&
+      isRecord(part.output) &&
+      isRecord(part.output.newTask)
+        ? [part.callId]
+        : [],
+    );
+}
+
 /** Whether a call is a delegation to a worker, a coding agent's or the brain's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
   return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
