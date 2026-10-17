@@ -20,12 +20,6 @@
     },
     "assignee": {
       "type": "string"
-    },
-    "mine": {
-      "type": "boolean",
-      "enum": [
-        true
-      ]
     }
   },
   "required": [

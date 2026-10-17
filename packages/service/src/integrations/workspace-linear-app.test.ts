@@ -62,30 +62,14 @@ const openAccount = Effect.gen(function* () {
   return userId;
 });
 
-/** One issue Linear holds: as its GraphQL API lists it, and who it is assigned to by email and the kind of state it stands in, which only a filter reads. */
-interface LinearHeld {
-  readonly node: typeof LINEAR_NODE;
-  readonly assigneeEmail?: string;
-  readonly stateType: string;
-}
-
-/** The kinds of state Linear counts as no longer open. */
-const CLOSED_STATE_TYPES: readonly string[] = ["completed", "canceled"];
-
-/**
- * Linear's GraphQL API, listing the issues it holds (the one issue unless a
- * test adds more) to anyone unless it `refuses` every token, the open ones
- * assigned to an email where it is asked for them, and every bearer and
- * query it heard.
- */
+/** Linear's GraphQL API, listing the one issue to anyone unless it `refuses` every token, and every bearer and query it heard. */
 function linearApi(refuses: boolean) {
   const asked: { bearer: string; query: string }[] = [];
-  const held: LinearHeld[] = [{ node: LINEAR_NODE, stateType: "unstarted" }];
   const layer = fakeHttpClientLayer(async (_url, init) => {
     // SAFETY: the client sends one GraphQL request body per call.
     const body = JSON.parse(await new Response(init.body).text()) as {
       query: string;
-      variables: { id?: string; email?: string };
+      variables: { id?: string };
     };
     asked.push({ bearer: new Headers(init.headers).get("authorization") ?? "", query: body.query });
     if (refuses) return Response.json({ errors: [{ message: "unauthorized" }] }, { status: 401 });
@@ -94,17 +78,9 @@ function linearApi(refuses: boolean) {
       const issue = body.variables.id === LINEAR_NODE.identifier ? LINEAR_NODE : null;
       return Response.json({ data: { issue } });
     }
-    const issues = { nodes: held.map((each) => each.node) };
-    const { email } = body.variables;
-    if (email === undefined) return Response.json({ data: { issues } });
-    const mine = held.filter(
-      (each) =>
-        each.assigneeEmail?.toLowerCase() === email.toLowerCase() &&
-        !CLOSED_STATE_TYPES.includes(each.stateType),
-    );
-    return Response.json({ data: { mine: { nodes: mine.map((each) => each.node) }, issues } });
+    return Response.json({ data: { issues: { nodes: [LINEAR_NODE] } } });
   });
-  return { layer, asked, held };
+  return { layer, asked };
 }
 
 /** The group over the test's database, a deployment naming these Linear connectors, and Linear's API. */
@@ -304,49 +280,6 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
         assert.deepEqual(
           group.linear.asked.map((ask) => ask.bearer),
           [`Bearer token_${workspaceId}`, `Bearer token_${workspaceId}`],
-        );
-      }),
-  );
-
-  it.effect(
-    "the open issues assigned to the member's own email, its case aside, lead the list marked theirs, then the rest newest first, each once; another member's are not theirs",
-    () =>
-      Effect.gen(function* () {
-        const group = yield* standing();
-        const { admin, member, workspaceId } = yield* team;
-        yield* group.connect(admin, workspaceId);
-        yield* group.returned(yield* signInState(workspaceId));
-        const issueOf = (id: string, title: string) => ({
-          ...LINEAR_NODE,
-          id: `issue-${id}`,
-          identifier: `ENG-${id}`,
-          title,
-          url: `https://linear.app/acme/issue/ENG-${id}`,
-        });
-        const email = `${member}@luke.test`.toUpperCase();
-        group.linear.held.push(
-          { node: issueOf("2", "Shipped already"), assigneeEmail: email, stateType: "completed" },
-          { node: issueOf("3", "Theirs and open"), assigneeEmail: email, stateType: "started" },
-          {
-            node: issueOf("4", "The admin's"),
-            assigneeEmail: `${admin}@luke.test`,
-            stateType: "started",
-          },
-        );
-
-        const read = yield* group.issues(member, workspaceId);
-
-        assert.equal(read.status, HOSTED_HTTP_STATUS.OK);
-        // SAFETY: an answered read is the issues as the wire lists them.
-        const issues = (read.body as { issues: { identifier: string; mine?: boolean }[] }).issues;
-        assert.deepEqual(
-          issues.map((issue) => [issue.identifier, issue.mine === true]),
-          [
-            ["ENG-3", true],
-            ["ENG-1", false],
-            ["ENG-2", false],
-            ["ENG-4", false],
-          ],
         );
       }),
   );

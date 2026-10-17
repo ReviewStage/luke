@@ -12,9 +12,8 @@ import { Schema as EffectSchema } from "effect";
  * `/api/workspaces/linear/connected`, which settles it and lands on the
  * integrations landing page. `POST /api/workspaces/linear/disconnect` ends
  * it and answers the workspace. `POST /api/workspaces/linear/issues`
- * answers the issues a member may start a plan from: the open ones assigned
- * to the member asking first, marked `mine`, then the rest newest changed
- * first; or those a search matches; or the one issue an identifier names,
+ * answers the issues a member may start a plan from, newest changed first,
+ * or those a search matches, or the one issue an identifier names,
  * as a link to it drawn in Luke's words, or a key or link pasted into New
  * task, asks for its title and state (`linearIssueIdentifierOf`,
  * `linearIssueIdentifierIn`). A plan started from one names it by its id
@@ -97,12 +96,6 @@ export const linearIssueSummarySchema = EffectSchema.Struct({
   state: EffectSchema.optionalKey(EffectSchema.String),
   /** The name of the member it is assigned to; absent where it is assigned to no one, and from a service older than it. */
   assignee: EffectSchema.optionalKey(EffectSchema.String),
-  /**
-   * Present, and true, where the issue is open and assigned to the member who
-   * asked, as the service matched their Luke account's email to a Linear
-   * user's; absent otherwise, from a search, and from a service older than it.
-   */
-  mine: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type LinearIssueSummary = typeof linearIssueSummarySchema.Type;

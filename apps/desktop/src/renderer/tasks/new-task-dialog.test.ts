@@ -713,24 +713,3 @@ test("a pasted link to an issue, or its key typed alone, asks Linear for that on
     vi.useRealTimers();
   }
 });
-
-test("with nothing typed, the developer's own open issues stand under the field with Create untitled task highlighted, so Return still starts the task unnamed", async () => {
-  const mine = { ...OLDER_ISSUE, mine: true as const };
-  const card = await mount(undefined, undefined, {}, [...ISSUES, mine]);
-
-  const listed = matchRows();
-  const heading = document.querySelector('[role="listbox"]')?.getAttribute("aria-label");
-  await card.press("ArrowDown", card.field());
-  const stepped = matchRows().highlighted;
-  await card.press("ArrowUp", card.field());
-  await card.press("Enter", card.field());
-
-  assert.equal(heading, "Assigned to you");
-  assert.deepEqual(listed, {
-    rows: ["Queue jumps on retryENG-301 · Backlog", "Create untitled task"],
-    highlighted: "Create untitled task",
-  });
-  assert.equal(stepped, "Queue jumps on retryENG-301 · Backlog");
-  assert.deepEqual(card.starts, [["", "acme/web"]]);
-  assert.deepEqual(card.fromIssues, [undefined]);
-});

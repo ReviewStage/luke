@@ -209,20 +209,6 @@ test("New task also offers what Linear found for the words, after the listed iss
   );
 });
 
-test("with nothing typed, New task offers the member's own open issues among those listed, and none where none are theirs", () => {
-  const listed = [
-    { identifier: "ENG-5", title: "Mine and open", mine: true as const },
-    { identifier: "ENG-1", title: "Recent, someone else's" },
-    { identifier: "ENG-9", title: "Also mine", mine: true as const },
-  ];
-
-  assert.deepEqual(
-    offeredIssues(listed, "  ").map((issue) => issue.identifier),
-    ["ENG-5", "ENG-9"],
-  );
-  assert.deepEqual(offeredIssues([{ identifier: "ENG-1", title: "Someone else's" }], ""), []);
-});
-
 test("New task asks Linear for the one issue a key or link names, searches for any other words, and asks nothing for a blank name", () => {
   assert.deepEqual(linearIssuesAskOf(" eng-42 "), { identifier: "ENG-42" });
   assert.deepEqual(linearIssuesAskOf("https://linear.app/acme/issue/OPS-7/rotate"), {

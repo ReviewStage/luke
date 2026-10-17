@@ -12,14 +12,6 @@
  * the grant reaches, every member of the workspace reads, a private team's
  * issues among them, which is what the admin agreed to on connecting.
  *
- * The grant is the admin's token, so Linear's own viewer is whoever
- * connected it, never the member reading. Whose issues are the member's is
- * read instead by their Luke account's email, matched case-blind against
- * the email of the Linear user each issue is assigned to: a member whose
- * Linear email is another reads no issue as theirs and is listed the
- * recent ones alone. The match only orders issues every member reads
- * anyway, so a wrong one shows nobody anything new.
- *
  * Every failure is one word, and nothing Linear said is kept: an error's
  * message is Linear's own, which nothing here can vouch for holding no
  * credential.
@@ -56,9 +48,6 @@ const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 
 /** How long one read of Linear may take. */
 const READ_TIMEOUT = Duration.seconds(10);
-
-/** The most of the member's own open issues one list leads with, leaving the rest of the page to the recent ones. */
-const MAX_OWN_ISSUES = 20;
 
 /** Why a workspace's Linear answered nothing usable. */
 export const LINEAR_READ_FAILURE = {
@@ -100,13 +89,6 @@ const IssueListSchema = Schema.Struct({
   }),
 });
 
-const IssueListWithOwnSchema = Schema.Struct({
-  data: Schema.Struct({
-    mine: Schema.Struct({ nodes: Schema.Array(IssueNodeSchema) }),
-    issues: Schema.Struct({ nodes: Schema.Array(IssueNodeSchema) }),
-  }),
-});
-
 const IssueSearchSchema = Schema.Struct({
   data: Schema.Struct({
     searchIssues: Schema.Struct({ nodes: Schema.Array(IssueNodeSchema) }),
@@ -132,13 +114,8 @@ const IssueByIdentifierSchema = Schema.Struct({
 
 const ISSUE_FIELDS = "id identifier title url state { name } assignee { name }";
 
-/** The issues assigned to the Linear user with an email, case aside, in no completed or canceled state. */
-const OWN_FILTER =
-  '{ assignee: { email: { eqIgnoreCase: $email } }, state: { type: { nin: ["completed", "canceled"] } } }';
-
 const QUERY = {
   RECENT: `query LukeRecentIssues($first: Int!) { issues(first: $first, orderBy: updatedAt) { nodes { ${ISSUE_FIELDS} } } }`,
-  RECENT_WITH_OWN: `query LukeRecentAndOwnIssues($first: Int!, $own: Int!, $email: String!) { mine: issues(first: $own, orderBy: updatedAt, filter: ${OWN_FILTER}) { nodes { ${ISSUE_FIELDS} } } issues(first: $first, orderBy: updatedAt) { nodes { ${ISSUE_FIELDS} } } }`,
   SEARCH: `query LukeSearchIssues($term: String!, $first: Int!) { searchIssues(term: $term, first: $first) { nodes { ${ISSUE_FIELDS} } } }`,
   ONE: "query LukeIssue($id: String!) { issue(id: $id) { identifier title url description } }",
   BY_IDENTIFIER: `query LukeIssueByIdentifier($id: String!) { issue(id: $id) { ${ISSUE_FIELDS} } }`,
@@ -246,45 +223,13 @@ export const workspaceLinearToken = /* @__PURE__ */ Effect.fn("web/workspaceLine
   },
 );
 
-/**
- * The issues the member's own email is assigned, open ones alone and marked
- * `mine`, then the rest the grant reaches, newest changed first, each once,
- * in one request.
- */
-function recentWithOwn(
-  token: Redacted.Redacted,
-  email: string,
-): Effect.Effect<readonly LinearIssueSummary[], LinearReadFailure, HttpClient.HttpClient> {
-  const variables = { first: LINEAR_BOUNDS.MAX_ISSUES, own: MAX_OWN_ISSUES, email };
-  return Effect.map(
-    graphql(token, QUERY.RECENT_WITH_OWN, variables, IssueListWithOwnSchema),
-    ({ data }) => {
-      const own = data.mine.nodes.slice(0, MAX_OWN_ISSUES);
-      const ids = new Set(own.map((node) => node.id));
-      const rest = data.issues.nodes.filter((node) => !ids.has(node.id));
-      return [
-        ...own.map((node): LinearIssueSummary => ({ ...summaryOf(node), mine: true })),
-        ...rest.map(summaryOf),
-      ];
-    },
-  );
-}
-
-/**
- * The issues the grant reaches, newest changed first, the open ones
- * assigned to the member's email leading where one is given, or those a
- * search matches, at most a page of them.
- */
+/** The issues the grant reaches, newest changed first, or those a search matches, at most a page of them. */
 export function listLinearIssues(
   token: Redacted.Redacted,
   query: string | undefined,
-  memberEmail?: string,
 ): Effect.Effect<readonly LinearIssueSummary[], LinearReadFailure, HttpClient.HttpClient> {
   const term = query?.trim() ?? "";
   const first = LINEAR_BOUNDS.MAX_ISSUES;
-  if (term === "" && memberEmail !== undefined) {
-    return Effect.map(recentWithOwn(token, memberEmail), (read) => read.slice(0, first));
-  }
   const nodes =
     term === ""
       ? Effect.map(

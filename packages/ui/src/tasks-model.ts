@@ -183,25 +183,22 @@ function issueNearness(
 }
 
 /**
- * The issues New task offers under its name field, at most
- * `ISSUE_MATCH_LIMIT` of them. For a blank name, the member's own open
- * issues among those listed, in Linear's order, and none where none are
- * theirs, which leaves the field a plain name. For a name typed, the issues
- * listed whose title or key holds every word typed, case aside, and every
- * issue Linear answered for the words (`found`: what its search matched,
- * or the one issue a key or link names), each once, nearest first and
- * otherwise listed first, the member's own leading the list.
+ * The issues New task offers for the name typed so far, at most
+ * `ISSUE_MATCH_LIMIT` of them: those listed whose title or key holds every
+ * word typed, case aside, and every issue Linear answered for the words
+ * (`found`: what its search matched, or the one issue a key or link names),
+ * each once, nearest first and otherwise listed first; none for a blank
+ * name, which leaves the field a plain name.
  */
-export function offeredIssues<
-  Issue extends Pick<LinearIssueSummary, "identifier" | "title" | "mine">,
->(listed: readonly Issue[], typed: string, found: readonly Issue[] = []): readonly Issue[] {
+export function offeredIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
+  listed: readonly Issue[],
+  typed: string,
+  found: readonly Issue[] = [],
+): readonly Issue[] {
   const tokens = searchTokens(typed);
-  if (tokens.length === 0) {
-    return listed.filter((issue) => issue.mine === true).slice(0, ISSUE_MATCH_LIMIT);
-  }
+  if (tokens.length === 0) return [];
   const named = linearIssueIdentifierIn(typed);
   const foundKeys = new Set(found.map((issue) => issue.identifier));
-  // Note that an issue both listed and found is offered as listed, because only the list says it is the member's own.
   const once = new Map<string, Issue>();
   for (const issue of [...listed, ...found]) {
     if (!once.has(issue.identifier)) once.set(issue.identifier, issue);

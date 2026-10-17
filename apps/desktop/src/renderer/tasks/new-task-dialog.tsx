@@ -62,13 +62,11 @@ import type { TasksControl } from "./use-tasks-tab";
  * for the next New task (`new-task-planning.ts`).
  *
  * Where the workspace the task starts in has Linear connected, the name
- * field is also the search over its issues. The issues are read as the card
- * opens and again on a switch of workspace, the developer's own open ones
- * first, and those stand under the empty field, the last row, which creates
- * the task untitled, highlighted, so Return still does what it always did.
- * As soon as anything is typed, the issues whose title or key holds every
- * word stand under the field, and once the typing rests Linear itself is
- * searched for the words, so an issue older than those read is found too;
+ * field is also the search over its issues, read as the card opens and
+ * again on a switch of workspace. As soon as anything is typed, the issues
+ * whose title or key holds every word stand under the field, and once the
+ * typing rests Linear itself is searched for the words, so an issue older
+ * than those read is found too;
  * a key typed whole or a link to an issue pasted asks Linear for that one
  * issue instead. They stand nearest first, the top one highlighted, and the
  * arrows move the highlight on through them to the last row, which creates
@@ -98,12 +96,6 @@ const NAME_PLACEHOLDER = {
 const PLANNING_NOTE = {
   ON: "Starts from your plan template and opens a call with Luke.",
   OFF: "Starts with an empty plan and no call.",
-} as const;
-
-/** What heads the issues under the name field: the developer's own while nothing is typed, else those the words found. */
-const ISSUES_HEADING = {
-  MINE: "Assigned to you",
-  FOUND: "Linear issues",
 } as const;
 
 /** How long the typing rests before Linear is searched for the name as typed. */
@@ -313,15 +305,12 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const current = answered !== undefined && answered.typed === name.trim();
   const found = current ? answered.issues : [];
   const known = current || answered === undefined ? issues : [...issues, ...answered.issues];
-  // The row the arrows stand on among the issues and, after them, the name as typed, none chosen
-  // meaning the top issue, or the name as typed where nothing is; and whether Escape put the issues
-  // away until the next keystroke.
-  const [highlight, setHighlight] = useState<number | undefined>(undefined);
+  // The row the arrows stand on among the issues and, after them, the name as typed; and whether Escape put the issues away until the next keystroke.
+  const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState(false);
-  const blank = name.trim() === "";
   const matches = dismissed ? [] : offeredIssues(known, name, found);
   const matching = matches.length > 0;
-  const at = Math.min(highlight ?? (blank ? matches.length : 0), matches.length);
+  const at = Math.min(highlight, matches.length);
   const picked = matching ? matches[at] : undefined;
   const tokens = searchTokens(name);
   const field = useRef<HTMLInputElement>(null);
@@ -402,7 +391,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
             disabled={starting}
             onChoose={(chosenId) => {
               setWorkspaceId(chosenId);
-              setHighlight(undefined);
+              setHighlight(0);
               setDismissed(false);
               searchLinear(name, chosenId);
             }}
@@ -447,7 +436,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
           onChange={(event) => {
             const typed = event.currentTarget.value;
             setName(typed);
-            setHighlight(undefined);
+            setHighlight(0);
             setDismissed(false);
             searchLinear(typed, startsIn);
           }}
@@ -460,11 +449,11 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
             id={listId}
             className="new-task-matches"
             role="listbox"
-            aria-label={blank ? ISSUES_HEADING.MINE : ISSUES_HEADING.FOUND}
+            aria-label="Linear issues"
             onMouseDown={(event) => event.preventDefault()}
           >
             <div className="menu-heading" aria-hidden="true">
-              {blank ? ISSUES_HEADING.MINE : ISSUES_HEADING.FOUND}
+              Linear issues
             </div>
             {matches.map((issue, index) => (
               <IssueOption
@@ -490,9 +479,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
               <span className="menu-item-glyph">
                 <ComposeIcon />
               </span>
-              <span className="task-compose-menu-name">
-                {blank ? "Create untitled task" : `Create task “${name.trim()}”`}
-              </span>
+              <span className="task-compose-menu-name">Create task “{name.trim()}”</span>
               <Shortcut chord={TYPED_CHORD} className="menu-item-hint" />
             </button>
           </div>

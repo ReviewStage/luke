@@ -605,9 +605,9 @@ export interface TasksControl {
     /**
      * The read of a workspace's Linear issues, where that workspace has
      * Linear connected; none where it has not, which leaves the name a plain
-     * field. Asked nothing, it answers the issues the dialog lists as it
-     * opens, the member's own open ones first; asked a search or an
-     * identifier, it answers what Linear finds for the name as typed.
+     * field. Asked nothing, it answers the issues the dialog reads as it
+     * opens; asked a search or an identifier, it answers what Linear finds
+     * for the name as typed.
      */
     linearIssuesIn: (
       workspaceId: string | undefined,
