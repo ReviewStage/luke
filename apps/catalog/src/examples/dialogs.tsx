@@ -1,11 +1,13 @@
 import {
   BUTTON_VARIANT,
   Button,
+  CloseIcon,
   DIALOG_ROLE,
   DIALOG_SIZE,
   Dialog,
   FormField,
   GAP,
+  IconButton,
   Inline,
   JUSTIFY,
   Stack,
@@ -15,6 +17,7 @@ import {
   Text,
   TextArea,
   TextField,
+  WingFace,
 } from "@luke/ui";
 import { useId, useRef, useState } from "react";
 import type { Example } from "../examples";
@@ -22,8 +25,9 @@ import { CatalogSection } from "../section";
 
 /**
  * dialogs.tsx -- a dialog holding a field, a question that must be
- * answered, a long one, and a wide note that grows with its words and rings
- * while a file is dragged over the window, each opened from its button and
+ * answered, a long one, a wide note that grows with its words and rings
+ * while a file is dragged over the window, and a picture shown edge to edge
+ * under its name, each opened from its button and
  * put away by its answers, Escape, or a press on the dimmed window. The
  * question's words scroll inside the card in a short window, so its answers
  * stay on screen.
@@ -149,6 +153,24 @@ function NoteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   );
 }
 
+/** A picture opened over the window, the card fitted to it under a bar naming it. */
+function PictureDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const titleId = useId();
+  return (
+    <Dialog size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose}>
+      <div className="catalog-media-bar">
+        <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H2} id={titleId}>
+          luke-face.svg
+        </Text>
+        <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
+      </div>
+      <div className="catalog-media-picture">
+        <WingFace />
+      </div>
+    </Dialog>
+  );
+}
+
 /** A button that opens `Body`, which closes itself. */
 function Opener({
   label,
@@ -175,6 +197,7 @@ function Dialogs(): React.JSX.Element {
         <Opener label="Rename plan…" Body={RenameDialog} />
         <Opener label="Delete plan…" Body={DeleteDialog} />
         <Opener label="Send feedback…" Body={NoteDialog} />
+        <Opener label="Open picture…" Body={PictureDialog} />
       </Inline>
     </CatalogSection>
   );

@@ -325,6 +325,41 @@ body {
   overflow-y: auto;
 }
 
+/* A picture's card: its name and Close along the top, the picture under
+   it on its own ground. */
+.catalog-media-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--luke-space-6) var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.catalog-media-picture {
+  display: grid;
+  padding: var(--luke-space-48);
+  place-items: center;
+  background: var(--luke-color-surface);
+}
+
+/* The face gives way to a narrow or short window, so the card that fits it
+   never has to clip it: the window less the dimmed margin, the picture's
+   inset, the card's edge, and, for its height, the bar above it. */
+.catalog-media-picture > .luke-face {
+  width: min(
+    480px,
+    100vw -
+    2 *
+    (var(--luke-space-24) + var(--luke-space-48)) -
+    2px,
+    (100vh - 2 * (var(--luke-space-24) + var(--luke-space-48)) - 48px) *
+    3 / 2
+  );
+  height: auto;
+  aspect-ratio: 3 / 2;
+}
+
 /* The measure a settings page gives its sections. */
 .catalog-settings {
   max-width: 560px;

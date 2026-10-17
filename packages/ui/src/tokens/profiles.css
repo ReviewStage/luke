@@ -62,6 +62,8 @@
 
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
+  --luke-dialog-media-min-width: 360px;
+  --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
@@ -120,6 +122,8 @@
 
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
+  --luke-dialog-media-min-width: 360px;
+  --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);

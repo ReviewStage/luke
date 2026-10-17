@@ -4576,61 +4576,59 @@ button.attached-file-face:hover img {
 }
 
 /* A file opened over the window (attachment-viewer.tsx): the dialog's
-   dimmed window and card, the file's name and its buttons along the top,
-   and the file under them, an image fitted to the window, a text file's
-   lines scrolling inside the card, any other file its icon over Download. */
+   media card, fitted to what it holds, with the file's name and its buttons
+   along the top and the file under them, an image fitted to the window, a
+   text file's lines scrolling inside the card, any other file its icon over
+   Download. */
 .attachment-viewer {
-  width: auto;
-  min-width: min(360px, 100%);
-  max-width: min(1200px, 100%);
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .attachment-viewer[data-view="text"] {
-  width: min(880px, 100%);
-  height: calc(100vh - 2 * var(--space-24));
+  width: min(880px, 100vw - 2 * var(--luke-space-24));
+  height: calc(100vh - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer[data-view="other"] {
-  width: min(400px, 100%);
+  width: min(400px, 100vw - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer-header {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-6) var(--space-6) var(--space-6) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6) var(--luke-space-6) var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .attachment-viewer-header > .file-type-icon,
 .attachment-viewer-header > .icon-button-glyph {
-  width: 16px;
-  height: 16px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
 }
 
 .attachment-viewer-title {
   overflow: hidden;
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--luke-type-section-size);
+  line-height: var(--luke-type-section-leading);
+  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .attachment-viewer-size {
   flex: none;
-  margin: 0 auto 0 var(--space-4);
-  color: var(--text-secondary);
-  font-size: 12px;
+  margin: 0 auto 0 var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* What the place opening the viewer says of the file shown, after its size
@@ -4644,11 +4642,12 @@ button.attached-file-face:hover img {
 .attachment-viewer-note {
   display: flex;
   min-width: 0;
-  margin: 0 auto 0 var(--space-12);
+  margin: 0 auto 0 var(--luke-space-12);
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .attachment-viewer-walk {
@@ -4658,8 +4657,9 @@ button.attached-file-face:hover img {
 
 .attachment-viewer-place {
   min-width: 48px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -4673,7 +4673,7 @@ button.attached-file-face:hover img {
   display: grid;
   overflow: hidden;
   place-items: center;
-  background: var(--section-fill);
+  background: var(--luke-color-surface);
 }
 
 /* The picture is zoomed by a transform over its fitted size
@@ -4684,7 +4684,7 @@ button.attached-file-face:hover img {
 .attachment-viewer-image {
   display: block;
   max-width: 100%;
-  max-height: calc(100vh - 2 * var(--space-24) - 50px);
+  max-height: calc(100vh - 2 * var(--luke-space-24) - 50px);
   object-fit: contain;
   cursor: zoom-in;
   touch-action: none;
@@ -4713,8 +4713,8 @@ button.attached-file-face:hover img {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-24);
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-24);
   text-align: center;
 }
 
@@ -4726,16 +4726,18 @@ button.attached-file-face:hover img {
 
 .attachment-viewer-other-name {
   max-width: 100%;
-  margin: var(--space-6) 0 0;
-  font-size: 13px;
-  font-weight: 600;
+  margin: var(--luke-space-6) 0 0;
+  font-size: var(--luke-type-section-size);
+  line-height: var(--luke-type-section-leading);
+  font-weight: var(--luke-weight-semibold);
   overflow-wrap: anywhere;
 }
 
 .attachment-viewer-other-size {
-  margin: 0 0 var(--space-12);
-  color: var(--text-secondary);
-  font-size: 12px;
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* An archived plan's agent takes no message, so its composer's place says
