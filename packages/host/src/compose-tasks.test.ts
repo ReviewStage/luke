@@ -75,6 +75,7 @@ import {
 } from "@luke/gateway";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
@@ -856,7 +857,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           yield* standing.closing ?? Effect.void;
           standing.about = undefined;
         }),
-    });
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = tasks.methods[method];
       assert.ok(handler, `no handler for ${method}`);

@@ -1,9 +1,9 @@
 import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/luke-link";
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import { ACT_KIND, isGitHubAddress, isWebAddress } from "@luke/host/acts";
+import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import { pullRequestAgentOf } from "@luke/ui/pull-request-link";
 import { createContext, useCallback, useContext, useMemo } from "react";
-import { useAct } from "../act";
+import { appPlatform } from "../app-platform";
 
 /**
  * use-open-link.ts -- how a link in written words opens: a transcript's, the Call tab's, an agent tab's, or an Inbox item's.
@@ -121,9 +121,8 @@ function lukeLinkOf(href: string): ReadLink | undefined {
     : undefined;
 }
 
-/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, anything else in the browser, over the act it belongs to. */
+/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, anything else in the browser, over the capability it belongs to. */
 export function useOpenLink(): (href: string) => void {
-  const { tell } = useAct();
   const openPlace = useContext(OpenLinkContext);
   const openHere = useContext(OpenHereContext);
   return useCallback(
@@ -133,11 +132,11 @@ export function useOpenLink(): (href: string) => void {
       if (openPlace !== undefined && link !== undefined) {
         openPlace(link);
       } else if (isGitHubAddress(href)) {
-        tell(ACT_KIND.GITHUB_OPEN, { url: href });
+        appPlatform().openGitHub(href);
       } else {
-        tell(ACT_KIND.WEB_OPEN, { url: href });
+        appPlatform().openWeb(href);
       }
     },
-    [tell, openPlace, openHere],
+    [openPlace, openHere],
   );
 }

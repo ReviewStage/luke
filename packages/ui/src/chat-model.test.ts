@@ -182,6 +182,43 @@ test("the rail counts For you, lists #general, then the plans' channels, then th
   );
 });
 
+test("a channel read further on its own cursor counts only what came past that, and leaves every other channel counted from the cursor everywhere", () => {
+  const chat = {
+    ...chatOf(3, [
+      message(4, AGENT, WITH_AGENT.id),
+      message(5, AGENT, PLAN.id),
+      message(6, MARIA, PLAN.id),
+      message(7, MARIA, PLAN.id),
+    ]),
+    reads: [{ channelId: PLAN.id, readSeq: 6 }],
+  };
+  const rail = chatRail(chat, NAMES);
+  assert.deepEqual(
+    rail.channels.map((row) => [row.label, row.unread]),
+    [
+      ["general", 0],
+      ["invites", 1],
+      ["alpha", 0],
+    ],
+  );
+  assert.deepEqual(
+    rail.direct.map((row) => [row.label, row.unread]),
+    [
+      ["agent-2", 1],
+      ["maria", 0],
+    ],
+  );
+});
+
+test("a message changed past the reader's cursor counts unread again, as the service counts it, though it was posted before", () => {
+  const chat = {
+    ...chatOf(3, [message(2, AGENT, PLAN.id, { touchedSeq: 7 }), message(3, MARIA, PLAN.id)]),
+    reads: [{ channelId: PLAN.id, readSeq: 5 }],
+  };
+  const rail = chatRail(chat, NAMES);
+  assert.equal(rail.channels.find((row) => row.label === "invites")?.unread, 1);
+});
+
 test("a channel reads as its roots in the order posted, each with its thread's replies under it, and a reply whose root was not read stands as a root", () => {
   const chat = chatOf(0, [
     message(3, MARIA, PLAN.id, { parentId: "m1" }),

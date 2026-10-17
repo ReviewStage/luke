@@ -445,7 +445,7 @@ The bytes never enter traces, events, app state, or the voice window.
   `voice/socket-over-ws.ts`) runs in main. It hands each terminal's bytes to
   **the requesting panel's `webContents` alone**, over a `MessagePort`.
 - They never travel in `app:state`, which is broadcast to every window
-  including the voice window (`main/app-state.ts:114-133`).
+  including the voice window (`packages/host/src/client/app-state-store.ts`'s `voiceWindowState`).
 - They never travel in an act's payload or answer, a trace
   (`recordAgentTrace` is voice-only), a counted event, Sentry, or a console
   line.

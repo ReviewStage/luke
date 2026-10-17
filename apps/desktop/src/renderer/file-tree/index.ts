@@ -19,8 +19,8 @@ import {
 /**
  * index.ts -- the file tree bundle: Pierre's tree mounted beside a File tab, listed a folder at a time, a file opened on its press.
  *
- * Built on its own as `file-tree.js` (`scripts/build.mjs`) and loaded by the
- * first File tab that shows its tree, so the bundle every window parses
+ * An entry of the renderer's build (`scripts/build.mjs`), imported by the
+ * first File tab that shows its tree (`../bundle-loader.ts`), so the bundle every window parses
  * never carries Pierre, nor anything of the tree's own drawing. The root is
  * listed first, and the tab's words for why it could not be stand in the
  * tree's place, with the offer to list it again where that may help.
@@ -342,4 +342,4 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   };
 }
 
-window.lukeFileTree = { mount, fileIcon } satisfies FileTreeModule;
+export const fileTree: FileTreeModule = { mount, fileIcon };

@@ -1,7 +1,6 @@
-import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { createContext, useContext } from "react";
-import { useAct } from "./act";
+import { appPlatform } from "./app-platform";
 import { useMemberDirectory } from "./member-directory";
 
 /**
@@ -52,7 +51,6 @@ export function useActorDoor(actor: Actor): (() => void) | undefined {
   const openPerson = useContext(OpenPersonContext);
   // Note that a person is opened in the workspace the place naming them reads its members of, an agent's own where its page stands in another.
   const { workspaceId } = useMemberDirectory();
-  const { tell } = useAct();
   if (openPerson === undefined) return undefined;
   switch (actor.kind) {
     case ACTOR_KIND.PERSON: {
@@ -67,7 +65,7 @@ export function useActorDoor(actor: Actor): (() => void) | undefined {
     }
     case ACTOR_KIND.GITHUB: {
       const url = githubPageOf(actor.login, actor.bot);
-      return () => tell(ACT_KIND.GITHUB_OPEN, { url });
+      return () => appPlatform().openGitHub(url);
     }
     default:
       return undefined;
