@@ -7,6 +7,10 @@ import {
   productEventFromWire,
 } from "@luke/features/analytics";
 import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
+import {
+  type CodingAgentInboxChanged,
+  codingAgentInboxChangedSchema,
+} from "@luke/features/coding-agent-view";
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
@@ -378,6 +382,24 @@ export const BRIDGE = {
     channel: "app:show-task",
     args: noArgs,
     result: result<{ taskId: string }>((value) => isRecord(value) && isWireString(value.taskId)),
+  }),
+  /**
+   * A plan's or an agent's inbox this window follows, as it now stands: its
+   * items whole, or why there are none. Sent to the windows that follow it
+   * alone, each time it changes and once as a window starts following one
+   * already standing, rather than as a slice of the document, because the
+   * document reaches every window on every change and a followed inbox is
+   * read by the one window drawing it.
+   */
+  onInbox: entry({
+    kind: "subscribe",
+    channel: "app:inbox",
+    args: noArgs,
+    result: result<CodingAgentInboxChanged>((value) =>
+      Result.isSuccess(
+        readEither(codingAgentInboxChangedSchema, { excess: EXCESS_KEYS.DROP })(value),
+      ),
+    ),
   }),
   /**
    * A Luke link the system handed the app: the panel is to open the place it

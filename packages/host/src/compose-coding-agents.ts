@@ -8,6 +8,8 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxChanged,
+  type CodingAgentInboxScope,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -22,6 +24,7 @@ import {
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxParamsSchema,
+  codingAgentInboxScopeSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
@@ -36,6 +39,7 @@ import {
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
+  INBOX_SCOPE_KIND,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionsAnswerView,
@@ -55,7 +59,7 @@ import {
 } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberHandle, RcMap, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberHandle, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { followAccountInbox } from "./account-inbox-follow.js";
@@ -64,7 +68,13 @@ import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
-import { inboxPast, type ScopeInboxes, scopeInboxes } from "./scope-inbox-follow.js";
+import {
+  followInbox,
+  type InboxScopeKey,
+  inboxPast,
+  type ScopeInboxes,
+  scopeInboxes,
+} from "./scope-inbox-follow.js";
 
 /**
  * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
@@ -143,6 +153,11 @@ export interface CodingAgentsComposer extends Composer {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** The key a scope's subscription and follow are held under. */
+function scopeKeyOf(scope: CodingAgentInboxScope): InboxScopeKey {
+  return scope.kind === INBOX_SCOPE_KIND.PLAN ? `plan:${scope.id}` : `agent:${scope.id}`;
+}
+
 /** Whether the service may be asked now: a run that sends, behind an open account gate. */
 function gateOf({ kernel, account }: CodingAgentsDependencies): () => boolean {
   return () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
@@ -174,15 +189,22 @@ export function composeCodingAgents(
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });
-    return composed(dependencies, follower, inboxes);
+    const followed = yield* FiberMap.make<InboxScopeKey>();
+    return composed(dependencies, follower, { inboxes, followed });
   });
+}
+
+/** The scopes' subscriptions the windows share, and the follows main asked for, one fiber per scope. */
+interface ScopeFollows {
+  readonly inboxes: ScopeInboxes;
+  readonly followed: FiberMap.FiberMap<InboxScopeKey>;
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything but the account inbox's follower, when main asks for it, and a scope's inbox subscription, while a window reads it. */
 function composed(
   dependencies: CodingAgentsDependencies,
   follower: FiberHandle.FiberHandle<never>,
-  inboxes: ScopeInboxes,
+  { inboxes, followed }: ScopeFollows,
 ): CodingAgentsComposer {
   const { kernel, client } = dependencies;
   const gate = gateOf(dependencies);
@@ -483,6 +505,36 @@ function composed(
           : UNANSWERED;
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const scope = yield* read(
+          codingAgentInboxScopeSchema,
+          params,
+          "following an inbox names a plan or an agent",
+        );
+        const key = scopeKeyOf(scope);
+        const tell = (inbox: CodingAgentInboxChanged["inbox"]) =>
+          Effect.sync(() => kernel.emit(GATEWAY_EVENT.INBOX_CHANGED, carried({ scope, inbox })));
+        const held = (after: string) =>
+          asked(
+            scope.kind === INBOX_SCOPE_KIND.PLAN
+              ? client.inbox(scope.id, after)
+              : client.agentInbox(scope.id, after),
+          );
+        const follow = gate() ? followInbox(inboxes, key, held, tell) : tell(UNANSWERED);
+        yield* FiberMap.run(followed, key, follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const scope = yield* read(
+          codingAgentInboxScopeSchema,
+          params,
+          "letting an inbox go names a plan or an agent",
+        );
+        yield* FiberMap.remove(followed, scopeKeyOf(scope));
+        return {};
+      }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>
       Effect.gen(function* () {
         const { itemId, attachmentId } = yield* read(
@@ -533,6 +585,7 @@ function composed(
 
   const reset = Effect.gen(function* () {
     yield* FiberHandle.clear(follower);
+    yield* FiberMap.clear(followed);
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
   });
 

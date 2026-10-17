@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxChanged,
 } from "@luke/features/coding-agent-view";
-import type { InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
 import {
   inboxOfLiveRows,
   type ScopeInboxLiveAnswer,
@@ -155,6 +156,68 @@ export function inboxPast(
       return state.kind === "standing"
         ? { items: state.inbox.items, cursor: state.inbox.cursor }
         : yield* held;
+    }),
+  );
+}
+
+/** A followed inbox as the window is told it: its items whole, or why there are none. */
+type Told = CodingAgentInboxChanged["inbox"];
+
+/** The held read, one after another from the start, each answer told, until one does not answer, which is told and ends it. */
+function heldReads(
+  held: (after: string) => Effect.Effect<CodingAgentInboxAnswerView>,
+  tell: (inbox: Told) => Effect.Effect<void>,
+): Effect.Effect<void> {
+  const next = (after: string): Effect.Effect<void> =>
+    Effect.flatMap(held(after), (answer) =>
+      "failure" in answer
+        ? tell({ failure: answer.failure })
+        : Effect.andThen(tell({ items: answer.items }), next(answer.cursor)),
+    );
+  return Effect.suspend(() => next(INBOX_CURSOR_START));
+}
+
+/**
+ * The scope's inbox followed until interrupted, each change told whole: from
+ * its subscription where the service seals it, once its first rows land; by
+ * the held read, one after another, where it does not, and from the moment
+ * the subscription stops for good. A subscription with nothing to say within
+ * the hold has the held read answer once meanwhile, as a read held that long
+ * was. One the account does not reach is told not found, and a held read that
+ * did not answer is told so; either ends the follow, and following again
+ * starts over.
+ */
+export function followInbox(
+  inboxes: ScopeInboxes,
+  scope: InboxScopeKey,
+  held: (after: string) => Effect.Effect<CodingAgentInboxAnswerView>,
+  tell: (inbox: Told) => Effect.Effect<void>,
+): Effect.Effect<void> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const standing = yield* RcMap.get(inboxes, scope);
+      if (standing.kind === "refused") return yield* tell({ failure: standing.failure });
+      if (standing.kind === "held") return yield* heldReads(held, tell);
+      const settled = yield* SubscriptionRef.changes(standing.inbox).pipe(
+        Stream.filter((state) => state.kind !== "waiting"),
+        Stream.runHead,
+        Effect.timeoutOption(HOLD),
+        Effect.map(Option.flatten),
+      );
+      if (Option.isNone(settled)) {
+        const answer = yield* held(INBOX_CURSOR_START);
+        if ("failure" in answer) return yield* tell({ failure: answer.failure });
+        yield* tell({ items: answer.items });
+      }
+      // Note that a delivery that moved nothing is told nobody, since the digest is where every item stands.
+      yield* SubscriptionRef.changes(standing.inbox).pipe(
+        Stream.takeWhile((state) => state.kind !== "broken"),
+        Stream.filter((state) => state.kind === "standing"),
+        Stream.map((state) => state.inbox),
+        Stream.changesWith((one, other) => one.cursor === other.cursor),
+        Stream.runForEach((inbox) => tell({ items: inbox.items })),
+      );
+      yield* heldReads(held, tell);
     }),
   );
 }

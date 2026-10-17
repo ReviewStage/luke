@@ -179,6 +179,15 @@ export const GATEWAY_METHOD = {
   /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  /**
+   * One plan's inbox, or one agent's, followed from now until it is let go
+   * or the account signs out: over Neon Realtime where the service seals it,
+   * read by the held read where it does not. What it holds is heard as
+   * `INBOX_CHANGED` events, never answered; following again starts over.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  /** One plan's or agent's inbox let go: no more `INBOX_CHANGED` events of it until it is followed again. */
+  CODING_AGENTS_INBOX_UNFOLLOW: "codingAgents.inboxUnfollow",
   /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** Where every one of the account's integrations stands, read from the service now. */
@@ -535,6 +544,8 @@ export const GATEWAY_EVENT = {
   TERMINAL_STATE: "terminal.state",
   /** What waits on the developer across the account, whole, each time it changes while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
+  /** One followed plan's or agent's inbox, its items whole or why there are none, each time it changes while it is followed. */
+  INBOX_CHANGED: "inbox.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

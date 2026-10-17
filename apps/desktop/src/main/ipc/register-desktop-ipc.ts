@@ -18,6 +18,7 @@ import { accountActRows } from "./account-session";
 import { automationActRows } from "./automation-acts";
 import { avatarActRows, avatarReports } from "./avatar-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
+import { inboxFollowActRows } from "./inbox-follow-acts";
 import { integrationActRows } from "./integration-acts";
 import { issueActRows } from "./issue-acts";
 import { macTerminalActRows } from "./mac-terminal-acts";
@@ -128,6 +129,14 @@ export function registerDesktopIpc(services: DesktopServices): void {
       colourCode: highlightSnippet,
     }),
     ...codingAgentActRows({ host: operator.host, notices }),
+    ...inboxFollowActRows({
+      host: operator.host,
+      deliver: (sender, changed) => {
+        if (!sender.isDestroyed()) sender.send(channels.onInbox, changed);
+      },
+      whenGone: whenPageGone,
+      run,
+    }),
     ...macTerminalActRows({
       host: operator.host,
       stateRoot: config.stateRoot,
