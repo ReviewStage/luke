@@ -8025,7 +8025,7 @@ button.automation-run:hover {
   position: fixed;
   z-index: var(--z-dialog);
   inset: 0;
-  background: var(--scrim);
+  background: var(--luke-color-scrim);
   animation: confirm-dialog-dim var(--duration-quick) ease-out;
   -webkit-app-region: no-drag;
 }
@@ -8036,14 +8036,14 @@ button.automation-run:hover {
   top: 18vh;
   left: 50%;
   display: flex;
-  width: min(560px, calc(100vw - 2 * var(--space-24)));
+  width: min(560px, calc(100vw - 2 * var(--luke-space-24)));
   max-height: 64vh;
   flex-direction: column;
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-dialog-radius);
-  background: var(--surface-popover);
-  box-shadow: 0 24px 64px var(--shadow-deep);
-  color: var(--text-primary);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  color: var(--luke-color-text);
   overflow: clip;
   transform: translateX(-50%);
   animation:
@@ -8067,11 +8067,11 @@ button.automation-run:hover {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   height: 44px;
-  padding: 0 var(--space-16);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-tertiary);
+  padding: 0 var(--luke-space-16);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-subtle);
 }
 
 .command-palette-search svg {
@@ -8087,56 +8087,33 @@ button.automation-run:hover {
   border: 0;
   outline: none; /* no ring: a menu's filter, which always holds the caret */
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font: inherit;
   font-size: 14px;
 }
 
 .command-palette-search input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
-/* The filters under the field, one pill each, the chosen one filled as a
-   filter chip is everywhere in the window. */
+/* The filters under the field, one shared filter chip each, in a row that
+   wraps under the field. */
 .command-palette-filters {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   min-width: 0;
   margin: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--luke-space-8) var(--luke-space-12);
   border: 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.command-palette-filter {
-  height: 24px;
-  padding: 0 var(--space-8);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.command-palette-filter:hover {
-  background: var(--raised);
-  color: var(--text-primary);
-}
-
-.command-palette-filter[aria-pressed="true"] {
-  border-color: var(--selected-edge);
-  background: var(--selected);
-  color: var(--text-primary);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .command-palette-list {
   flex: 1 1 auto;
   min-height: 0;
-  padding: var(--space-6);
+  padding: var(--luke-space-6);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -8167,7 +8144,7 @@ button.automation-run:hover {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8179,18 +8156,18 @@ button.automation-run:hover {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-16);
+  gap: var(--luke-space-16);
   height: 36px;
-  padding: 0 var(--space-16);
-  border-top: 1px solid var(--hairline);
-  color: var(--text-tertiary);
+  padding: 0 var(--luke-space-16);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-subtle);
   font-size: 12px;
 }
 
 .command-palette-footer-hint {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 /* A hint's keys set as one chord, ↑↓ and ←→, a step apart from their word. */
@@ -8201,7 +8178,7 @@ button.automation-run:hover {
 }
 
 .command-palette-footer .shortcut {
-  --shortcut-ink: var(--text-secondary);
+  --shortcut-ink: var(--luke-color-text-muted);
 }
 
 .command-palette-empty {
@@ -8209,16 +8186,14 @@ button.automation-run:hover {
   min-height: 40px;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 13px;
 }
 
 /* A quiet line under the rows: the Files filter saying its search is of
    the repository's first entries alone. */
 .command-palette-notice {
-  padding: var(--space-8) var(--row-inset) var(--space-4);
-  color: var(--text-tertiary);
-  font-size: 12px;
+  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
 }
 
 @keyframes command-palette-rise {
