@@ -1661,20 +1661,17 @@ test("an answer file whose read failed says so under the files, and Retry reads 
   };
   inboxes = new Map([[BILLING.id, [answered]]]);
   let failing = true;
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: failing
-            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-            : { contentType: "application/pdf", base64: "JVBERg==" },
-        });
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: failing
+          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          : { contentType: "application/pdf", base64: "JVBERg==" },
+      });
     },
   });
   const { page } = mount();

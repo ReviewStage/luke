@@ -31,6 +31,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { relayout } from "#testing/resize-observer";
@@ -626,15 +627,12 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   const archivedUrl = "https://github.com/acme/relay/pull/9";
   const opened: unknown[] = [];
   const onGitHub: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+  fakeAppBridge({
+    onMenuCommand: () => () => undefined,
+    recordSurfaceEvent: () => undefined,
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
   const task: Task = {
