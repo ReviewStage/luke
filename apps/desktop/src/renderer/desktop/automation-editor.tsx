@@ -278,21 +278,14 @@ function OwnerRow({
   onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
   const parse = optionValue(owners);
-  const detailId = useId();
   return (
     <PickerRow
-      copy={
-        <>
-          <strong>Owner</strong>
-          <small id={detailId}>
-            {owner === AUTOMATION_SCOPE.WORKSPACE
-              ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
-              : "Only you see and change it. Owners and admins can see it and turn it off."}
-          </small>
-        </>
-      }
       label="Owner"
-      describedBy={detailId}
+      detail={
+        owner === AUTOMATION_SCOPE.WORKSPACE
+          ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
+          : "Only you see and change it. Owners and admins can see it and turn it off."
+      }
       value={owner}
       valueLabel={ownerName(owner, workspace)}
       valueIcon={
@@ -542,7 +535,6 @@ function ScheduleRows({
       )}
       <PickerRow
         label="Time zone"
-        copy={<strong>Time zone</strong>}
         value={timezone}
         valueLabel={zoneLabel(timezone)}
         rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
@@ -1157,6 +1149,10 @@ function agentLabel(agent: { title: string | null }): string {
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
+/** What the agent row says under its name. */
+const AGENT_DETAIL =
+  "Each run is sent to that agent as a message, even mid-turn. It keeps its own model and effort.";
+
 /**
  * The agent each run goes to, chosen from the workspace's agents on the
  * repository. The agent it goes to as saved is kept first in the menu where
@@ -1175,20 +1171,12 @@ function AgentRow({
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const copy = (
-    <>
-      <strong>Agent</strong>
-      <small>
-        Each run is sent to that agent as a message, even mid-turn. It keeps its own model and
-        effort.
-      </small>
-    </>
-  );
   if (agents !== undefined && "failed" in agents) {
     return (
       <div className="settings-row">
         <span className="settings-copy">
-          {copy}
+          <strong>Agent</strong>
+          <small>{AGENT_DETAIL}</small>
           <small className="error-message">The workspace's agents could not be read.</small>
         </span>
       </div>
@@ -1211,7 +1199,7 @@ function AgentRow({
   return (
     <PickerRow
       label="Agent"
-      copy={copy}
+      detail={AGENT_DETAIL}
       value={draft.agentId ?? ""}
       valueLabel={
         chosen !== undefined

@@ -930,7 +930,7 @@ test("while a new issue is being filed its card's chips take no pick", async () 
   file("Flaky checkout test");
   await settle();
   const chips = [
-    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] .settings-picker-chip"),
+    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button[aria-haspopup=dialog]"),
   ];
   const lockedWhileOut = chips.length === 2 && chips.every((chip) => chip.disabled);
   act(() => held[0]?.());

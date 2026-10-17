@@ -237,11 +237,14 @@
   align-items: center;
 }
 
-/* The chip is the field chip (`chip.tsx`), a row button's face at a form's
-   type, so a picker and the buttons beside it read as one set of controls;
-   only its width, the column's, is the picker's own. */
-.settings-picker-chip {
-  width: 200px;
+/* The chip is the field chip (`@luke/ui`'s `Chip`), a row button's face at
+   a form's type, so a picker and the buttons beside it read as one set of
+   controls; only its width, the column a settings row's pop-ups share, is
+   the picker's own. The class is the repository and server chips', which
+   still draw a picker's face of their own. */
+.settings-picker-chip,
+.settings-picker > .luke-chip {
+  width: var(--luke-select-field-width);
 }
 
 /* The menu hangs from the chip's trailing edge, where the column is, and

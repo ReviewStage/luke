@@ -366,7 +366,16 @@ test("a refused write is said under its row, and the row can be pressed again", 
   held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not save that setting." });
   await flush();
 
-  assert.ok(popover.querySelector('[role="alert"]'), "the refusal is said");
-  assert.equal(settingControl(popover, '[role="switch"]', "Ligatures").disabled, false);
+  const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
+  assert.equal(ligatures.getAttribute("aria-invalid"), "true", "the refusal is said");
+  assert.match(
+    (ligatures.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" "),
+    /Could not save that setting/u,
+    "under its own row",
+  );
+  assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
 });

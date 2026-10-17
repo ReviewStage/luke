@@ -1,9 +1,16 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { cssCustomProperties } from "@luke/ui";
+import {
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  cssCustomProperties,
+  SettingsRow,
+  type SettingsRowDensity,
+} from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
-import { CHIP_LOOK, Chip } from "../chip";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import { ChangedMark } from "./marks";
 
 /**
  * picker-row.tsx -- the one control a settings row picks a value with: a chip naming the value, and the app's own menu under it.
@@ -20,6 +27,10 @@ import { type MenuRow, SearchableMenu } from "../searchable-menu";
  * its list capped to that room: the menu stands inside the page's own
  * scroller, which clips what runs past its edge, so the room is the
  * scroller's and not the window's.
+ *
+ * The chip is `@luke/ui`'s field `Chip`; its width, the column a settings
+ * row's pop-ups share, is the picker's layout (`.settings-picker`), and a
+ * `PickerRow` stands it in `@luke/ui`'s `SettingsRow`.
  */
 
 /** Which of the chip's edges the menu hangs from: its trailing edge, where a settings column is, or its leading edge, where a chip leads its line. */
@@ -226,7 +237,6 @@ export function Picker({
         ref={chip}
         look={CHIP_LOOK.FIELD}
         chevron
-        className="settings-picker-chip"
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         aria-label={`${label}: ${valueLabel}`}
         aria-describedby={describedBy}
@@ -241,7 +251,7 @@ export function Picker({
         }}
       >
         {valueIcon}
-        <span className="chip-name">{valueLabel}</span>
+        <ChipName>{valueLabel}</ChipName>
       </Chip>
       {drawn.mounted ? (
         <SearchableMenu
@@ -269,18 +279,47 @@ export function Picker({
   );
 }
 
-/** A settings row picking one value: its name and why, then the picker. */
+/**
+ * A settings row picking one value: `@luke/ui`'s `SettingsRow`, its name
+ * and why, then the picker, and under both the refusal of its last write.
+ * The why describes the chip, and a refusal marks it invalid and describes
+ * it too.
+ */
 export function PickerRow({
-  copy,
+  detail,
+  changed,
+  error,
+  density,
   ...picker
-}: PickerProps & {
-  /** The row's name and why, drawn before the chip. */
-  copy: React.ReactNode;
+}: Omit<PickerProps, "describedBy" | "invalid"> & {
+  /** The why under the row's name: words, and where a row needs one, a link among them. */
+  detail?: React.ReactNode;
+  /** Whether the stored value differs from the default, which earns the mark. */
+  changed?: boolean | undefined;
+  /** What the last write was refused with, or nothing while none was. */
+  error?: React.ReactNode;
+  /** How the row stands; in a settings card where none is named. */
+  density?: SettingsRowDensity | undefined;
 }): React.JSX.Element {
   return (
-    <div className="settings-row">
-      <span className="settings-copy">{copy}</span>
-      <Picker {...picker} />
-    </div>
+    <SettingsRow
+      density={density}
+      label={
+        <>
+          {picker.label}
+          {changed ? <ChangedMark /> : null}
+        </>
+      }
+      description={detail}
+      error={error}
+    >
+      {(control) => (
+        <Picker
+          {...picker}
+          describedBy={control["aria-describedby"]}
+          invalid={control["aria-invalid"]}
+        />
+      )}
+    </SettingsRow>
   );
 }

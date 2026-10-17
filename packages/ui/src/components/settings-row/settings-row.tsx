@@ -14,7 +14,21 @@ import { type ReactNode, useId } from "react";
  * window's rows stand even whether or not they carry a description), and the
  * room between its parts; its edges and the rules between rows are its
  * section's.
+ *
+ * A compact row (`SETTINGS_ROW_DENSITY.COMPACT`) stands bare, without
+ * padding and at a menu row's least height, where the surface around it, a
+ * popover, already insets it. Unlike a card's row it does not stack under
+ * 380px: a popover is narrower than that throughout, so its controls stay
+ * beside its words and wrap below them only where they cannot fit at all.
  */
+
+/** How a row stands: padded in a section's card, or bare inside a surface that insets it. */
+export const SETTINGS_ROW_DENSITY = {
+  CARD: "card",
+  COMPACT: "compact",
+} as const;
+
+export type SettingsRowDensity = (typeof SETTINGS_ROW_DENSITY)[keyof typeof SETTINGS_ROW_DENSITY];
 
 /** What a row hands the controls it holds. */
 export interface SettingsRowControl {
@@ -34,12 +48,15 @@ export function SettingsRow({
   label,
   description,
   error,
+  density = SETTINGS_ROW_DENSITY.CARD,
   children,
 }: {
   label: ReactNode;
   description?: ReactNode;
   /** What went wrong with the last write, or nothing while none did. */
   error?: ReactNode;
+  /** How the row stands; in a section's card where none is named. */
+  density?: SettingsRowDensity | undefined;
   /** The row's controls, handed the row's ids to name and describe them by. */
   children: (control: SettingsRowControl) => ReactNode;
 }): React.JSX.Element {
@@ -53,7 +70,7 @@ export function SettingsRow({
     .filter((part) => part !== undefined)
     .join(" ");
   return (
-    <div className="luke-settings-row" data-invalid={failed}>
+    <div className="luke-settings-row" data-invalid={failed} data-density={density}>
       <div className="luke-settings-row-body">
         <div className="luke-settings-row-line">
           <div className="luke-settings-row-copy">
