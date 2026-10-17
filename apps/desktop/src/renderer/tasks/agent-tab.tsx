@@ -31,6 +31,7 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/task";
 import { TOOL_STATE } from "../ai-elements/tool";
+import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
@@ -98,11 +99,12 @@ import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
+import { SentTime } from "./sent-time";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
-import { callHeading, useMinute } from "./task-time";
+import { useMinute } from "./task-time";
 import {
   calledAgent,
   cardTitle,
@@ -130,6 +132,7 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
+import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
@@ -597,7 +600,10 @@ function AgentPartView({
       }
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
-      const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      // A chat call opens Chat only while the window offers it; otherwise its row folds open as any call's does.
+      const called = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      const target =
+        called?.kind === TOOL_TARGET.CHAT && delegation?.chatOn !== true ? undefined : called;
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
         return (
@@ -903,17 +909,6 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   );
 }
 
-/** When one of the developer's lines was sent, in the words a finished turn's line ends on (`WorkedFor`), after who sent it where anyone is named. */
-function SentTime({ at, named }: { at: number; named: boolean }): React.JSX.Element {
-  const now = useMinute();
-  return (
-    <span className="message-sent-at">
-      {named ? <span aria-hidden="true">·</span> : null}
-      <time dateTime={new Date(at).toISOString()}>{callHeading(at, now)}</time>
-    </span>
-  );
-}
-
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
 export interface ArrivedLine {
   readonly message: CodingAgentMessage;
@@ -1027,6 +1022,7 @@ export function AgentMessage({
             </SentToAgent>
           </MessageContent>
         )}
+        <UndeliveredMark messageId={message.id} />
         {words === "" && named === null && sentAt === undefined ? null : (
           <div className="message-meta">
             {words === "" ? null : (
@@ -1188,6 +1184,7 @@ function AgentTranscriptView({
   endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
+  const undelivered = useUndeliveredLines();
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
@@ -1195,7 +1192,10 @@ function AgentTranscriptView({
     // any other is, but where something sent it, an automation, when it is
     // that sender's card; the rest the developer sent since.
     const first = messages.find(
-      (message) => message.role === MESSAGE_ROLE.USER && chatNoticeOf(message) === undefined,
+      (message) =>
+        message.role === MESSAGE_ROLE.USER &&
+        chatNoticeOf(message) === undefined &&
+        !undelivered.has(message.id),
     );
     const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
     const plan = carded ? first : undefined;
@@ -1240,7 +1240,12 @@ function AgentTranscriptView({
               />
               {message === first && opening !== undefined && replay !== undefined ? (
                 <>
-                  <ReplayCard replay={opening.replay} place={replay} planId={planId} />
+                  <ReplayCard
+                    replay={opening.replay}
+                    sentAt={first.sentAt}
+                    place={replay}
+                    planId={planId}
+                  />
                   {opening.note === undefined ? null : (
                     <AgentMessage
                       message={opening.note}
@@ -1388,6 +1393,9 @@ function AgentTabView({
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
   const steering = new Set(composer.sent.filter((line) => line.steers).map((line) => line.id));
+  const undelivered = new Set(
+    composer.sent.filter((line) => line.undelivered === true).map((line) => line.id),
+  );
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
   const { members, former } = useMemberDirectory();
@@ -1412,42 +1420,44 @@ function AgentTabView({
       <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId, former)}>
         <AgentPicturesProvider value={pictures}>
           <MentionedServers value={{ disabled: servers.disabled, steering }}>
-            <AgentTranscriptView
-              messages={lines}
-              brief={agent.brief}
-              briefSender={starter === undefined ? undefined : starterActor}
-              origin={origin}
-              readerId={readerId}
-              planId={agent.planId ?? undefined}
-              replay={replay}
-              delegation={{
-                models,
-                own: { model: agent.model, effort: agent.effort },
-                starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                onOpen: onOpenSubagent,
-                onOpenTarget,
-                cards,
-                standings: transcript.subagents,
-                chat,
-                chatOn,
-              }}
-              reading={transcript.reading}
-              failed={transcript.failed}
-              working={working}
-              sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-              startedAt={startedAt}
-              ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
-              endReason={endLineReason(transcript.failure, starter)}
-              onOpenApiKeys={onOpenApiKeys}
-              endTrail={endTrail}
-              onRetry={transcript.onRetry}
-              footer={
-                showsPublishedRow(agent.status, published) ? (
-                  <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-                ) : null
-              }
-              overComposer
-            />
+            <UndeliveredLines value={undelivered}>
+              <AgentTranscriptView
+                messages={lines}
+                brief={agent.brief}
+                briefSender={starter === undefined ? undefined : starterActor}
+                origin={origin}
+                readerId={readerId}
+                planId={agent.planId ?? undefined}
+                replay={replay}
+                delegation={{
+                  models,
+                  own: { model: agent.model, effort: agent.effort },
+                  starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                  onOpen: onOpenSubagent,
+                  onOpenTarget,
+                  cards,
+                  standings: transcript.subagents,
+                  chat,
+                  chatOn,
+                }}
+                reading={transcript.reading}
+                failed={transcript.failed}
+                working={working}
+                sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                startedAt={startedAt}
+                ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+                endReason={endLineReason(transcript.failure, starter)}
+                onOpenApiKeys={onOpenApiKeys}
+                endTrail={endTrail}
+                onRetry={transcript.onRetry}
+                footer={
+                  showsPublishedRow(agent.status, published) ? (
+                    <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+                  ) : null
+                }
+                overComposer
+              />
+            </UndeliveredLines>
           </MentionedServers>
         </AgentPicturesProvider>
       </MacOwnerProvider>
@@ -1590,7 +1600,7 @@ export function AgentTab({
     read: control.readPullRequest,
   });
   const copyWithToast = useCopyToast();
-  const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  const openGitHub = (url: string) => appPlatform().openGitHub(url);
   // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
   const toast = useToast();
   useMessageReveal({
@@ -1664,8 +1674,8 @@ export function AgentTab({
             control={control}
             onOpenAgent={openAgent}
             carry={{
-              words: composer.draft,
-              attachments: composer.attachments,
+              words: composer.unsent.words,
+              attachments: composer.unsent.attachments,
               planId: agent.planId,
             }}
           />

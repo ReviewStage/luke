@@ -191,6 +191,10 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** A workspace's chat past a cursor: what a person in it sees of it, held open by the service while nothing moved. */
+  CODING_AGENTS_CHAT: "codingAgents.chat",
+  /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */
+  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */

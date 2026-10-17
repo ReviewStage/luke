@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, type TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   ConfirmDialog,
@@ -23,7 +24,6 @@ import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { usePlanDrafted } from "../composer-drafts";

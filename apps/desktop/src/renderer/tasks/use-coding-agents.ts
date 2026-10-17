@@ -49,7 +49,7 @@ import {
   withAgent,
   withAgentRun,
 } from "./coding-agent-model";
-import { type AgentFork, forkStart } from "./fork-model";
+import { type AgentFork, continueFork, forkStart } from "./fork-model";
 import { keptSkills } from "./repository-skills";
 import type { SkillSource } from "./skill-picker";
 import type { MessageSender } from "./use-agent-composer";
@@ -168,6 +168,18 @@ export interface CodingAgentsControl {
    * the source's model and effort and its MCP servers.
    */
   onForkDraft: (fork: AgentFork) => string;
+  /**
+   * Opens the open task's draft as a continue of one of its agents on its
+   * whole transcript, or answers the draft it joined, by its key: the words
+   * and files given are laid in after any the draft held, and its chips
+   * start on the source's model and effort and its MCP servers. Nothing is
+   * sent until the draft is.
+   */
+  onContinueDraft: (
+    sourceId: string,
+    words: string,
+    attachments: readonly CodingAgentAttachment[],
+  ) => string;
   /** Lets the open task's draft's fork go, leaving an ordinary draft with its words and chips. */
   onDropFork: () => void;
   /** Writes the open task's draft: the words in its box, the choice on its chip, or the MCP servers it switched off. */
@@ -321,6 +333,9 @@ function planDraft(
 function forkOf(fork: AgentFork | undefined): { readonly fork?: AgentFork } {
   return fork === undefined ? {} : { fork };
 }
+
+/** Nothing laid in after a draft's own words as they move. */
+const NOTHING_CARRIED: Pick<Draft, "text" | "attachments"> = { text: "", attachments: [] };
 
 /** A Start on its way or asked again: the task, the key the press minted, and the choice it was for. */
 interface PendingStart {
@@ -696,12 +711,24 @@ export function useCodingAgents(input: {
     ...forkOf(fork),
   });
 
-  /** The open task's draft's words and files kept again under `id` and `fork`, and no longer where they were. */
-  const moveWords = (on: string, id: string, fork: AgentFork | undefined) => {
-    if (draft === undefined) return;
-    const words = { text: draft.prompt, attachments: draft.attachments };
-    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draft.id);
-    writer.update(wordsPlace(on, id, fork), (was) => ({ ...was, ...words }));
+  /**
+   * The open task's draft's words and files kept again under `id` and
+   * `fork`, and no longer where they were, with the words and files
+   * `carried` laid in after them, a blank line between the two.
+   */
+  const moveWords = (
+    on: string,
+    id: string,
+    fork: AgentFork | undefined,
+    carried: Pick<Draft, "text" | "attachments"> = NOTHING_CARRIED,
+  ) => {
+    const text = [draft?.prompt ?? "", carried.text].filter((each) => each !== "").join("\n\n");
+    const attachments = [...(draft?.attachments ?? []), ...carried.attachments];
+    if (draft !== undefined) {
+      const was = draft.id;
+      writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === was);
+    }
+    writer.update(wordsPlace(on, id, fork), (kept) => ({ ...kept, text, attachments }));
   };
 
   // Note that a fork joins the draft the task holds, so words already
@@ -718,6 +745,32 @@ export function useCodingAgents(input: {
       id,
       choice: undefined,
       disabledServers: source?.disabledServers ?? [],
+      fork,
+    });
+    return id;
+  };
+
+  // Note that a continue joins the task's draft as a fork does, under a key
+  // of its own for the same reason, unless the draft already continues the
+  // same agent and nothing is laid in, when it keeps its key, so a Start it
+  // sent and never heard answered is answered with the agent it made; words
+  // or files laid in make another request, which that agent never had.
+  const onContinueDraft = (
+    sourceId: string,
+    words: string,
+    attachments: readonly CodingAgentAttachment[],
+  ): string => {
+    const joins = draft?.fork?.agentId === sourceId && draft.fork.messageId === undefined;
+    const adds = words.trim() !== "" || attachments.length > 0;
+    const id = joins && !adds && draft !== undefined ? draft.id : mintKey();
+    if (taskId === undefined) return id;
+    const source = held?.find((agent) => agent.id === sourceId);
+    const fork = continueFork(sourceId);
+    moveWords(taskId, id, fork, { text: words.trim(), attachments });
+    withDraft(taskId, {
+      id,
+      choice: joins ? draft?.choice : undefined,
+      disabledServers: joins ? (draft?.disabledServers ?? []) : (source?.disabledServers ?? []),
       fork,
     });
     return id;
@@ -1095,6 +1148,7 @@ export function useCodingAgents(input: {
     draft,
     onNewDraft,
     onForkDraft,
+    onContinueDraft,
     onDropFork,
     onDraftChange,
     onDraftAttachments,

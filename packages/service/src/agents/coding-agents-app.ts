@@ -496,7 +496,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     agent: codingAgentSummary(
       agent,
-      { turn: undefined, lineAwaits: false },
+      { turn: undefined, awaitingLineAt: undefined },
       yield* Clock.currentTimeMillis,
       names,
     ),

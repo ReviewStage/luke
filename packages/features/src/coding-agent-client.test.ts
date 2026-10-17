@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
@@ -410,5 +411,42 @@ it.effect(
         );
         assert.deepEqual(refused, { failure }, error);
       }
+    }),
+);
+
+it.effect(
+  "a Start outlasts the usual deadline, since one from another agent copies its work first, and answers unanswered only past its own",
+  () =>
+    Effect.gen(function* () {
+      const request = { idempotencyKey: "press-1", from: { agentId: AGENT_ID } };
+      let answer: (response: Response) => void = () => undefined;
+      const slow = recordingHttpClient(
+        () =>
+          new Promise<Response>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const asked = yield* Effect.forkChild(
+        Effect.provide(client().start(TASK_ID, request), slow.layer),
+      );
+      yield* TestClock.adjust("30 seconds");
+      answer(
+        new Response(JSON.stringify({ agent: AGENT }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      assert.deepEqual(yield* Fiber.join(asked), { agent: AGENT });
+
+      const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
+      const unanswered = yield* Effect.forkChild(
+        Effect.provide(client().start(TASK_ID, request), silent.layer),
+      );
+      yield* TestClock.adjust("119 seconds");
+      assert.equal(unanswered.pollUnsafe(), undefined, "still waiting short of its deadline");
+      yield* TestClock.adjust("1 second");
+      assert.deepEqual(yield* Fiber.join(unanswered), {
+        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+      });
     }),
 );

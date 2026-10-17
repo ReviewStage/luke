@@ -1,4 +1,4 @@
-import "./asset-path";
+import "./index.css";
 import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
@@ -437,5 +437,4 @@ async function renderScene(reported: readonly object[]): Promise<string | undefi
   }
 }
 
-const whiteboard: WhiteboardModule = { mount: mountBoard, render: renderScene };
-window.lukeWhiteboard = whiteboard;
+export const whiteboard: WhiteboardModule = { mount: mountBoard, render: renderScene };

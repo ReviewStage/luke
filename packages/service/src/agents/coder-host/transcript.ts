@@ -177,9 +177,9 @@ const statusNow = (target: ConversationTarget, createdAt: Date) =>
     const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
     const now = yield* Clock.currentTimeMillis;
     const turn = turns.get(target.conversationId);
-    const lineAwaits = awaiting.has(target.conversationId);
-    const status = codingAgentStatusOf(turn, { createdAt, now, lineAwaits });
-    const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, lineAwaits });
+    const awaitingLineAt = awaiting.get(target.conversationId);
+    const status = codingAgentStatusOf(turn, { createdAt, now, awaitingLineAt });
+    const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
     const failureReason =
       status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
     return { status, runStartedAt, failureReason, turn };

@@ -160,14 +160,23 @@ import {
  * workspace's chat read are the calls the service holds open, for as long
  * as it waits on the agent's next message or the next change, so they
  * travel under a deadline of
- * their own that outlasts that hold; every other call keeps the account
- * call's usual one. The account's task
+ * their own that outlasts that hold; a Start travels under a longer one
+ * still, since one from another agent copies its work first; every other
+ * call keeps the account call's usual one. The account's task
  * template is read and written here too, as Settings asks for it beside
  * the default and the keys.
  */
 
 /** How long a held read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
 const HELD_READ_TIMEOUT_MS = 35_000;
+
+/**
+ * How long a Start may stand: a Start from another agent copies its work,
+ * summarizing what does not fit, before the new agent's session opens,
+ * which can run well past the usual deadline; a Start that outlasts it is
+ * asked again under the same key and answered with the agent it made.
+ */
+const START_TIMEOUT_MS = 120_000;
 
 export interface HostedCodingAgentClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
@@ -294,6 +303,7 @@ function readAnswer<Answer, Encoded>(
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
   readonly #held: AccountCallEffects;
+  readonly #start: AccountCallEffects;
 
   constructor(options: HostedCodingAgentClientOptions) {
     const credential = accountBearer(options);
@@ -306,6 +316,11 @@ export class HostedCodingAgentClient {
       baseUrl: options.serviceBaseUrl,
       credential,
       requestTimeoutMs: HELD_READ_TIMEOUT_MS,
+    });
+    this.#start = accountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential,
+      requestTimeoutMs: START_TIMEOUT_MS,
     });
   }
 
@@ -523,7 +538,7 @@ export class HostedCodingAgentClient {
     const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.flatMap(
-      this.#call.send({
+      this.#start.send({
         method: HTTP_METHOD.POST,
         path: taskAgentsPath(taskId),
         body: JSON.stringify(admitted),

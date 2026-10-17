@@ -181,8 +181,9 @@ An Effect describes work; only a runtime edge runs one. The edges are listed
 in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/main.ts`
 (the desktop's one `ManagedRuntime`), `apps/desktop/src/main/services/compose-desktop.ts`
 (the layer that runtime is built from), the renderer root
-`apps/desktop/src/renderer/index.tsx` (loaded once per window, the panels and
-the voice window alike, so no two windows share a browser registry),
+`apps/desktop/src/renderer/window-root.tsx` (loaded once per window by each
+window's own entry, the panels' and the voice window's alike, so no two windows
+share a browser registry),
 `apps/desktop/src/renderer/renderer-runtime.ts` (the module the root's
 runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
 reads it, the moment the root first reaches it, so the edge is here rather than
@@ -262,7 +263,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   `void | Promise<void>` and whose `reopen()` is synchronous) — so what would
   end this row is a decision about that seam rather than an implementation
   detail of this door.
-- **`apps/desktop/src/main/app-state.ts`** — `AppStateStore`'s `snapshot`,
+- **`packages/host/src/client/app-state-store.ts`** — `AppStateStore`'s `snapshot`,
   `update`, and `touch` run their `SubscriptionRef` operation through
   `Effect.runSyncWith` on the services the launch handed them, never an empty
   context of their own, because every caller but the one production subscriber
@@ -272,7 +273,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   statement — is what turning them into effects a caller awaits would give up.
 - **`packages/host/src/update-service.ts`** — synchronous Electron
   IPC/menu callers (start, check, install) bridge into fibers on the services
-  the launch handed them, on the same terms as the desktop's `app-state.ts`.
+  the launch handed them, on the same terms as the client's `app-state-store.ts`.
 - **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — the notice
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
