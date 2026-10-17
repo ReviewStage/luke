@@ -69,6 +69,7 @@ const startFrom = (total: number): StartFrom => ({
     carried: undefined,
     forked: { at: false, edited: undefined },
     unkept: [],
+    inPullRequest: false,
     messageId: undefined,
   },
 });

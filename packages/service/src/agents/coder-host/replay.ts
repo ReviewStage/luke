@@ -34,6 +34,7 @@ import {
   type CodingAgentAttachmentType,
   type CodingAgentPullRequest,
   type CodingAgentStartFrom,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { isFileUIPart, isTextUIPart } from "ai";
@@ -53,6 +54,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { agentPublished } from "./published.js";
 import { copySourceWork, type SnapshotOutcome, type SourceCopyServices } from "./snapshot.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
@@ -487,6 +489,55 @@ function pullWords(published: CodingAgentPullRequest | null): string {
     : `, with its pull request #${published.number} (${published.url})`;
 }
 
+/** Whether a pull request is still open, a draft among them, so work that goes on goes on in it. */
+function stillOpen(published: CodingAgentPullRequest | null): boolean {
+  return (
+    published !== null &&
+    (published.state === PULL_REQUEST_STATE.OPEN || published.state === PULL_REQUEST_STATE.DRAFT)
+  );
+}
+
+/**
+ * Whether a continue goes on in its source's pull request: one its row last
+ * read open, read again on GitHub now, since one merged or closed since the
+ * row was written must not take the work. A read that fails is logged and
+ * answered no, so the continue opens a pull request of its own rather than
+ * pushing to a branch that may be done.
+ */
+const goesOnInPullRequest = (
+  userId: string,
+  source: CodingAgent,
+  stored: CodingAgentPullRequest | null,
+) =>
+  source.branch === null || !stillOpen(stored)
+    ? Effect.succeed(false)
+    : agentPublished(userId, source).pipe(
+        Effect.map((answer) => stillOpen(answer.pullRequest)),
+        Effect.catch((failure) =>
+          Effect.as(
+            Effect.logWarning(
+              `the pull request of an agent being continued could not be read: ${failure._tag}`,
+            ),
+            false,
+          ),
+        ),
+      );
+
+/**
+ * How a continue carries the copy of its source's work onto the branch of the
+ * source's pull request still open, rather than opening a second one from the
+ * copy: that branch checked out, the copy's commits brought onto it, a
+ * fast-forward where it has not moved since the source's checkout was copied.
+ */
+function carryOntoWords(copied: string, branch: string): string {
+  return (
+    ` Its pull request is still open, so carry on in it rather than open a second one; this takes the place of your instructions' own branch and pull request steps for this work: once the copy is fetched, ${fetchWords(branch)}, ` +
+    `bring the copy's commits onto it with \`git merge --ff-only ${shellQuoted(copied)}\` (a plain merge where it has moved on since), ` +
+    "then work and push there, and open no new pull request. Where that pull request has merged or " +
+    "closed by the time you publish, open a new one from your work instead, as your instructions say."
+  );
+}
+
 /** The work a source that made no branch of its own took up: the agent it came from, that agent's pull request, and the branch that agent's work was copied to for the source, where it was. */
 interface CarriedWork {
   /** None where that agent can no longer be read, and only the copy made of its work stands. */
@@ -519,12 +570,21 @@ function carriedWhere(carried: CarriedWork): string {
   );
 }
 
-/** Where the source's work stands for the new agent: the branch its checkout was copied to, or, where it could not be, the branch and pull request it left, or those of the work it carried where it made no branch of its own. */
+/**
+ * Where the source's work stands for the new agent: the branch its checkout
+ * was copied to, or, where it could not be, the branch and pull request it
+ * left, or those of the work it carried where it made no branch of its own.
+ * A continue of a source whose pull request is still open goes on in that
+ * pull request, the copy carried onto its branch, so the work does not
+ * split across two (`goesOnInPullRequest`); a fork, a line of work of its
+ * own, opens its own.
+ */
 function whereOf(
   source: CodingAgent,
   published: CodingAgentPullRequest | null,
   copy: SnapshotOutcome,
   carried: CarriedWork | undefined,
+  inPullRequest: boolean,
 ): string {
   const pull = pullWords(published);
   if (copy.copied) {
@@ -538,6 +598,12 @@ function whereOf(
         : taken === undefined || taken.branch === null
           ? ""
           : ` It made no branch of its own; the coding agent it took up, ${agentName(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
+    if (inPullRequest && source.branch !== null) {
+      return (
+        `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}.` +
+        `${own}${carryOntoWords(copy.branch, source.branch)}`
+      );
+    }
     return (
       `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}, ` +
       `build on it, and open your pull request from it as usual.${own}`
@@ -580,12 +646,13 @@ function preambleOf(
   forked: { readonly at: boolean; readonly edited: readonly string[] | undefined },
   counts: { readonly kept: number; readonly total: number; readonly summarized: number },
   unkept: readonly string[],
+  inPullRequest: boolean,
 ): string {
   const name = agentName(source);
   const lead = forked.at
     ? `You are a fork of the coding agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
     : `You continue the work of the coding agent ${name}, which stopped before it was done.`;
-  const where = `${whereOf(source, published, copy, carried)}${forkCaveat(forked.at, forked.edited)}`;
+  const where = `${whereOf(source, published, copy, carried, inPullRequest)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
   const unfit = counts.total - counts.kept;
   // Note that a summary beside steps left out may cover the newest of those that did not fit rather than the oldest, so it names none as the oldest.
@@ -639,6 +706,8 @@ interface ReplayTold {
   readonly carried: CarriedWork | undefined;
   readonly forked: { readonly at: boolean; readonly edited: readonly string[] | undefined };
   readonly unkept: readonly string[];
+  /** Whether a continue goes on in its source's pull request, which GitHub says is still open; never a fork. */
+  readonly inPullRequest: boolean;
   readonly messageId: string | undefined;
   /** Where the fork cut that message, where it was of a reply still being written; none where it kept the message whole. */
   readonly cut?: StepCut | undefined;
@@ -671,6 +740,7 @@ export function replayOf(
     told.forked,
     counts,
     told.unkept,
+    told.inPullRequest,
   );
   const message = told.messageId === undefined ? undefined : { messageId: told.messageId };
   return {
@@ -935,6 +1005,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const forked = from.messageId !== undefined;
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
   const copy = yield* copySourceWork(userId, source, forked, idempotencyKey);
+  const inPullRequest = !forked && (yield* goesOnInPullRequest(userId, source, published));
   const edited =
     cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));
   return {
@@ -954,6 +1025,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       carried: carriedWork,
       forked: { at: forked, edited },
       unkept: files.unkept,
+      inPullRequest,
       messageId: from.messageId,
       cut,
     },

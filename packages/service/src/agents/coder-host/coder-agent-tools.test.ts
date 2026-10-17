@@ -1152,6 +1152,67 @@ test("start_agent from another agent refuses, in words the model acts on and sta
   assert.equal(eve.sent.length, 0, "no refusal opens a session");
 });
 
+/** A teammate's agent on the task given, started on the branch given, its session recorded. */
+async function agentOnBranch(
+  userId: string,
+  planId: string,
+  branch: string,
+): Promise<StartedAgent> {
+  return claimed(userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: planId,
+    planSnapshot: "# Billing",
+    prompt: null,
+    startBranch: branch,
+  });
+}
+
+test("start_agent continuing an agent started on a branch clones the new agent at that branch, or at the default branch where GitHub no longer holds it", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const held = await agentOnBranch(teammates.userId, plans.billing, STACKED_BRANCH);
+  const gone = await agentOnBranch(teammates.userId, plans.billing, "luke/merged-and-deleted");
+  await saidTurnOn(held, "The base is in review.");
+  await saidTurnOn(gone, "The base merged.");
+  const eve = await fakeCoderEve(workspaceId, [STACKED_BRANCH]);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  const onHeld = await call(CODER_TOOL.START_AGENT, { from: { agentId: held.id } }, "call-held");
+  const stored = await storedStart(caller.userId, onHeld);
+  assert.equal(stored.startedFrom?.agentId, held.id);
+  assert.equal(stored.startBranch, STACKED_BRANCH);
+  const onGone = await call(CODER_TOOL.START_AGENT, { from: { agentId: gone.id } }, "call-gone");
+  assert.equal((await storedStart(caller.userId, onGone)).startBranch, null);
+});
+
+test("start_agent refuses to continue an agent whose session died while it still reads running, pointing at stop_agent, which settles it, and then continues it", async () => {
+  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  await saidTurnOn(teammates, "Halfway through the CSV writer.");
+  await turnOn(teammates, false);
+  const eve = await fakeCoderEve(workspaceId, [], undefined, "no_active_turn");
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const from = { agentId: teammates.id };
+
+  assert.deepEqual(await call(CODER_TOOL.START_AGENT, { from }, "call-1"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_CODING_AGENT_REFUSAL.SOURCE_RUNNING,
+  });
+  assert.ok(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING.includes(CODER_TOOL.STOP_AGENT));
+  // eve runs no turn on the dead session, so the Stop stops nothing there, yet the turn reads cancelled.
+  const stopped = await call(CODER_TOOL.STOP_AGENT, from, "call-2");
+  assert.equal(stopped.stopped, false, JSON.stringify(stopped));
+  assert.ok(isRecord(stopped.agent));
+  assert.equal(stopped.agent.status, CODING_AGENT_STATUS.CANCELLED);
+
+  const continued = await call(CODER_TOOL.START_AGENT, { from }, "call-3");
+  const stored = await storedStart(caller.userId, continued);
+  assert.equal(stored.taskId, plans.billing);
+  assert.equal(stored.startedFrom?.agentId, teammates.id);
+  assert.ok(openingWords(eve.sent).includes("CSV writer"));
+});
+
 test("start_agent from a source whose transcript does not fit the new agent's window hands it Luke's summary of the steps left out, written on the deployment's summary model", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
