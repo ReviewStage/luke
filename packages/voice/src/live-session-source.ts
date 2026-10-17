@@ -37,7 +37,7 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
-import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
+import type { VideoAvatar } from "@luke/features/video-avatar";
 import {
   decodeLivePayload,
   isLiveVoice,
@@ -998,7 +998,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           const frame: AvatarStartFrame = {
             type: VOICE_SERVICE_FRAME.AVATAR_START,
             requestId,
-            ...(avatar === VIDEO_AVATAR.DEFAULT ? undefined : { avatar }),
+            avatar,
           };
           socket.send(JSON.stringify(frame));
         },

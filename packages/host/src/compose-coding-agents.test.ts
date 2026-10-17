@@ -114,26 +114,26 @@ const CHANGES = {
   },
 };
 
-/** That pull request as its Pull request tab draws it. */
+/** That pull request itself, its checks, and its conversation, as its Pull request tab's overview reads them. */
 const OVERVIEW = {
   pullRequest: {
-    number: 123,
-    title: "Send the invite once",
-    url: "https://github.com/acme/relay/pull/123",
-    state: PULL_REQUEST_STATE.OPEN,
-    html: "<p>Sends the invite once.</p>",
-    cut: false,
-    base: "main",
-    head: "luke/invite-once",
-    createdAt: 1_800_000_000_000,
-    mergedAt: null,
-    merge: MERGE_STATE.CLEAN,
-    checks: [],
-    reviewers: [],
-    conversation: [],
-    earlier: 0,
+    pullRequest: {
+      number: 123,
+      title: "Send the invite once",
+      url: "https://github.com/acme/relay/pull/123",
+      state: PULL_REQUEST_STATE.OPEN,
+      html: "<p>Sends the invite once.</p>",
+      base: "main",
+      head: "luke/invite-once",
+      createdAt: 1_800_000_000_000,
+      mergedAt: null,
+      merge: MERGE_STATE.CLEAN,
+      requested: [],
+    },
   },
-};
+  checks: { pullRequest: { checks: [] } },
+  conversation: { pullRequest: { reviewers: [], conversation: [], earlier: 0 } },
+} as const;
 
 /** A synthetic key, as Settings carries it once; nothing below may answer it back. */
 const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
@@ -285,10 +285,20 @@ function fakeService() {
         asked.push(`changes:${agentId}`);
         return CHANGES;
       }),
-    overview: (agentId) =>
+    overviewPullRequest: (agentId) =>
       Effect.sync(() => {
-        asked.push(`overview:${agentId}`);
-        return OVERVIEW;
+        asked.push(`overview-pull-request:${agentId}`);
+        return OVERVIEW.pullRequest;
+      }),
+    overviewChecks: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`overview-checks:${agentId}`);
+        return OVERVIEW.checks;
+      }),
+    overviewConversation: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`overview-conversation:${agentId}`);
+        return OVERVIEW.conversation;
       }),
     githubImage: (agentId, src) =>
       Effect.sync(() => {
@@ -526,8 +536,16 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW, { agentId: AGENT_ID }),
-      OVERVIEW,
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
+      OVERVIEW.pullRequest,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: AGENT_ID }),
+      OVERVIEW.checks,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, { agentId: AGENT_ID }),
+      OVERVIEW.conversation,
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, {
@@ -603,7 +621,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
-      `overview:${AGENT_ID}`,
+      `overview-pull-request:${AGENT_ID}`,
+      `overview-checks:${AGENT_ID}`,
+      `overview-conversation:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,

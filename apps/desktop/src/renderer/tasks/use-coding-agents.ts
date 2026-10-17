@@ -5,7 +5,9 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentListAnswer,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CONTEXT_WINDOW,
@@ -225,8 +227,12 @@ export interface CodingAgentsControl {
   readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
   changesPeople: ReadonlyMap<string, HeldPeople>;
-  /** One read of an agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation. */
-  readOverview: (agentId: string) => Promise<CodingAgentOverviewAnswerView>;
+  /** One read of an agent's pull request itself as its Pull request tab's overview draws it: its description, branches, mergeability, and people. */
+  readOverviewPullRequest: (agentId: string) => Promise<CodingAgentOverviewPullRequestAnswerView>;
+  /** One read of the checks on an agent's pull request's head, as its overview draws them. */
+  readOverviewChecks: (agentId: string) => Promise<CodingAgentOverviewChecksAnswerView>;
+  /** One read of an agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
+  readOverviewConversation: (agentId: string) => Promise<CodingAgentOverviewConversationAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
@@ -854,8 +860,18 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readOverview = useCallback<CodingAgentsControl["readOverview"]>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW, { agentId }),
+  const readOverviewPullRequest = useCallback<CodingAgentsControl["readOverviewPullRequest"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId }),
+    [act],
+  );
+
+  const readOverviewChecks = useCallback<CodingAgentsControl["readOverviewChecks"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, { agentId }),
+    [act],
+  );
+
+  const readOverviewConversation = useCallback<CodingAgentsControl["readOverviewConversation"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION, { agentId }),
     [act],
   );
 
@@ -939,7 +955,9 @@ export function useCodingAgents(input: {
     pullRequests: published.pullRequests,
     readChanges,
     changesPeople,
-    readOverview,
+    readOverviewPullRequest,
+    readOverviewChecks,
+    readOverviewConversation,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
     readInbox,

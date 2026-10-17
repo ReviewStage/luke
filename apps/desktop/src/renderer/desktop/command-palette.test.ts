@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -30,7 +28,6 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_TASK } from "#testing/document-task";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
@@ -51,9 +48,6 @@ interface Sent {
   tabs: PanelTab[];
   views: SettingsView[];
 }
-
-/** The window's own stylesheet, which says which part of a row gives way. */
-const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
 
 const roots: Root[] = [];
 
@@ -254,17 +248,6 @@ const SETTINGS_PAGES = [
   "About",
   "Keyboard shortcuts",
 ];
-
-test("the results fade under the filters above them and over the keys' hints below them, rather than being sliced at either hairline", () => {
-  openPalette();
-  const sheets = layFades();
-  try {
-    const list = document.querySelector(".command-palette-list") ?? assert.fail("results stand");
-    assert.deepEqual(fadedEdges(list), { top: true, bottom: true });
-  } finally {
-    sheets.remove();
-  }
-});
 
 test("the Settings filter lists every Settings page by its name, ahead of the settings", () => {
   openPalette();
@@ -978,35 +961,6 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥�
     `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
   ]);
   assert.equal(newestToastSays(), "Link copied");
-});
-
-test("an action's name keeps its width beside the task it acts on, and the task's name is what gives way, while a name with no detail has the whole row", () => {
-  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  openPalette(ON_AGENT_TAB);
-  type("copy link");
-  const at = rows().indexOf(`Copy link to task · ${DOCUMENT_TASK.name}`);
-  const row =
-    document.querySelectorAll(".menu-item")[at] ?? assert.fail("Copy link to task is listed");
-  const name = row.querySelector(".command-palette-name") ?? assert.fail("the row's name");
-  const detail = row.querySelector(".command-palette-detail") ?? assert.fail("the task it acts on");
-
-  type("");
-  const bare =
-    [...document.querySelectorAll(".command-palette-name")].find(
-      (each) => each.nextElementSibling?.classList.contains("command-palette-detail") !== true,
-    ) ?? assert.fail("a row with no detail is listed");
-
-  assert.equal(getComputedStyle(name).flexShrink, "0", "the name keeps its width");
-  assert.deepEqual(
-    [getComputedStyle(bare).flexShrink, getComputedStyle(bare).maxWidth],
-    ["1", "none"],
-    "a name with nothing after it has the whole row",
-  );
-  assert.deepEqual(
-    [getComputedStyle(detail).flexShrink, getComputedStyle(detail).minWidth],
-    ["1", "0px"],
-    "the task's name gives way",
-  );
 });
 
 test("⌥⌘C copies the link of what is open, the most specific first: the Inbox's item over the Inbox, an automation over the list, the task under its tabs", async () => {

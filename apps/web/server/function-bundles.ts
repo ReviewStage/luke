@@ -77,7 +77,7 @@ export interface FunctionBundlePlan {
 }
 
 /** The name of the package a specifier reaches: the scope and name of a scoped one, the first segment otherwise. */
-export function packageNameOf(specifier: string): string {
+function packageNameOf(specifier: string): string {
   return specifier.startsWith("@")
     ? specifier.split("/").slice(0, 2).join("/")
     : (specifier.split("/")[0] ?? specifier);
@@ -214,6 +214,32 @@ function importSpecifier(imported: MetafileImport): string {
 function bundleKey(web: string, outputPath: string): string {
   const fromWeb = relative(join(web, FUNCTION_BUNDLE_DIRECTORY), join(web, outputPath));
   return fromWeb.split(sep).join(posix.sep);
+}
+
+/** esbuild's own helper module, recorded in the metafile as an external import of every bundle it shimmed a `require` in; not a dependency. */
+const ESBUILD_RUNTIME = "<runtime>";
+
+/**
+ * The external imports no declared package accounts for, sorted: each a
+ * module a bundle would fail to load. A module given to esbuild's `inject`,
+ * as Sentry's plugin gives its release stub, is recorded external from every
+ * importer even though it is bundled as an input, so an import the metafile
+ * also lists as an input is not one.
+ */
+export function undeclaredImports(
+  metafile: Metafile,
+  web: string,
+  declared: ReadonlySet<string>,
+): string[] {
+  const undeclared = new Set<string>();
+  for (const input of Object.values(metafile.inputs)) {
+    for (const imported of input.imports) {
+      if (!imported.external || imported.path === ESBUILD_RUNTIME) continue;
+      if (relative(web, imported.path) in metafile.inputs) continue;
+      if (!declared.has(packageNameOf(imported.path))) undeclared.add(imported.path);
+    }
+  }
+  return [...undeclared].sort();
 }
 
 /** Every bundle's external imports as the metafile records them, sorted and unique, keyed by bundle. */

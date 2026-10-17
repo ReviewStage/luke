@@ -39,8 +39,7 @@
       "project": ["src/**", "scripts/**"]
     },
     "apps/catalog": {
-      "vitest": false,
-      "entry": ["src/main.tsx", "vitest.config.ts", "src/catalog.test.ts", "src/test-setup.ts"],
+      "entry": ["src/main.tsx"],
       "project": ["src/**"]
     },
     "apps/web": {
@@ -83,6 +82,7 @@
         "{,subagents/*/}instructions.ts",
         "{,subagents/*/}instructions/*.ts",
         "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "instrumentation/*.ts",
         "evals/evals.config.ts",
         "evals/*.eval.ts"
       ],
@@ -107,6 +107,7 @@
         "{,subagents/*/}instructions.ts",
         "{,subagents/*/}instructions/*.ts",
         "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "instrumentation/*.ts",
         "evals/evals.config.ts",
         "evals/*.eval.ts"
       ],

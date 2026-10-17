@@ -30,7 +30,9 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentWorkspaceListParams,
@@ -63,7 +65,9 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
-  codingAgentOverviewAnswerSchema,
+  codingAgentOverviewChecksAnswerSchema,
+  codingAgentOverviewConversationAnswerSchema,
+  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
@@ -103,7 +107,9 @@ import {
   agentGitHubImagePath,
   agentInboxPath,
   agentMessagesPath,
-  agentOverviewPath,
+  agentOverviewChecksPath,
+  agentOverviewConversationPath,
+  agentOverviewPullRequestPath,
   agentPath,
   agentPicturePath,
   agentPullRequestPath,
@@ -678,13 +684,33 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them now. */
-  overview(
+  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
+  overviewPullRequest(
     agentId: string,
-  ): Effect.Effect<CodingAgentOverviewAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewPath(agentId) }),
-      (answer) => readAnswer(answer, codingAgentOverviewAnswerSchema, ROW_REFUSALS),
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewPullRequestPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentOverviewPullRequestAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** The checks on one agent's pull request's head as GitHub holds them now. */
+  overviewChecks(
+    agentId: string,
+  ): Effect.Effect<CodingAgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewChecksPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentOverviewChecksAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them now. */
+  overviewConversation(
+    agentId: string,
+  ): Effect.Effect<CodingAgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewConversationPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentOverviewConversationAnswerSchema, ROW_REFUSALS),
     );
   }
 
