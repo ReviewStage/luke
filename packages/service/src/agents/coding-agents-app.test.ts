@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
-import { readAccountPreferences } from "@luke/database/models/account-store";
+import {
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@luke/database/models/account-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import {
   createAutomation,
@@ -15,6 +18,7 @@ import {
   ensureMember,
   ensurePlanChannel,
   findOrMakeDm,
+  memberNamed,
   postAsk,
   postMessage,
   roster,
@@ -63,8 +67,10 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
+  CHANNEL_KIND,
   CHAT_ASK,
   CHAT_BLOCK,
+  CHAT_BOUNDS,
   CHAT_REPLY,
   MEMBER_KIND,
   mentionedHandles,
@@ -101,6 +107,7 @@ import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { and, eq } from "drizzle-orm";
@@ -121,6 +128,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
+  ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
@@ -163,6 +171,7 @@ import {
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
 import { CODER } from "./coder-host/bounds.js";
+import { CHAT_TOOL_REFUSAL, type ChatAgent, postAsAgent, readAsAgent } from "./coder-host/chat.js";
 import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
@@ -3101,6 +3110,10 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
       const opened = yield* openTask({ eve });
       const workspace = opened.task.workspaceId;
       if (secondByTeammate) yield* joinWorkspace(workspace, opened.other);
+      // Chat is an experiment each starter turns on; the tests below are of its telling.
+      for (const starter of [opened.owner, opened.other]) {
+        yield* writeAccountPreferences(starter, { experiments: { [EXPERIMENT.CHAT]: true } });
+      }
       const agents = [];
       for (const at of [0, 1]) {
         const starter = at === 1 && secondByTeammate ? opened.other : opened.owner;
@@ -3475,5 +3488,338 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
       yield* tell(answered.ask);
       assert.equal(eve.sent.length, 1);
     }),
+  );
+
+  it.effect(
+    "an agent whose starter has not turned Chat on is steered nothing, however it is addressed",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve, true);
+        yield* writeAccountPreferences(chat.other, { experiments: { [EXPERIMENT.CHAT]: false } });
+        const told = yield* chat.post(chat.person, "@agent-2 please carry on.");
+        assert.deepEqual([told.receipt.told, told.receipt.held], [[], ["agent-2"]]);
+        assert.equal(eve.sent.length, 0);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding agent's chat tools", (it) => {
+  /**
+   * The owner's plan with two agents on it, each session claimed so a notice
+   * reaches it, and each agent's tools as its own calls run them: a post
+   * under a fresh call id, with the turn's count given, and a read.
+   */
+  const openAgents = (eve = fakeEve()) =>
+    Effect.gen(function* () {
+      const opened = yield* openTask({ eve });
+      yield* writeAccountPreferences(opened.owner, { experiments: { [EXPERIMENT.CHAT]: true } });
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      const telling = {
+        eveFor: (starter: string) => eve.eve(`Bearer ${starter}`),
+        writer: Effect.succeed(writer),
+        doors: HELD_DOORS,
+      };
+      const agents: ChatAgent[] = [];
+      for (const at of [0, 1]) {
+        const started = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+        const sessionId = eve.opened[at]?.sessionId ?? "";
+        assert.equal(
+          yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
+          true,
+        );
+        agents.push({
+          userId: opened.owner,
+          agentId: started.agent.id,
+          planId: opened.task.id,
+          telling,
+        });
+      }
+      const [first, second] = agents;
+      assert.ok(first && second);
+      const post = (agent: ChatAgent, value: WireBoundaryInput, postsInTurn = 0) =>
+        postAsAgent(agent, unparsedWire(value), randomUUID(), postsInTurn).pipe(
+          Effect.provide(opened.github.layer),
+        );
+      const read = (agent: ChatAgent, value: WireBoundaryInput = {}) =>
+        readAsAgent(agent, unparsedWire(value));
+      // Note that the handles are read back rather than assumed, because two agents started at one instant mint in either order.
+      const handleOf = (agent: ChatAgent) =>
+        Effect.map(read(agent, { channel: "#teammate-invitations" }), (answer) => {
+          assert.ok("you" in answer);
+          return answer.you;
+        });
+      const handles = { first: yield* handleOf(first), second: yield* handleOf(second) };
+      return { ...opened, first, second, handles, post, read };
+    });
+
+  it.effect(
+    "a plain post lands in the plan's channel and tells nobody, the other agent reads it once as unread, and a mention tells the agent it names and names a handle that names no one",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const plain = yield* chat.post(chat.first, { text: "Starting on the emails." });
+        assert.ok(plain.status === ACTION_RESULT_STATUS.ACCEPTED && "seq" in plain);
+        assert.deepEqual(
+          { ...plain, seq: 0 },
+          {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            seq: 0,
+            in: "#teammate-invitations",
+            told: [],
+            held: [],
+            left: [],
+            unresolved: [],
+          },
+        );
+        assert.equal(eve.sent.length, 0);
+
+        const unread = yield* chat.read(chat.second);
+        assert.ok(unread.status === ACTION_RESULT_STATUS.ACCEPTED && "messages" in unread);
+        assert.equal(unread.you, chat.handles.second);
+        assert.deepEqual(unread.messages, [
+          {
+            seq: plain.seq,
+            in: "#teammate-invitations",
+            from: chat.handles.first,
+            text: "Starting on the emails.",
+          },
+        ]);
+        assert.deepEqual(unread.channels, [
+          { name: "#teammate-invitations", kind: CHANNEL_KIND.PLAN, unread: 0 },
+        ]);
+        const again = yield* chat.read(chat.second);
+        assert.ok("messages" in again);
+        assert.deepEqual(again.messages, [], "a message read is read once");
+
+        const mentioned = yield* chat.post(chat.first, {
+          text: `${chat.handles.second} take the invite table; @nobody FYI`,
+        });
+        assert.ok("told" in mentioned);
+        assert.deepEqual(
+          [mentioned.told, mentioned.unresolved],
+          [[chat.handles.second], ["@nobody"]],
+        );
+        assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a post to @handle is a DM the other agent reads by its handle, a reply lands in the thread it answers and tells its poster, and every message names its thread's root",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const { first: one, second: two } = chat.handles;
+        const dm = yield* chat.post(chat.first, { text: "Is the invite table yours?", to: two });
+        assert.ok("told" in dm);
+        assert.deepEqual([dm.in, dm.told], [two, [two]]);
+        const direct = yield* chat.read(chat.second, { channel: one });
+        assert.ok("messages" in direct);
+        assert.deepEqual(
+          direct.messages.map((message) => [message.in, message.text]),
+          [[one, "Is the invite table yours?"]],
+        );
+        // The read of one channel marks nothing read.
+        const unread = yield* chat.read(chat.second);
+        assert.ok("messages" in unread);
+        assert.deepEqual(
+          unread.channels.map((channel) => [channel.name, channel.unread]),
+          [
+            ["#teammate-invitations", 0],
+            [one, 0],
+          ],
+        );
+        assert.equal(unread.messages.length, 1);
+
+        const root = yield* chat.post(chat.first, { text: "Who owns the emails?" });
+        assert.ok("seq" in root);
+        const reply = yield* chat.post(chat.second, { text: "I do.", replyTo: root.seq });
+        assert.ok("told" in reply);
+        assert.deepEqual([reply.thread, reply.in, reply.told], [root.seq, undefined, [one]]);
+        const nested = yield* chat.post(chat.first, { text: "Thanks.", replyTo: reply.seq });
+        assert.ok("seq" in nested);
+        assert.equal(nested.thread, root.seq, "a reply to a reply lands in its root's thread");
+        const thread = yield* chat.read(chat.first, { thread: root.seq });
+        assert.ok("messages" in thread);
+        assert.deepEqual(
+          thread.messages.map((message) => [message.from, message.thread]),
+          [
+            [one, undefined],
+            [two, root.seq],
+            [one, root.seq],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent started on another plan of the workspace answers to its handle before it ever posts or reads, and is told a DM to it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const other = yield* startTask(chat.owner, {
+          name: "Billing export",
+          repository: RELAY_FULL_NAME,
+        });
+        const third = yield* startedAgent(chat.owner, other.id, chat.ask);
+        const sessionId = eve.opened[2]?.sessionId ?? "";
+        assert.equal(
+          yield* claimRuntimeSession(third.target, sessionId, yield* DateTime.nowAsDate),
+          true,
+        );
+        const dm = yield* chat.post(chat.first, { text: "Take the emails?", to: "@agent-3" });
+        assert.ok("told" in dm);
+        assert.deepEqual(dm.told, ["@agent-3"]);
+        assert.deepEqual(
+          eve.sent.map((each) => each.sessionId),
+          [sessionId],
+        );
+      }),
+  );
+
+  it.effect(
+    "a #name no channel holds opens a topic channel, and the read lists the roster and every channel the agent sees",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const topic = yield* chat.post(chat.first, {
+          text: "Release notes go here.",
+          to: "#releases",
+        });
+        assert.ok("in" in topic);
+        assert.equal(topic.in, "#releases");
+        yield* chat.post(chat.first, { text: "Hello all.", to: "#general" });
+        const read = yield* chat.read(chat.second);
+        assert.ok("members" in read);
+        assert.deepEqual(
+          read.members.toSorted((a, b) => a.handle.localeCompare(b.handle)),
+          [
+            { handle: "@agent-1", kind: MEMBER_KIND.AGENT },
+            { handle: "@agent-2", kind: MEMBER_KIND.AGENT },
+          ],
+        );
+        assert.deepEqual(read.channels.map((channel) => [channel.name, channel.kind]).toSorted(), [
+          ["#general", CHANNEL_KIND.GENERAL],
+          ["#releases", CHANNEL_KIND.TOPIC],
+          ["#teammate-invitations", CHANNEL_KIND.PLAN],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a post refused names why: both a reply and a target, a handle naming no one or the agent itself, a message that is not there, words that do not read, and a turn past its bound; a read of a channel the agent does not see",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Hi.", to: "#general", replyTo: 1 }),
+          refused(CHAT_TOOL_REFUSAL.REPLY_AND_TO),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Hi.", to: "@nobody" }),
+          refused(CHAT_TOOL_REFUSAL.NO_MEMBER),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Hi.", to: chat.handles.first }),
+          refused(CHAT_TOOL_REFUSAL.TO_SELF),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "Hi.", replyTo: 9_999 }),
+          refused(CHAT_TOOL_REFUSAL.NO_MESSAGE),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "" }),
+          refused(CHAT_TOOL_REFUSAL.UNREADABLE_POST),
+        );
+        assert.deepEqual(
+          yield* chat.post(chat.first, { text: "One more." }, CHAT_BOUNDS.MAX_POSTS_PER_TURN),
+          refused(CHAT_TOOL_REFUSAL.TOO_MANY_POSTS),
+        );
+        assert.deepEqual(
+          yield* chat.read(chat.first, { channel: "#nowhere" }),
+          refused(CHAT_TOOL_REFUSAL.NO_CHANNEL),
+        );
+        const history = yield* chat.read(chat.second, { channel: "#teammate-invitations" });
+        assert.ok("messages" in history);
+        assert.deepEqual(history.messages, [], "nothing refused was posted");
+        assert.equal(eve.sent.length, 0);
+      }),
+  );
+
+  it.effect(
+    "a planless agent posts in its workspace's general channel by default, and its @luke names no one",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const db = yield* Database;
+        yield* db
+          .update(codingAgent)
+          .set({ taskId: null })
+          .where(eq(codingAgent.id, chat.first.agentId));
+        const planless = { ...chat.first, planId: null };
+        const posted = yield* chat.post(planless, { text: "@luke who owns the invite table?" });
+        assert.ok("seq" in posted);
+        assert.deepEqual([posted.in, posted.unresolved], ["#general", ["@luke"]]);
+      }),
+  );
+
+  it.effect("an agent started where its starter has not turned Chat on joins no chat", () =>
+    Effect.gen(function* () {
+      const opened = yield* openTask();
+      yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      assert.deepEqual(yield* roster(opened.owner, opened.task.workspaceId), []);
+      yield* writeAccountPreferences(opened.owner, { experiments: { [EXPERIMENT.CHAT]: true } });
+      yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      assert.equal((yield* roster(opened.owner, opened.task.workspaceId)).length, 1);
+    }),
+  );
+
+  it.effect(
+    "a post is the calling agent's own, whatever member, author, or 'as' its input names",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const other = Option.getOrThrow(
+          yield* memberNamed(chat.owner, chat.task.workspaceId, chat.handles.second.slice(1)),
+        );
+        const posted = yield* chat.post(chat.first, {
+          text: "Who wrote this?",
+          authorMemberId: other.id,
+          author: other.id,
+          as: chat.handles.second,
+          memberId: other.id,
+        });
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* chat.read(chat.second);
+        assert.ok("messages" in read);
+        assert.deepEqual(
+          read.messages.map((message) => [message.from, message.text]),
+          [[chat.handles.first, "Who wrote this?"]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a read seats the other agents on its task only where their starters turned Chat on",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        yield* joinWorkspace(chat.task.workspaceId, chat.other);
+        const theirs = yield* startedAgent(chat.other, chat.task.id, chat.ask);
+        const seated = () =>
+          Effect.map(roster(chat.owner, chat.task.workspaceId), (members) =>
+            members.some((member) => member.agentId === theirs.agent.id),
+          );
+        yield* chat.read(chat.first);
+        assert.equal(yield* seated(), false, "a teammate with Chat off is not seated");
+        yield* writeAccountPreferences(chat.other, { experiments: { [EXPERIMENT.CHAT]: true } });
+        yield* chat.read(chat.first);
+        assert.equal(yield* seated(), true);
+      }),
   );
 });

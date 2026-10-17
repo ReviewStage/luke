@@ -2923,3 +2923,56 @@ export function movePlanChat(planId: string, organizationId: string): ChatStoreE
     }),
   );
 }
+
+const findSeqsOf = SqlSchema.findAll({
+  Request: Schema.Struct({ organizationId: Schema.String, ids: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({ id: Schema.String, seq: Schema.Number }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: chatMessage.id, seq: chatMessage.seq })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.organizationId, key.organizationId),
+            inArray(chatMessage.id, [...key.ids]),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The places of the messages named by id in the workspace, by id: what a
+ * reader names a thread's root by, where a reply carries its root's id.
+ * Empty where the account is not in it or nothing is named.
+ */
+export function seqsOf(
+  userId: string,
+  organizationId: string,
+  ids: readonly string[],
+): ChatStoreEffect<ReadonlyMap<string, number>> {
+  return Effect.gen(function* () {
+    if (ids.length === 0 || !(yield* isWorkspaceMember(userId, organizationId))) return new Map();
+    const rows = yield* findSeqsOf({ organizationId, ids });
+    return new Map(rows.map((row) => [row.id, row.seq]));
+  });
+}
+
+/**
+ * The workspace a coding agent was started in, as its own row names it,
+ * which is what seats a planless agent; nothing where the agent names none
+ * or the account is not in it.
+ */
+export function agentWorkspace(
+  userId: string,
+  agentId: string,
+): ChatStoreEffect<Option.Option<string>> {
+  return Effect.gen(function* () {
+    const found = yield* findAgentWorkspace(agentId);
+    const organizationId = Option.flatMap(found, (row) => Option.fromNullishOr(row.organizationId));
+    if (Option.isNone(organizationId)) return Option.none();
+    return (yield* isWorkspaceMember(userId, organizationId.value))
+      ? organizationId
+      : Option.none();
+  });
+}

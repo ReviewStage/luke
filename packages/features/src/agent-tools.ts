@@ -11,6 +11,7 @@
  */
 
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "./board-vocabulary.js";
+import { CHAT_TOOL } from "./chat-wire.js";
 import { CODING_AGENT_DELEGATE_TOOL, CODING_AGENT_TODOS_TOOL } from "./coding-agent-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
@@ -55,6 +56,9 @@ export const AGENT_TOOL = {
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
   READ_INBOX: INBOX_TOOL.READ,
   OPEN_PULL_REQUEST: "open_pull_request",
+  // The workspace's chat, the planner's and every coding agent's.
+  POST_CHAT: CHAT_TOOL.POST,
+  READ_CHAT: CHAT_TOOL.READ,
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
   // An interactive page shown in the plan's side panel, and a read of one by its id.
