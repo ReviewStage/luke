@@ -1229,3 +1229,36 @@ it.effect(
       assert.deepEqual(held.realtime.opened, []);
     }),
 );
+
+it.effect(
+  "a read the service says only the clock may end is read again at the edge it names, though no row moved, rather than at the hold's end",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealTranscript, pageNow: script, realtime } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      const failed = { ...pageNow("0:0", { holds: false }), status: CODING_AGENT_STATUS.FAILED };
+      const starting = {
+        ...pageNow("0:0", { holds: true }),
+        status: CODING_AGENT_STATUS.STARTING,
+        wakeIn: 3_000,
+      };
+      script(starting, starting, failed);
+      const read = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+          agentId: AGENT_ID,
+          after: CODING_AGENT_CURSOR_START,
+        }),
+      );
+      yield* settled;
+      transcriptRows(realtime, 0, 0);
+      yield* settled;
+      // The first rows landing read the page again; the edge is still ahead, so it holds.
+      yield* TestClock.adjust("2999 millis");
+      yield* settled;
+      assert.equal(read.pollUnsafe(), undefined);
+      yield* TestClock.adjust("1 millis");
+      yield* settled;
+      assert.deepEqual(yield* Fiber.join(read), windowPage(failed));
+      assert.equal(asked.filter((ask) => ask.startsWith("messages-now")).length, 3);
+    }),
+);

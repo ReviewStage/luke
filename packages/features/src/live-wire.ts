@@ -242,11 +242,20 @@ export const TRANSCRIPT_NOW_QUERY = { WAIT: "wait", NONE: "none" } as const;
  * A page of the transcript read at once rather than held, for a reader
  * following its live statements: the page the held read answers, and
  * whether that read would have held on it for more, which is when the
- * reader waits for the statements to move before it reads again.
+ * reader waits for the statements to move, or for the clock to reach an
+ * edge the rows cannot say, before it reads again.
  */
 export const transcriptNowAnswerSchema = EffectSchema.Struct({
   ...codingAgentMessagesAnswerSchema.fields,
   holds: EffectSchema.Boolean,
+  /**
+   * Where it would hold, how many milliseconds from now the clock alone may
+   * end that, which no row changing says: an agent passing the grace its
+   * first turn had to land in, or the window of a title it waits on
+   * closing. The reader reads again then. Absent where only a row may, and
+   * from a service older than it.
+   */
+  wakeIn: EffectSchema.optionalKey(countedNumber),
 });
 
 export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;

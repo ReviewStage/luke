@@ -116,9 +116,12 @@ import {
   delegationNow,
   delegationPast,
   NO_TITLE_AWAITED,
+  NO_TITLE_EDGE,
   type TitleAwaited,
+  type TitleEdge,
   type TranscriptPage,
   titleMayLand,
+  titleWindowEdge,
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
@@ -354,14 +357,27 @@ function readsNow(request: Request): boolean {
   return asked === TRANSCRIPT_NOW_QUERY.NONE;
 }
 
+/** When the window of every title `titleAwaitedOf` waits on closes, on the same terms: none where the deployment generates no titles. */
+const titleEdgeOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  parent: ConversationTarget,
+  childConversationId?: string,
+): Effect.fn.Return<TitleEdge, never, HostedEnvironment> {
+  const environment = yield* HostedEnvironment;
+  return environment.anthropicKey === undefined
+    ? NO_TITLE_EDGE
+    : titleWindowEdge(parent, childConversationId);
+});
+
 /** A page of a transcript as the wire answers it, with whether the held read would have held on it where it was read at once. */
 function transcriptResponse(
   page: TranscriptPage,
   title: string | null,
   holds?: boolean,
+  wakeIn?: number,
 ): HttpServerResponse.HttpServerResponse {
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     ...(holds === undefined ? undefined : { holds }),
+    ...(wakeIn === undefined ? undefined : { wakeIn }),
     messages: page.messages,
     cursor: cursorToWire(page.cursor),
     status: page.status,
@@ -571,15 +587,24 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   const { userId, agent, target } = yield* reachedAgent(seams, request);
   const titleAwaited = yield* titleAwaitedOf(target);
   const cursor = cursorOfWire(after);
-  const { page, holds } = readsNow(request)
+  const { page, holds, wakeIn } = readsNow(request)
     ? yield* hostedStoreOrUnavailable(
-        transcriptNow(target, CODER_TOOL_SET, cursor, agent, agent, titleAwaited),
+        transcriptNow(
+          target,
+          CODER_TOOL_SET,
+          cursor,
+          agent,
+          agent,
+          titleAwaited,
+          yield* titleEdgeOf(target),
+        ),
       )
     : {
         page: yield* hostedStoreOrUnavailable(
           transcriptPast(target, CODER_TOOL_SET, cursor, agent, agent, titleAwaited),
         ),
         holds: undefined,
+        wakeIn: undefined,
       };
   // The title is read after the page, since it lands after a turn ends, which a held read may span.
   const titled = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agent.id));
@@ -587,10 +612,11 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
     page,
     Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
     holds,
+    wakeIn,
   );
 });
 
-/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one, with the worker's title once one landed. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. Where `wait=none` asks, nothing is held: the page, or the empty page of a worker still starting, is answered at once with whether the held read would have held. */
+/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one, with the worker's title once one landed. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. Where `wait=none` asks, nothing is held: the page, or the empty page of a worker still starting, is answered at once with whether the held read would have held, and how soon the clock alone may end that hold. */
 const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMessagesEndpoint")(
   function* (
     seams: CodingAgentsAppSeams,
@@ -620,19 +646,28 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
     const worker = { userId: agent.userId, conversationId };
     const cursor = cursorOfWire(after);
     const started = { createdAt: read.delegation.createdAt };
-    const { page, holds } = now
+    const { page, holds, wakeIn } = now
       ? yield* hostedStoreOrUnavailable(
-          transcriptNow(worker, CODER_TOOL_SET, cursor, started, undefined, titleAwaited),
+          transcriptNow(
+            worker,
+            CODER_TOOL_SET,
+            cursor,
+            started,
+            undefined,
+            titleAwaited,
+            yield* titleEdgeOf(target, conversationId),
+          ),
         )
       : {
           page: yield* hostedStoreOrUnavailable(
             transcriptPast(worker, CODER_TOOL_SET, cursor, started, undefined, titleAwaited),
           ),
           holds: undefined,
+          wakeIn: undefined,
         };
     // The title is read after the page, since it lands beside the worker's start, which a held read may span.
     const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
-    return transcriptResponse(page, titles.get(conversationId) ?? null, holds);
+    return transcriptResponse(page, titles.get(conversationId) ?? null, holds, wakeIn);
   },
 );
 
