@@ -243,12 +243,30 @@ test("an empty task item left at the end of a checklist is saved as a checkbox t
 
 test("a checked empty task item inside a checklist stays one when a later item is edited", () => {
   const text = "- [ ] first\n- [x] &nbsp;\n- [ ] last\n";
-  const { editor, handedOver } = opened(text);
+  const { host, editor, handedOver } = opened(text);
 
   typedAtEnd(editor, " one");
 
-  const empty = editor.state.doc.firstChild?.child(1);
-  assert.deepEqual([empty?.attrs.checked, empty?.textContent], [true, ""]);
+  const empty = host.querySelectorAll("li")[1];
+  assert.deepEqual(
+    [empty?.querySelector("input")?.checked, empty?.lastElementChild?.textContent],
+    [true, ""],
+  );
   assert.equal(handedOver(), text.replace("last", "last one"));
   assert.equal(drawnCheckboxes(handedOver()), 3);
+});
+
+test("a task item emptied above its nested checklist is saved as a checkbox and opens empty", () => {
+  const { editor, handedOver } = opened("- [ ] parent\n  - [ ] nested\n");
+  const start = Selection.atStart(editor.state.doc).from;
+
+  editor.commands.deleteRange({ from: start, to: start + "parent".length });
+  const saved = handedOver();
+
+  assert.equal(saved, "- [ ] &nbsp;\n  - [ ] nested\n");
+  assert.equal(drawnCheckboxes(saved), 2);
+  const reopened = opened(saved);
+  reopened.editor.commands.setTextSelection(Selection.atStart(reopened.editor.state.doc).from);
+  reopened.editor.commands.insertContent("again");
+  assert.equal(reopened.handedOver(), "- [ ] again\n  - [ ] nested\n");
 });
