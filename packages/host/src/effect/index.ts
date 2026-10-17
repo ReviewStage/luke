@@ -12,5 +12,6 @@ export {
   reporterLayer,
   SecretCipher,
   ShutdownSignal,
+  SignInConsent,
   StateRoot,
 } from "./seams.js";

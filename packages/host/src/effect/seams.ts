@@ -5,6 +5,7 @@
  * so a composer states the seams it reaches in its own requirements instead of
  * taking a kernel that holds all of them.
  */
+import type { OpenConsent } from "@luke/credentials";
 import type { OpenSocket } from "@luke/voice";
 import { type ConfigProvider, Context, Layer, Logger } from "effect";
 import type { OpenTerminalSocket } from "../compose-terminals.js";
@@ -65,6 +66,22 @@ export class HostSockets extends Context.Service<HostSockets, HostSocketsSeam>()
 ) {}
 
 /**
+ * How the account's sign-in asks the developer's consent: each trip the
+ * session manager words — the sign-in and the session hand-off — is stood up
+ * by `open`. It arrives rather than being built here, because the only
+ * implementation so far is the desktop's loopback over `node:http`
+ * (`@luke/credentials/node`), and a host that imported it could not load in a
+ * browser, which would sign in its own way.
+ */
+export interface SignInConsentSeam {
+  readonly open: OpenConsent;
+}
+
+export class SignInConsent extends Context.Service<SignInConsent, SignInConsentSeam>()(
+  "@luke/host/SignInConsent",
+) {}
+
+/**
  * Where a line about the host's own running goes. The service answers the
  * `report(line)` seam every unconverted caller holds, and `reporterLayer`
  * routes the runtime's own `Logger` to the same sink, so an `Effect.log*` and a
@@ -108,7 +125,7 @@ export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSign
   "@luke/host/ShutdownSignal",
 ) {}
 
-/** Every seam tag the host's kernel stands on; the assembly adds `HostSockets`. */
+/** Every seam tag the host's kernel stands on; the assembly adds `HostSockets` and `SignInConsent`. */
 export type HostSeamTags =
   | StateRoot
   | RunMode
