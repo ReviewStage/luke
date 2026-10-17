@@ -42,7 +42,10 @@ export type ClientSettingSideEffects = Readonly<
  * and duck).
  */
 export interface SettingsActsDependencies<Sender> {
-  host: HostOperator;
+  host: Pick<
+    HostOperator,
+    "settingsSnapshot" | "updateSetting" | "resetSettings" | "setExperiment"
+  >;
   /** The opaque token naming the window that asked, so the host's change event is not echoed back to it. */
   reporterOf: (sender: Sender) => string;
   /** The settings snapshot as this client last saw it, for the refusals worded here. */
