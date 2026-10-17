@@ -15,6 +15,7 @@ import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { MemberDirectory } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
@@ -291,12 +292,15 @@ function DetailPage({
   }
 
   return (
-    <IssueDetail
-      issue={issue}
-      workspaceName={plans.workspace?.name ?? ""}
-      onChange={onChange}
-      onBack={onBack}
-    />
+    // The workspace's members, read for the issue's creator: their picture, and You for the reader's own.
+    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+      <IssueDetail
+        issue={issue}
+        workspaceName={plans.workspace?.name ?? ""}
+        onChange={onChange}
+        onBack={onBack}
+      />
+    </MemberDirectory>
   );
 }
 

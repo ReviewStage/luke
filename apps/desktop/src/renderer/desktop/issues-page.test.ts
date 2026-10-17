@@ -10,6 +10,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { lineWords } from "#testing/actor-line";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
@@ -19,7 +20,7 @@ import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
 
 /**
- * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, and a read that did not land said with a retry.
+ * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed, and a read that did not land said with a retry.
  *
  * The service is a script at the act boundary; synthetic issues and words throughout.
  */
@@ -30,6 +31,10 @@ const WORKSPACE: Workspace = {
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
 function issue(number: number, patch: Partial<Issue> = {}): Issue {
   return {
@@ -282,6 +287,11 @@ async function openIssue(issueId: string): Promise<HTMLElement> {
 /** The issue's title as its page draws it. */
 function titleOf(page: HTMLElement): string | undefined {
   return page.querySelector("[aria-label='Issue title']")?.textContent ?? undefined;
+}
+
+/** What the line under the issue's title says, a phrase at a time, each face left out. */
+function bylineOf(page: HTMLElement): (string | undefined)[] {
+  return [...page.querySelectorAll(".issue-byline .actor-line")].map(lineWords);
 }
 
 /** The button whose words or name are `name`, wherever it is drawn. */
@@ -601,6 +611,32 @@ test("Escape in the title puts back the title it opened on, sends nothing, and l
   assert.deepEqual(changes, []);
   assert.equal(titleOf(page), "Fix login");
   assert.equal(closed, 0);
+});
+
+test("under the title an issue's page says who filed it and when, and when it last changed, a task's own words", async () => {
+  const now = Date.now();
+  const filed = issue(1, {
+    creator: { userId: "user-ada", name: "Ada Lovelace" },
+    createdAt: now - 3 * DAY - HOUR,
+    updatedAt: now - 2 * HOUR - MINUTE,
+  });
+  standing = [filed];
+  const page = await openIssue(filed.id);
+
+  assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
+});
+
+test("an issue whose creator is gone and unchanged since it was filed says only when it was created, until a change lands", async () => {
+  const filedAt = Date.now() - 5 * HOUR - MINUTE;
+  const filed = issue(1, { creator: null, createdAt: filedAt, updatedAt: filedAt });
+  standing = [filed];
+  const page = await openIssue(filed.id);
+
+  assert.deepEqual(bylineOf(page), ["Created · 5h ago"]);
+  pick(page, "Status", "Todo");
+  await settle();
+
+  assert.deepEqual(bylineOf(page), ["Created · 5h ago", "Last edited · 5h ago"]);
 });
 
 test("the list stands in the window's own frame: the Automations page's view and scroll, Home's sections and rows", async () => {
