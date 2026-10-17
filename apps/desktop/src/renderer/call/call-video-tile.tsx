@@ -15,7 +15,7 @@
  * Call tab is, and the voice is what the developer hears whatever is shown.
  */
 
-import { ResetIcon, VideoIcon, VideoOffIcon, WingFace } from "@luke/ui";
+import { Button, IconButton, ResetIcon, VideoIcon, VideoOffIcon, WingFace } from "@luke/ui";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef } from "react";
 import { ThinkingDots } from "../thinking-dots";
@@ -82,10 +82,9 @@ function TileGround({
     return (
       <AvatarStill>
         <span className="call-video-note">{CALL_VIDEO_LABEL.ENDED}</span>
-        <button type="button" className="toolbar-button call-video-restart" onClick={onRestart}>
-          <ResetIcon />
+        <Button icon={<ResetIcon />} onClick={onRestart}>
           {CALL_VIDEO_LABEL.RESTART}
-        </button>
+        </Button>
       </AvatarStill>
     );
   }
@@ -132,7 +131,11 @@ export function AvatarVoice({
   return <audio ref={soundElement} autoPlay hidden />;
 }
 
-/** Video off or Video on: one button that says which the press will do. */
+/**
+ * Video off or Video on: one button that says which the press will do,
+ * named on hover by the system's own hint, since the floating window is too
+ * small to hold a tooltip.
+ */
 export function VideoToggle({
   on,
   onSetVideo,
@@ -142,15 +145,13 @@ export function VideoToggle({
 }): React.JSX.Element {
   const label = on ? CALL_VIDEO_LABEL.VIDEO_OFF : CALL_VIDEO_LABEL.VIDEO_ON;
   return (
-    <button
-      type="button"
-      className="icon-button call-video-toggle"
-      aria-label={label}
-      title={label}
-      onClick={() => onSetVideo(!on)}
-    >
-      {on ? <VideoOffIcon /> : <VideoIcon />}
-    </button>
+    <span className="call-video-toggle" title={label}>
+      <IconButton
+        icon={on ? <VideoOffIcon /> : <VideoIcon />}
+        label={label}
+        onClick={() => onSetVideo(!on)}
+      />
+    </span>
   );
 }
 

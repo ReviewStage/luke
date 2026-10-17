@@ -148,9 +148,10 @@ html.call-window #root {
   font-size: 12px;
 }
 
-/* Moved under a still pointer, the buttons take no hover until the pointer
-   itself moves (`window-pointer.ts`). */
-html.call-window[data-pointer-stale="true"] .call-card button {
+/* Moved under a still pointer, the buttons, and the video toggle's hint
+   around its button, take no hover until the pointer itself moves
+   (`window-pointer.ts`). */
+html.call-window[data-pointer-stale="true"] .call-card :is(button, .call-video-toggle) {
   pointer-events: none;
 }
 
@@ -178,8 +179,8 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 }
 
 .call-card .call-video-controls {
-  right: var(--space-4);
-  bottom: var(--space-4);
+  right: var(--luke-space-4);
+  bottom: var(--luke-space-4);
   padding: 0;
 }
 
@@ -204,8 +205,8 @@ html.call-window[data-pointer-stale="true"] .call-card button {
    The strip shares the width, so the toggle stays put when video goes off. */
 .call-video-tile,
 .call-video-strip {
-  width: min(100% - 2 * var(--space-16), var(--reading-width), max(240px, 70vh));
-  margin: var(--space-4) auto var(--space-8);
+  width: min(100% - 2 * var(--luke-space-16), var(--reading-width), max(240px, 70vh));
+  margin: var(--luke-space-4) auto var(--luke-space-8);
 }
 
 .call-video-tile {
@@ -214,12 +215,12 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   overflow: clip;
   box-sizing: border-box;
   aspect-ratio: 16 / 9;
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 12px;
-  background: var(--surface-popover);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 18px;
+  background: var(--luke-color-overlay);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
 }
 
 .call-video-frame {
@@ -238,7 +239,7 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .call-video-face {
@@ -250,28 +251,34 @@ html.call-window[data-pointer-stale="true"] .call-card button {
 .call-video-face .luke-face {
   width: 100%;
   height: 100%;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .call-video-note {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
-  color: var(--text-secondary);
-  font-size: 12px;
+  gap: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* Video off, in the tile's bottom-right corner over whatever it draws, on
    the card's ground so it reads over any frame of video. */
 .call-video-controls {
   position: absolute;
-  right: var(--space-8);
-  bottom: var(--space-8);
+  right: var(--luke-space-8);
+  bottom: var(--luke-space-8);
   display: flex;
   align-items: center;
-  padding: var(--space-4);
-  border-radius: 999px;
-  background: var(--surface-popover);
+  padding: var(--luke-space-4);
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-overlay);
+}
+
+/* Video off or on, named by the system's hint its wrapper carries, and
+   no taller than its button. */
+.call-video-toggle {
+  display: flex;
 }
 
 /* The strip the tile collapses to once the developer turns video off: one
@@ -284,9 +291,9 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   align-items: center;
   justify-content: space-between;
   box-sizing: border-box;
-  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
-  border: 1px solid var(--hairline-strong);
+  padding: var(--luke-space-4) var(--luke-space-4) var(--luke-space-4) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border-strong);
   border-radius: 12px;
-  background: var(--surface-popover);
-  color: var(--text-primary);
+  background: var(--luke-color-overlay);
+  color: var(--luke-color-text);
 }
