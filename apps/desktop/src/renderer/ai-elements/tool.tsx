@@ -1,16 +1,7 @@
-import { cn } from "@luke/ui";
-import { type ComponentProps, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
 import { CodeBlock } from "./code-block";
-import {
-  Fold,
-  FoldBody,
-  type FoldBodyProps,
-  type FoldProps,
-  FoldSummary,
-  type FoldSummaryProps,
-  useFoldBodyDrawn,
-} from "./fold";
+import { Fold, FoldBody, type FoldProps, FoldSummary, useFoldBodyDrawn } from "./fold";
 
 /**
  * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.
@@ -33,7 +24,7 @@ import {
  * mono blocks of bounded height, the answer cut to its first lines with
  * the rest behind Show more. What the words say is the caller's decision
  * (`tasks/tool-call-model.ts`); how a block of each kind is drawn is
- * this file's.
+ * this file's. Its look is `.tool`'s (tasks.css).
  */
 
 /** The states a tool part may stand in, as the AI SDK spells them. */
@@ -97,18 +88,11 @@ function clippedLines(text: string, limit: number = OUTPUT_PREVIEW_LINES): Clipp
   return { shown: lines.slice(0, limit).join("\n"), hiddenLines: lines.length - limit };
 }
 
-const PATCH_LINE_CLASS = {
-  [PATCH_LINE.ADDED]: "text-luke",
-  [PATCH_LINE.REMOVED]: "text-danger",
-  [PATCH_LINE.MARK]: "text-muted-foreground",
-  [PATCH_LINE.CONTEXT]: "",
-} as const satisfies Record<PatchLineKind, string>;
+export type ToolProps = Omit<FoldProps, "className">;
 
-export type ToolProps = FoldProps;
-
-export function Tool({ className, children, ...props }: ToolProps): ReactNode {
+export function Tool({ children, ...props }: ToolProps): ReactNode {
   return (
-    <Fold className={cn("text-[12.5px]", className)} {...props}>
+    <Fold className="tool" {...props}>
       {children}
     </Fold>
   );
@@ -128,7 +112,7 @@ export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
   return <StateGlyph state={GLYPH_STATE.WORKING} />;
 }
 
-export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
+export interface ToolHeaderProps {
   state: ToolState;
   /** The tool's icon, drawn at 16px. */
   icon: ReactNode;
@@ -144,26 +128,7 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   subjectInBody?: boolean;
   /** Where the call ran, as a quiet tag at the line's end, for a call that ran somewhere other than its tab says ("On your Mac", or whose Mac by their disc and name); none for the rest. */
   place?: ReactNode | undefined;
-};
-
-/**
- * How a call's line is set, whether it folds its body open or opens
- * somewhere else: in the muted ink, which its icon, its subject, and its
- * working mark keep, while its label is set in the full ink over it; the
- * body under it keeps its own.
- */
-export const TOOL_LINE_CLASS =
-  "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary";
-
-/**
- * The fade a subject ends on where the line cuts it, over the last
- * `--label-fade` as a cut label's (desktop.css). Note that it is drawn
- * without measuring the words, unlike a label's (`use-clipped.ts`),
- * because the subject's box takes the line's whole rest whatever it
- * holds, so words that stop short end before the fade begins, and words
- * still streaming in reach it without a resize to measure them by.
- */
-const SUBJECT_FADE = "[mask-image:linear-gradient(to_left,transparent,#000_var(--label-fade))]";
+}
 
 /**
  * What a call's line says: its icon, what it did, who it was about where it
@@ -186,45 +151,29 @@ export function ToolLine({
   const trailing = subject !== undefined || chip !== undefined;
   return (
     <>
-      <span
-        className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4"
-        aria-hidden="true"
-      >
+      <span className="tool-icon" aria-hidden="true">
         {icon}
       </span>
       {/* Note that the label keeps its space, so the line still reads as one sentence to find, copy, and a screen reader, though the flex gap sets it. */}
-      <span className="flex min-w-0 flex-1 items-baseline gap-1">
+      <span className="tool-words">
         {label === undefined ? null : (
-          <span
-            className={cn("min-w-0 truncate text-foreground", chip !== undefined && "shrink-0")}
-          >
+          <span className="tool-label" data-chipped={chip === undefined ? undefined : ""}>
             {trailing ? `${label} ` : label}
           </span>
         )}
         {chip === undefined ? null : (
-          <span className="min-w-0 whitespace-nowrap">
+          <span className="tool-chip">
             {chip}
             {subject === undefined ? null : " "}
           </span>
         )}
         {subject === undefined ? null : (
-          <span
-            className={cn(
-              "min-w-0 flex-1 basis-0 overflow-hidden whitespace-nowrap",
-              SUBJECT_FADE,
-              subjectIsCode && "font-mono text-[11.5px]",
-            )}
-          >
+          <span className="tool-subject" data-code={subjectIsCode ? "" : undefined}>
             {subject}
           </span>
         )}
       </span>
-      {place === undefined ? null : (
-        <span className="shrink-0 rounded border border-border px-1 text-[11px] text-muted-foreground">
-          {" "}
-          {place}
-        </span>
-      )}
+      {place === undefined ? null : <span className="tool-place"> {place}</span>}
       <ToolStateMark state={state} />
     </>
   );
@@ -240,12 +189,10 @@ export function ToolHeader({
   subjectIsCode = true,
   subjectInBody = false,
   place,
-  className,
-  ...props
 }: ToolHeaderProps): ReactNode {
   const drawn = useFoldBodyDrawn();
   return (
-    <FoldSummary className={cn(TOOL_LINE_CLASS, className)} {...props}>
+    <FoldSummary className="tool-line">
       <ToolLine
         state={state}
         icon={icon}
@@ -259,21 +206,9 @@ export function ToolHeader({
   );
 }
 
-export type ToolContentProps = FoldBodyProps;
-
 /** The body under an open row: a card holding the blocks, a hairline between them, clipped to its corners, so what is in it rings inside itself. */
-export function ToolContent({ className, children, ...props }: ToolContentProps): ReactNode {
-  return (
-    <FoldBody
-      className={cn(
-        "mt-1 mb-1 ml-7 overflow-hidden rounded-lg border border-border bg-muted [--focus-ring-offset:var(--focus-ring-inset)] [&>*+*]:border-t [&>*+*]:border-border",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </FoldBody>
-  );
+export function ToolContent({ children }: { children: ReactNode }): ReactNode {
+  return <FoldBody className="tool-body">{children}</FoldBody>;
 }
 
 /** A block's words drawn by its kind. */
@@ -282,13 +217,13 @@ function BlockWords({ block }: { block: ToolBlock }): ReactNode {
     case TOOL_BLOCK.COMMAND:
       return (
         <>
-          <span className="text-muted-foreground select-none">{COMMAND_PROMPT}</span>
+          <span className="tool-prompt">{COMMAND_PROMPT}</span>
           {block.text}
         </>
       );
     case TOOL_BLOCK.PATCH:
       return block.text.split("\n").map((line, index) => (
-        <span key={index} className={cn("block", PATCH_LINE_CLASS[patchLineKind(line)])}>
+        <span key={index} className="tool-patch-line" data-line={patchLineKind(line)}>
           {line}
         </span>
       ));
@@ -298,14 +233,10 @@ function BlockWords({ block }: { block: ToolBlock }): ReactNode {
   }
 }
 
-export type ToolInputProps = ComponentProps<"div"> & {
-  block: ToolBlock;
-};
-
 /** What the call was given. */
-export function ToolInput({ block, className, ...props }: ToolInputProps): ReactNode {
+export function ToolInput({ block }: { block: ToolBlock }): ReactNode {
   return (
-    <div className={className} data-tool-input="" {...props}>
+    <div data-tool-input="">
       <CodeBlock>
         <BlockWords block={block} />
       </CodeBlock>
@@ -313,23 +244,20 @@ export function ToolInput({ block, className, ...props }: ToolInputProps): React
   );
 }
 
-export type ToolOutputProps = ComponentProps<"div"> & {
+export interface ToolOutputProps {
   /** Nothing while the call has not answered. */
   block: ToolBlock | undefined;
   errorText: string | undefined;
-};
+}
 
 /** What the call answered, cut to its first lines, or the error it ended in; nothing while it has answered neither. */
-export function ToolOutput({ block, errorText, className, ...props }: ToolOutputProps): ReactNode {
+export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
   const [whole, setWhole] = useState(false);
   if (block === undefined && errorText === undefined) return null;
   if (errorText !== undefined) {
     return (
-      <div className={className} data-tool-output="" {...props}>
-        <p
-          className="m-0 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-danger whitespace-pre-wrap [overflow-wrap:anywhere] select-text"
-          role="alert"
-        >
+      <div data-tool-output="">
+        <p className="tool-error" role="alert">
           {errorText}
         </p>
       </div>
@@ -338,16 +266,12 @@ export function ToolOutput({ block, errorText, className, ...props }: ToolOutput
   if (block === undefined) return null;
   const clipped = whole ? { shown: block.text, hiddenLines: 0 } : clippedLines(block.text);
   return (
-    <div className={className} data-tool-output="" {...props}>
+    <div data-tool-output="">
       <CodeBlock>
         <BlockWords block={{ kind: block.kind, text: clipped.shown }} />
       </CodeBlock>
       {clipped.hiddenLines > 0 ? (
-        <button
-          type="button"
-          className="block w-full border-t border-border bg-transparent px-3 py-1.5 text-left text-[11.5px] text-muted-foreground transition-colors hover:text-foreground"
-          onClick={() => setWhole(true)}
-        >
+        <button type="button" className="tool-more" onClick={() => setWhole(true)}>
           Show more ({clipped.hiddenLines} more lines)
         </button>
       ) : null}

@@ -81,7 +81,6 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/re
 import { Shimmer } from "../ai-elements/shimmer";
 import {
   TOOL_BLOCK,
-  TOOL_LINE_CLASS,
   TOOL_STATE,
   Tool,
   type ToolBlock,
@@ -734,7 +733,7 @@ export function TranscriptOpeningCall({
     <Tooltip label={hint} card={card ?? undefined}>
       <button
         type="button"
-        className={cn(TOOL_LINE_CLASS, "w-full bg-transparent text-left text-[12.5px]")}
+        className="tool-line tool-opening"
         data-call-id={callId}
         data-opens=""
         onClick={onOpen}

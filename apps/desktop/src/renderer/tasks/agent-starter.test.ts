@@ -366,7 +366,7 @@ async function macPlace(
     }),
     readerId,
   );
-  const pill = view.querySelector<HTMLElement>(".rounded.border");
+  const pill = view.querySelector<HTMLElement>(".tool-place");
   assert.ok(pill, "the row says where the command ran");
   return pill;
 }
