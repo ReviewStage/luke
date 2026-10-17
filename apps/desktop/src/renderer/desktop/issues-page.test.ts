@@ -286,7 +286,7 @@ function groups(page: HTMLElement): [string, string[]][] {
 /** The board's columns, each its heading and its cards' identifiers, left to right. */
 function columns(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll("[data-issue-column]")].map((column) => [
-    column.querySelector(".factory-head")?.textContent ?? "",
+    column.querySelector("h2")?.textContent ?? "",
     [...column.querySelectorAll(".issue-row-identifier")].map((id) => id.textContent ?? ""),
   ]);
 }
@@ -958,10 +958,7 @@ test("the page opens as a board: a column for every status in the order work mov
     ["Done1", ["ACME-1"]],
     ["Canceled", []],
   ]);
-  assert.equal(
-    page.querySelector("[data-issue-column='in-progress'] .factory-idle")?.textContent,
-    "No issues",
-  );
+  assert.equal(page.querySelector("[data-issue-column='in-progress'] p")?.textContent, "No issues");
   assert.equal(page.querySelector(".home-section"), null, "no list stands beside the board");
 });
 
@@ -1123,7 +1120,12 @@ test("a workspace with no issue yet still stands the board's columns, each sayin
     ["Done", []],
     ["Canceled", []],
   ]);
-  assert.equal(page.querySelectorAll(".factory-idle").length, 5);
+  assert.equal(
+    [...page.querySelectorAll("[data-issue-column] p")].filter(
+      (idle) => idle.textContent === "No issues",
+    ).length,
+    5,
+  );
 });
 
 test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
