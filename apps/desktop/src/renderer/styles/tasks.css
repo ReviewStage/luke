@@ -1476,21 +1476,21 @@ button.file-ref:hover .file-ref-path {
    tree is. */
 .file-view-status {
   flex: 0 0 auto;
-  color: var(--state-attention);
-  font-family: var(--font-mono);
+  color: var(--luke-color-attention);
+  font-family: var(--luke-font-mono);
   font-weight: 600;
 }
 
 .file-view-status[data-status="added"] {
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
 }
 
 .file-view-status[data-status="deleted"] {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 .file-view-status[data-status="renamed"] {
-  color: var(--state-working);
+  color: var(--luke-color-working);
 }
 
 /* The Files changed bar's diff settings (diff-settings.tsx): the button,
@@ -1505,15 +1505,15 @@ button.file-ref:hover .file-ref-path {
   display: flex;
   max-height: min(560px, 70vh);
   flex-direction: column;
-  gap: var(--space-12);
-  padding: var(--space-12) var(--space-16) var(--space-16);
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
   overflow-y: auto;
   overscroll-behavior: contain;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
-  box-shadow: var(--menu-shadow);
-  color: var(--text-primary);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-menu-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 12px 32px var(--luke-color-shadow);
+  color: var(--luke-color-text);
   font-size: 12.5px;
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
@@ -1528,24 +1528,24 @@ button.file-ref:hover .file-ref-path {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-right: calc(-1 * var(--space-8));
+  margin-right: calc(-1 * var(--luke-space-8));
 }
 
 .diff-settings-title {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--luke-type-section-size);
   font-weight: 600;
 }
 
 .diff-settings-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .diff-settings-group + .diff-settings-group {
-  padding-top: var(--space-12);
-  border-top: 1px solid var(--hairline);
+  padding-top: var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 /* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
@@ -1685,6 +1685,7 @@ button.file-ref:hover .file-ref-path {
 
 .file-tab-notice > p {
   flex: 1;
+  margin: 0;
 }
 
 /* Who a Changes tab's pull request names, under its bar in a notice's
@@ -1694,10 +1695,10 @@ button.file-ref:hover .file-ref-path {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4) var(--space-16);
-  padding: var(--space-8) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
+  gap: var(--luke-space-4) var(--luke-space-16);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
   font-size: 12.5px;
   line-height: 1.5;
 }
@@ -1705,20 +1706,20 @@ button.file-ref:hover .file-ref-path {
 /* A reviewer's standing, in GitHub's colours: approved green, changes asked
    for red, a review asked for amber, a comment or a dismissal quiet. */
 [data-review-state="approved"] {
-  --review-tone: var(--state-complete);
+  --review-tone: var(--luke-color-complete);
 }
 
 [data-review-state="changes-requested"] {
-  --review-tone: var(--danger);
+  --review-tone: var(--luke-color-danger);
 }
 
 [data-review-state="requested"] {
-  --review-tone: var(--state-attention);
+  --review-tone: var(--luke-color-attention);
 }
 
 [data-review-state="commented"],
 [data-review-state="dismissed"] {
-  --review-tone: var(--text-tertiary);
+  --review-tone: var(--luke-color-text-subtle);
 }
 
 .review-state {
