@@ -1,6 +1,6 @@
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { AnchoredPopover, CHIP_LOOK, Chip, type ChipLook, POPOVER_ALIGN } from "@luke/ui";
+import { AnchoredPopover, CHIP_LOOK, Chip, type ChipLook, ChipName, POPOVER_ALIGN } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks";
@@ -92,7 +92,9 @@ export function AgentModelChip({
           onClick={() => setOpen(!open)}
         >
           {provider === undefined ? null : <HarnessMark provider={provider} />}
-          <ModelLabel choice={model.choice} models={models ?? []} />
+          <ChipName>
+            <ModelLabel choice={model.choice} models={models ?? []} />
+          </ChipName>
         </Chip>
       </Tooltip>
       {drawn.mounted ? (

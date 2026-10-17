@@ -3453,10 +3453,6 @@ button.skill-chip:hover,
 /* Too narrow for the model's words: the chip draws its harness's mark
    alone, where it has one, its label and hint still naming the choice. */
 @container composer (max-width: 299px) {
-  .agent-composer .agent-model-chip .luke-chip:has(.harness-mark) {
-    padding: 0 var(--space-8);
-  }
-
   .agent-composer .agent-model-chip .harness-mark {
     display: block;
   }
@@ -3464,7 +3460,7 @@ button.skill-chip:hover,
   .agent-composer
     .agent-model-chip
     .luke-chip:has(.harness-mark)
-    :is(.model-label, .settings-chevron) {
+    :is(.luke-chip-name, .settings-chevron) {
     display: none;
   }
 }
@@ -4432,15 +4428,7 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .model-label-detail {
-  color: var(--text-secondary);
-}
-
-/* The model chip is the toolbar chip (`chip.tsx`): the pair it names cut
-   short before the chevron where the foot is narrow. */
-.agent-model-chip .model-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--luke-color-text-muted);
 }
 
 /* The MCP servers popover: the searchable menu's surface, its search field
