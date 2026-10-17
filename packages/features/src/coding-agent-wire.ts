@@ -898,7 +898,10 @@ const overviewName = EffectSchema.String.check(
  * One check on a pull request's head: a check run, named by its run and the
  * App that runs it, or a commit status, named by its context and by no App;
  * where it stands; its page, where GitHub names one; and when it started and
- * ended, in epoch milliseconds, where it has.
+ * ended, in epoch milliseconds, where it has. Its avatar is the picture of
+ * the App that runs it, or of whoever posted the status, as GitHub's own
+ * avatar host serves it; absent where GitHub names none there, or from a
+ * service before it.
  */
 const pullRequestCheckSchema = EffectSchema.Struct({
   name: overviewName,
@@ -907,6 +910,7 @@ const pullRequestCheckSchema = EffectSchema.Struct({
   url: EffectSchema.NullOr(EffectSchema.String),
   startedAt: EffectSchema.NullOr(countedNumber),
   completedAt: EffectSchema.NullOr(countedNumber),
+  avatarUrl: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type PullRequestCheck = typeof pullRequestCheckSchema.Type;

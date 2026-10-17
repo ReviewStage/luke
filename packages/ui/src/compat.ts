@@ -10,3 +10,7 @@
  */
 
 export { ChipFrame as CompatChip } from "./components/chip/chip-frame.js";
+export {
+  SwitchButtonFrame as CompatSwitchButton,
+  SwitchMarkFrame as CompatSwitchMark,
+} from "./components/switch/switch-frame.js";

@@ -1,3 +1,4 @@
+import { githubAvatarAt, githubAvatarUrl } from "@luke/features/account-picture";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -25,6 +26,7 @@ import {
 import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { INLINE_DIFF } from "@luke/settings/diff-view";
 import { CopyIcon, ProviderMark } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
@@ -39,7 +41,7 @@ import {
   RotateCwIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useId } from "react";
+import { type ReactNode, useCallback, useId, useState } from "react";
 import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
@@ -47,10 +49,18 @@ import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-me
 import { EmptyState } from "../empty-state";
 import { ReadFailure } from "../read-failure";
 import { Skeleton, SkeletonRegion } from "../skeleton";
+import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
+import {
+  type ConversationFiltersControl,
+  type ConversationHidden,
+  conversationHidden,
+  filteredConversation,
+  useConversationFilters,
+} from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
 import {
@@ -70,6 +80,7 @@ import {
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenLink } from "./use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
+import { useWorkingNow, workingTime } from "./working-time";
 
 /**
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, and its files.
@@ -112,8 +123,11 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
  * end of the hunk it was made on, drawn as Files changed draws a diff with
  * its own lines lit (`file-diff.tsx`), then its comments; one resolved or
  * outdated by a later push is folded closed under its head, which says
- * which, until opened. Every name and word here is the repository's, so
- * the tab is left out of the screen recording (`ph-no-capture`).
+ * which, until opened. Over the conversation, stage-cli's two filters,
+ * Hide bots and Hide resolved, each counting what it leaves out and kept
+ * across launches (`conversation-filters.ts`). Every name and word here is
+ * the repository's, so the tab is left out of the screen recording
+ * (`ph-no-capture`).
  */
 
 /** The tab's own words. */
@@ -129,12 +143,24 @@ const PULL_REQUEST_WORDS = {
   NO_DESCRIPTION: "No description provided.",
   NO_CHECKS: "No checks have run on this pull request.",
   NO_CONVERSATION: "Nobody has commented yet.",
+  NO_MATCHING: "No matching comments.",
+  HIDE_BOTS: "Hide bots",
+  HIDE_RESOLVED: "Hide resolved",
+  /** What Hide bots says it leaves out, by how many. */
+  hiddenBots: (count: number) =>
+    `Hides ${count} ${count === 1 ? "comment or review" : "comments and reviews"} by bots`,
+  /** What Hide resolved says it leaves out, by how many. */
+  hiddenResolved: (count: number) =>
+    `Hides ${count} resolved review ${count === 1 ? "thread" : "threads"}`,
   /** What the conversation says of the earlier entries a read left on GitHub, by how many. */
   earlier: (count: number) => `${count} earlier ${count === 1 ? "comment" : "comments"} on GitHub`,
   /** What a review thread says of the replies a read left on GitHub, by how many. */
   moreReplies: (count: number) => `${count} more ${count === 1 ? "reply" : "replies"} on GitHub`,
   RESOLVED: "Resolved",
   OUTDATED: "Outdated",
+  /** What the folded checks' control says while folded, by how many checks there are in all. */
+  showAll: (count: number) => `Show all ${count}`,
+  SHOW_LESS: "Show less",
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -246,14 +272,29 @@ const CHECK_ORDER: readonly CheckState[] = [
   CHECK_STATE.SKIPPED,
 ];
 
-/** How long a check ran, as "42s", "3m 5s", or "1h 2m"; none for one still running or never timed. */
+/** How many checks stand before the list folds, as stage-cli folds its own; a check that failed or still runs never folds away. */
+const CHECKS_UNFOLDED = 5;
+
+/** The size, in CSS pixels, a check's avatar is drawn at, and the density GitHub is asked for it at. */
+const CHECK_AVATAR_PIXELS = 16;
+const CHECK_AVATAR_DENSITY = 2;
+
+/** The least a check must have run to say how long: a skipped or neutral check, or one cancelled before it began, ran for none. */
+const RAN_AT_LEAST_MS = 1_000;
+
+/** How long a check ran, as a working count says it ("42s", "3m 5s", "1h 2m"); none for one still running, never timed, or that ran for no time. */
 function durationOf(check: PullRequestCheck): string | undefined {
   if (check.startedAt === null || check.completedAt === null) return undefined;
-  const seconds = Math.max(0, Math.round((check.completedAt - check.startedAt) / 1_000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  const ran = check.completedAt - check.startedAt;
+  return ran < RAN_AT_LEAST_MS ? undefined : workingTime(ran);
+}
+
+/** How many of the checks, in the order the service ranks them, stand unfolded: the first five, and past them every one that failed or still runs. */
+function unfoldedCountOf(checks: readonly PullRequestCheck[]): number {
+  const asking = checks.filter(
+    (check) => check.state === CHECK_STATE.FAILED || check.state === CHECK_STATE.PENDING,
+  ).length;
+  return Math.max(CHECKS_UNFOLDED, asking);
 }
 
 /** The bar's ⋯: the page read again, and the pull request's link copied. */
@@ -411,11 +452,71 @@ function Section({
   );
 }
 
-/** One check: its glyph for where it stands, its name, its App, and how long it ran; a press opens its page where it has one. */
-function CheckRow({ check }: { check: PullRequestCheck }): React.JSX.Element {
+/** How the tab reads a picture GitHub names through the service, on the App's token as the agent's (`githubImageOf`). */
+function useGitHubImageRead() {
+  const { act } = useAct();
+  return useCallback(
+    (owner: string, address: string) =>
+      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
+    [act],
+  );
+}
+
+/** A running check's count since it started, moving each second on the window's own clock; a timer to a reader, never announced. */
+function RunningTime({ startedAt }: { startedAt: number }): React.JSX.Element | null {
+  const now = useWorkingNow();
+  if (now === undefined) return null;
+  return (
+    <span className="pull-request-quiet pull-request-check-time" role="timer" aria-live="off">
+      {workingTime(now - startedAt)}
+    </span>
+  );
+}
+
+/** A check's avatar read through the service's image proxy as the agent's, drawn once read and an empty square until then or where it answered none. */
+function ProxiedCheckAvatar({ agentId, src }: { agentId: string; src: string }): React.JSX.Element {
+  const state = usePicture(agentId, src, useGitHubImageRead());
+  return state.kind === PICTURE_STATE.READY ? (
+    <img className="pull-request-check-avatar" src={state.url} alt="" />
+  ) : (
+    <span className="pull-request-check-avatar" aria-hidden="true" />
+  );
+}
+
+/** The picture of the App that runs a check, or of whoever posted it: one GitHub's avatar host serves drawn as it is, at its size, and any other through the service's image proxy. */
+function CheckAvatar({ agentId, src }: { agentId: string; src: string }): React.JSX.Element {
+  const hosted = githubAvatarUrl(src);
+  if (hosted === undefined) return <ProxiedCheckAvatar agentId={agentId} src={src} />;
+  return (
+    <img
+      className="pull-request-check-avatar"
+      src={githubAvatarAt(hosted, CHECK_AVATAR_PIXELS * CHECK_AVATAR_DENSITY)}
+      alt=""
+    />
+  );
+}
+
+/**
+ * One check: its glyph for where it stands, its App's avatar, its name, its
+ * App, and how long it ran, counting each second while it runs and is on
+ * screen; a press opens its page where it has one. Note that a running
+ * count stands only while the Checks tab is shown (`live`), because the
+ * tab stays mounted behind `hidden`, and a count left reading the clock
+ * there would tick for no one.
+ */
+function CheckRow({
+  agentId,
+  check,
+  live,
+}: {
+  agentId: string;
+  check: PullRequestCheck;
+  live: boolean;
+}): React.JSX.Element {
   const openLink = useOpenLink();
   const duration = durationOf(check);
-  const { url } = check;
+  const { url, avatarUrl, startedAt } = check;
+  const running = check.state === CHECK_STATE.PENDING && startedAt !== null;
   const inner = (
     <>
       <span
@@ -426,9 +527,11 @@ function CheckRow({ check }: { check: PullRequestCheck }): React.JSX.Element {
       >
         {CHECK_GLYPHS[check.state]}
       </span>
+      {avatarUrl === undefined ? null : <CheckAvatar agentId={agentId} src={avatarUrl} />}
       <span className="pull-request-check-name">{check.name}</span>
       {check.app === null ? null : <span className="pull-request-quiet">{check.app}</span>}
-      {duration === undefined ? null : (
+      {running && live ? <RunningTime startedAt={startedAt} /> : null}
+      {running || duration === undefined ? null : (
         <span className="pull-request-quiet pull-request-check-time">{duration}</span>
       )}
     </>
@@ -446,23 +549,53 @@ function CheckRow({ check }: { check: PullRequestCheck }): React.JSX.Element {
   );
 }
 
-/** Every check, in the order the service ranks them, failures first, under a count of each standing. */
-function Checks({ checks }: { checks: readonly PullRequestCheck[] }): React.JSX.Element {
+/**
+ * Every check, in the order the service ranks them, failures first, under a
+ * count of each standing. Past five the list folds, as stage-cli's does,
+ * behind a control that shows them all and folds them again; a check that
+ * failed or still runs stands above the fold however many there are.
+ */
+function Checks({
+  agentId,
+  checks,
+  live,
+}: {
+  agentId: string;
+  checks: readonly PullRequestCheck[];
+  live: boolean;
+}): React.JSX.Element {
+  const [unfolded, setUnfolded] = useState(false);
+  const listId = useId();
   const counts = CHECK_ORDER.flatMap((state) => {
     const count = checks.filter((check) => check.state === state).length;
     return count === 0 ? [] : [`${count} ${CHECK_WORDS[state]}`];
   });
+  const folds = checks.length > unfoldedCountOf(checks);
+  const shown = folds && !unfolded ? checks.slice(0, unfoldedCountOf(checks)) : checks;
   return (
     <Section title="Checks" count={counts.length === 0 ? undefined : counts.join(", ")}>
       {checks.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
       ) : (
-        <ul className="pull-request-checks">
-          {checks.map((check, at) => (
-            // Note that two checks may share a name across Apps, so a row is keyed by its place too.
-            <CheckRow key={`${at}`} check={check} />
-          ))}
-        </ul>
+        <div className="pull-request-checks">
+          <ul id={listId} className="pull-request-check-list">
+            {shown.map((check, at) => (
+              // Note that two checks may share a name across Apps, so a row is keyed by its place too.
+              <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
+            ))}
+          </ul>
+          {folds ? (
+            <button
+              type="button"
+              className="pull-request-checks-fold"
+              aria-expanded={unfolded}
+              aria-controls={listId}
+              onClick={() => setUnfolded((was) => !was)}
+            >
+              {unfolded ? PULL_REQUEST_WORDS.SHOW_LESS : PULL_REQUEST_WORDS.showAll(checks.length)}
+            </button>
+          ) : null}
+        </div>
       )}
     </Section>
   );
@@ -532,13 +665,7 @@ function GitHubPicture({
   src: string;
   alt: string;
 }): React.JSX.Element {
-  const { act } = useAct();
-  const read = useCallback(
-    (owner: string, address: string) =>
-      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
-    [act],
-  );
-  const state = usePicture(agentId, src, read);
+  const state = usePicture(agentId, src, useGitHubImageRead());
   if (state.kind === PICTURE_STATE.READY) {
     return <img className="pull-request-picture" src={state.url} alt={alt} />;
   }
@@ -598,7 +725,7 @@ function ThreadCard({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
-  const look = { ...useDiffLook(false), changedWords: false };
+  const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
   const openLink = useOpenLink();
   const preview = threadPreview(thread);
   const lines = threadLines(thread);
@@ -751,10 +878,20 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
   );
 }
 
-/** The checks section as its read stands: every check once landed, a skeleton of rows while out, its failure with Retry. */
-function ChecksPart({ parts }: { parts: OverviewParts }): React.JSX.Element {
+/** The checks section as its read stands: every check once landed, its running counts moving while the tab is shown (`live`), a skeleton of rows while out, its failure with Retry. */
+function ChecksPart({
+  agentId,
+  parts,
+  live,
+}: {
+  agentId: string;
+  parts: OverviewParts;
+  live: boolean;
+}): React.JSX.Element {
   const part = parts.checks;
-  if (part.kind === PART.LANDED) return <Checks checks={part.value.checks} />;
+  if (part.kind === PART.LANDED) {
+    return <Checks agentId={agentId} checks={part.value.checks} live={live} />;
+  }
   return (
     <Section title="Checks">
       {part.kind === PART.PENDING ? (
@@ -797,14 +934,16 @@ function DescriptionPart({
   );
 }
 
-/** The conversation as its read stands: its entries once landed, the earlier ones counted first; a skeleton while out, its failure with Retry. */
+/** The conversation as its read stands: its entries once landed, as the filters leave them, the earlier ones counted first; a skeleton while out, its failure with Retry. */
 function ConversationPart({
   parts,
+  filters,
   url,
   now,
   picture,
 }: {
   parts: OverviewParts;
+  filters: ConversationFiltersControl["filters"];
   /** The pull request's page, which the earlier entries left on GitHub open. */
   url: string | undefined;
   now: number;
@@ -830,6 +969,7 @@ function ConversationPart({
     );
   }
   const { conversation, earlier } = part.value;
+  const shown = filteredConversation(conversation, filters);
   return (
     <Section
       title="Conversation"
@@ -851,9 +991,11 @@ function ConversationPart({
             {PULL_REQUEST_WORDS.NO_CONVERSATION}
           </p>
         ) : null
+      ) : shown.length === 0 ? (
+        <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_MATCHING}</p>
       ) : (
         <ol className="pull-request-conversation">
-          {conversation.map((entry) => (
+          {shown.map((entry) => (
             <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
           ))}
         </ol>
@@ -895,7 +1037,7 @@ type TabCount =
   | { readonly kind: typeof TAB_COUNT.COUNT; readonly count: number }
   | {
       readonly kind: typeof TAB_COUNT.CHECKS;
-      /** How many, once the checks are read; none before. */
+      /** How many stand as its glyph says, once the checks are read; none before. */
       readonly count: number | undefined;
       readonly summary: CheckSummary;
     }
@@ -911,6 +1053,17 @@ interface TabEntry {
   readonly icon: ReactNode;
   readonly label: string;
   readonly count: TabCount | undefined;
+}
+
+/** How many checks the Checks tab's glyph counts: those that failed beside a failure, those still running beside a wait, and every one where all passed. */
+function summaryCountOf(checks: readonly PullRequestCheck[], summary: CheckSummary): number {
+  if (summary === CHECK_SUMMARY.FAILING) {
+    return checks.filter((check) => check.state === CHECK_STATE.FAILED).length;
+  }
+  if (summary === CHECK_SUMMARY.PENDING) {
+    return checks.filter((check) => check.state === CHECK_STATE.PENDING).length;
+  }
+  return checks.length;
 }
 
 /** The glyph the Checks tab wears for how its checks went, as the pull request's mark tells it; none where there are none. */
@@ -1059,7 +1212,11 @@ function tabsOf(
       count:
         bar === undefined
           ? undefined
-          : { kind: TAB_COUNT.CHECKS, count: checks?.checks.length, summary: bar.checks },
+          : {
+              kind: TAB_COUNT.CHECKS,
+              count: checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
+              summary: bar.checks,
+            },
     },
     {
       view: PULL_REQUEST_VIEW.FILES,
@@ -1077,7 +1234,82 @@ function tabsOf(
   ];
 }
 
-/** The Conversation tab: the description, then the comments, reviews, and threads, in one scroll under the header. */
+/** One of the conversation's filters: its word, how many it would leave out once the conversation is read, and its switch, the word and the count pressing it too. */
+function ConversationFilter({
+  label,
+  count,
+  describe,
+  on,
+  onChange,
+}: {
+  label: string;
+  /** How many it would leave out; none until the conversation is read. */
+  count: number | undefined;
+  describe: (count: number) => string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}): React.JSX.Element {
+  const switchId = useId();
+  const noteId = useId();
+  const note = count === undefined ? undefined : describe(count);
+  const filter = (
+    <span className="pull-request-filter">
+      {/* Note that the word and the count label the switch, so a press on either turns it too. */}
+      <label htmlFor={switchId}>
+        {label}
+        {count === undefined ? null : (
+          <span className="pull-request-count" aria-hidden="true">
+            {count.toLocaleString()}
+          </span>
+        )}
+      </label>
+      <Switch
+        id={switchId}
+        checked={on}
+        label={label}
+        describedBy={note === undefined ? undefined : noteId}
+        onChange={onChange}
+      />
+      {note === undefined ? null : (
+        <span id={noteId} hidden>
+          {note}
+        </span>
+      )}
+    </span>
+  );
+  return note === undefined ? filter : <Tooltip label={note}>{filter}</Tooltip>;
+}
+
+/** The row over the conversation that stays put while it scrolls: Hide resolved and Hide bots, as stage-cli orders them, each counting what it leaves out once read. */
+function ConversationFilterRow({
+  control,
+  hidden,
+}: {
+  control: ConversationFiltersControl;
+  hidden: ConversationHidden | undefined;
+}): React.JSX.Element {
+  const { filters, change } = control;
+  return (
+    <div className="pull-request-filters">
+      <ConversationFilter
+        label={PULL_REQUEST_WORDS.HIDE_RESOLVED}
+        count={hidden?.resolved}
+        describe={PULL_REQUEST_WORDS.hiddenResolved}
+        on={filters.hideResolved}
+        onChange={(hideResolved) => change({ hideResolved })}
+      />
+      <ConversationFilter
+        label={PULL_REQUEST_WORDS.HIDE_BOTS}
+        count={hidden?.bots}
+        describe={PULL_REQUEST_WORDS.hiddenBots}
+        on={filters.hideBots}
+        onChange={(hideBots) => change({ hideBots })}
+      />
+    </div>
+  );
+}
+
+/** The Conversation tab: its filters, then the description, then the comments, reviews, and threads, in one scroll under them. */
 function ConversationView({
   agentId,
   parts,
@@ -1089,11 +1321,25 @@ function ConversationView({
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
+  const filters = useConversationFilters();
+  const conversation = landed(parts.conversation)?.conversation;
   return (
-    <div className="pull-request-page">
-      <DescriptionPart part={parts.pullRequest} picture={picture} />
-      <ConversationPart parts={parts} url={url} now={now} picture={picture} />
-    </div>
+    <>
+      <ConversationFilterRow
+        control={filters}
+        hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
+      />
+      <div className="pull-request-page">
+        <DescriptionPart part={parts.pullRequest} picture={picture} />
+        <ConversationPart
+          parts={parts}
+          filters={filters.filters}
+          url={url}
+          now={now}
+          picture={picture}
+        />
+      </div>
+    </>
   );
 }
 
@@ -1231,7 +1477,11 @@ export function AgentPullRequestTab({
             hidden={view !== PULL_REQUEST_VIEW.CHECKS}
           >
             <div className="pull-request-page">
-              <ChecksPart parts={parts} />
+              <ChecksPart
+                agentId={agentId}
+                parts={parts}
+                live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+              />
             </div>
           </div>
         </>

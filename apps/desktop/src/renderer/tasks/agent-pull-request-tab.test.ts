@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentOverviewChecksAnswerView,
@@ -31,8 +32,10 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
@@ -42,6 +45,7 @@ import { codingAgentsControl } from "#testing/tasks-control";
 import type { DiffViewProps } from "../diff-view/contract";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect";
 import { MemberDirectory } from "../member-directory";
+import { rendererRuntime } from "../renderer-runtime";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
@@ -185,6 +189,7 @@ let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
+  window.localStorage.clear();
   opened = [];
   images = [];
   previews = [];
@@ -311,10 +316,18 @@ const NO_GITHUB: GitHubConnectControl = {
   disconnect: () => Promise.resolve(false),
 };
 
+/** A registry whose atoms count on this clock, as the window's count on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
+
 /** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed. */
 async function draw(
   control: CodingAgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
+  registry = AtomRegistry.make(),
   github: GitHubConnectControl = NO_GITHUB,
 ) {
   const container = document.body.appendChild(document.createElement("div"));
@@ -322,7 +335,7 @@ async function draw(
   act(() =>
     root?.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(GitHubConnectProvider, {
           value: github,
           children: createElement(MemberDirectory, {
@@ -464,7 +477,132 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "1 failed, 1 running, 1 passed",
   );
   assert.deepEqual(words(tab, ".pull-request-check-name"), ["lint", "build", "test"]);
-  assert.deepEqual(words(tab, ".pull-request-check-time"), ["1m 5s", "1m 5s"]);
+  assert.deepEqual(
+    words(tab, '.pull-request-check-time:not([role="timer"])'),
+    ["1m 5s", "1m 5s"],
+    "a finished check says how long it ran",
+  );
+});
+
+it.effect(
+  "a check wears its App's avatar, a status's picture off GitHub's avatar host read through the service; a running one counts each second from when it started, a finished one says how long it ran",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      yield* TestClock.setTime(66_000);
+      const checks: CodingAgentOverviewChecks = {
+        checks: [
+          {
+            ...check("build", CHECK_STATE.PENDING),
+            avatarUrl: "https://avatars.githubusercontent.com/in/15368?v=4",
+          },
+          { ...check("vercel", CHECK_STATE.PASSED), app: null, avatarUrl: BADGE },
+          check("lint", CHECK_STATE.PASSED),
+        ],
+      };
+      const tab = yield* Effect.promise(() =>
+        draw(
+          controlAnswering({ checks: () => Promise.resolve({ pullRequest: checks }) }),
+          PULL_REQUEST_VIEW.CONVERSATION,
+          registry,
+        ),
+      );
+      yield* Effect.promise(() => choose(tab, "Checks"));
+
+      const rows = [...tab.querySelectorAll(".pull-request-check")];
+      assert.equal(
+        rows[0]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
+        "an App's logo is drawn from GitHub's avatar host at its size",
+      );
+      assert.ok(
+        images.every((src) => !src.startsWith("https://avatars.githubusercontent.com/")),
+        "a picture GitHub's avatar host serves is never asked of the service",
+      );
+      assert.equal(
+        rows[1]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
+        "any other is drawn as the service read it",
+      );
+      assert.equal(
+        rows[2]?.querySelector(".pull-request-check-avatar"),
+        null,
+        "no avatar, none drawn",
+      );
+      assert.deepEqual(words(tab, '[role="timer"]'), ["1m 5s"]);
+
+      yield* TestClock.adjust("1 second");
+      yield* Effect.promise(settle);
+      assert.deepEqual(words(tab, '[role="timer"]'), ["1m 6s"], "the running one counts on");
+      assert.deepEqual(words(tab, '.pull-request-check-time:not([role="timer"])'), [
+        "1m 5s",
+        "1m 5s",
+      ]);
+
+      yield* Effect.promise(() => choose(tab, "Conversation"));
+      assert.deepEqual(
+        words(tab, '[role="timer"]'),
+        [],
+        "a count behind a hidden tab reads no clock",
+      );
+      yield* TestClock.adjust("1 second");
+      yield* Effect.promise(() => choose(tab, "Checks"));
+      assert.deepEqual(
+        words(tab, '[role="timer"]'),
+        ["1m 7s"],
+        "shown again, it counts from the clock",
+      );
+      act(() => root?.unmount());
+      root = undefined;
+      registry.dispose();
+    }),
+);
+
+test("past five checks the list folds behind Show all, keeping every one that failed or still runs above the fold, and folds again on Show less", async () => {
+  const passing = Array.from({ length: 6 }, (_, at) => check(`test ${at}`, CHECK_STATE.PASSED));
+  const few: CodingAgentOverviewChecks = {
+    checks: [check("lint", CHECK_STATE.FAILED), check("build", CHECK_STATE.PENDING), ...passing],
+  };
+  const tab = await draw(controlAnswering({ checks: () => Promise.resolve({ pullRequest: few }) }));
+  await choose(tab, "Checks");
+  const fold = () =>
+    tab.querySelector<HTMLButtonElement>(".pull-request-checks-fold") ??
+    assert.fail("the list folds");
+  assert.deepEqual(words(tab, ".pull-request-check-name"), [
+    "lint",
+    "build",
+    "test 0",
+    "test 1",
+    "test 2",
+  ]);
+  assert.equal(fold().textContent, "Show all 8");
+  assert.equal(fold().getAttribute("aria-expanded"), "false");
+
+  act(() => fold().click());
+  assert.equal(words(tab, ".pull-request-check-name").length, 8);
+  assert.equal(fold().textContent, "Show less");
+  assert.equal(fold().getAttribute("aria-expanded"), "true");
+
+  act(() => fold().click());
+  assert.equal(words(tab, ".pull-request-check-name").length, 5);
+});
+
+test("a check that failed or still runs never folds away, however many there are, and five or fewer checks do not fold", async () => {
+  const failing = Array.from({ length: 6 }, (_, at) => check(`lint ${at}`, CHECK_STATE.FAILED));
+  const many: CodingAgentOverviewChecks = {
+    checks: [...failing, check("build", CHECK_STATE.PENDING), check("test", CHECK_STATE.PASSED)],
+  };
+  const tab = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: many }) }),
+  );
+  await choose(tab, "Checks");
+  assert.equal(words(tab, ".pull-request-check-name").length, 7);
+  assert.equal(tab.querySelector(".pull-request-checks-fold")?.textContent, "Show all 8");
+
+  act(() => root?.unmount());
+  const five = await draw(controlAnswering());
+  await choose(five, "Checks");
+  assert.equal(five.querySelector(".pull-request-checks-fold"), null);
 });
 
 test("the earlier entries a read left on GitHub are counted first, in the heading too, and open the pull request", async () => {
@@ -586,8 +724,8 @@ test("a review that only left line comments draws each thread under it: its file
     endSide: "additions",
   });
   assert.deepEqual(
-    [preview?.look.layout, preview?.look.changedWords, preview?.excerpt],
-    ["unified", false, true],
+    [preview?.look.layout, preview?.look.inlineDiff, preview?.excerpt],
+    ["unified", "none", true],
     "a preview is an excerpt drawn unified, its lines tinted whole",
   );
   assert.equal(
@@ -616,6 +754,159 @@ test("a review that only left line comments draws each thread under it: its file
     folded.querySelector(".pull-request-thread-comment")?.textContent ?? "",
     /Moved away\./u,
     "a press opens it",
+  );
+});
+
+/** The switch of the Conversation's filter named as given. */
+function filter(tab: HTMLElement, name: string): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>(
+      `.pull-request-filter [role="switch"][aria-label="${name}"]`,
+    ) ?? assert.fail(`the conversation offers ${name}`)
+  );
+}
+
+/** What a filter's switch says it leaves out, as a reader hears it. */
+function filterNote(tab: HTMLElement, name: string): string {
+  const note = filter(tab, name).getAttribute("aria-describedby");
+  return note === null ? "" : (document.getElementById(note)?.textContent ?? "");
+}
+
+/** Who wrote each entry still drawn, and how many threads stand under it. */
+function drawnEntries(tab: HTMLElement): string[] {
+  return [...tab.querySelectorAll(".pull-request-entry")].map(
+    (entry) =>
+      `${entry.querySelector(".changes-comment-head .actor-ref-name")?.textContent} ${entry.querySelectorAll(".pull-request-thread").length}`,
+  );
+}
+
+test("Hide bots and Hide resolved each count what they leave out, leave it out while on, a review whose every thread was resolved going with them, and stay as left for the next conversation drawn", async () => {
+  const devin = { login: "devin-ai-integration[bot]", bot: true };
+  const conversation: CodingAgentOverviewConversation = {
+    reviewers: [],
+    conversation: [
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: devin,
+        state: REVIEW_STATE.COMMENTED,
+        html: '<p dir="auto">Found one issue.</p>',
+        body: "",
+        at: 1_500,
+        url: `${PAGE}#pullrequestreview-1`,
+        threads: [thread({ resolved: true })],
+      },
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.COMMENTED,
+        html: '<p dir="auto">Two things.</p>',
+        body: "",
+        at: 2_000,
+        url: `${PAGE}#pullrequestreview-2`,
+        threads: [thread({ resolved: true }), thread({ path: "src/other.ts" })],
+      },
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.APPROVED,
+        html: '<p dir="auto">Settled.</p>',
+        body: "",
+        at: 2_500,
+        url: `${PAGE}#pullrequestreview-3`,
+        threads: [thread({ resolved: true })],
+      },
+      {
+        kind: CONVERSATION_ENTRY.COMMENT,
+        by: { login: "vercel[bot]", bot: true },
+        html: '<p dir="auto">Deployed.</p>',
+        body: "",
+        at: 3_000,
+        url: `${PAGE}#issuecomment-4`,
+      },
+      {
+        kind: CONVERSATION_ENTRY.COMMENT,
+        by: CHARLES_ON_GITHUB,
+        html: '<p dir="auto">Thanks.</p>',
+        body: "",
+        at: 3_500,
+        url: `${PAGE}#issuecomment-5`,
+      },
+    ],
+    earlier: 0,
+  };
+  const control = controlAnswering({
+    conversation: () => Promise.resolve({ pullRequest: conversation }),
+  });
+  const tab = await draw(control);
+
+  assert.deepEqual(
+    words(tab, ".pull-request-filter label"),
+    ["Hide resolved3", "Hide bots2"],
+    "each counts what it would leave out, resolved threads and bots' entries",
+  );
+  assert.equal(filterNote(tab, "Hide bots"), "Hides 2 comments and reviews by bots");
+  assert.equal(filterNote(tab, "Hide resolved"), "Hides 3 resolved review threads");
+  const all = [
+    "devin-ai-integration 1",
+    "Charles Pan 2",
+    "Charles Pan 1",
+    "vercel 0",
+    "Charles Pan 0",
+  ];
+  assert.deepEqual(drawnEntries(tab), all, "both start off, everything drawn");
+
+  act(() => filter(tab, "Hide bots").click());
+  assert.equal(filter(tab, "Hide bots").getAttribute("aria-checked"), "true");
+  assert.deepEqual(drawnEntries(tab), ["Charles Pan 2", "Charles Pan 1", "Charles Pan 0"]);
+
+  act(() => filter(tab, "Hide bots").click());
+  act(() => filter(tab, "Hide resolved").click());
+  assert.deepEqual(
+    drawnEntries(tab),
+    ["Charles Pan 1", "vercel 0", "Charles Pan 0"],
+    "a resolved thread goes, and a review whose every thread was resolved with it; a comment stays",
+  );
+
+  act(() => filter(tab, "Hide bots").click());
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+  const again = await draw(control);
+  assert.deepEqual(
+    [filter(again, "Hide resolved"), filter(again, "Hide bots")].map((each) =>
+      each.getAttribute("aria-checked"),
+    ),
+    ["true", "true"],
+    "the choice stands for the next conversation drawn",
+  );
+  assert.deepEqual(drawnEntries(again), ["Charles Pan 1", "Charles Pan 0"]);
+});
+
+test("where the filters leave nothing of the conversation, it says no comment matches", async () => {
+  window.localStorage.setItem(
+    "luke.conversation-filters",
+    JSON.stringify({ hideBots: true, hideResolved: false }),
+  );
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CONVERSATION,
+            conversation: CONVERSATION.conversation.map((entry) => ({
+              ...entry,
+              by: { login: "vercel[bot]", bot: true },
+            })),
+          },
+        }),
+    }),
+  );
+  const conversation =
+    tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
+  assert.equal(conversation.querySelector(".pull-request-entry"), null);
+  assert.equal(
+    conversation.querySelector(".pull-request-none")?.textContent,
+    "No matching comments.",
   );
 });
 
@@ -675,7 +966,7 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
   assert.equal(count("Files changed")?.textContent, "+4 −1");
 
   await choose(tab, "Checks");
-  assert.equal(count("Checks")?.textContent, "3");
+  assert.equal(count("Checks")?.textContent, "1", "beside a failure, how many failed");
   assert.equal(count("Checks")?.getAttribute("data-check-summary"), CHECK_SUMMARY.FAILING);
 
   act(() => option(tab, "Checks").focus());
@@ -690,6 +981,54 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
     "true",
     "the arrows move along the row",
   );
+});
+
+test("the Checks tab counts what its glyph says: beside a wait how many still run, and where all passed how many there are", async () => {
+  const running: CodingAgentOverviewChecks = {
+    checks: [
+      check("build", CHECK_STATE.PENDING),
+      check("e2e", CHECK_STATE.PENDING),
+      check("test", CHECK_STATE.PASSED),
+    ],
+  };
+  const waits = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: running }) }),
+  );
+  await choose(waits, "Checks");
+  const countOf = (tab: HTMLElement) =>
+    option(tab, "Checks").querySelector(".pull-request-tab-count");
+  assert.equal(countOf(waits)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PENDING);
+  assert.equal(countOf(waits)?.textContent, "2");
+
+  act(() => root?.unmount());
+  const passing: CodingAgentOverviewChecks = {
+    checks: [
+      check("lint", CHECK_STATE.PASSED),
+      check("test", CHECK_STATE.PASSED),
+      check("docs", CHECK_STATE.SKIPPED),
+    ],
+  };
+  const passed = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: passing }) }),
+  );
+  await choose(passed, "Checks");
+  assert.equal(countOf(passed)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PASSING);
+  assert.equal(countOf(passed)?.textContent, "3");
+});
+
+test("a check that ran for no time, skipped or cancelled before it began, says no duration", async () => {
+  const none: CodingAgentOverviewChecks = {
+    checks: [
+      { ...check("cancelled", CHECK_STATE.FAILED), completedAt: 1_000 },
+      { ...check("docs", CHECK_STATE.SKIPPED), completedAt: 1_000 },
+      check("test", CHECK_STATE.PASSED),
+    ],
+  };
+  const tab = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: none }) }),
+  );
+  await choose(tab, "Checks");
+  assert.deepEqual(words(tab, ".pull-request-check-time"), ["1m 5s"]);
 });
 
 test("a merged pull request says so on the bar, as its overview read it, says nothing of merging, and one with no description, checks, or comments says so", async () => {
@@ -992,7 +1331,7 @@ test("a draft's pill offers Ready for review, which is asked of the service for 
 test("a member GitHub would not take as signed in is offered to sign in with GitHub again, and a merged pull request's pill offers nothing", async () => {
   let connects = 0;
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
-  const tab = await draw(controlAnswering(), PULL_REQUEST_VIEW.CONVERSATION, {
+  const tab = await draw(controlAnswering(), PULL_REQUEST_VIEW.CONVERSATION, AtomRegistry.make(), {
     ...NO_GITHUB,
     connect: () => {
       connects += 1;

@@ -27,6 +27,19 @@ export const APP_SETTING_ID = {
   CALENDAR_SELECTED: "calendar_selected",
   THEME: "theme",
   ZOOM: "zoom",
+  LINE_NUMBERS: "line_numbers",
+  WORD_WRAP: "word_wrap",
+  DIFF_LAYOUT: "diff_layout",
+  DIFF_INDICATORS: "diff_indicators",
+  DIFF_INLINE: "diff_inline",
+  DIFF_BACKGROUNDS: "diff_backgrounds",
+  DIFF_DARK_THEME: "diff_dark_theme",
+  DIFF_LIGHT_THEME: "diff_light_theme",
+  DIFF_FONT: "diff_font",
+  DIFF_FONT_SIZE: "diff_font_size",
+  DIFF_LINE_HEIGHT: "diff_line_height",
+  DIFF_LIGATURES: "diff_ligatures",
+  DIFF_MINIMIZE_COMMENTS: "diff_minimize_comments",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];

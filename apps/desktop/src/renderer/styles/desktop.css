@@ -2104,7 +2104,7 @@ ul.actor-stack {
 .danger-button,
 .luke-button,
 .luke-chip,
-.segment,
+.luke-segment,
 .desktop-toolbar-actions,
 .desktop-toolbar .file-breadcrumbs,
 .sidebar-new-task,
@@ -4944,7 +4944,7 @@ button.integration-tool-head:hover,
    the next run's titles still answer the pointer; a press on a cell still
    reaches the button it stands in. */
 .automation-row-open > *,
-.automation-row > .switch {
+.automation-row > .luke-switch {
   position: relative;
   z-index: 1;
 }

@@ -1,22 +1,20 @@
-import {
-  ISSUE_PRIORITY_WORDS,
-  ISSUE_STATUS_WORDS,
-  issueColumns,
-  issueIdentifier,
-} from "@luke/features/issue-list-model";
+import { ISSUE_STATUS_WORDS, issueColumns, issueIdentifier } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
-import { PRIORITY_GLYPH, StatusGlyph } from "./issue-pickers";
+import { PriorityMark, StatusGlyph } from "./issue-pickers";
 
 /**
- * issue-board.tsx -- a workspace's issues as a board: a column for every status, the work under way first, each column's cards in the list's order.
+ * issue-board.tsx -- a workspace's issues as a board: a column for every status, in the order work moves through them, each column's cards in the list's order.
  *
- * The columns are Factory's stations (`desktop-factory.tsx`), side by side
- * on a wide window and one over the next on a narrow one, so the board
- * reads as Factory's line does. A card is a row of the sidebar's own on two
- * lines, its identifier, mark, and time over its whole title, since a
- * column is too narrow for the list's one line. ↑ and ↓ move through a column's cards,
+ * Each column is headed and boxed as Factory's stations are
+ * (`desktop-factory.tsx`), and the columns stand side by side at every
+ * width, the board scrolling sideways in its own scroller (`issues.css`)
+ * rather than stacking them into a second copy of the list. A column fills
+ * the page's height and scrolls its own cards, so its head stays in view. A
+ * card is a row of the sidebar's own on two lines, its identifier, mark,
+ * and time over its whole title, since a column is too narrow for the
+ * list's one line. ↑ and ↓ move through a column's cards,
  * ← and → to the nearest card of the next column holding any, from the
  * window itself as from a card, and Return opens the card reached.
  */
@@ -29,6 +27,9 @@ const CARDS = ".sidebar-task";
 
 /** A column of cards. */
 const COLUMNS = "[data-issue-column]";
+
+/** The board's own scroller, which scrolls sideways (`issues-page.tsx`). */
+const BOARD_SCROLLER = ".issue-board-scroll";
 
 /** How each arrow moves: across the columns, or down a column. */
 const ARROW_MOVE = {
@@ -60,6 +61,32 @@ function reached(
 }
 
 /**
+ * Keeps the column a card stands in whole inside the board's scroller, its
+ * inset to spare, scrolling only that scroller (the renderer's rule against
+ * `scrollIntoView`). Note that a focus scrolls a card in only where none of
+ * it shows, so a column half past the edge would hold the keyboard half
+ * unseen.
+ */
+function keepColumnInView(card: HTMLElement): void {
+  const column = card.closest<HTMLElement>(COLUMNS);
+  const scroller = column?.closest<HTMLElement>(BOARD_SCROLLER);
+  if (column === null || column === undefined || scroller === null || scroller === undefined) {
+    return;
+  }
+  const inset = Number.parseFloat(getComputedStyle(scroller).paddingLeft) || 0;
+  const left =
+    column.getBoundingClientRect().left -
+    scroller.getBoundingClientRect().left +
+    scroller.scrollLeft -
+    inset;
+  const right = left + column.offsetWidth + 2 * inset;
+  if (left < scroller.scrollLeft) scroller.scrollLeft = left;
+  else if (right > scroller.scrollLeft + scroller.clientWidth) {
+    scroller.scrollLeft = right - scroller.clientWidth;
+  }
+}
+
+/**
  * The arrows over the board, from the window itself or from one of its
  * cards: the first press from the window reaches the first card of the
  * first column holding any. A key with a modifier, or one pressed anywhere
@@ -79,12 +106,14 @@ export function useBoardKeys(board: HTMLElement | null, shown: boolean): void {
       const fromWindow = from === null || from === document.body;
       if (column < 0 && !fromWindow) return;
       event.preventDefault();
-      if (column < 0) {
-        columns.find((cards) => cards.length > 0)?.[0]?.focus();
-        return;
-      }
       const row = (columns[column] ?? []).findIndex((card) => card === from);
-      reached(columns, column, row, ARROW_MOVE[event.key])?.focus();
+      const card =
+        column < 0
+          ? columns.find((cards) => cards.length > 0)?.[0]
+          : reached(columns, column, row, ARROW_MOVE[event.key]);
+      if (card === undefined) return;
+      card.focus();
+      keepColumnInView(card);
     };
     window.addEventListener("keydown", step);
     return () => window.removeEventListener("keydown", step);
@@ -105,10 +134,12 @@ function IssueCard({
   focused: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const priority = PRIORITY_GLYPH[issue.priority];
   const card = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
-    if (focused) card.current?.focus();
+    // Note that the board was drawn again on the way back, its scroller at its start, so the column is brought whole into view as an arrow brings it.
+    if (!focused || card.current === null) return;
+    card.current.focus();
+    keepColumnInView(card.current);
   }, [focused]);
   return (
     <li className="sidebar-task-item home-row factory-row" data-issue-id={issue.id}>
@@ -117,16 +148,7 @@ function IssueCard({
           <span className="issue-row-identifier">
             {issueIdentifier(workspaceName, issue.number)}
           </span>
-          {priority === null ? null : (
-            <span
-              className="issue-priority-mark"
-              data-priority={issue.priority}
-              title={ISSUE_PRIORITY_WORDS[issue.priority]}
-            >
-              {priority}
-              <span className="visually-hidden">{ISSUE_PRIORITY_WORDS[issue.priority]}</span>
-            </span>
-          )}
+          <PriorityMark priority={issue.priority} />
           <RelativeTime className="sidebar-task-time" at={issue.updatedAt} now={now} />
         </span>
         <span className="sidebar-task-name issue-row-title issue-card-title">{issue.title}</span>
@@ -135,7 +157,7 @@ function IssueCard({
   );
 }
 
-/** The board: a column for every status, each headed by its glyph, its name, and how many issues stand in it. */
+/** The board: a column for every status, each headed by its glyph, its name, and how many issues stand in it, a column holding none saying so instead. */
 export function IssueBoard({
   issues,
   workspaceName,
@@ -151,23 +173,25 @@ export function IssueBoard({
   onOpen: (issue: Issue) => void;
 }): React.JSX.Element {
   return (
-    <div className="factory-line-up issue-board">
+    <div className="issue-board">
       {issueColumns(issues).map((column) => (
         <section
           key={column.status}
-          className="factory-step"
+          className="factory-step issue-column"
           data-issue-column={column.status}
           aria-label={ISSUE_STATUS_WORDS[column.status]}
         >
           <h2 className="factory-head">
             <StatusGlyph status={column.status} />
             <span className="factory-name">{ISSUE_STATUS_WORDS[column.status]}</span>
-            <span className="factory-count">{column.issues.length}</span>
+            {column.issues.length === 0 ? null : (
+              <span className="factory-count">{column.issues.length}</span>
+            )}
           </h2>
           {column.issues.length === 0 ? (
             <p className="factory-idle">{NO_ISSUES}</p>
           ) : (
-            <ul className="sidebar-tasks factory-rows">
+            <ul className="sidebar-tasks issue-column-cards scroll-fade">
               {column.issues.map((issue) => (
                 <IssueCard
                   key={issue.id}

@@ -31,7 +31,11 @@
  * made one conversation in time order.
  */
 
-import { githubAvatarUrl, githubUserAvatarUrl } from "@luke/features/account-picture";
+import {
+  githubAppAvatarUrl,
+  githubAvatarUrl,
+  githubUserAvatarUrl,
+} from "@luke/features/account-picture";
 import {
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
@@ -54,6 +58,7 @@ import {
   REVIEW_STATE,
   type ReviewState,
 } from "@luke/features/coding-agent-wire";
+import { githubImageOf } from "@luke/features/github-image";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -842,7 +847,7 @@ const ListedCheckRunsSchema = Schema.Struct({
       details_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
       started_at: Schema.NullOr(Schema.String),
       completed_at: Schema.NullOr(Schema.String),
-      app: Schema.NullOr(Schema.Struct({ name: Schema.String })),
+      app: Schema.NullOr(Schema.Struct({ id: Schema.Number, name: Schema.String })),
     }),
   ),
 });
@@ -856,6 +861,7 @@ const ListedStatusesSchema = Schema.Struct({
       target_url: Schema.NullOr(Schema.String),
       created_at: Schema.String,
       updated_at: Schema.String,
+      avatar_url: Schema.optionalKey(Schema.NullOr(Schema.String)),
     }),
   ),
 });
@@ -981,6 +987,21 @@ function statusStateOf(state: string): CheckState {
   return FAILING_STATUS_STATES.has(state) ? CHECK_STATE.FAILED : CHECK_STATE.PENDING;
 }
 
+/**
+ * A check's avatar as the wire carries it: an address on GitHub's own
+ * avatar host, drawn as it is, or one the window reads through the
+ * service's image proxy (`githubImageOf`); absent for anything else.
+ */
+function checkAvatarOf(spelled: string | null | undefined): string | undefined {
+  if (spelled === null || spelled === undefined) return undefined;
+  return githubAvatarUrl(spelled) ?? (githubImageOf(spelled) === undefined ? undefined : spelled);
+}
+
+/** A check wearing its avatar, where it has one. */
+function withAvatar(check: PullRequestCheck, avatarUrl: string | undefined): PullRequestCheck {
+  return avatarUrl === undefined ? check : { ...check, avatarUrl };
+}
+
 /** Where a check stands in the order the bound keeps them by: what asks for a look first. */
 const CHECK_RANK = {
   [CHECK_STATE.FAILED]: 0,
@@ -1001,7 +1022,10 @@ function pullHeadRef(number: number): string {
  * the checks wait on no read of the pull request for its head's commit; a
  * pull request the repository does not hold lists none. Note that they are
  * ordered before they are cut, because a head with a hundred passing runs
- * would otherwise leave out the one status that failed.
+ * would otherwise leave out the one status that failed. Each wears its
+ * avatar: a check run its App's logo, by the App's id its run names, and a
+ * status the picture GitHub names on it, so the avatars cost no request of
+ * their own.
  */
 export function pullRequestChecks(
   token: Redacted.Redacted,
@@ -1015,14 +1039,19 @@ export function pullRequestChecks(
     githubRead(`${commit}/check-runs`, token).pipe(perPage),
     ListedCheckRunsSchema,
     (answer): readonly PullRequestCheck[] =>
-      answer.check_runs.map((run) => ({
-        name: nameOf(run.name),
-        app: run.app === null ? null : nameOf(run.app.name),
-        state: runStateOf(run.status, run.conclusion),
-        url: run.html_url ?? run.details_url ?? null,
-        startedAt: timeOf(run.started_at),
-        completedAt: timeOf(run.completed_at),
-      })),
+      answer.check_runs.map((run) =>
+        withAvatar(
+          {
+            name: nameOf(run.name),
+            app: run.app === null ? null : nameOf(run.app.name),
+            state: runStateOf(run.status, run.conclusion),
+            url: run.html_url ?? run.details_url ?? null,
+            startedAt: timeOf(run.started_at),
+            completedAt: timeOf(run.completed_at),
+          },
+          run.app === null ? undefined : githubAppAvatarUrl(run.app.id),
+        ),
+      ),
   );
   const statuses = readListed(
     "commit statuses",
@@ -1031,7 +1060,7 @@ export function pullRequestChecks(
     (answer): readonly PullRequestCheck[] =>
       answer.statuses.map((status) => {
         const state = statusStateOf(status.state);
-        return {
+        const check: PullRequestCheck = {
           name: nameOf(status.context),
           app: null,
           state,
@@ -1039,6 +1068,7 @@ export function pullRequestChecks(
           startedAt: timeOf(status.created_at),
           completedAt: state === CHECK_STATE.PENDING ? null : timeOf(status.updated_at),
         };
+        return withAvatar(check, checkAvatarOf(status.avatar_url));
       }),
   );
   return Effect.map(Effect.all([runs, statuses], { concurrency: "unbounded" }), ([a, b]) =>
