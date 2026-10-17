@@ -30,6 +30,7 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
+  REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -1447,4 +1448,115 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
     assert.fail("the line may be dismissed");
   act(() => dismiss.click());
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
+});
+
+/** The bar's Review press. */
+function reviewPress(tab: HTMLElement): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>(".pull-request-review-button") ??
+    assert.fail("an open pull request's bar offers Review")
+  );
+}
+
+/** Opens the review panel from the bar. */
+function openReview(tab: HTMLElement): HTMLElement {
+  act(() => reviewPress(tab).click());
+  return (
+    tab.querySelector<HTMLElement>('[role="dialog"].pull-request-review-panel') ??
+    assert.fail("Review opens the panel")
+  );
+}
+
+/** Writes the review's words as the member would. */
+function writeReview(panel: HTMLElement, words: string): void {
+  const field =
+    panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Review comment"]') ??
+    assert.fail("the panel has a field for the review's words");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Chooses what the review says by its label, and submits it. */
+async function submitReview(panel: HTMLElement, label: string): Promise<void> {
+  const choice =
+    [...panel.querySelectorAll("label")].find((each) => each.textContent?.startsWith(label)) ??
+    assert.fail(`the panel offers ${label}`);
+  act(() => choice.querySelector("input")?.click());
+  const submit =
+    [...panel.querySelectorAll("button")].find((each) => each.textContent === "Submit review") ??
+    assert.fail("the panel submits");
+  act(() => submit.click());
+  await settle();
+}
+
+test("Review opens a panel whose choice and words are submitted for the agent as one review, after which it closes, lets its words go, and the conversation is read again", async () => {
+  let conversationReads = 0;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        conversationReads += 1;
+        return Promise.resolve({ pullRequest: CONVERSATION });
+      },
+    }),
+  );
+  const panel = openReview(tab);
+  assert.deepEqual(words(panel, ".pull-request-review-event-label"), [
+    "Comment",
+    "Approve",
+    "Request changes",
+  ]);
+
+  writeReview(panel, "Ship it once **CI** is green.");
+  await submitReview(panel, "Approve");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
+        event: REVIEW_EVENT.APPROVE,
+        body: "Ship it once **CI** is green.",
+      },
+    ],
+  ]);
+  assert.equal(conversationReads, 2, "the conversation is read again once GitHub took the review");
+  assert.equal(tab.querySelector(".pull-request-review-panel"), null, "the panel closes");
+  const reopened = openReview(tab);
+  assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
+  assert.equal(
+    reopened.querySelector<HTMLInputElement>("input:checked")?.value,
+    REVIEW_EVENT.COMMENT,
+  );
+});
+
+test("a review GitHub refuses says so in GitHub's own words inside the panel, never under the bar, and the words written stand for another try; a merged pull request offers no Review", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Review Can not approve your own pull request",
+  };
+  const tab = await draw(controlAnswering());
+  const panel = openReview(tab);
+
+  writeReview(panel, "LGTM");
+  await submitReview(panel, "Approve");
+
+  assert.equal(
+    panel.querySelector(".pull-request-review-note .failure-note-words")?.textContent,
+    "GitHub said: Review Can not approve your own pull request",
+  );
+  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+  assert.equal(panel.querySelector("textarea")?.value, "LGTM");
+  act(() => root?.unmount());
+  root = undefined;
+
+  const merged = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
+    }),
+  );
+  assert.equal(merged.querySelector(".pull-request-review-button"), null);
 });

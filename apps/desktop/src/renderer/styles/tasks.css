@@ -1868,6 +1868,146 @@ button.file-ref:hover .file-ref-path {
   margin-inline-start: auto;
 }
 
+/* The bar's Review press and the panel it opens (`pull-request-review.tsx`):
+   the press holds the panel's anchor, and the panel is a popover card as
+   the context ring's is, its words' field over what the review says, each
+   choice a row with its meaning under its name, as stage-cli draws them. */
+.pull-request-review {
+  position: relative;
+  display: flex;
+}
+
+.pull-request-review-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16) var(--space-16);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
+}
+
+.pull-request-review-panel:focus-visible {
+  outline: none; /* no ring: a popover holding focus for its controls */
+}
+
+.pull-request-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-right: calc(-1 * var(--space-8));
+}
+
+.pull-request-review-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pull-request-review-lead {
+  margin: calc(-1 * var(--space-8)) 0 0;
+  color: var(--text-secondary);
+}
+
+.pull-request-review-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.pull-request-review-field,
+.pull-request-review-preview {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  max-height: 240px;
+}
+
+.pull-request-review-field {
+  resize: vertical;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.pull-request-review-preview {
+  overflow-y: auto;
+  padding: 9px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+}
+
+.pull-request-review-preview > p:only-child {
+  margin: 0;
+}
+
+.pull-request-review-events {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pull-request-review-event {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+}
+
+.pull-request-review-event:has(input:checked) {
+  border-color: var(--hairline-strong);
+  background: var(--selected);
+}
+
+.pull-request-review-events:disabled .pull-request-review-event {
+  opacity: 0.6;
+}
+
+.pull-request-review-event input {
+  margin: 2px 0 0;
+  accent-color: var(--message-sent);
+}
+
+.pull-request-review-event-words {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pull-request-review-event-label {
+  font-weight: 600;
+}
+
+.pull-request-review-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pull-request-review-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pull-request-review-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--control-gap);
+}
+
 /* The branches it merges, quiet in the code face under the title. */
 .pull-request-branches {
   margin: var(--space-2) 0 0;

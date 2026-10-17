@@ -41,7 +41,7 @@ type PopoverAlign = (typeof POPOVER_ALIGN)[keyof typeof POPOVER_ALIGN];
 /** The gap between the anchor and its popover, which is desktop.css's `--space-4`. */
 const POPOVER_GAP = 4;
 
-/** The width a popover asks for, the searchable menu's own, which the room may narrow. */
+/** The width a popover asks for unless its owner asks another, the searchable menu's own, which the room may narrow. */
 const POPOVER_WIDTH = 340;
 
 /** The least gap a popover keeps from its room's edges, as the action menu keeps from the window's. */
@@ -123,9 +123,12 @@ function roomAround(element: HTMLElement): Box {
  */
 export function AnchoredPopover({
   align,
+  width = POPOVER_WIDTH,
   children,
 }: {
   align: PopoverAlign;
+  /** The width it asks for, a form's wider than a menu's. */
+  width?: number;
   children: React.ReactNode;
 }): React.JSX.Element {
   const layer = useRef<HTMLDivElement>(null);
@@ -140,7 +143,7 @@ export function AnchoredPopover({
         popoverPlace({
           anchor: anchor.getBoundingClientRect(),
           room: roomAround(anchor),
-          width: POPOVER_WIDTH,
+          width,
           height: drawn.getBoundingClientRect().height,
           align,
         }),
@@ -159,7 +162,7 @@ export function AnchoredPopover({
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [align]);
+  }, [align, width]);
 
   return (
     <div
@@ -168,7 +171,7 @@ export function AnchoredPopover({
       data-side={place?.side ?? POPOVER_SIDE.ABOVE}
       style={
         place === undefined
-          ? placeStyle(align, 0, POPOVER_WIDTH)
+          ? placeStyle(align, 0, width)
           : placeStyle(align, place.inset, place.width)
       }
     >
