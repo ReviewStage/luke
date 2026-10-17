@@ -12,10 +12,12 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
+import { applySectionWrite, sectionOrder } from "@luke/ui/task-sections-model";
+import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
@@ -26,8 +28,9 @@ import { DesktopSidebar } from "./desktop-sidebar";
  * sidebar-sections.test.ts -- the account's own sections in the sidebar:
  * drawn only while their experiment is on, each over the tasks kept in it,
  * which Tasks then leaves out, and reached from a task's menu, whose Move
- * to section writes the move and whose section's Delete asks first.
- * Synthetic throughout.
+ * to section writes the move and whose section's Delete asks first; and
+ * a task dragged between Pinned, Tasks, and a section, pinned, unpinned, and
+ * moved where it is let go while the experiment is on. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -66,6 +69,7 @@ afterEach(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 function task(id: string, name: string): TaskSummary {
@@ -325,4 +329,199 @@ test("choosing No icon and saving clears a section's icon", async () => {
   assert.deepEqual(writes, [
     { kind: TASK_SECTION_WRITE.EDIT, id: LAUNCH, title: "Launch", icon: null },
   ]);
+});
+
+/** Each row's height as laid out here, in CSS pixels. */
+const ROW_HEIGHT = 30;
+
+/** What a drag in the sidebar asked: each pin or unpin, each pin's new place, and each write to the sections. */
+interface Asked {
+  marks: [string, TaskMark][];
+  moves: PinMove[];
+  writes: TaskSectionWrite[];
+}
+
+/**
+ * Lays the sidebar out down one column, as jsdom does not: each row, and
+ * each empty section's word, a row's height below the one before, and
+ * everything holding some of them over exactly those, so each drop zone
+ * stands over its own rows and no other's.
+ */
+function layOutRows(): void {
+  const slots = () => [...document.querySelectorAll(".sidebar-task-item, .sidebar-section-empty")];
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const all = slots();
+    const own = all.indexOf(this);
+    const held = own >= 0 ? [own] : all.flatMap((slot, at) => (this.contains(slot) ? [at] : []));
+    const first = held[0];
+    const last = held.at(-1);
+    if (first === undefined || last === undefined) return DOMRect.fromRect();
+    return DOMRect.fromRect({
+      y: first * ROW_HEIGHT,
+      width: 200,
+      height: (last - first + 1) * ROW_HEIGHT,
+    });
+  });
+  // jsdom captures no pointer; a drag asks its list to, as the window's would.
+  for (const list of document.querySelectorAll(".sidebar-tasks")) {
+    Object.assign(list, { setPointerCapture: () => undefined });
+  }
+}
+
+/** The sidebar listing `plans` over `sections`, laid out down one column, what a drag asks heard by `asked`. */
+async function mountDraggable(
+  plans: readonly TaskSummary[],
+  sections: TaskSections,
+  asked: Asked,
+): Promise<HTMLElement> {
+  const tasks = tasksControl({
+    tasks: [...plans],
+    workspaces: [WORKSPACE],
+    workspace: WORKSPACE,
+    taskSections: sections,
+    onWriteSections: (writes) => asked.writes.push(...writes),
+    onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),
+    onMovePins: (moves) => asked.moves.push(...moves),
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
+    ),
+  );
+  await settle();
+  layOutRows();
+  return container;
+}
+
+const pointer = (type: string, y: number) =>
+  new PointerEvent(type, { bubbles: true, button: 0, clientY: y, pointerId: 1 });
+
+/** Drags the row named `name` from its middle to `y` down the column and lets it go there. */
+function drag(sidebar: HTMLElement, name: string, y: number): void {
+  const label = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-task-name")].find(
+    (each) => each.textContent === name,
+  );
+  const row = label?.closest("li") ?? assert.fail(`no ${name} in the sidebar`);
+  const top = row.getBoundingClientRect().top + ROW_HEIGHT / 2;
+  act(() => {
+    label?.dispatchEvent(pointer("pointerdown", top));
+    window.dispatchEvent(pointer("pointermove", top + (y > top ? 10 : -10)));
+    window.dispatchEvent(pointer("pointermove", y));
+    window.dispatchEvent(pointer("pointerup", y));
+  });
+}
+
+const noneAsked = (): Asked => ({ marks: [], moves: [], writes: [] });
+
+/** A task pinned at the first place a drag gives. */
+const PINNED = {
+  ...task("0a1b2c3d-0000-4000-8000-100000000003", "Pin audit"),
+  pinnedAt: 5,
+  pinPosition: "a0",
+};
+
+test("a task dragged from Tasks into Pinned is pinned below the pin it was let go under", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const asked = noneAsked();
+  // Down the column: Pin audit under Pinned, Invite expiry under Launch, Retry audit under Tasks.
+  const sidebar = await mountDraggable([PINNED, INVITES, RETRIES], SECTIONS, asked);
+
+  drag(sidebar, "Retry audit", ROW_HEIGHT - 4);
+
+  assert.deepEqual(asked.marks, [[RETRIES.id, TASK_MARK.PIN]]);
+  assert.deepEqual(
+    asked.moves.map((move) => move.id),
+    [RETRIES.id],
+  );
+  assert.ok((asked.moves[0]?.position ?? "") > PINNED.pinPosition, "it sorts after Pin audit");
+  assert.deepEqual(asked.writes, []);
+});
+
+test("a task dragged from a section onto the top of Pinned leaves the section and is pinned on top", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const asked = noneAsked();
+  const sidebar = await mountDraggable([PINNED, INVITES, RETRIES], SECTIONS, asked);
+
+  drag(sidebar, "Invite expiry", 4);
+
+  assert.deepEqual(asked.marks, [[INVITES.id, TASK_MARK.PIN]]);
+  assert.deepEqual(asked.moves, [], "a pin never dragged stands on top");
+  assert.deepEqual(asked.writes, [
+    { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES.id, sectionId: null },
+  ]);
+});
+
+test("a pinned task dragged onto Tasks is unpinned and leaves the section it was kept in", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const asked = noneAsked();
+  const kept: TaskSections = {
+    ...SECTIONS,
+    entries: [...SECTIONS.entries, { taskId: PINNED.id, sectionId: LAUNCH, addedAt: 3 }],
+  };
+  const sidebar = await mountDraggable([PINNED, INVITES, RETRIES], kept, asked);
+
+  drag(sidebar, "Pin audit", 3 * ROW_HEIGHT - 4);
+
+  assert.deepEqual(asked.marks, [[PINNED.id, TASK_MARK.UNPIN]]);
+  assert.deepEqual(asked.writes, [
+    { kind: TASK_SECTION_WRITE.PLACE, taskId: PINNED.id, sectionId: null },
+  ]);
+});
+
+test("a pinned task dragged into a section is unpinned and lands where it was let go", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const asked = noneAsked();
+  const sidebar = await mountDraggable([PINNED, INVITES, RETRIES], SECTIONS, asked);
+
+  drag(sidebar, "Pin audit", 2 * ROW_HEIGHT - 4);
+
+  assert.deepEqual(asked.marks, [[PINNED.id, TASK_MARK.UNPIN]]);
+  const after = asked.writes.reduce(
+    (state, write) => applySectionWrite(state, write, Date.now()),
+    SECTIONS,
+  );
+  assert.deepEqual(
+    sectionOrder(after, LAUNCH).map((entry) => entry.taskId),
+    [INVITES.id, PINNED.id],
+  );
+});
+
+test("with sections on, Pinned stands while nothing is pinned and takes the first pin", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const asked = noneAsked();
+  const sidebar = await mountDraggable([INVITES, RETRIES], SECTIONS, asked);
+  assert.ok(sidebar.querySelector('nav[aria-label="Pinned"] .sidebar-section-empty'));
+
+  drag(sidebar, "Retry audit", 4);
+
+  assert.deepEqual(asked.marks, [[RETRIES.id, TASK_MARK.PIN]]);
+});
+
+test("with the experiment off, Pinned takes no task dragged at it and its pins still reorder", async () => {
+  handState({});
+  const asked = noneAsked();
+  const second = {
+    ...task("0a1b2c3d-0000-4000-8000-100000000004", "Pin review"),
+    pinnedAt: 4,
+    pinPosition: "a1",
+  };
+  // Down the column: Pin audit and Pin review under Pinned, then both others under Tasks.
+  const sidebar = await mountDraggable([PINNED, second, INVITES, RETRIES], SECTIONS, asked);
+  assert.equal(
+    sidebar.querySelector('nav[aria-label="Pinned"]')?.hasAttribute("data-row-drop"),
+    false,
+  );
+
+  drag(sidebar, "Retry audit", 4);
+  drag(sidebar, "Pin audit", 2 * ROW_HEIGHT - 4);
+
+  assert.deepEqual(asked.marks, []);
+  assert.deepEqual(
+    asked.moves.map((move) => move.id),
+    [PINNED.id],
+  );
+  assert.ok((asked.moves[0]?.position ?? "") > second.pinPosition, "it sorts after Pin review");
 });
