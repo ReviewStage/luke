@@ -41,14 +41,6 @@ export const commentAnchorMark = Mark.create({
         default: "",
         renderHTML: (attributes) => ({ "data-threads": String(attributes.thread ?? "") }),
       },
-      // A thread on its block whole is drawn as the read view draws one, its block's bar from the margin.
-      block: {
-        default: false,
-        renderHTML: (attributes) =>
-          attributes.block === true
-            ? { "data-block": "true", "data-block-threads": String(attributes.thread ?? "") }
-            : {},
-      },
     };
   },
   renderHTML({ HTMLAttributes }) {
@@ -109,11 +101,7 @@ export function anchorsLaidIn(
     const from = span === undefined ? undefined : words.at[span.from];
     const last = span === undefined ? undefined : words.at[span.to - 1];
     if (from === undefined || last === undefined) continue;
-    tr.addMark(
-      from,
-      last + 1,
-      type.create({ thread: anchor.thread, block: anchor.block === true }),
-    );
+    tr.addMark(from, last + 1, type.create({ thread: anchor.thread }));
     laid.push(anchor.thread);
   }
   if (laid.length > 0) editor.view.dispatch(tr);
