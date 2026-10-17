@@ -29,6 +29,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  max,
   notExists,
   or,
   sql,
@@ -857,7 +858,7 @@ export function latestTurnsOfReached(
 
 const AwaitingLinesRowSchema = Schema.Struct({
   conversationId: Schema.String,
-  lines: Schema.Number,
+  newestAt: InstantColumnSchema,
 });
 
 /**
@@ -901,15 +902,17 @@ export function noReceiptOfLine() {
 }
 
 /**
- * How many of the developer's lines stand in each coding-agent conversation
- * named with no turn yet: each is a message the session took and the next
- * turn will receive, which is what reads an idle agent as running again
- * until that turn opens. The kind is held here as the writer holds it when
- * it takes such a line, since a task conversation's turnless user rows
- * are its spoken asks and wait for no turn of eve's. A line a turn already
- * received under another row (`noReceiptOfLine`) is not counted.
+ * When the newest of the developer's lines standing with no turn yet was
+ * written, in each coding-agent conversation named that holds one: each is
+ * a message the session took and the next turn will receive, which is what
+ * reads an idle agent as running again until that turn opens, for as long
+ * as the status allows it to wait (`coder-host/status.ts`). The kind is held
+ * here as the writer holds it when it takes such a line, since a task
+ * conversation's turnless user rows are its spoken asks and wait for no
+ * turn of eve's. A line a turn already received under another row
+ * (`noReceiptOfLine`) is not counted.
  */
-const countAwaitingLines = SqlSchema.findAll({
+const newestAwaitingLines = SqlSchema.findAll({
   Request: ConversationsReadSchema,
   Result: AwaitingLinesRowSchema,
   execute: ({ userId, conversationIds }) =>
@@ -917,7 +920,7 @@ const countAwaitingLines = SqlSchema.findAll({
       db
         .select({
           conversationId: messages.conversationId,
-          lines: sql<number>`count(*)::int`,
+          newestAt: max(messages.createdAt),
         })
         .from(messages)
         .innerJoin(conversations, eq(conversations.id, messages.conversationId))
@@ -970,26 +973,26 @@ export function sentLineStands(
 function awaitingLinesRead(
   userId: string | null,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlySet<string>, MessageReadFailure, DatabaseServices> {
-  if (conversationIds.length === 0) return Effect.succeed(new Set());
+): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
-    countAwaitingLines({ userId, conversationIds }),
-    (rows) => new Set(rows.filter((row) => row.lines > 0).map((row) => row.conversationId)),
+    newestAwaitingLines({ userId, conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row.newestAt])),
   );
 }
 
-/** The conversations among those named in which a developer's line awaits its turn; one with none is absent. */
+/** The conversations among those named in which a developer's line awaits its turn, each with when the newest such line was written; one with none is absent. */
 export function awaitingLinesOf(
   userId: string,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlySet<string>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
   return awaitingLinesRead(userId, conversationIds);
 }
 
-/** The conversations among those named, whoever owns them, in which a developer's line awaits its turn; only for ids a gate already read, as `latestTurnsOfReached`. */
+/** The conversations among those named, whoever owns them, in which a developer's line awaits its turn, each with when the newest was written; only for ids a gate already read, as `latestTurnsOfReached`. */
 export function awaitingLinesOfReached(
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlySet<string>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
   return awaitingLinesRead(null, conversationIds);
 }
 

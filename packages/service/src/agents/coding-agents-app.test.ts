@@ -1975,6 +1975,53 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a line no turn ever took reads its agent running for the line's grace and failed past it, alike on its page, in its task's list, and on its transcript",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, agent, ask, transcript, sent } = yield* startedAgent(fakeEve(), {
+          running: false,
+        });
+        // The session takes the line and then fails with the store's hooks, so no turn row is written for it.
+        yield* TestClock.adjust(Duration.seconds(1));
+        assert.equal(
+          (yield* sent("Rename the subject line too.")).agent.status,
+          CODING_AGENT_STATUS.RUNNING,
+        );
+        const statuses = () =>
+          Effect.gen(function* () {
+            const page = readAnswer(
+              codingAgentPageAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(AGENT, owner, { id: agent.id })),
+            );
+            const listed = readAnswer(
+              codingAgentListAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
+            );
+            return {
+              page: page.agent.status,
+              list: listed.agents.find((each) => each.id === agent.id)?.status,
+              transcript: (yield* transcript()).status,
+            };
+          });
+
+        yield* TestClock.adjust(CODER.LINE_GRACE);
+        assert.deepEqual(yield* statuses(), {
+          page: CODING_AGENT_STATUS.RUNNING,
+          list: CODING_AGENT_STATUS.RUNNING,
+          transcript: CODING_AGENT_STATUS.RUNNING,
+        });
+        yield* TestClock.adjust(Duration.millis(1));
+        assert.deepEqual(yield* statuses(), {
+          page: CODING_AGENT_STATUS.FAILED,
+          list: CODING_AGENT_STATUS.FAILED,
+          transcript: CODING_AGENT_STATUS.FAILED,
+        });
+      }),
+  );
+
+  it.effect(
     "the plan list a teammate reads names the member who started each of the plan's agents, by the name their account holds now",
     () =>
       Effect.gen(function* () {
