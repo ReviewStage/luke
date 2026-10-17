@@ -8,8 +8,9 @@ import { workspaceIdSchema } from "./task-wire.js";
  *
  * A section is its maker's own reading of their work, as a pin is: one
  * account's, in one workspace, so a teammate's sidebar never wears it. It
- * has a title and, optionally, an icon, one emoji or one of the glyphs
- * named here, and a place among the account's sections once dragged there
+ * has a title and, optionally, an icon, one emoji or one Lucide glyph by
+ * its kebab-case name, the glyph in one of the colors named here or in
+ * the text's own, and a place among the account's sections once dragged there
  * (`pin-order.ts`'s keys; with none, it stands by when it was made). A task
  * stands in at most one of the account's sections, an entry with a place
  * of its own among the section's tasks. Deleting a section deletes its
@@ -30,15 +31,22 @@ export const TASK_SECTION_BOUNDS = {
   MAX_SECTIONS: 100,
   /** The most UTF-16 units one emoji may spell, a family or a flag with its joiners included. */
   MAX_EMOJI_UNITS: 32,
+  /** The most characters a glyph's name may spell; Lucide's longest is about half of it. */
+  MAX_GLYPH_CHARS: 64,
 } as const;
 
-/** What a section's icon is: one emoji, or one of Luke's own glyphs. */
+/** What a section's icon is: one emoji, or one Lucide glyph. */
 export const TASK_SECTION_ICON_KIND = {
   EMOJI: "emoji",
   GLYPH: "glyph",
 } as const;
 
-/** The glyphs a section may wear, each a Lucide icon the Mac draws by this name. */
+/**
+ * The glyphs the picker offers first, each a Lucide icon by its name, and
+ * every name a section could wear before any Lucide icon could be chosen.
+ * Any other kebab-case name is taken too; a Mac that knows no such icon
+ * draws none.
+ */
 export const TASK_SECTION_GLYPH = {
   FOLDER: "folder",
   STAR: "star",
@@ -55,6 +63,21 @@ export const TASK_SECTION_GLYPH = {
 } as const;
 
 export type TaskSectionGlyph = (typeof TASK_SECTION_GLYPH)[keyof typeof TASK_SECTION_GLYPH];
+
+/** The colors a glyph may wear; a glyph without one wears the text's own. */
+export const TASK_SECTION_ICON_COLOR = {
+  RED: "red",
+  ORANGE: "orange",
+  YELLOW: "yellow",
+  GREEN: "green",
+  TEAL: "teal",
+  BLUE: "blue",
+  PURPLE: "purple",
+  PINK: "pink",
+} as const;
+
+export type TaskSectionIconColor =
+  (typeof TASK_SECTION_ICON_COLOR)[keyof typeof TASK_SECTION_ICON_COLOR];
 
 /** Which write a request is. */
 export const TASK_SECTION_WRITE = {
@@ -81,7 +104,13 @@ const emojiSchema = EffectSchema.Trim.check(
   EffectSchema.makeFilter(isOneEmoji),
 );
 
-/** A section's icon: one emoji, or one of the glyphs `TASK_SECTION_GLYPH` names. */
+/** A glyph's name, as Lucide spells it: lower-case words and numbers joined by hyphens, bounded. */
+const glyphSchema = EffectSchema.String.check(
+  EffectSchema.isMaxLength(TASK_SECTION_BOUNDS.MAX_GLYPH_CHARS),
+  EffectSchema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+);
+
+/** A section's icon: one emoji, or one Lucide glyph by name, in a color of `TASK_SECTION_ICON_COLOR` or none. */
 export const taskSectionIconSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(TASK_SECTION_ICON_KIND.EMOJI),
@@ -89,7 +118,8 @@ export const taskSectionIconSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(TASK_SECTION_ICON_KIND.GLYPH),
-    glyph: EffectSchema.Literals(Object.values(TASK_SECTION_GLYPH)),
+    glyph: glyphSchema,
+    color: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(TASK_SECTION_ICON_COLOR))),
   }),
 ]);
 

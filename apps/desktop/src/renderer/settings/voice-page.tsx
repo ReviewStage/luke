@@ -46,10 +46,13 @@ export function VoiceSection({
   view,
   writes,
   microphone,
+  microphoneOffered,
 }: {
   view: SettingsRowsInput;
   writes: SettingsWrites;
   microphone: MicrophoneControl;
+  /** Whether the platform asks for the microphone itself, which its permission row stands on. */
+  microphoneOffered: boolean;
 }): React.JSX.Element {
   const settings = view.settings;
   const microphoneRow = microphoneAccessRow({
@@ -75,10 +78,11 @@ export function VoiceSection({
           </SettingsRow>
         </SettingsSection>
       )}
-      {/* Drawn only once there is a voice for the microphone to reach: until
-          then, the permission guards a feature that cannot run, and the page
-          holds the one thing to do next rather than a queue of them. */}
-      {settings.voiceAvailable ? (
+      {/* Drawn only once there is a voice for the microphone to reach, on a
+          platform whose microphone Luke asks for: until then, the permission
+          guards a feature that cannot run, and the page holds the one thing
+          to do next rather than a queue of them. */}
+      {settings.voiceAvailable && microphoneOffered ? (
         <SettingsSection title="Permissions">
           {/* Access, not use. The talk key is what opens the microphone, so a
               button here could only ever repeat what the key already does — the

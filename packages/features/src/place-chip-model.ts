@@ -18,6 +18,8 @@ import { LINK_PLACE, type LinkPlace } from "./luke-link.js";
 export interface KnownNames {
   readonly plans: ReadonlyMap<string, string>;
   readonly agents: ReadonlyMap<string, string>;
+  /** The catalog id of the model each agent the window holds runs on, which its harness's mark is read off; titled or not. */
+  readonly agentModels: ReadonlyMap<string, string>;
   readonly pages: ReadonlyMap<string, string>;
   readonly inboxItems: ReadonlyMap<string, string>;
   readonly people: ReadonlyMap<string, string>;
