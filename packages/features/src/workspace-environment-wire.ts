@@ -117,7 +117,12 @@ export const workspaceEnvironmentSaveRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   name: workspaceEnvironmentNameSchema,
   kind: kindSchema,
-  value: EffectSchema.String.check(
+  /**
+   * The value, of either kind. Note that it is named for a secret whatever
+   * its kind, so Sentry's default denylist, which replaces a field by its
+   * name, keeps it out of a request's trace (`PRIVACY.md`).
+   */
+  secretValue: EffectSchema.String.check(
     EffectSchema.isMinLength(1),
     EffectSchema.isMaxLength(WORKSPACE_ENVIRONMENT_BOUNDS.MAX_VALUE_CHARS),
     // A NUL ends a C string, so no environment can carry one.

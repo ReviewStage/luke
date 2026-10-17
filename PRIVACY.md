@@ -342,10 +342,12 @@ reads the values and hands them to the agent's sandbox with the command, so
 they stand in that command's environment and are not written to the sandbox's
 disk. A secret's value is replaced with `[REDACTED]` wherever it appears in
 what a command answers, but a command can still print it changed, so a secret
-can reach the agent's model, its transcript, and the traces of its run. We
-never log a value or send one to our analytics, crash reports, or screen
-recordings. Removing one in Settings deletes it, and every one goes with its
-workspace.
+can reach the agent's model, its transcript, and the traces of its run,
+which include the agent traces sent to Sentry described under "Error,
+performance, and agent reports from our service". A value is saved under a
+field name Sentry replaces before a request's trace leaves. We never log a
+value or send one to our analytics or screen recordings. Removing one in
+Settings deletes it, and every one goes with its workspace.
 
 **A task's whiteboard.** You and Luke can both draw on a
 task's whiteboard. Our service stores it with the task, as drawn and readable

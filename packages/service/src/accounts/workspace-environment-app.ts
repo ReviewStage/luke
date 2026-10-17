@@ -167,13 +167,13 @@ const saveEndpoint = Effect.fn("web/workspaceEnvironmentSaveEndpoint")(function*
     return yield* listResponse(ring, workspace.id, WORKSPACE_ENVIRONMENT_REJECTION.TOO_MANY);
   }
   const kind: WorkspaceEnvironmentKind = asked.kind;
-  const value = Redacted.make(asked.value);
+  const value = Redacted.make(asked.secretValue);
   const sealed = sealEnvironmentValue(
     ring,
     { organizationId: workspace.id, name: asked.name },
     value,
   );
-  const hint = kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? secretHint(asked.value) : "";
+  const hint = kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? secretHint(asked.secretValue) : "";
   const now = yield* DateTime.nowAsDate;
   yield* hostedStoreOrUnavailable(
     saveWorkspaceEnvironmentValue(workspace.id, asked.name, kind, sealed, hint, userId, now),

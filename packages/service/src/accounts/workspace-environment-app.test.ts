@@ -147,7 +147,12 @@ const list = (userId: string, workspaceId: string) =>
   post(HOSTED_SERVICE_PATH.WORKSPACE_ENVIRONMENT, userId, { workspaceId });
 
 const save = (userId: string, workspaceId: string, name: string, kind: string, value: string) =>
-  post(HOSTED_SERVICE_PATH.WORKSPACE_ENVIRONMENT_SAVE, userId, { workspaceId, name, kind, value });
+  post(HOSTED_SERVICE_PATH.WORKSPACE_ENVIRONMENT_SAVE, userId, {
+    workspaceId,
+    name,
+    kind,
+    secretValue: value,
+  });
 
 const remove = (userId: string, workspaceId: string, name: string) =>
   post(HOSTED_SERVICE_PATH.WORKSPACE_ENVIRONMENT_REMOVE, userId, { workspaceId, name });
