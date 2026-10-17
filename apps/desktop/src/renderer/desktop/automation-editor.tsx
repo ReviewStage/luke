@@ -845,7 +845,7 @@ function CodeReviewGroup({
   // The rules file's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
   const rulesFile = useRef<HTMLInputElement>(null);
   return (
-    <SettingsGroup title="Code review">
+    <SettingsSection title="Code review">
       <SwitchRow
         label="Comment when no issues are found"
         detail="Only on a pull request's first review."
@@ -884,7 +884,7 @@ function CodeReviewGroup({
         checked={settings.fix}
         onChange={(fix) => onSettings({ ...settings, fix })}
       />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -1281,7 +1281,7 @@ function RunsGroup({
   // The other repositories as a save would send them: the one shown first left out.
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
-    <SettingsGroup title="Runs">
+    <SettingsSection title="Runs">
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Repository</strong>
@@ -1333,7 +1333,7 @@ function RunsGroup({
         </>
       )}
       <Problem problem={problems[DRAFT_FIELD.AGENT]} />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -1397,7 +1397,7 @@ function EditorForm({
           />
         </SettingsSection>
       ) : null}
-      <SettingsGroup title="Trigger">
+      <SettingsSection title="Trigger">
         <SelectRow
           label="Type"
           detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
@@ -1437,7 +1437,7 @@ function EditorForm({
           />
         )}
         <Problem problem={problems[DRAFT_FIELD.SCHEDULE]} />
-      </SettingsGroup>
+      </SettingsSection>
       {review === undefined ? null : (
         <CodeReviewGroup
           settings={review}
