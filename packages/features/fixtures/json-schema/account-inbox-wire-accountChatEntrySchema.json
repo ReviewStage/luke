@@ -1,0 +1,59 @@
+{
+  "type": "object",
+  "properties": {
+    "messageId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "seq": {
+      "type": "number",
+      "minimum": 0
+    },
+    "workspaceId": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "ask",
+        "direct",
+        "mention"
+      ]
+    },
+    "from": {
+      "type": "string"
+    },
+    "planId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "touchedSeq": {
+      "type": "number",
+      "minimum": 0
+    },
+    "updatedAt": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "messageId",
+    "seq",
+    "workspaceId",
+    "reason",
+    "from",
+    "planId",
+    "touchedSeq",
+    "updatedAt"
+  ],
+  "additionalProperties": false
+}

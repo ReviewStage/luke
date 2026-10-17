@@ -10,6 +10,7 @@ import {
 } from "@luke/features/integration-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { composeIntegrations, type IntegrationsClient } from "./compose-integrations.js";
 
@@ -90,7 +91,7 @@ function subject(
           service.opened.push(url);
           return options.opens ?? true;
         }),
-    });
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);

@@ -22,6 +22,9 @@ import {
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
@@ -30,11 +33,14 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { relayout } from "#testing/resize-observer";
 import { runAppCommand, useAppKeymap } from "../app-commands";
+import { fixtureChat } from "../tasks/chat-fixture";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { NO_LOOKS } from "../tasks/use-task-looks";
@@ -626,15 +632,11 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   const archivedUrl = "https://github.com/acme/relay/pull/9";
   const opened: unknown[] = [];
   const onGitHub: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+  fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
   const task: Task = {
@@ -725,4 +727,86 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   assert.equal(opened.length, 2, "no tab was asked for");
   act(() => root.unmount());
   container.remove();
+});
+
+/** The task's column on its Chat tab over the fixture's chat, its plan channel this task's where `ownChannel`. */
+async function chatTabMounted(ownChannel: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const staged = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(staged);
+  const chat = {
+    ...staged,
+    answer: {
+      ...staged.answer,
+      channels: staged.answer.channels.map((channel) =>
+        ownChannel && channel.name === "teammate-invitations"
+          ? { ...channel, planId: TASK.id }
+          : channel,
+      ),
+    },
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          captions: undefined,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.READY, task: TASK },
+            mainTabs: {
+              ...tasksControl().mainTabs,
+              tabs: [MAIN_TAB.PLAN, MAIN_TAB.CHAT],
+              tab: MAIN_TAB.CHAT,
+            },
+            chatView: { ...tasksControl().chatView, available: true, chat },
+          }),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  return { container, root };
+}
+
+test("a task's Chat tab shows its plan channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const own = await chatTabMounted(true);
+  const tab = own.container.querySelector('section.desktop-plan-chat[aria-label="Chat"]');
+  assert.ok(tab, "the task's Chat tab");
+  assert.equal(tab.querySelector(".chat-head-title")?.textContent, "# teammate-invitations");
+  assert.ok(tab.querySelector('textarea[aria-label="Message #teammate-invitations"]'));
+  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 6);
+  act(() => own.root.unmount());
+  own.container.remove();
+
+  const none = await chatTabMounted(false);
+  assert.match(
+    none.container.querySelector("section.desktop-plan-chat")?.textContent ?? "",
+    /Nothing is posted in this plan's channel yet\./u,
+  );
+  act(() => none.root.unmount());
+  none.container.remove();
+});
+
+test("with Chat off for the account, a Chat tab kept on the task's strip draws nothing", async () => {
+  handState({});
+  const off = await chatTabMounted(true);
+  assert.equal(off.container.querySelector("section.desktop-plan-chat"), null);
+  act(() => off.root.unmount());
+  off.container.remove();
 });
