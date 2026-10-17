@@ -92,10 +92,9 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
   return title.length === 0 ? Option.none() : Option.some(title);
 }
 
-/** A part's words without the replay of another agent: the brief and the note where a replay stands between them, the part whole otherwise. */
+/** A part's words without the replay of another agent or the note's marker: the brief and the note where either stands, the part whole otherwise. */
 function withoutReplay(text: string): string {
   const read = firstMessageParts(text);
-  if (read.replay === undefined) return text;
   return read.note === undefined ? read.brief : `${read.brief}\n${read.note.text}`;
 }
 
