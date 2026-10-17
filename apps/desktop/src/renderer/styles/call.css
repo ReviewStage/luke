@@ -154,9 +154,12 @@ html.call-window #root {
   display: flex;
 }
 
-/* Moved under a still pointer, the buttons take no hover until the pointer
-   itself moves (`window-pointer.ts`). */
-html.call-window[data-pointer-stale="true"] .call-card button {
+/* Moved under a still pointer, the buttons, and the hints the video toggle
+   and the way back carry around their buttons, take no hover until the
+   pointer itself moves (`window-pointer.ts`). */
+html.call-window[data-pointer-stale="true"]
+  .call-card
+  :is(button, .call-video-toggle, .call-card-return) {
   pointer-events: none;
 }
 

@@ -1,4 +1,5 @@
 import type { TaskSummary } from "@luke/features/task-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ArchiveIcon, IconButton, useMenu } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
@@ -14,7 +15,6 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useMemberDirectory } from "../member-directory";

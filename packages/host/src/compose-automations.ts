@@ -17,8 +17,7 @@ import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
@@ -70,20 +69,25 @@ function webhookSecretHash(secret: string): Effect.Effect<string> {
 
 export function composeAutomations(
   dependencies: AutomationsDependencies,
-): Effect.Effect<AutomationsComposer, never, Scope.Scope> {
-  return Effect.sync(() => composed(dependencies));
+): Effect.Effect<AutomationsComposer, never, Scope.Scope | HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    return composed(dependencies, yield* HttpClient.HttpClient);
+  });
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything. */
-function composed(dependencies: AutomationsDependencies): AutomationsComposer {
+function composed(
+  dependencies: AutomationsDependencies,
+  http: HttpClient.HttpClient,
+): AutomationsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
-  /** The service asked behind the gate, over the ambient fetch client. */
+  /** The service asked behind the gate, over the host's own HTTP client. */
   const asked = <Answer>(
     call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
   ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provide(call, FetchHttpClient.layer) : Effect.succeed(UNANSWERED);
+    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(

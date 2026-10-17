@@ -9,6 +9,7 @@ import { INBOX_ATTACHMENT_KIND, type InboxAttachmentKind } from "../storage-voca
 import { bytea, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { inboxItem } from "./inbox.js";
+import { inboxMessage } from "./inbox-message.js";
 import { task } from "./task.js";
 
 /** A value written into the check as SQL rather than a parameter, which a constraint cannot take. */
@@ -42,6 +43,12 @@ const bound = (bytes: number) => sql.raw(String(bytes));
  * answer's file has a name and a place. An answer's files go when the
  * answer is taken back, or when the agent posts the item again, which opens
  * it and clears the answer.
+ *
+ * A file a message on the item's thread carried is kept here too, as a row
+ * of the message kind naming its message, held to an answer's file's bound
+ * with a name and a place among the message's files. It goes with its
+ * message, which goes with the item, and stays when the agent posts the
+ * item again, since the thread does.
  */
 export const inboxAttachment = pgTable(
   "inbox_attachment",
@@ -59,11 +66,13 @@ export const inboxAttachment = pgTable(
     itemId: uuid("item_id")
       .notNull()
       .references(() => inboxItem.id, { onDelete: "cascade" }),
-    /** A picture of an image block's, as every row before answers carried files was, or a file of the answer's. */
+    /** The message on the item's thread whose file it is; null for a picture and an answer's file. */
+    messageId: uuid("message_id").references(() => inboxMessage.id, { onDelete: "cascade" }),
+    /** A picture of an image block's, as every row before answers carried files was, a file of the answer's, or a file of a message's. */
     kind: text("kind").$type<InboxAttachmentKind>().notNull().default(INBOX_ATTACHMENT_KIND.IMAGE),
-    /** An answer's file's own name, never a path, such as `trace.txt`; null for a picture, whose words are its block's alt. */
+    /** An answer's or a message's file's own name, never a path, such as `trace.txt`; null for a picture, whose words are its block's alt. */
     name: text("name"),
-    /** An answer's file's place among the answer's files, from zero, in the order the developer attached them; null for a picture. */
+    /** An answer's or a message's file's place among its files, from zero, in the order they were attached; null for a picture. */
     position: integer("position"),
     /** The media type a picture's bytes were sniffed to be, or the type an answer's file travelled as: what the bytes are served under. */
     contentType: text("content_type").$type<CodingAgentAttachmentType>().notNull(),
@@ -75,10 +84,12 @@ export const inboxAttachment = pgTable(
   (table) => [
     // An item's attachments are read and deleted by the item.
     index("inbox_attachment_item").on(table.itemId),
-    // Each kind is held to its own bound, and only an answer's file has a name and a place.
+    // A message's files are read by the message, and go with it.
+    index("inbox_attachment_message").on(table.messageId),
+    // Each kind is held to its own bound, only an answer's or a message's file has a name and a place, and only a message's names a message.
     check(
       "inbox_attachment_kind_bound",
-      sql`(${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.IMAGE)} and octet_length(${table.bytes}) <= ${bound(INBOX_BOUNDS.MAX_IMAGE_BYTES)} and ${table.name} is null and ${table.position} is null) or (${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.ANSWER)} and octet_length(${table.bytes}) <= ${bound(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)} and ${table.name} is not null and ${table.position} is not null)`,
+      sql`(${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.IMAGE)} and octet_length(${table.bytes}) <= ${bound(INBOX_BOUNDS.MAX_IMAGE_BYTES)} and ${table.name} is null and ${table.position} is null and ${table.messageId} is null) or (${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.ANSWER)} and octet_length(${table.bytes}) <= ${bound(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)} and ${table.name} is not null and ${table.position} is not null and ${table.messageId} is null) or (${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.MESSAGE)} and octet_length(${table.bytes}) <= ${bound(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)} and ${table.name} is not null and ${table.position} is not null and ${table.messageId} is not null)`,
     ),
   ],
 );

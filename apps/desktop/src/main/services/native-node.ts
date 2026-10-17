@@ -1,4 +1,5 @@
 import type { AppAudioSlice } from "@luke/host/app-state";
+import type { AppStateStore } from "@luke/host/client";
 import type { DesktopService } from "@luke/host/desktop-service";
 import {
   MICROPHONE_STATUS,
@@ -8,7 +9,6 @@ import {
 } from "@luke/voice/audio";
 import { Schema } from "effect";
 import { systemPreferences } from "electron";
-import type { AppStateStore } from "../app-state";
 import { MediaDuckController } from "../native/media-duck";
 import {
   microphoneRouteWatcher as createMicrophoneRouteWatcher,
@@ -26,7 +26,7 @@ const readMicrophoneStatusWord = Schema.decodeUnknownSync(
 );
 
 /** The capabilities this node offers the host by name; a capability no node offers is a typed refusal there. */
-export interface NativeNodeCapabilities {
+interface NativeNodeCapabilities {
   /** Hands an address to the operating system; a throw is an open that did not land. */
   openExternal: (url: string) => Promise<void>;
 }
