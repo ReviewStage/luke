@@ -9,6 +9,7 @@
 
 @import "./components/visually-hidden.css";
 @import "./components/layout/layout.css";
+@import "./components/list-row/list-row.css";
 @import "./components/text/text.css";
 @import "./components/badge/badge.css";
 @import "./components/button/button.css";

@@ -7,6 +7,7 @@ export * from "./components/chip/chip.js";
 export * from "./components/dialog/dialog.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/layout/layout.js";
+export * from "./components/list-row/list-row.js";
 export * from "./components/segmented/segmented.js";
 export * from "./components/settings-row/settings-row.js";
 export * from "./components/skeleton/skeleton.js";
