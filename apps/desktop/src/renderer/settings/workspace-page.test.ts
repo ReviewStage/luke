@@ -448,9 +448,12 @@ const emailOf = (row: HTMLElement) => row.querySelector("p")?.textContent;
 
 /** The rows of the invitations still pending, by the line each wears. */
 const invitationRows = (page: HTMLElement) =>
-  [...page.querySelectorAll<HTMLElement>(".settings-row")].filter((row) =>
-    row.querySelector("small")?.textContent?.startsWith("Invited as "),
+  [...page.querySelectorAll<HTMLElement>(".menu-row")].filter((row) =>
+    row.querySelector("p")?.textContent?.startsWith("Invited as "),
   );
+
+/** A pending invitation's address, its row's label. */
+const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .settings-one-line');
 
 /** The items of the ⋯ on `row`, or none where it draws no ⋯. */
 function rowActions(row: HTMLElement): string[] {
@@ -755,7 +758,7 @@ test("a member's address and an invited one, where the row cuts them short, are 
   await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
   const addresses = [
     memberNamed(page, "Sam").querySelector("p .settings-one-line"),
-    (invitationRows(page)[0] ?? assert.fail("no pending invitation")).querySelector("strong"),
+    addressOf(invitationRows(page)[0] ?? assert.fail("no pending invitation")),
   ].map((words) => words ?? assert.fail("an address is not drawn"));
 
   assert.deepEqual(addresses.map(pillOver), [undefined, undefined], "drawn whole, no pill");
@@ -1449,10 +1452,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
   const face = row.querySelector<HTMLElement>(".actor-mark")?.dataset.kind;
-  const listed = [
-    row.querySelector("strong")?.textContent,
-    row.querySelector("small")?.textContent,
-  ];
+  const listed = [addressOf(row)?.textContent, row.querySelector("p")?.textContent];
   act(() => button(row, "Copy link").click());
   await chooseAction(row, "Cancel invitation");
 
@@ -1549,7 +1549,7 @@ test("a first read still out when an invitation lands does not take the new invi
   await settle();
 
   assert.deepEqual(
-    invitationRows(page).map((row) => row.querySelector("strong")?.textContent),
+    invitationRows(page).map((row) => addressOf(row)?.textContent),
     ["alan@example.com"],
   );
 });
@@ -1561,7 +1561,7 @@ test("an invitation made stays listed with its link when the read after it fails
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
 
   const row = invitationRows(page)[0] ?? assert.fail("the invitation was lost");
-  assert.equal(row.querySelector("strong")?.textContent, "alan@example.com");
+  assert.equal(addressOf(row)?.textContent, "alan@example.com");
   assert.ok(button(row, "Copy link"));
 });
 
@@ -1699,7 +1699,7 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   await settle();
 
   assert.deepEqual(
-    invitationRows(page).map((row) => row.querySelector("strong")?.textContent),
+    invitationRows(page).map((row) => addressOf(row)?.textContent),
     ["sam@example.com"],
   );
 });
