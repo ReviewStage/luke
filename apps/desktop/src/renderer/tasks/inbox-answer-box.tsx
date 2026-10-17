@@ -8,7 +8,7 @@ import {
   type InboxReplyKind,
   knownResponse,
 } from "@luke/features/inbox-wire";
-import { PlusIcon } from "@luke/ui";
+import { BUTTON_VARIANT, Button, IconButton, PlusIcon } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useRef, useState } from "react";
@@ -24,7 +24,6 @@ import { editorBundleAtom } from "../editor-bundle";
 import { imageFiles } from "../feedback-images";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
-import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
@@ -137,25 +136,19 @@ function SendPresses({
     return (
       <div className="inbox-presses flex gap-(--control-gap)">
         {back === undefined ? null : (
-          <button
-            type="button"
-            className="toolbar-button"
-            disabled={held}
-            onClick={() => onAnswer(back.reply)}
-          >
+          <Button disabled={held} onClick={() => onAnswer(back.reply)}>
             {back.label}
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          className="primary-button"
+        <Button
+          variant={BUTTON_VARIANT.PRIMARY}
+          busy={sending}
+          busyLabel="Sending"
           disabled={held}
           onClick={() => onAnswer(ahead.reply)}
         >
-          <BusyLabel busy={sending} label="Sending">
-            {ahead.label}
-          </BusyLabel>
-        </button>
+          {ahead.label}
+        </Button>
       </div>
     );
   }
@@ -349,15 +342,12 @@ function AnswerCard({
               <>
                 <PromptInputTools className="inbox-answer-tools">
                   <Tooltip label={ATTACH}>
-                    <button
-                      type="button"
-                      className="icon-button inbox-answer-attach"
-                      aria-label={ATTACH}
+                    <IconButton
+                      icon={<PlusIcon />}
+                      label={ATTACH}
                       disabled={sending}
                       onClick={() => picker.current?.click()}
-                    >
-                      <PlusIcon />
-                    </button>
+                    />
                   </Tooltip>
                   <input
                     ref={picker}

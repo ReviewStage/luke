@@ -339,7 +339,10 @@ async function narrowTaskInbox(
       );
       return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
     },
-    back: () => tab.querySelector<HTMLButtonElement>("button.inbox-back"),
+    back: () =>
+      [
+        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
+      ].find((button) => button.textContent === "Inbox") ?? null,
     row: (title: string) =>
       [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-task")].find((each) =>
         each.textContent?.includes(title),

@@ -1126,9 +1126,16 @@ function columnsShown(page: HTMLElement): string[] {
   ];
 }
 
+/** The item's bar's press named Inbox, the way back to the list, where there is one. */
+function wayBack(page: HTMLElement): HTMLButtonElement | undefined {
+  return [
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
+  ].find((button) => button.textContent === "Inbox");
+}
+
 /** The way back from the item standing alone to the list. */
 function backToList(page: HTMLElement): HTMLButtonElement {
-  const back = page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-back");
+  const back = wayBack(page);
   assert.ok(back, "the item standing alone has a way back");
   return back;
 }
@@ -1214,7 +1221,7 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
   assert.deepEqual(columnsShown(page), ["list"], "within the band it stays one column");
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
-  assert.equal(page.querySelector(".inbox-view-items button.inbox-back"), null);
+  assert.equal(wayBack(page), undefined);
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["item"]);
 });
