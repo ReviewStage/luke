@@ -389,10 +389,11 @@ test("the listed workspace's issues stand under a heading for each status, the w
   ];
   const page = mount();
   await settle();
+  showList();
 
   assert.deepEqual(listed, [WORKSPACE.id]);
   assert.deepEqual(groups(page), [
-    ["In Progress1", ["ACME-3 Fix login"]],
+    ["In progress1", ["ACME-3 Fix login"]],
     ["Backlog2", ["ACME-4 Issue 4", "ACME-2 Issue 2"]],
     ["Done1", ["ACME-1 Issue 1"]],
   ]);
@@ -484,7 +485,10 @@ test("C pressed on the page opens the card, and a c typed into the card's title,
 });
 
 test("↓ and Return open the issue reached, read on its own page; Escape comes back to the list with its row holding the keyboard, and Escape again closes the page", async () => {
-  standing = [issue(1), issue(2, { status: ISSUE_STATUS.IN_PROGRESS, title: "Fix login" })];
+  standing = [
+    issue(1, { status: ISSUE_STATUS.DONE }),
+    issue(2, { status: ISSUE_STATUS.IN_PROGRESS, title: "Fix login" }),
+  ];
   const page = mount();
   await settle();
 
@@ -498,7 +502,7 @@ test("↓ and Return open the issue reached, read on its own page; Escape comes 
 
   assert.deepEqual(reads, [issue(2).id]);
   assert.equal(titleOf(page), "Fix login");
-  assert.equal(picked(page, "Status"), "In Progress");
+  assert.equal(picked(page, "Status"), "In progress");
 
   act(() => {
     runAppCommand(APP_COMMAND.EXIT_ISSUES);
@@ -838,7 +842,7 @@ test("a filing answered once another workspace is listed puts away no card of th
   assert.equal(composerField()?.value, "Meant for Initech");
 });
 
-test("the page opens as a board: a column for every status in the list's order, an empty one saying so, each counted and its cards sorted as the list sorts", async () => {
+test("the page opens as a board: a column for every status in the order work moves through them, an empty one saying so uncounted, each other counted and its cards sorted as the list sorts", async () => {
   standing = [
     issue(1, { status: ISSUE_STATUS.DONE }),
     issue(2, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.LOW }),
@@ -848,11 +852,11 @@ test("the page opens as a board: a column for every status in the list's order, 
   await settle();
 
   assert.deepEqual(columns(page), [
-    ["In Progress0", []],
+    ["Backlog", []],
     ["Todo2", ["ACME-3", "ACME-2"]],
-    ["Backlog0", []],
+    ["In progress", []],
     ["Done1", ["ACME-1"]],
-    ["Canceled0", []],
+    ["Canceled", []],
   ]);
   assert.equal(
     page.querySelector("[data-issue-column='in-progress'] .factory-idle")?.textContent,
@@ -895,6 +899,73 @@ test("on the board ↓ and ↑ move down a column, ← and → to the nearest ca
   assert.ok(page.querySelector("[aria-label='Issue title']"));
 });
 
+/**
+ * The board laid out as a narrow window lays it: each column 300px wide,
+ * side by side from the scroller's start, in a scroller 700px wide that
+ * scrolls sideways. jsdom lays nothing out, so this answers the geometry the
+ * browser would. Answers each scroller's sideways scroll as it stands.
+ */
+function layBoardOut(): () => number {
+  const COLUMN = 300;
+  const scrolled = new WeakMap<Element, number>();
+  const scroller = () => document.querySelector(".issue-board-scroll");
+  vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (this: Element) {
+    return scrolled.get(this) ?? 0;
+  });
+  vi.spyOn(Element.prototype, "scrollLeft", "set").mockImplementation(function (
+    this: Element,
+    left: number,
+  ) {
+    scrolled.set(this, left);
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.matches(".issue-board-scroll") ? 700 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.matches("[data-issue-column]") ? COLUMN : 0;
+  });
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const columns = [...document.querySelectorAll("[data-issue-column]")];
+    const at = columns.indexOf(this);
+    const left = at < 0 ? 0 : at * COLUMN - (scrolled.get(scroller() ?? this) ?? 0);
+    return new DOMRect(left, 0, at < 0 ? 0 : COLUMN, 0);
+  });
+  return () => {
+    const board = scroller();
+    return board === null ? -1 : (scrolled.get(board) ?? 0);
+  };
+}
+
+test("on a board wider than the window, the column of the card reached stands whole in view, by an arrow and on the way back from its issue", async () => {
+  standing = [issue(1), issue(2, { status: ISSUE_STATUS.DONE })];
+  const page = mount();
+  await settle();
+  const scrolledTo = layBoardOut();
+
+  press("ArrowDown", window);
+  press("ArrowRight");
+  const byArrow = scrolledTo();
+  const card = document.activeElement;
+  assert.ok(card instanceof HTMLButtonElement);
+  act(() => card.click());
+  await settle();
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+
+  // Note that Done is the fourth column, so it ends at 1200px, 500px past the scroller's 700.
+  assert.equal(byArrow, 500);
+  assert.equal(
+    document.activeElement?.closest("[data-issue-id]")?.getAttribute("data-issue-id"),
+    issue(2).id,
+  );
+  assert.equal(scrolledTo(), 500, "the board drawn again brings the returned card's column in");
+  assert.ok(page.querySelector("[data-issue-column]"));
+});
+
 test("View options lays the page out as the list and back as the board, and an issue opened from either goes back to it", async () => {
   standing = [issue(1)];
   const page = mount();
@@ -923,11 +994,11 @@ test("a workspace with no issue yet still stands the board's columns, each sayin
   await settle();
 
   assert.deepEqual(columns(page), [
-    ["In Progress0", []],
-    ["Todo0", []],
-    ["Backlog0", []],
-    ["Done0", []],
-    ["Canceled0", []],
+    ["Backlog", []],
+    ["Todo", []],
+    ["In progress", []],
+    ["Done", []],
+    ["Canceled", []],
   ]);
   assert.equal(page.querySelectorAll(".factory-idle").length, 5);
 });

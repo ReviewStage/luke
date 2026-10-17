@@ -42,7 +42,7 @@ const STATUS_GLYPH = {
 } as const satisfies Record<IssueStatus, React.ReactNode>;
 
 /** Each priority's mark; an unweighed issue wears none in the list. */
-export const PRIORITY_GLYPH = {
+const PRIORITY_GLYPH = {
   [ISSUE_PRIORITY.NONE]: null,
   [ISSUE_PRIORITY.URGENT]: <CircleAlertIcon />,
   [ISSUE_PRIORITY.HIGH]: <SignalHighIcon />,
@@ -64,6 +64,19 @@ export function StatusGlyph({ status }: { status: IssueStatus }): React.JSX.Elem
   return (
     <span className="issue-status-glyph" data-status={status}>
       <StateGlyph glyph={STATUS_GLYPH[status]} state={GLYPH_STATE.REST} />
+    </span>
+  );
+}
+
+/** A priority's mark where an issue is listed, a row's or a card's, its words for a reader who cannot see it; none where the issue is unweighed. */
+export function PriorityMark({ priority }: { priority: IssuePriority }): React.JSX.Element | null {
+  const glyph = PRIORITY_GLYPH[priority];
+  if (glyph === null) return null;
+  const words = ISSUE_PRIORITY_WORDS[priority];
+  return (
+    <span className="issue-priority-mark" data-priority={priority} title={words}>
+      {glyph}
+      <span className="visually-hidden">{words}</span>
     </span>
   );
 }
