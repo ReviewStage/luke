@@ -101,6 +101,7 @@ import {
   brainTitleAwaited,
   brainTurnsPage,
   brainWorkerSession,
+  planConversationLiveStatements,
 } from "./brain-transcript.js";
 import {
   PLAN_SAVE_REFUSAL,
@@ -781,7 +782,16 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskMessagesEndpoint")(f
   const page = yield* hostedStoreOrUnavailable(
     after === undefined
       ? brainTurnsPage(target, before)
-      : (unheld ? brainPageNow : brainPagePast)(target, cursorOfWire(after)),
+      : unheld
+        ? brainPageNow(target, cursorOfWire(after))
+        : brainPagePast(
+            target,
+            cursorOfWire(after),
+            Option.match(planConversationLiveStatements(userId, taskId), {
+              onNone: () => [],
+              onSome: ({ mark }) => [mark],
+            }),
+          ),
   );
   return transcriptAnswer(page, null);
 });
