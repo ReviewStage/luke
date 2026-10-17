@@ -434,14 +434,32 @@ body,
      or scrollIntoView can drag the whole window's content out of. */
   overflow: clip;
   background: transparent;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
-/* The one place a selection is wanted: a credential being pasted. */
-.settings-input {
-  -webkit-user-select: text;
-  user-select: text;
+/* Words are selectable wherever they are read, so any line the window draws,
+   a failure's sentence, a heading, a row's detail, can be copied. A control
+   is pressed rather than read, so its words never select: a press, a tab, a
+   menu's row, a switch, a label that presses what it names, a glyph, and
+   whatever is dragged, where a selection would start in place of the drag. */
+:where(
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="option"],
+  [role="switch"],
+  [role="slider"],
+  [role="separator"],
+  summary,
+  label,
+  svg,
+  img,
+  [draggable="true"]
+) {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Luke's face ------------------------------------------------------------ */
