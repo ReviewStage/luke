@@ -1,9 +1,8 @@
 import { APP_SHORTCUTS, type KeyedCommand } from "@luke/settings/shortcuts";
-import { CheckIcon, ChevronRightIcon, SearchIcon } from "@luke/ui";
+import { CheckIcon, ChevronRightIcon, SearchIcon, SwitchMark } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Shortcut } from "./shortcut";
-import { Switch } from "./switch";
 import { Tooltip } from "./tooltip";
 
 /**
@@ -663,7 +662,9 @@ export function SearchableMenu(props: {
                     <button {...shared} role="switch" aria-checked={row.toggle.on}>
                       <RowGlyph icon={row.icon} />
                       <span className="task-compose-menu-name">{row.label}</span>
-                      <Switch checked={row.toggle.on} className="task-compose-menu-switch" />
+                      <span className="task-compose-menu-switch">
+                        <SwitchMark checked={row.toggle.on} />
+                      </span>
                     </button>
                   );
                 return (

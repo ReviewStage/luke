@@ -24,6 +24,8 @@ import {
   PlusIcon,
   ProviderMark,
   SearchIcon,
+  Skeleton,
+  SkeletonRegion,
   UnpinIcon,
   useMenu,
 } from "@luke/ui";
@@ -74,7 +76,6 @@ import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
-import { Skeleton, SkeletonRegion } from "../skeleton";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { useChatOn } from "../tasks/chat-gate";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -878,12 +879,14 @@ function TaskGroups({
  */
 function ListSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label="Reading your tasks…" className="sidebar-skeleton">
-      {LIST_SKELETON.map((width) => (
-        <div key={width} className="sidebar-skeleton-row">
-          <Skeleton width={width} />
-        </div>
-      ))}
+    <SkeletonRegion label="Reading your tasks…">
+      <div className="sidebar-skeleton">
+        {LIST_SKELETON.map((width) => (
+          <div key={width} className="sidebar-skeleton-row">
+            <Skeleton width={width} />
+          </div>
+        ))}
+      </div>
     </SkeletonRegion>
   );
 }

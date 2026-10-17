@@ -3723,6 +3723,8 @@ ul.actor-stack {
    row where the row is the switch for the keyboard, or its own button where
    the row holds other controls too (the MCP popover's). */
 .task-compose-menu-switch {
+  display: flex;
+  flex: 0 0 auto;
   margin-left: auto;
 }
 
@@ -8230,7 +8232,7 @@ button.automation-run:hover {
 }
 
 /* Create issue's chord, muted against its own fill rather than the card's. */
-.new-task-dialog .primary-button .shortcut {
+.new-issue .primary-button .shortcut {
   --shortcut-ink: var(--luke-color-on-accent-muted);
 }
 
@@ -8454,10 +8456,14 @@ button.automation-run:hover {
   height: 34px;
 }
 
-/* New issue (`desktop/new-issue-dialog.tsx`): the dialog's card, its
-   one-line name in a well, and its answers at its foot. */
-.new-task-dialog {
-  width: min(460px, 100%);
+/* New issue (`desktop/new-issue-dialog.tsx`), inside the shared dialog's
+   wide card: its one-line name in a well, its two chips, and its answers at
+   its foot, in one column the screen recording leaves out
+   (`ph-no-capture`). */
+.new-issue {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
   gap: var(--luke-space-12);
 }
 
@@ -8519,13 +8525,13 @@ button.automation-run:hover {
    (`settings/picker-row.tsx`) standing alone at the head of their lines,
    not in a column, so each is as wide as its value and gives way,
    ellipsized, to a long one. */
-:is(.new-task-dialog, .new-task) .settings-picker {
+:is(.new-issue, .new-task) .settings-picker {
   min-width: 0;
   flex-shrink: 1;
 }
 
-:is(.new-task-dialog, .new-task) .repository-chip > .luke-chip,
-:is(.new-task-dialog, .new-task) .settings-picker > .luke-chip {
+:is(.new-issue, .new-task) .repository-chip > .luke-chip,
+:is(.new-issue, .new-task) .settings-picker > .luke-chip {
   width: auto;
   max-width: 100%;
 }

@@ -1,4 +1,4 @@
-import { SwitchButtonFrame, type SwitchButtonProps, SwitchMarkFrame } from "./switch-frame.js";
+import type { ComponentPropsWithRef, MouseEvent } from "react";
 
 /**
  * switch.tsx -- the app's one on/off switch: a pill whose thumb slides right and takes the accent while on.
@@ -16,12 +16,58 @@ import { SwitchButtonFrame, type SwitchButtonProps, SwitchMarkFrame } from "./sw
  * attributes its search lands on.
  */
 
+/** The switch as a button of its own: `role="switch"`, named by `label`. */
+type SwitchProps = {
+  checked: boolean;
+  /** Answers the state a press asks for, with the press, which a switch inside a pressable row stops from reaching the row. */
+  onChange: (checked: boolean, event: MouseEvent<HTMLButtonElement>) => void;
+  /** The switch's accessible name. */
+  label: string;
+  /** The id of the words that say what the switch does, where some stand beside it. */
+  describedBy?: string | undefined;
+} & Omit<
+  ComponentPropsWithRef<"button">,
+  | "type"
+  | "role"
+  | "onChange"
+  | "onClick"
+  | "className"
+  | "style"
+  | "children"
+  | "aria-checked"
+  | "aria-label"
+>;
+
 /** The switch as a button of its own. */
-export function Switch(props: Omit<SwitchButtonProps, "className">): React.JSX.Element {
-  return <SwitchButtonFrame {...props} />;
+export function Switch({
+  checked,
+  onChange,
+  label,
+  describedBy,
+  ...button
+}: SwitchProps): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      {...button}
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      aria-describedby={describedBy ?? button["aria-describedby"]}
+      className="luke-switch"
+      data-checked={checked}
+      onClick={(event) => onChange(!checked, event)}
+    >
+      <span className="luke-switch-thumb" />
+    </button>
+  );
 }
 
-/** The switch's drawing alone, inside a control that is the switch. */
+/** The switch's drawing alone, hidden from a reader, inside a control that is the switch. */
 export function SwitchMark({ checked }: { checked: boolean }): React.JSX.Element {
-  return <SwitchMarkFrame checked={checked} />;
+  return (
+    <span className="luke-switch" data-checked={checked} aria-hidden="true">
+      <span className="luke-switch-thumb" />
+    </span>
+  );
 }

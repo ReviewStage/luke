@@ -249,7 +249,7 @@ function itemsOf(menu: HTMLElement): HTMLElement[] {
  * and not a submenu's, by a navigation key (Up, Down, Home, End), passing
  * over every item that does not apply now; answers whether the key was one.
  */
-export function moveMenuFocus(event: React.KeyboardEvent<HTMLElement>): boolean {
+function moveMenuFocus(event: React.KeyboardEvent<HTMLElement>): boolean {
   const items = itemsOf(event.currentTarget);
   const next = itemAfter(
     event.key,

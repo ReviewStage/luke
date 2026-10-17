@@ -6,8 +6,8 @@ import {
   type IssueStatus,
 } from "@luke/features/issue-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
+import { DIALOG_SIZE, Dialog } from "@luke/ui";
 import { useId, useRef, useState } from "react";
-import { ModalShell } from "../modal-shell";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
@@ -70,64 +70,66 @@ function NewIssueCard({
   };
 
   return (
-    <ModalShell
-      className="confirm-dialog new-task-dialog ph-no-capture"
+    <Dialog
+      size={DIALOG_SIZE.WIDE}
       labelledBy={titleId}
       busy={creating}
       initialFocus={field}
       onDismiss={close}
     >
-      <div className="new-plan-head">
-        <h2 id={titleId} className="confirm-dialog-title">
-          New issue
-        </h2>
-      </div>
-      <input
-        ref={field}
-        type="text"
-        className="dialog-name-field"
-        aria-label="New issue title"
-        aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-        placeholder="Issue title"
-        maxLength={ISSUE_BOUNDS.MAX_TITLE_CHARS}
-        spellCheck
-        value={title}
-        disabled={creating}
-        onChange={(event) => setTitle(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-          event.preventDefault();
-          create();
-        }}
-      />
-      <div className="issue-properties">
-        <StatusMenu status={status} disabled={creating} onPick={setStatus} />
-        <PriorityMenu priority={priority} disabled={creating} onPick={setPriority} />
-      </div>
-      {refused ? (
-        <p className="error-message" role="alert">
-          {UNFILED_LINE}
-        </p>
-      ) : null}
-      <div className="confirm-dialog-actions">
-        <button type="button" className="toolbar-button" disabled={creating} onClick={close}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="primary-button"
+      <div className="new-issue ph-no-capture">
+        <div className="new-plan-head">
+          <h2 id={titleId} className="confirm-dialog-title">
+            New issue
+          </h2>
+        </div>
+        <input
+          ref={field}
+          type="text"
+          className="dialog-name-field"
+          aria-label="New issue title"
           aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-          aria-busy={creating}
-          disabled={!canCreate}
-          onClick={create}
-        >
-          <BusyLabel busy={creating} label="Creating">
-            Create issue
-          </BusyLabel>
-          <Shortcut chord={CREATE_CHORD} />
-        </button>
+          placeholder="Issue title"
+          maxLength={ISSUE_BOUNDS.MAX_TITLE_CHARS}
+          spellCheck
+          value={title}
+          disabled={creating}
+          onChange={(event) => setTitle(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            create();
+          }}
+        />
+        <div className="issue-properties">
+          <StatusMenu status={status} disabled={creating} onPick={setStatus} />
+          <PriorityMenu priority={priority} disabled={creating} onPick={setPriority} />
+        </div>
+        {refused ? (
+          <p className="error-message" role="alert">
+            {UNFILED_LINE}
+          </p>
+        ) : null}
+        <div className="confirm-dialog-actions">
+          <button type="button" className="toolbar-button" disabled={creating} onClick={close}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+            aria-busy={creating}
+            disabled={!canCreate}
+            onClick={create}
+          >
+            <BusyLabel busy={creating} label="Creating">
+              Create issue
+            </BusyLabel>
+            <Shortcut chord={CREATE_CHORD} />
+          </button>
+        </div>
       </div>
-    </ModalShell>
+    </Dialog>
   );
 }
 
