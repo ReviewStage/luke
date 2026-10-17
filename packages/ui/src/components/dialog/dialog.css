@@ -45,6 +45,18 @@
     gap: var(--luke-space-12);
   }
 
+  /* A file shown edge to edge: the card fits what it holds between its
+     two measures, with no inset or gap of its own, and clips it at its
+     corners. */
+  .luke-dialog[data-size="media"] {
+    width: auto;
+    min-width: min(var(--luke-dialog-media-min-width), 100%);
+    max-width: min(var(--luke-dialog-media-max-width), 100%);
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
   /* A drag the dimmed window would take rings the card that will take it. */
   .luke-dialog[data-dropping="true"] {
     box-shadow:

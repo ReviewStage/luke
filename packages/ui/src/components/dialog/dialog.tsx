@@ -18,8 +18,8 @@ import { DialogFrame, type DialogProps } from "./dialog-frame.js";
  * The dialog stands only while it is open, so mounting it is opening and
  * unmounting it is closing, however it came to close. The card is the
  * profile's dialog card, its inset and its corners, at a question's
- * measure or wider for a note being written; what it holds lays itself out
- * inside. A dialog that takes files dropped on the dimmed window rings its
+ * measure, wider for a note being written, or fitted edge to edge to a file
+ * shown; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
  * card while a drag it would take is over it.
  */
 

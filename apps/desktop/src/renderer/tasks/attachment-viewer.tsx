@@ -6,7 +6,7 @@ import {
   type FileChip,
   sizeLabel,
 } from "@luke/features/attachment-model";
-import { CloseIcon } from "@luke/ui";
+import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton } from "@luke/ui";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -17,7 +17,6 @@ import {
 import { useId } from "react";
 import { SHORTCUT_KEY, type ShortcutChord } from "#shared/shortcuts";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
-import { ModalShell } from "../modal-shell";
 import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
 import { type ImageZoom, useImageZoom } from "./use-image-zoom";
@@ -35,14 +34,14 @@ import { type ImageZoom, useImageZoom } from "./use-image-zoom";
  * far along the message's files it is, a note the place opening it gives
  * the file shown (who last edited it, for a plan's picture), beside Copy for a text file,
  * whatever the place opening it offers for a picture (Add to plan, in an
- * agent's transcript), Download, and the way out. It opens in the window's one modal frame
- * (`../modal-shell.tsx`): the window dims, Tab stays inside the card, and
+ * agent's transcript), Download, and the way out. It opens in the window's one modal frame,
+ * `@luke/ui`'s dialog fitted to the file shown: the window dims, Tab stays inside the card, and
  * Escape, a press on the dimmed window, and the way out all close it and
  * hand focus back to the chip that opened it. The
  * file's bytes are the chip's own, so a file in the message box and one
  * read back with the transcript open the same. A message's files are its
- * developer's own, so the card is left out of the screen recording
- * (`ph-no-capture`) as a second line behind the masking.
+ * developer's own, so everything the card holds is left out of the screen
+ * recording (`ph-no-capture`) as a second line behind the masking.
  *
  * Note that a PDF is shown by its icon rather than drawn, because the
  * window's policy refuses the frames and objects Chromium draws one in.
@@ -92,14 +91,11 @@ function CopyTextButton({ text }: { text: string }): React.JSX.Element {
   const { state, copy } = useCopyFeedback();
   return (
     <Tooltip label={copyHint(state, VIEWER_LABEL.COPY)}>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={VIEWER_LABEL.COPY}
+      <IconButton
+        icon={<CopyGlyph state={state} />}
+        label={VIEWER_LABEL.COPY}
         onClick={() => copy(text)}
-      >
-        <CopyGlyph state={state} />
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -109,18 +105,16 @@ function HeaderButton({
   label,
   chord,
   onClick,
-  children,
+  icon,
 }: {
   label: string;
   chord?: ShortcutChord;
   onClick: () => void;
-  children: React.ReactNode;
+  icon: React.ReactNode;
 }): React.JSX.Element {
   return (
     <Tooltip label={label} chord={chord}>
-      <button type="button" className="icon-button" aria-label={label} onClick={onClick}>
-        {children}
-      </button>
+      <IconButton icon={icon} label={label} onClick={onClick} />
     </Tooltip>
   );
 }
@@ -167,10 +161,9 @@ function AttachmentBody({
       <FileTypeIcon name={file.name} />
       <p className="attachment-viewer-other-name">{file.name}</p>
       <p className="attachment-viewer-other-size">{sizeLabel(base64)}</p>
-      <button type="button" className="toolbar-button" onClick={() => download(file)}>
-        <DownloadIcon aria-hidden="true" />
+      <Button icon={<DownloadIcon aria-hidden="true" />} onClick={() => download(file)}>
         {VIEWER_LABEL.DOWNLOAD}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -226,69 +219,65 @@ export function AttachmentViewer({
   // does, so no ring stands on a control nobody chose; Tab goes on to the
   // buttons from there.
   return (
-    <ModalShell
-      className="attachment-viewer"
-      backdropClassName="attachment-viewer-backdrop ph-no-capture"
-      labelledBy={titleId}
-      onDismiss={onClose}
-      onKeyDown={walkKey}
-      data-view={attachmentView(file)}
-    >
-      <header className="attachment-viewer-header">
-        <FileTypeIcon name={file.name} />
-        <h2 id={titleId} className="attachment-viewer-title">
-          {file.name}
-        </h2>
-        <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
-        {note === undefined || note === null ? null : (
-          <span className="attachment-viewer-note">{note}</span>
-        )}
-        {files.length > 1 ? (
-          <div className="attachment-viewer-walk">
-            <HeaderButton label={VIEWER_LABEL.PREVIOUS} onClick={() => walk(-1)}>
-              <ChevronLeftIcon aria-hidden="true" />
-            </HeaderButton>
-            <span className="attachment-viewer-place">
-              {`${String(at + 1)} of ${String(files.length)}`}
-            </span>
-            <HeaderButton label={VIEWER_LABEL.NEXT} onClick={() => walk(1)}>
-              <ChevronRightIcon aria-hidden="true" />
-            </HeaderButton>
-          </div>
-        ) : null}
-        {text === undefined ? null : <CopyTextButton text={text} />}
-        {image ? (
-          <>
-            <HeaderButton
-              label={VIEWER_LABEL.ZOOM_OUT}
-              chord={ZOOM_CHORD.OUT}
-              onClick={() => zoom.step(-1)}
-            >
-              <ZoomOutIcon aria-hidden="true" />
-            </HeaderButton>
-            <HeaderButton
-              label={VIEWER_LABEL.ZOOM_IN}
-              chord={ZOOM_CHORD.IN}
-              onClick={() => zoom.step(1)}
-            >
-              <ZoomInIcon aria-hidden="true" />
-            </HeaderButton>
-          </>
-        ) : null}
-        {action === undefined || !image ? null : (
-          <button type="button" className="toolbar-button" onClick={() => action.onPress(file)}>
-            {action.icon}
-            {action.label}
-          </button>
-        )}
-        <HeaderButton label={VIEWER_LABEL.DOWNLOAD} onClick={() => download(file)}>
-          <DownloadIcon aria-hidden="true" />
-        </HeaderButton>
-        <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={onClose}>
-          <CloseIcon />
-        </HeaderButton>
-      </header>
-      <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
-    </ModalShell>
+    <Dialog size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose} onKeyDown={walkKey}>
+      <div className="attachment-viewer ph-no-capture" data-view={attachmentView(file)}>
+        <header className="attachment-viewer-header">
+          <FileTypeIcon name={file.name} />
+          <h2 id={titleId} className="attachment-viewer-title">
+            {file.name}
+          </h2>
+          <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+          {note === undefined || note === null ? null : (
+            <span className="attachment-viewer-note">{note}</span>
+          )}
+          {files.length > 1 ? (
+            <div className="attachment-viewer-walk">
+              <HeaderButton
+                label={VIEWER_LABEL.PREVIOUS}
+                onClick={() => walk(-1)}
+                icon={<ChevronLeftIcon aria-hidden="true" />}
+              />
+              <span className="attachment-viewer-place">
+                {`${String(at + 1)} of ${String(files.length)}`}
+              </span>
+              <HeaderButton
+                label={VIEWER_LABEL.NEXT}
+                onClick={() => walk(1)}
+                icon={<ChevronRightIcon aria-hidden="true" />}
+              />
+            </div>
+          ) : null}
+          {text === undefined ? null : <CopyTextButton text={text} />}
+          {image ? (
+            <>
+              <HeaderButton
+                label={VIEWER_LABEL.ZOOM_OUT}
+                chord={ZOOM_CHORD.OUT}
+                onClick={() => zoom.step(-1)}
+                icon={<ZoomOutIcon aria-hidden="true" />}
+              />
+              <HeaderButton
+                label={VIEWER_LABEL.ZOOM_IN}
+                chord={ZOOM_CHORD.IN}
+                onClick={() => zoom.step(1)}
+                icon={<ZoomInIcon aria-hidden="true" />}
+              />
+            </>
+          ) : null}
+          {action === undefined || !image ? null : (
+            <Button icon={action.icon} onClick={() => action.onPress(file)}>
+              {action.label}
+            </Button>
+          )}
+          <HeaderButton
+            label={VIEWER_LABEL.DOWNLOAD}
+            onClick={() => download(file)}
+            icon={<DownloadIcon aria-hidden="true" />}
+          />
+          <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={onClose} icon={<CloseIcon />} />
+        </header>
+        <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
+      </div>
+    </Dialog>
   );
 }

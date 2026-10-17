@@ -325,6 +325,29 @@ body {
   overflow-y: auto;
 }
 
+/* A picture's card: its name and Close along the top, the picture under
+   it on its own ground. */
+.catalog-media-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--luke-space-6) var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.catalog-media-picture {
+  display: grid;
+  padding: var(--luke-space-48);
+  place-items: center;
+  background: var(--luke-color-surface);
+}
+
+.catalog-media-picture > .luke-face {
+  width: 480px;
+  height: 320px;
+}
+
 /* The measure a settings page gives its sections. */
 .catalog-settings {
   max-width: 560px;
