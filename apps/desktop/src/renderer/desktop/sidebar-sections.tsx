@@ -11,7 +11,15 @@ import {
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { EllipsisIcon, PencilIcon, TrashIcon } from "@luke/ui";
+import {
+  ConfirmDialog,
+  DIALOG_TONE,
+  type DialogConfirm,
+  EllipsisIcon,
+  PencilIcon,
+  TrashIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import {
   placeWrites,
   sectionEntries,
@@ -38,12 +46,6 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import {
-  ConfirmDialog,
-  DIALOG_TONE,
-  type DialogConfirm,
-  useConfirmDialog,
-} from "../settings/confirm-dialog";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
