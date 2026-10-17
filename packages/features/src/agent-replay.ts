@@ -230,8 +230,10 @@ function noteFrom(text: string, at: number): FirstMessageNote | null | undefined
   for (const heading of NOTE_HEADINGS) {
     const lead = `${SECTION_GAP}${heading}${SECTION_GAP}`;
     if (!text.startsWith(lead, at)) continue;
-    // A marker that does not add up is a note damaged, never one from before the marker.
-    if (text.startsWith(NOTE_OPEN_START, at + lead.length)) return undefined;
+    // A whole marker that does not add up is a note damaged, never one from before the marker,
+    // whose words may still open with the marker's first words.
+    const start = at + lead.length;
+    if (NOTE_OPEN.test(text.slice(start, start + 96))) return undefined;
     return { heading, text: text.slice(at + lead.length), files: NO_NOTE_FILES };
   }
   return undefined;

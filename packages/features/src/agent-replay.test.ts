@@ -103,6 +103,10 @@ test("a marked note after a replay whose marker does not add up leaves the messa
   );
 
   assert.deepEqual(firstMessageParts(damaged), { brief: damaged });
+
+  const replayed = firstMessageText("Fix it.", replay, undefined);
+  const legacy = `${replayed}\n\n${START_NOTE_HEADING.DEVELOPER}\n\n<!-- luke:note this is an example -->`;
+  assert.equal(firstMessageParts(legacy).note?.text, "<!-- luke:note this is an example -->");
 });
 
 test("a replay with no note and no fork reads back without either", () => {
