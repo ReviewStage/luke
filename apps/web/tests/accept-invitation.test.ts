@@ -25,8 +25,16 @@ const INVITED = "ada@example.com";
 /** The pages' answers, by path: a JSON body, or a status with none. */
 type Answer = { readonly status: number; readonly body?: unknown };
 
-/** The page, answering `answers` by path and leaving every other request hanging. */
+/** Longer than Better Auth waits, after an accept, before it reads the session again. */
+const SESSION_REREAD_DELAY_MS = 1_000;
+
+/**
+ * The page, answering `answers` by path and leaving every other request
+ * hanging. The clock is the test's from the start: Better Auth reads the
+ * session on timers and dates the test moves, never on real time.
+ */
 async function openPage(answers: ReadonlyMap<string, () => Answer>): Promise<HTMLElement> {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
     const answer = answers.get(url.pathname);
@@ -121,16 +129,9 @@ afterEach(() => {
 test("a valid invitation names its workspace and inviter and is accepted from its button", async () => {
   let settleAccept: (answer: Answer) => void = () => undefined;
   let offer = VALID;
-  let sessionRead: () => void = () => undefined;
   const page = await openPage(
     new Map([
-      [
-        "/api/auth/get-session",
-        () => {
-          sessionRead();
-          return SIGNED_IN;
-        },
-      ],
+      ["/api/auth/get-session", () => SIGNED_IN],
       [HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER, () => offer],
     ]),
   );
@@ -147,13 +148,11 @@ test("a valid invitation names its workspace and inviter and is accepted from it
   await act(async () => buttonNamed(page, "Accept invitation").click());
   expect(buttonNamed(page, "Joining").getAttribute("aria-busy")).toBe("true");
 
-  // Note that accepting makes Better Auth read the session again, after which the route answers spent.
-  const sessionReadAgain = new Promise<void>((settle) => {
-    sessionRead = settle;
-  });
+  // Note that accepting makes Better Auth read the session again on a timer,
+  // after which the route answers spent, so the clock moves past that.
   offer = offerRead({ refused: INVITATION_OFFER_REFUSAL.SPENT });
   await act(async () => settleAccept({ status: 200, body: { invitation: {}, member: {} } }));
-  await act(async () => sessionReadAgain);
+  await act(async () => vi.advanceTimersByTimeAsync(SESSION_REREAD_DELAY_MS));
   await titled(page, "You joined Atlas");
   expect(page.textContent).toContain("Return to Luke. You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
@@ -221,7 +220,6 @@ test("a sign-in asked for again, after a session came and went, carries no earli
 
   // Note that Better Auth refetches the session when the tab is shown again,
   // but not within seconds of its last read, so the clock moves past that.
-  vi.useFakeTimers({ toFake: ["Date"] });
   const refocus = async (now: Answer) => {
     session = now;
     vi.setSystemTime(Date.now() + 60_000);
@@ -248,7 +246,6 @@ test("an address verified while the page stood open makes the invitation accepta
   await titled(page, "Your address isn't verified");
 
   // Note that Better Auth refetches on visibility only after the prior session read has aged out.
-  vi.useFakeTimers({ toFake: ["Date"] });
   session = SIGNED_IN;
   offer = VALID;
   vi.setSystemTime(Date.now() + 60_000);
