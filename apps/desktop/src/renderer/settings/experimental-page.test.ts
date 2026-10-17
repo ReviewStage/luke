@@ -18,6 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -73,6 +74,7 @@ function rowsInput(experiments: ExperimentChoices) {
     settings: settingsView({ experiments }),
     voiceControlsDrawn: false,
     accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
   };
 }
 

@@ -36,6 +36,7 @@ function about(initial: UpdateSnapshot): AboutGroup {
   function MainProcess(): React.JSX.Element {
     const [update, setUpdate] = useState<UpdateSnapshot>(initial);
     return createElement(UpdatesSection, {
+      offered: true,
       control: {
         update,
         build: { packaged: true },

@@ -65,7 +65,7 @@ function fixture() {
   const dependencies = {
     panels,
     voiceWindow,
-    state: new AppStateStore(initialAppState(RUN, false), Context.empty()),
+    state: new AppStateStore(initialAppState(RUN, false, []), Context.empty()),
     openExternal: async () => undefined,
     liveSession: {
       createLiveSession: (sdp: string) =>

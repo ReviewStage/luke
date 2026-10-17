@@ -1,6 +1,7 @@
 import type { ProductSettingValue } from "@luke/features/analytics";
 import type { UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
+import type { HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";
 import type { RuntimeStatus } from "./status.js";
 
@@ -115,6 +116,8 @@ export interface SettingsVisibility {
   voiceControlsDrawn: boolean;
   /** Whether the Account section stands. */
   accountDrawn: boolean;
+  /** What the platform offers, which a platform feature's row stands on. */
+  capabilities: readonly HostCapability[];
 }
 
 /** One option a row's control draws: the token it stores by, the words it shows, and the picture beside them where it has one. */

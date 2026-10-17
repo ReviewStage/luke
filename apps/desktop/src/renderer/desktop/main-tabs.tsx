@@ -452,9 +452,9 @@ export function MainTabStrip({
   inbox: number;
   /** The toolbar's slot the chosen tab's ⋯ stands in, where the plan's own stands on its tab. */
   actionsSlot: HTMLElement | null;
-  /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent. */
-  onOpenTerminal: (agentId: string) => void;
-  /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository. */
+  /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
+  onOpenTerminal?: ((agentId: string) => void) | undefined;
+  /** Runs an agent's pushed branch in a terminal of this Mac in the side panel, by the agent; none where the task names no repository or the platform has no Mac terminal. */
   onOpenOnMac?: ((agentId: string) => void) | undefined;
   /** Whether there is a chat to read, so the "+" menu offers the plan's Chat tab. */
   chat: boolean;
@@ -555,7 +555,10 @@ export function MainTabStrip({
             },
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
-      onOpenTerminal: agent === undefined ? undefined : () => onOpenTerminal(agent.id),
+      onOpenTerminal:
+        agent === undefined || onOpenTerminal === undefined
+          ? undefined
+          : () => onOpenTerminal(agent.id),
       onOpenOnMac:
         agent === undefined || onOpenOnMac === undefined ? undefined : () => onOpenOnMac(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),

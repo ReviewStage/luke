@@ -6,7 +6,6 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
-  SETTINGS_PAGE_GROUPS,
   SETTINGS_VIEW,
   type SettingsPageGroup,
   type SettingsView,
@@ -22,7 +21,7 @@ import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
-import { settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
+import { settingsGroupHeadingOf, settingsPageOf, shownSettingsPageGroups } from "../settings/pages";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
@@ -273,7 +272,7 @@ export function DesktopSettings({
             {search ? (
               <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
             ) : (
-              SETTINGS_PAGE_GROUPS.map(({ group, pages }) => (
+              shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
                 <section key={group} className="settings-nav-group">
                   <GroupHeading group={group} listed={listed} />
                   <ul>

@@ -15,7 +15,7 @@ import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import { experimentsOn, settingsView } from "@luke/settings/testing";
@@ -28,7 +28,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { handState } from "#testing/app-state";
+import { DESKTOP_CAPABILITIES, handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_TASK } from "#testing/document-task";
@@ -93,6 +93,7 @@ function openPalette(
   readFiles: (taskId: string) => Promise<TasksTreeAnswer> = () =>
     Promise.reject(new Error("no repository is open")),
   page?: { agentId: string; workspaceId: string },
+  capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
 ): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
@@ -107,7 +108,13 @@ function openPalette(
         onTabChange: (tab) => sent.tabs.push(tab),
         tasks,
         settings: {
-          rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+          rows: {
+            settings: settingsView(),
+            voiceControlsDrawn: true,
+            accountDrawn: true,
+            capabilities,
+          },
+          capabilities,
           onViewChange: (view) => sent.views.push(view),
         },
         readFiles,
@@ -151,7 +158,13 @@ function paletteOverPlan(): (looked: typeof DOCUMENT_TASK | undefined) => void {
               onTabChange: () => undefined,
               tasks: plans,
               settings: {
-                rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+                rows: {
+                  settings: settingsView(),
+                  voiceControlsDrawn: true,
+                  accountDrawn: true,
+                  capabilities: DESKTOP_CAPABILITIES,
+                },
+                capabilities: DESKTOP_CAPABILITIES,
                 onViewChange: () => undefined,
               },
               readFiles: () => Promise.reject(new Error("no repository is open")),
@@ -263,6 +276,27 @@ test("the Settings filter lists every Settings page by its name, ahead of the se
   chooseFilter("Settings");
 
   assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length), SETTINGS_PAGES);
+});
+
+test("on a platform without voice or Mac commands, the Settings filter lists neither page, and finds none of their rows", () => {
+  const offered = DESKTOP_CAPABILITIES.filter(
+    (each) => each !== HOST_CAPABILITY.VOICE && each !== HOST_CAPABILITY.MAC_COMMANDS,
+  );
+  const shown = SETTINGS_PAGES.filter((page) => page !== "Voice" && page !== "This Mac");
+  openPalette(undefined, undefined, undefined, offered);
+  chooseFilter("Settings");
+
+  assert.deepEqual(rows().slice(0, shown.length), shown);
+  type("Talk to Luke");
+  assert.equal(
+    rows().some((row) => row.includes("Talk to Luke")),
+    false,
+  );
+  type("Let agents run commands on this Mac");
+  assert.equal(
+    rows().some((row) => row.includes("Let agents run commands")),
+    false,
+  );
 });
 
 test("a page is found by its name, above every setting the query finds", () => {
@@ -575,7 +609,13 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       onTabChange: () => undefined,
       tasks,
       settings: {
-        rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+        rows: {
+          settings: settingsView(),
+          voiceControlsDrawn: true,
+          accountDrawn: true,
+          capabilities: DESKTOP_CAPABILITIES,
+        },
+        capabilities: DESKTOP_CAPABILITIES,
         onViewChange: () => undefined,
       },
       readFiles: () => Promise.reject(new Error("no repository is open")),
@@ -1291,7 +1331,13 @@ function PinnableTask(): React.JSX.Element {
       onTabChange: () => undefined,
       tasks: plans,
       settings: {
-        rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+        rows: {
+          settings: settingsView(),
+          voiceControlsDrawn: true,
+          accountDrawn: true,
+          capabilities: DESKTOP_CAPABILITIES,
+        },
+        capabilities: DESKTOP_CAPABILITIES,
         onViewChange: () => undefined,
       },
       readFiles: () => Promise.reject(new Error("no repository is open")),
@@ -1355,7 +1401,13 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
           onTabChange: () => undefined,
           tasks,
           settings: {
-            rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+            rows: {
+              settings: settingsView(),
+              voiceControlsDrawn: true,
+              accountDrawn: true,
+              capabilities: DESKTOP_CAPABILITIES,
+            },
+            capabilities: DESKTOP_CAPABILITIES,
             onViewChange: () => undefined,
           },
           readFiles: () => Promise.reject(new Error("no repository is open")),

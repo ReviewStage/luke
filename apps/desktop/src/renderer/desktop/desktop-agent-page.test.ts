@@ -40,7 +40,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { handState, stateWith } from "#testing/app-state";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState, stateWith } from "#testing/app-state";
 import { editorBundleLanded, installEditorLayout, typeInComposer } from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -243,6 +243,7 @@ beforeEach(() => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
+  handCapabilities(DESKTOP_CAPABILITIES);
 });
 
 afterEach(() => {

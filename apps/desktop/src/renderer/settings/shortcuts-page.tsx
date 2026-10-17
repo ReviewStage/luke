@@ -1,4 +1,4 @@
-import type { ExperimentChoices } from "@luke/settings";
+import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
 import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection } from "@luke/ui";
@@ -16,7 +16,8 @@ import { Shortcut } from "../shortcut";
  * answers only while Luke's window has the keyboard, so they are fixed and
  * listed here to be found, not chosen, under the groups the table keeps —
  * the menu bar's own — each row the command's name and its chord. A gated
- * feature's shortcut is listed only while the account has its experiment on.
+ * feature's shortcut is listed only while the account has its experiment on,
+ * and a platform feature's only where the platform offers it.
  *
  * Each group is `@luke/ui`'s `SettingsSection` and each command its
  * `SettingsRow` at the list density, a reference's line rather than a
@@ -26,12 +27,14 @@ import { Shortcut } from "../shortcut";
  */
 export function WindowShortcutSections({
   experiments,
+  capabilities,
 }: {
   experiments: ExperimentChoices;
+  capabilities: readonly HostCapability[];
 }): React.JSX.Element {
   return (
     <>
-      {shownShortcutGroups(experiments).map((group) => (
+      {shownShortcutGroups(experiments, capabilities).map((group) => (
         <SettingsSection key={group.title} title={group.title}>
           {group.commands.map((command) => (
             <div key={command} {...searchAnchorProps(command)}>

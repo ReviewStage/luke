@@ -4,6 +4,7 @@ import { describe, it } from "@effect/vitest";
 import { loopbackConsent } from "@luke/credentials/node";
 import { GATEWAY_ERROR, GATEWAY_METHOD } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { scriptedOpenSocket } from "@luke/voice/testing";
 import { noNetwork } from "@luke/wire/testing";
 import { ConfigProvider, Effect, Layer } from "effect";
@@ -23,7 +24,13 @@ import {
   TerminalSocket,
   VoiceSocket,
 } from "./effect/seams.js";
-import { ALL_HOST_PLATFORM_CONCERNS, HOST_CONCERN, NOT_ON_THIS_PLATFORM } from "./host-concerns.js";
+import {
+  ALL_HOST_PLATFORM_CONCERNS,
+  type ClientCapability,
+  HOST_CONCERN,
+  hostCapabilities,
+  NOT_ON_THIS_PLATFORM,
+} from "./host-concerns.js";
 import { runModeFor } from "./run-mode.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
@@ -59,6 +66,9 @@ const machineOver = (stateRoot: string) =>
     ),
   );
 
+/** A client offering one capability of its own, as a browser might. */
+const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.NOTIFICATIONS];
+
 /** What a standing host answers for a Mac's repositories and an agent's terminals, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
@@ -93,6 +103,7 @@ describe("the host's platform concerns", () => {
       assert.equal(asked.concerns.has(HOST_CONCERN.MAC_TERMINAL), false);
       assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
       assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
+      assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.NOTIFICATIONS]);
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
 
@@ -120,6 +131,12 @@ describe("the host's platform concerns", () => {
       });
       for (const concern of ALL_HOST_PLATFORM_CONCERNS)
         assert.equal(asked.concerns.has(concern), true);
+      assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [
+        HOST_CAPABILITY.NOTIFICATIONS,
+        HOST_CAPABILITY.MAC_COMMANDS,
+        HOST_CAPABILITY.MAC_TERMINAL,
+        HOST_CAPABILITY.TERMINALS,
+      ]);
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
 });

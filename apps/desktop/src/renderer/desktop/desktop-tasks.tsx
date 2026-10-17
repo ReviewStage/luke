@@ -3,7 +3,7 @@ import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ConfirmDialog,
@@ -65,7 +65,7 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { useExperiment } from "../use-app-state";
+import { useCapability, useExperiment } from "../use-app-state";
 import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";
@@ -376,6 +376,9 @@ function PlanDocument({
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
+  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
+  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -544,7 +547,7 @@ function PlanDocument({
   // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
   const { repository } = task;
   const openOnMac =
-    repository === null
+    repository === null || !macTerminalOffered
       ? undefined
       : (agentId: string) => {
           sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
@@ -674,7 +677,11 @@ function PlanDocument({
                         inbox={inbox.board.open.length}
                         chat={chatOn && tasks.chatView.available}
                         actionsSlot={actionsSlot}
-                        onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
+                        onOpenTerminal={
+                          terminalsOffered
+                            ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)
+                            : undefined
+                        }
                         onOpenOnMac={openOnMac}
                       />
                     }
@@ -690,12 +697,14 @@ function PlanDocument({
                       </p>
                     ) : null}
                     <CopyChord copy={tasks.copy} />
-                    <TerminalCommands
-                      here={terminalHere}
-                      agents={agents}
-                      sidePanel={sidePanel}
-                      onShown={showSide}
-                    />
+                    {terminalsOffered ? (
+                      <TerminalCommands
+                        here={terminalHere}
+                        agents={agents}
+                        sidePanel={sidePanel}
+                        onShown={showSide}
+                      />
+                    ) : null}
                     {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
                     {tasks.history.viewing === undefined ? (
                       <NewTabChord
@@ -831,7 +840,7 @@ function PlanDocument({
                   </div>
                   {/* Note that a call of the plan's own still stands, so it can be
             ended, when only a race left one on a plan just archived. */}
-                  {archived && !tasks.stop.shown ? null : (
+                  {!voiceOffered || (archived && !tasks.stop.shown) ? null : (
                     <div className="desktop-call-bar">
                       {captions}
                       <CallBar

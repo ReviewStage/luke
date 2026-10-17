@@ -14,6 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
@@ -47,6 +48,7 @@ function settingsOn(microphone: MicrophoneControl): SettingsPanelProps {
       onOpenSettings: ignore,
       onTest: ignore,
     },
+    capabilities: DESKTOP_CAPABILITIES,
     updates: {
       update: {
         status: UPDATE_STATUS.IDLE,

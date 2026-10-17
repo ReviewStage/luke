@@ -6,6 +6,7 @@ import {
   APP_SETTING_SCHEMA,
   describedSettings,
   EXPERIMENTS,
+  HOST_CAPABILITY,
   type SettingsRowsInput,
   settingFieldForId,
   settingIdVisible,
@@ -30,7 +31,7 @@ import { useAppCommand } from "./app-commands";
 import { appPlatform } from "./app-platform";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
-import { settingsPageOf } from "./settings/pages";
+import { settingsPageOf, settingsPageShown } from "./settings/pages";
 import { Shortcut } from "./shortcut";
 import { commandKeyshortcuts } from "./tooltip";
 
@@ -118,12 +119,17 @@ const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
  */
 function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const entries: (SettingsSearchEntry | undefined)[] = [
-    {
-      id: SETTINGS_SEARCH_ROW.UPDATES,
-      label: "Updates",
-      page: SETTINGS_VIEW.ABOUT,
-      haystack: ["Updates", "version release download check for updates build commit development"],
-    },
+    input.capabilities.includes(HOST_CAPABILITY.UPDATES)
+      ? {
+          id: SETTINGS_SEARCH_ROW.UPDATES,
+          label: "Updates",
+          page: SETTINGS_VIEW.ABOUT,
+          haystack: [
+            "Updates",
+            "version release download check for updates build commit development",
+          ],
+        }
+      : undefined,
     {
       id: SETTINGS_SEARCH_ROW.CHANGELOG,
       label: "Changelog",
@@ -168,8 +174,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Delete account", "account erase remove"],
         }
       : undefined,
-    // The Voice page's permission row, drawn once there is a voice to reach.
-    input.settings.voiceAvailable
+    // The Voice page's permission row, drawn once there is a voice to reach and a microphone to ask for.
+    input.settings.voiceAvailable && input.capabilities.includes(HOST_CAPABILITY.MICROPHONE)
       ? {
           id: SETTINGS_SEARCH_ROW.MICROPHONE,
           label: "Microphone",
@@ -290,7 +296,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         }
       : undefined,
     // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
-    ...shownShortcutGroups(input.settings.experiments).flatMap((group) =>
+    ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) =>
       group.commands.map((command) => ({
         id: command,
         label: APP_SHORTCUTS[command].label,
@@ -330,13 +336,16 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     ];
   });
   const fixed = fixedEntries(input);
-  return SETTINGS_PAGE_LIST.flatMap((page) => [
-    ...described.filter((entry) => entry.page === page),
-    ...fixed.filter((entry) => entry.page === page),
-  ]).map((entry) => ({
-    ...entry,
-    haystack: [...entry.haystack, resultPageWord(entry.page)],
-  }));
+  const pages = SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, input.capabilities));
+  return pages
+    .flatMap((page) => [
+      ...described.filter((entry) => entry.page === page),
+      ...fixed.filter((entry) => entry.page === page),
+    ])
+    .map((entry) => ({
+      ...entry,
+      haystack: [...entry.haystack, resultPageWord(entry.page)],
+    }));
 }
 
 /** One page's matches: the page that heads the group, and the rows under it. */

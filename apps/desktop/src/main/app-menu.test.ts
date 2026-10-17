@@ -14,6 +14,7 @@ import { experimentsOn } from "@luke/settings/testing";
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
 import { ellipsized } from "#testing/action-label";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
 
 /**
@@ -77,10 +78,12 @@ describe("the menu bar's gate", () => {
 
 describe("the Automations item", () => {
   test("stands under Go only while the account has its experiment on", () => {
-    const off = appMenuTemplate("Luke", undefined, (command) => shortcutShown(command, {}));
+    const off = appMenuTemplate("Luke", undefined, (command) =>
+      shortcutShown(command, {}, DESKTOP_CAPABILITIES),
+    );
     assert.ok(!labelsOf(off, "Go").includes("Automations"));
     const on = appMenuTemplate("Luke", undefined, (command) =>
-      shortcutShown(command, experimentsOn(EXPERIMENT.AUTOMATIONS)),
+      shortcutShown(command, experimentsOn(EXPERIMENT.AUTOMATIONS), DESKTOP_CAPABILITIES),
     );
     assert.ok(labelsOf(on, "Go").includes("Automations"));
   });
@@ -89,12 +92,13 @@ describe("the Automations item", () => {
 describe("Factory", () => {
   test("keeps no menu bar item and no chord, with its experiment on as off, so ⇧⌘F reaches no command", () => {
     const on = appMenuTemplate("Luke", undefined, (command) =>
-      shortcutShown(command, experimentsOn(EXPERIMENT.FACTORY)),
+      shortcutShown(command, experimentsOn(EXPERIMENT.FACTORY), DESKTOP_CAPABILITIES),
     );
     assert.ok(!labelsOf(on, "Go").includes("Factory"));
-    const listed = shownShortcutGroups(experimentsOn(EXPERIMENT.FACTORY)).flatMap(
-      (group) => group.commands,
-    );
+    const listed = shownShortcutGroups(
+      experimentsOn(EXPERIMENT.FACTORY),
+      DESKTOP_CAPABILITIES,
+    ).flatMap((group) => group.commands);
     assert.ok(!listed.some((command) => appCommandLabel(command) === "Factory"));
     const freed = shortcutAccelerator({ key: SHORTCUT_KEY.F, shift: true });
     assert.ok(
@@ -115,11 +119,11 @@ describe("the menu bar's drawer", () => {
     show();
     assert.equal(drawn.length, 1);
 
-    show({ experiments: {} });
+    show({ experiments: {}, capabilities: [] });
     show();
     assert.equal(drawn.length, 1, "nothing moved, so nothing was drawn again");
 
-    show({ experiments: experimentsOn(EXPERIMENT.FACTORY) });
+    show({ experiments: experimentsOn(EXPERIMENT.FACTORY), capabilities: [] });
     assert.equal(drawn.length, 2);
 
     const update = {
@@ -133,7 +137,7 @@ describe("the menu bar's drawer", () => {
     assert.ok(labelsOf(drawn[2] ?? [], "Luke").includes("Restart to Update"));
 
     // The experiments moving keeps the update item it was last told.
-    show({ experiments: {} });
+    show({ experiments: {}, capabilities: [] });
     assert.equal(drawn.length, 4);
     assert.ok(labelsOf(drawn[3] ?? [], "Luke").includes("Restart to Update"));
   });
