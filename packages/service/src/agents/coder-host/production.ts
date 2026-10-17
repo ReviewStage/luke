@@ -18,6 +18,7 @@ import { MeterUnavailable, type ResearchAccess, researchOpenAiOf } from "../publ
 import { accountProviderKeys } from "./account-keys.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
 import { type LukeKeys, type ProviderKeys, titleModel } from "./model.js";
+import { productionSummaryModel, type SummaryModelOf } from "./replay-summary.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -53,6 +54,8 @@ export interface CoderHostSeams {
   readonly research: (userId: string) => ResearchAccess;
   /** Whether the deployment asked for the scripted fixture model in place of the providers. */
   readonly scriptedModel: () => boolean;
+  /** How an agent this one starts from another summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out. */
+  readonly summaryModel?: SummaryModelOf;
   readonly now: () => number;
 }
 
@@ -112,6 +115,10 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
       }),
       scriptedModel: () =>
         process.env[CODER_ENVIRONMENT.MODEL_FIXTURE] === CODER_MODEL_FIXTURE.SCRIPTED,
+      summaryModel: (owner, chosen, effort) =>
+        productionSummaryModel(owner, chosen, effort).pipe(
+          Effect.provideService(HostedEnvironment, environment),
+        ),
       now: () => Date.now(),
     };
   },

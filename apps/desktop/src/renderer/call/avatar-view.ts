@@ -30,6 +30,7 @@ import {
 import { Duration, Effect, Option, Queue, type Scope, Stream, SubscriptionRef } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
+import { appBridge } from "../app-bridge";
 import { rendererRuntime } from "../renderer-runtime";
 import { gatherIce } from "../voice/live-peer";
 import { callAvatarAtom } from "./call-avatar";
@@ -286,8 +287,8 @@ const windowFocused: Stream.Stream<boolean> = Stream.callback<boolean>((queue) =
 
 /** Either window's doors: main's channel each way, and the browser's own peer connection. */
 const windowDoors: AvatarViewDoors = {
-  subscribe: (deliver) => window.luke.onAvatarViewSignal(deliver),
-  send: (signal) => Effect.sync(() => window.luke.signalAvatarView(signal)),
+  subscribe: (deliver) => appBridge().onAvatarViewSignal(deliver),
+  send: (signal) => Effect.sync(() => appBridge().signalAvatarView(signal)),
   createPeer: () => new RTCPeerConnection(),
 };
 

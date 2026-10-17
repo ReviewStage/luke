@@ -1,6 +1,7 @@
 import type {
   AgentEndToast,
   AgentNoticeDoorsSurface,
+  ChatMessageToast,
   FailedRunToast,
   InboxItemToast,
 } from "@luke/host/agent-notices";
@@ -45,11 +46,13 @@ export function electronNoticeDoors(dependencies: {
   toPanels: (end: AgentEndToast) => void;
   inboxToPanels: (item: InboxItemToast) => void;
   failedRunToPanels: (run: FailedRunToast) => void;
+  chatToPanels: (message: ChatMessageToast) => void;
   /** macOS showed a notification, or refused one: whether notifications are on for Luke. */
   onAnswered: (status: NotificationsStatus) => void;
   report: (line: string) => void;
 }): ElectronNoticeDoors {
-  const { toPanels, inboxToPanels, failedRunToPanels, onAnswered, report } = dependencies;
+  const { toPanels, inboxToPanels, failedRunToPanels, chatToPanels, onAnswered, report } =
+    dependencies;
   const standing = new Set<Notification>();
   const post: AgentNoticeDoorsSurface["post"] = (notice) => {
     if (!Notification.isSupported()) return;
@@ -75,6 +78,7 @@ export function electronNoticeDoors(dependencies: {
     toast: toPanels,
     toastInbox: inboxToPanels,
     toastFailedRun: failedRunToPanels,
+    toastChat: chatToPanels,
     badge: (count) => {
       app.setBadgeCount(count);
     },

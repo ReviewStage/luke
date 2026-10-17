@@ -8,10 +8,12 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/h
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { installEditorBundle, installEditorLayout } from "#testing/composer";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
 import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
@@ -32,35 +34,33 @@ const PLAN: Task = {
 
 const roots: Root[] = [];
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
-  installEditorBundle();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.TASKS_TREE
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: {
-                  folder: {
-                    path: "",
-                    repository: "acme/relay",
-                    branch: "main",
-                    entries: [
-                      { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
-                      { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
-                      { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
-                    ],
-                    truncated: false,
-                  },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.TASKS_TREE
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                folder: {
+                  path: "",
+                  repository: "acme/relay",
+                  branch: "main",
+                  entries: [
+                    { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
+                    { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
+                    { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
+                  ],
+                  truncated: false,
                 },
-              }
-            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-        ),
-      recordSurfaceEvent: () => undefined,
-    },
+              },
+            }
+          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      ),
   });
 });
 
