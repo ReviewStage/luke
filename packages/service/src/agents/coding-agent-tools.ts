@@ -213,7 +213,8 @@ export const START_CODING_AGENT_REFUSAL = {
   UNREADABLE:
     "Not started: give a prompt as text of at most " +
     `${CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
-    "bounded the same or none, and a model with its effort, both or neither.",
+    `bounded the same or none, a title of at most ${CODING_AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
+    "characters or none, and a model with its effort, both or neither.",
   NO_TASK: `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
@@ -295,9 +296,18 @@ const START_PROMPT = Schema.Trim.check(
   Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS),
 );
 
+/** A title a start may name: bounded as a rename's is, and never empty, since an empty one names nothing. */
+const START_TITLE = Schema.Trim.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS),
+);
+
 /**
  * A start names a prompt at most, a note at most, and a model with its
- * effort or neither; the catalog decides whether the two name anything.
+ * effort or neither; the catalog decides whether the two name anything. A
+ * title it names is the agent's from the start, as an automation's run's
+ * fixed name is, so no generated title ever covers it; without one the
+ * agent is named from its first exchange as any is.
  * Note that the note is what lets one start carry everything: without it a
  * start on the plan had no room for what was said beyond the plan, so the
  * caller started the agent and then messaged it the rest.
@@ -323,6 +333,13 @@ const START_AGENT_INPUT = Schema.Struct({
       "Everything else the agent should hear as it starts (what to start with, what to watch out " +
         "for, what to leave alone), handed to it after the plan or the prompt in the same first " +
         "message; leave it out where there is nothing beyond the plan.",
+    ),
+  ),
+  title: Schema.optionalKey(
+    describeWire(
+      START_TITLE,
+      "The agent's title from the start, how the developer sees it named, such as the pull " +
+        "request it will open; leave it out to have it named from what it is told.",
     ),
   ),
   model: Schema.optionalKey(
@@ -999,6 +1016,7 @@ export function runStartAgent(
         choice,
         prompt,
         note,
+        title: asked.success.title,
         ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
