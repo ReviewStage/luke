@@ -23,12 +23,25 @@ import { useAct } from "../act";
  * and neither asks first. An address neither act takes — a `file:`, a
  * `javascript:`, another app's scheme — is no link, and the surface draws
  * its words going nowhere.
+ *
+ * A place may open some links where it stands before the window does
+ * (`OpenHereProvider`), as the window's Inbox opens a file, a page, or a pull
+ * request of the item's task in the panel beside the item rather than
+ * leaving for the task.
  */
 
 const OpenLinkContext = createContext<((link: ReadLink) => void) | undefined>(undefined);
 
 /** Hands the window's opener for a place in Luke to everything under it. */
 export const OpenLinkProvider = OpenLinkContext.Provider;
+
+/** Opens a link where the place stands, answering whether it did; one it did not is the window's to open. */
+export type OpenHere = (href: string) => boolean;
+
+const OpenHereContext = createContext<OpenHere | undefined>(undefined);
+
+/** Hands everything under it the place's own opener, asked first of every link opened there. */
+export const OpenHereProvider = OpenHereContext.Provider;
 
 /** The place a mention of a plan, or of one of its sections, names. */
 function placeOfMention(mention: PlanMention): LinkPlace {
@@ -73,8 +86,10 @@ function lukeLinkOf(href: string): ReadLink | undefined {
 export function useOpenLink(): (href: string) => void {
   const { tell } = useAct();
   const openPlace = useContext(OpenLinkContext);
+  const openHere = useContext(OpenHereContext);
   return useCallback(
     (href: string) => {
+      if (openHere?.(href) === true) return;
       const link = openPlace === undefined ? undefined : lukeLinkOf(href);
       if (openPlace !== undefined && link !== undefined) {
         openPlace(link);
@@ -84,6 +99,6 @@ export function useOpenLink(): (href: string) => void {
         tell(ACT_KIND.WEB_OPEN, { url: href });
       }
     },
-    [tell, openPlace],
+    [tell, openPlace, openHere],
   );
 }
