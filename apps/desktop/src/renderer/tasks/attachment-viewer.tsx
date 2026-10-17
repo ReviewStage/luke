@@ -6,6 +6,7 @@ import {
   type FileChip,
   sizeLabel,
 } from "@luke/features/attachment-model";
+import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import { CloseIcon } from "@luke/ui";
 import {
   ChevronLeftIcon,
@@ -15,7 +16,6 @@ import {
   ZoomOutIcon,
 } from "lucide-react";
 import { useId } from "react";
-import { SHORTCUT_KEY, type ShortcutChord } from "#shared/shortcuts";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { ModalShell } from "../modal-shell";
 import { Tooltip } from "../tooltip";

@@ -4,7 +4,8 @@
  * `tokens.css` keys each app's roles on `data-luke-profile` and its palette
  * on `data-luke-theme`, so a surface is two attributes: the window's root
  * and anything it portals into `document.body` carry the same pair, and a
- * dialog reads the window's tokens rather than none.
+ * dialog reads the window's tokens rather than none. A web surface may carry
+ * a third, `data-luke-density`, which sets the site's roles at a denser size.
  */
 
 /** Which app's roles a surface is drawn at: the desktop's density, or the site's. */
@@ -25,6 +26,17 @@ export const THEME = {
 export type Theme = (typeof THEME)[keyof typeof THEME];
 
 /**
+ * How densely a web surface is drawn, where it is not at the site's own
+ * size: `compact` is a dashboard's, its controls and type a step under a
+ * public page's. The desktop has one density, its own.
+ */
+export const DENSITY = {
+  COMPACT: "compact",
+} as const;
+
+export type Density = (typeof DENSITY)[keyof typeof DENSITY];
+
+/**
  * The themes a surface at `profile` may be drawn in. The site keeps a
  * palette per theme and none that follows the machine, so `system` is the
  * desktop's alone: a web surface asking for it would take the machine's
@@ -34,16 +46,22 @@ export type ThemeOf<P extends Profile> = P extends typeof PROFILE.WEB
   ? Exclude<Theme, typeof THEME.SYSTEM>
   : Theme;
 
-/** The attributes a surface's root wears for `profile` in `theme`. */
+/** The densities a surface at `profile` may be drawn at: the site's alone has more than one. */
+export type DensityOf<P extends Profile> = P extends typeof PROFILE.WEB ? Density : never;
+
+/** The attributes a surface's root wears for `profile` in `theme`, at `density` where it has one. */
 export interface SurfaceAttributes {
   readonly "data-luke-profile": Profile;
   readonly "data-luke-theme": Theme;
+  readonly "data-luke-density"?: Density;
 }
 
-/** The attributes a root or a portal spreads to be drawn at `profile` in `theme`. */
+/** The attributes a root or a portal spreads to be drawn at `profile` in `theme`, and `density` where given. */
 export function surfaceAttributes<P extends Profile>(
   profile: P,
   theme: ThemeOf<P>,
+  density?: DensityOf<P>,
 ): SurfaceAttributes {
-  return { "data-luke-profile": profile, "data-luke-theme": theme };
+  const surface = { "data-luke-profile": profile, "data-luke-theme": theme };
+  return density === undefined ? surface : { ...surface, "data-luke-density": density };
 }

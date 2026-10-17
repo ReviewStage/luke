@@ -2,13 +2,16 @@ import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agen
 import type { Failure } from "@luke/features/failure-remedy";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
+import { ConversationEmptyState } from "../ai-elements/conversation";
 import { AgentComposer } from "./agent-composer";
 import type { TranscriptCards } from "./agent-tab";
 import { ArchivedComposerNote } from "./archived-task";
+import { agentTabLabel } from "./coding-agent-model";
 import { ForkChip } from "./fork-action";
-import { forkChoice } from "./fork-model";
+import { forkChoice, startingWords } from "./fork-model";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
+import { useWorkingNow, WorkingLine } from "./working-time";
 
 /**
  * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.
@@ -39,12 +42,39 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * the model chip starts on the source's model and effort, and a send forks
  * the source there with the box's words and files as the developer's note,
  * an empty box forking alone. The chip's × lets the fork go, leaving an
- * ordinary draft with its words.
+ * ordinary draft with its words. A draft may continue one of the agents
+ * on its whole transcript the same way, its chip naming the source alone.
+ * While a fork's or a continue's Start is out, which copies the source's
+ * work before the new agent starts and may take a while, the tab stands on
+ * a working line saying so, counting from the send, over the held box;
+ * once it lands the tab gives way to the new agent's, and a Start that did
+ * not land leaves the line for the note and Retry under the box, the words
+ * kept.
  */
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
 const NOTHING_TO_STOP = () => Promise.resolve();
 const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
+
+/** What a fork's working line names its source as where the task does not list it. */
+const UNLISTED_SOURCE = "the agent";
+
+/** The working line a fork's or a continue's draft stands on while its Start is out, saying the stage it is likely at and counting from the send. */
+function StartingLine({
+  source,
+  sentAt,
+}: {
+  source: string | undefined;
+  sentAt: number;
+}): React.JSX.Element {
+  const now = useWorkingNow();
+  return (
+    <WorkingLine
+      startedAt={sentAt}
+      words={startingWords(source ?? UNLISTED_SOURCE, now === undefined ? undefined : now - sentAt)}
+    />
+  );
+}
 
 export function DraftAgentTab({
   draft,
@@ -57,6 +87,8 @@ export function DraftAgentTab({
   cards?: TranscriptCards | undefined;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
+  // When a fork's or a continue's Start went, which its working line counts from; none while none is out.
+  const [sentAt, setSentAt] = useState<number | undefined>(undefined);
   const [note, setNote] = useState<Failure | undefined>(undefined);
   // The account's default as read, which the chip names until the developer makes a choice of their own.
   const [fallback, setFallback] = useState<AgentDraft["choice"]>(undefined);
@@ -87,6 +119,7 @@ export function DraftAgentTab({
     if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
     setSending(true);
     setNote(undefined);
+    if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
     const started =
       fork === undefined
@@ -94,6 +127,7 @@ export function DraftAgentTab({
         : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers);
     started.then((failed) => {
       setSending(false);
+      setSentAt(undefined);
       setNote(failed);
     });
   };
@@ -123,6 +157,14 @@ export function DraftAgentTab({
 
   return (
     <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
+      {sentAt === undefined || fork === undefined ? null : (
+        <ConversationEmptyState>
+          <StartingLine
+            source={source === undefined ? undefined : agentTabLabel(source, control.models)}
+            sentAt={sentAt}
+          />
+        </ConversationEmptyState>
+      )}
       <footer className="agent-tab-foot">
         {fork === undefined ? null : (
           <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />

@@ -1,27 +1,31 @@
-import { PROFILE, type Profile, THEME, type Theme } from "@luke/ui";
+import { DENSITY, type Density, PROFILE, type Profile, THEME, type Theme } from "@luke/ui";
 import { EXAMPLES, type Example } from "./examples";
 
 /**
  * catalog.tsx -- the catalog's page: the index of examples, the profile and
  * theme they are drawn at, and the one example chosen.
  *
- * The address is the whole state, `?example=<id>&profile=<p>&theme=<t>`, so
+ * The address is the whole state, `?example=<id>&profile=<p>&theme=<t>`,
+ * and `&density=compact` for the site's compact surface, so
  * every view is a link a reader can share and a test can open, and the
  * shell keeps no state of its own. The profile and theme are the document's
  * own attributes (`main.tsx`), as they are on an app's root, so whatever an
  * example portals into the body is drawn at them too.
  */
 
-/** What the catalog shows: one example, at one profile, in one theme. */
+/** What the catalog shows: one example, at one profile, in one theme, compact where the site's is asked for. */
 export interface CatalogView {
   readonly example: Example;
   readonly profile: Profile;
   readonly theme: Theme;
+  readonly density: Density | undefined;
 }
 
 /** The themes a reader picks between; `system` is the desktop's own and follows whatever the machine is set to. */
 const THEMES = [THEME.DARK, THEME.LIGHT] as const;
 const PROFILES = [PROFILE.DESKTOP, PROFILE.WEB] as const;
+/** The site's densities: its own, which no attribute names, and the compact one. */
+const DENSITIES = [undefined, DENSITY.COMPACT] as const;
 
 /** `value` if it is one of `known`, else `fallback`. */
 function oneOf<Value extends string>(
@@ -37,10 +41,16 @@ export function readView(search: string): CatalogView {
   const params = new URLSearchParams(search);
   const first = EXAMPLES[0];
   if (first === undefined) throw new Error("The catalog has no examples");
+  const profile = oneOf(params.get("profile"), PROFILES, PROFILE.DESKTOP);
   return {
     example: EXAMPLES.find((example) => example.id === params.get("example")) ?? first,
-    profile: oneOf(params.get("profile"), PROFILES, PROFILE.DESKTOP),
+    profile,
     theme: oneOf(params.get("theme"), THEMES, THEME.DARK),
+    // The desktop has one density, so an address asking it for another gets its own.
+    density:
+      profile === PROFILE.WEB
+        ? DENSITIES.find((candidate) => candidate === params.get("density"))
+        : undefined,
   };
 }
 
@@ -51,6 +61,7 @@ function hrefOf(view: CatalogView): string {
     profile: view.profile,
     theme: view.theme,
   });
+  if (view.density !== undefined) params.set("density", view.density);
   return `?${params.toString()}`;
 }
 
@@ -82,7 +93,7 @@ function ExampleFrame({ example }: { example: Example }): React.JSX.Element {
 }
 
 export function Catalog({ view }: { view: CatalogView }): React.JSX.Element {
-  const { example, profile, theme } = view;
+  const { example, profile, theme, density } = view;
   return (
     <div className="catalog">
       <nav className="catalog-index" aria-label="Examples">
@@ -108,6 +119,17 @@ export function Catalog({ view }: { view: CatalogView }): React.JSX.Element {
               </li>
             ))}
           </ul>
+          {profile === PROFILE.WEB ? (
+            <ul aria-label="Density">
+              {DENSITIES.map((option) => (
+                <li key={option ?? "regular"}>
+                  <ViewLink view={{ ...view, density: option }} current={option === density}>
+                    {option ?? "regular"}
+                  </ViewLink>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <ul aria-label="Theme">
             {THEMES.map((option) => (
               <li key={option}>

@@ -20,7 +20,11 @@ import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
  * write the relay's own end takes, so its journal is finished and its
  * unanswered parts are settled exactly as a failed turn's are. Relay state
  * is irrelevant here: eve emitted no end the relay saw, and an end eve does
- * emit later finds the row terminal and is repeated, not written.
+ * emit later finds the row terminal and is repeated, not written. A coding
+ * agent's turn whose session eve says it no longer runs is settled on the
+ * same write at once, failed for its session's end rather than abandoned
+ * (`settleEndedSessionTurn`), since eve's word is final where the sweep's
+ * bound is only a guess.
  */
 
 export const TURN_ABANDON = {
@@ -85,6 +89,39 @@ const abandonedTurns = SqlSchema.findAll({
     ),
 });
 
+/** A turn whose end is not coming: its id, and the conversation and account it stands in. */
+export type LostTurn = typeof AbandonedTurnRowSchema.Type;
+
+/**
+ * The turn settled as failed for the reason given, through the write the
+ * relay's own end takes; whether this write settled it, a turn already
+ * ended being a repeat. The end stands alone in the turn's sequence: the
+ * relay's count of what it told is not known here, and the writer settles
+ * the row by the turn's id.
+ */
+const settledLost = (
+  writer: Pick<StoreWriter, "consume">,
+  turn: LostTurn,
+  failure: typeof BRAIN_REQUEST_FAILURE.ABANDONED | typeof BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+  now: number,
+) =>
+  Effect.map(
+    writer.consume(
+      { userId: turn.userId, conversationId: turn.conversationId },
+      {
+        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        conversationId: sessionKey(turn.conversationId),
+        turnId: turn.id,
+        sequence: 1,
+        status: BRAIN_REQUEST_STATUS.FAILED,
+        failure,
+        responseIds: [],
+        at: now,
+      },
+    ),
+    (written) => Result.isSuccess(written) && written.success === STORE_WRITE_EFFECT.WRITTEN,
+  );
+
 export interface AbandonedTurnSweepStore {
   readonly writer: Pick<StoreWriter, "consume">;
 }
@@ -107,21 +144,30 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
   });
   let settled = 0;
   for (const turn of turns) {
-    // The end stands alone in the turn's sequence: the relay's count of what it told is not known here, and the writer settles the row by the turn's id.
-    const written = yield* store.writer.consume(
-      { userId: turn.userId, conversationId: turn.conversationId },
-      {
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
-        conversationId: sessionKey(turn.conversationId),
-        turnId: turn.id,
-        sequence: 1,
-        status: BRAIN_REQUEST_STATUS.FAILED,
-        failure: BRAIN_REQUEST_FAILURE.ABANDONED,
-        responseIds: [],
-        at: options.now,
-      },
+    const written = yield* settledLost(
+      store.writer,
+      turn,
+      BRAIN_REQUEST_FAILURE.ABANDONED,
+      options.now,
     );
-    if (Result.isSuccess(written) && written.success === STORE_WRITE_EFFECT.WRITTEN) settled += 1;
+    if (written) settled += 1;
   }
   return settled;
 });
+
+/**
+ * Settles the coding agent's turn named as failed because its session ended
+ * for good, as eve answered a message to it, at `now`; answers whether this
+ * call settled it. Only the turn named is settled, and only while it still
+ * stands queued or running, so a turn that ended meanwhile keeps its own end
+ * and a newer turn is never touched.
+ */
+export const settleEndedSessionTurn = /* @__PURE__ */ Effect.fn("web/settleEndedSessionTurn")(
+  function* (
+    writer: Pick<StoreWriter, "consume">,
+    turn: LostTurn,
+    now: number,
+  ): Effect.fn.Return<boolean, QueryError | Schema.SchemaError, DatabaseServices> {
+    return yield* settledLost(writer, turn, BRAIN_REQUEST_FAILURE.SESSION_ENDED, now);
+  },
+);

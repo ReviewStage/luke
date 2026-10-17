@@ -6,22 +6,22 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
-  SETTINGS_PAGE_GROUPS,
   SETTINGS_VIEW,
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import { BackIcon, SettingsPage, useMenu } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
-import { settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
+import { settingsGroupHeadingOf, settingsPageOf, shownSettingsPageGroups } from "../settings/pages";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
@@ -189,7 +189,7 @@ export function DesktopSettings({
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
   const open = (view: SettingsView) => {
-    window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
+    appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
       settings_view: SETTINGS_VIEW_COUNTED_AS[view],
     });
     settings.onViewChange(view);
@@ -272,7 +272,7 @@ export function DesktopSettings({
             {search ? (
               <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
             ) : (
-              SETTINGS_PAGE_GROUPS.map(({ group, pages }) => (
+              shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
                 <section key={group} className="settings-nav-group">
                   <GroupHeading group={group} listed={listed} />
                   <ul>

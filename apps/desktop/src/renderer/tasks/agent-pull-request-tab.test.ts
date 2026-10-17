@@ -42,10 +42,14 @@ import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { DiffViewProps } from "../diff-view/contract";
+import type { SideBundles } from "../bundle-loader";
+import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect";
 import { MemberDirectory } from "../member-directory";
 import { rendererRuntime } from "../renderer-runtime";
@@ -186,6 +190,22 @@ let opened: string[] = [];
 let images: string[] = [];
 /** What each review thread's preview handed the diff bundle, in the order drawn. */
 let previews: DiffViewProps[] = [];
+
+/** The diff bundle, a chunk of its own the panel imports, stood in for at its importer. */
+const DIFF_STAND_IN: DiffViewModule = {
+  mount: (_host, props) => {
+    previews.push(props);
+    return { update: () => undefined, unmount: () => undefined };
+  },
+};
+
+let bundles: SideBundles;
+
+beforeAll(async () => {
+  bundles = await Effect.runPromise(
+    landedBundles({ diffView: () => Promise.resolve(DIFF_STAND_IN) }),
+  );
+});
 /** Every change to the pull request the tab asked for, by agent, in order. */
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
@@ -203,38 +223,28 @@ beforeEach(() => {
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
   changeHeld = undefined;
-  // The diff bundle, a script of its own the panel loads, stood in for at its global.
-  window.lukeDiffView = {
-    mount: (_host, props) => {
-      previews.push(props);
-      return { update: () => undefined, unmount: () => undefined };
-    },
-  };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
-        if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
-        if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-          changes.push([request.payload.agentId, request.payload.request]);
-          const answer = changeAnswer;
-          return (changeHeld ?? Promise.resolve()).then(() => ({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: answer,
-          }));
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
-          images.push(request.payload.src);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
-        }
-        return Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-        );
-      },
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
+      if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
+      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+        changes.push([request.payload.agentId, request.payload.request]);
+        const answer = changeAnswer;
+        return (changeHeld ?? Promise.resolve()).then(() => ({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: answer,
+        }));
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
+        images.push(request.payload.src);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
+      }
+      return Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
+          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+      );
     },
   });
 });
@@ -243,7 +253,6 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  delete window.lukeDiffView;
 });
 
 /** The pull request as what the agent published names it, which the tab's bar wears. */
@@ -381,14 +390,17 @@ async function drawn(
     root?.render(
       onRegistry(
         registry,
-        createElement(GitHubConnectProvider, {
-          value: github,
-          children: createElement(MemberDirectory, {
-            workspace: { id: "workspace-acme", memberCount: 2 },
-            readerId: "user-dana",
-            children: tab,
+        onSideBundles(
+          bundles,
+          createElement(GitHubConnectProvider, {
+            value: github,
+            children: createElement(MemberDirectory, {
+              workspace: { id: "workspace-acme", memberCount: 2 },
+              readerId: "user-dana",
+              children: tab,
+            }),
           }),
-        }),
+        ),
       ),
     ),
   );

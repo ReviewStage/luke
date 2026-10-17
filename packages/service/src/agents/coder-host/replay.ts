@@ -11,6 +11,7 @@ import {
   messageSeqOf,
   type StoredMessageRecord,
 } from "@luke/database/models/message-reads";
+import { readTask } from "@luke/database/models/task-store";
 import type { StoredStartedFrom } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -44,6 +45,7 @@ import {
   isWireString,
   MESSAGE_ROLE,
   type StoredToolPart,
+  UI_PART_TYPE,
   type UnparsedWireValue,
 } from "../../core.js";
 import {
@@ -65,7 +67,11 @@ import { CURSOR_START } from "./transcript.js";
  * other, and its transcript under the member who started it, whose
  * conversation it is. A continue replays every step; a fork stops at the
  * assistant message named, its turn's journal included, and a message that
- * is none of the source's own journals is refused. The source's first
+ * is none of the source's own journals is refused. A fork of a reply still
+ * being written names where it was seen to end as Fork was pressed, by its
+ * steps and the words and calls of the last of them, and keeps those alone,
+ * as they stand when the Start reads them, so what the source wrote after
+ * the press stays out of it. The source's first
  * message is its brief and is not replayed: the new agent is handed the
  * plan as it stands now, or the source's prompt with the text files
  * attached to it, an automation run's prompt as it was handed, without the
@@ -87,7 +93,12 @@ import { CURSOR_START } from "./transcript.js";
  * checks that branch out and goes on there. A fork's copy is the code as it
  * stands now, which may be ahead of the message it was forked at, so its
  * preamble names the files the source's own file tools edited after that
- * message, for the new agent to undo where its direction needs it.
+ * message, for the new agent to undo where its direction needs it. A source
+ * that made no branch of its own, as one that failed or never ended a turn,
+ * is read back through the agents it was started from (`lineageOf`), and
+ * the preamble names the work it carried, the copy made for it or the
+ * branch and pull request of the agent it took up, rather than sending the
+ * new agent to the default branch.
  */
 
 /** The bounds a replay keeps to. */
@@ -98,6 +109,8 @@ export const REPLAY_BOUNDS = {
   MAX_ROWS: 10_000,
   /** The most files a fork's preamble names as edited after its message; the rest are counted. */
   EDITED_FILES: 50,
+  /** The most agents a chain is read back through for the work a source that made no branch of its own carried. */
+  CHAIN_DEPTH: 8,
 } as const;
 
 /** The widest page the store answers. */
@@ -147,6 +160,10 @@ const NOTE_SPEAKER: ReadonlyMap<StartNoteHeading, string> = new Map([
 ]);
 
 const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** What a source that left no branch, carried none, and could not be copied is taken up from. */
+const NO_BRANCH_WORDS =
+  "It left no branch to build on, and its work could not be copied from its sandbox, so start from the repository's default branch.";
 
 /** A text cut to the bound on one line, ending in an ellipsis where it was cut. */
 function cutLine(text: string, maximumChars: number): string {
@@ -458,26 +475,76 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** Where the source's work stands for the new agent: the branch its checkout was copied to, or, where it could not be, the branch and pull request it left. */
+/** An agent as the preamble names it: its title, or its model where it has none, and its id. */
+function agentName(agent: CodingAgent): string {
+  return `"${agent.title ?? agent.model}" (agent id ${agent.id})`;
+}
+
+/** A pull request as it follows the branch it is from; nothing where there is none. */
+function pullWords(published: CodingAgentPullRequest | null): string {
+  return published === null
+    ? ""
+    : `, with its pull request #${published.number} (${published.url})`;
+}
+
+/** The work a source that made no branch of its own took up: the agent it came from, that agent's pull request, and the branch that agent's work was copied to for the source, where it was. */
+interface CarriedWork {
+  /** None where that agent can no longer be read, and only the copy made of its work stands. */
+  readonly agent: CodingAgent | undefined;
+  readonly published: CodingAgentPullRequest | null;
+  readonly copiedBranch: string | undefined;
+}
+
+/** Where the work a source carried stands, for a source that made no branch of its own: the copy made for it of the agent it took up, or that agent's own branch and pull request. */
+function carriedWhere(carried: CarriedWork): string {
+  const { agent, copiedBranch } = carried;
+  const named =
+    agent === undefined ? "another coding agent" : `the coding agent ${agentName(agent)}`;
+  const lead = `It never made a branch of its own: it took up the work of ${named}`;
+  const branch = agent?.branch ?? null;
+  const own =
+    branch === null
+      ? ""
+      : ` That agent's own branch is \`${branch}\`${pullWords(carried.published)}.`;
+  if (copiedBranch !== undefined) {
+    return (
+      `${lead}, whose checkout was copied for it to the branch \`${copiedBranch}\`. ${capitalized(fetchWords(copiedBranch))}, ` +
+      `build on it, and open your pull request from it as usual.${own}`
+    );
+  }
+  if (branch === null) return NO_BRANCH_WORDS;
+  return (
+    `${lead}, whose branch is \`${branch}\`${pullWords(carried.published)}. ${capitalized(fetchWords(branch))} ` +
+    "and continue there rather than starting a new one; only what that agent pushed stands."
+  );
+}
+
+/** Where the source's work stands for the new agent: the branch its checkout was copied to, or, where it could not be, the branch and pull request it left, or those of the work it carried where it made no branch of its own. */
 function whereOf(
   source: CodingAgent,
   published: CodingAgentPullRequest | null,
   copy: SnapshotOutcome,
+  carried: CarriedWork | undefined,
 ): string {
-  const pull =
-    published === null ? "" : `, with its pull request #${published.number} (${published.url})`;
+  const pull = pullWords(published);
   if (copy.copied) {
     const what = copy.uncommitted
       ? "with what it had not committed or pushed recorded as one snapshot commit on top"
       : "which held nothing it had not committed";
-    const own = source.branch === null ? "" : ` Its own branch was \`${source.branch}\`${pull}.`;
+    const taken = carried?.agent;
+    const own =
+      source.branch !== null
+        ? ` Its own branch was \`${source.branch}\`${pull}.`
+        : taken === undefined || taken.branch === null
+          ? ""
+          : ` It made no branch of its own; the coding agent it took up, ${agentName(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
     return (
       `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}, ` +
       `build on it, and open your pull request from it as usual.${own}`
     );
   }
   if (source.branch === null) {
-    return "It left no branch to build on, and its work could not be copied from its sandbox, so start from the repository's default branch.";
+    return carried === undefined ? NO_BRANCH_WORDS : carriedWhere(carried);
   }
   return (
     `Its branch is \`${source.branch}\`${pull}. ${capitalized(fetchWords(source.branch))} and continue there rather than ` +
@@ -509,23 +576,28 @@ function preambleOf(
   source: CodingAgent,
   published: CodingAgentPullRequest | null,
   copy: SnapshotOutcome,
+  carried: CarriedWork | undefined,
   forked: { readonly at: boolean; readonly edited: readonly string[] | undefined },
   counts: { readonly kept: number; readonly total: number; readonly summarized: number },
   unkept: readonly string[],
 ): string {
-  const name = `"${source.title ?? source.model}" (agent id ${source.id})`;
+  const name = agentName(source);
   const lead = forked.at
     ? `You are a fork of the coding agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
     : `You continue the work of the coding agent ${name}, which stopped before it was done.`;
-  const where = `${whereOf(source, published, copy)}${forkCaveat(forked.at, forked.edited)}`;
+  const where = `${whereOf(source, published, copy, carried)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
+  const unfit = counts.total - counts.kept;
+  // Note that a summary beside steps left out may cover the newest of those that did not fit rather than the oldest, so it names none as the oldest.
   const summarized =
     counts.summarized === 0
       ? ""
-      : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by Luke rather than by that agent: read it as a recap, not its words.`;
+      : left > 0
+        ? ` ${unfit} of its ${counts.total} steps did not fit: a summary of ${counts.summarized} of them comes first, written by Luke rather than by that agent, so read it as a recap, not its words; the other ${left} are left out.`
+        : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by Luke rather than by that agent: read it as a recap, not its words.`;
   const dropped =
-    left > 0
-      ? ` ${counts.summarized === 0 ? "The oldest" : "Besides those the summary covers,"} ${left} of its ${counts.total} steps are left out to fit.`
+    left > 0 && counts.summarized === 0
+      ? ` The oldest ${left} of its ${counts.total} steps are left out to fit.`
       : "";
   const files =
     unkept.length === 0
@@ -541,6 +613,8 @@ function preambleOf(
 /** What a Start from another agent is handed and runs on: the source's brief, the replay, the source's files that fit beside the note's, the choice and servers it runs on unless the Start names its own, the words its servers are read from, and what the new agent keeps of where it came from. */
 export interface StartFrom {
   readonly source: CodingAgent;
+  /** The agents the source's work came down through, the source first, read back while one made no branch of its own (`lineageOf`); whose context the replay is bounded by is read from the first that measured one. */
+  readonly lineage: readonly CodingAgent[];
   /** The source's prompt as the new agent's prompt; none where the source was handed the plan, which the new agent is handed as it stands now. */
   readonly prompt: string | undefined;
   readonly attachments: readonly CodingAgentAttachment[];
@@ -561,9 +635,13 @@ export interface StartFrom {
 interface ReplayTold {
   readonly published: CodingAgentPullRequest | null;
   readonly copy: SnapshotOutcome;
+  /** The work a source that made no branch of its own carried, where an agent before it left a branch. */
+  readonly carried: CarriedWork | undefined;
   readonly forked: { readonly at: boolean; readonly edited: readonly string[] | undefined };
   readonly unkept: readonly string[];
   readonly messageId: string | undefined;
+  /** Where the fork cut that message, where it was of a reply still being written; none where it kept the message whole. */
+  readonly cut?: StepCut | undefined;
 }
 
 /** A replay fitted to the new agent's window, and what the new agent's row keeps of where it came from. */
@@ -585,7 +663,15 @@ export function replayOf(
 ): FittedReplay {
   const { source, told, totalSteps } = from;
   const counts = { kept: kept.length, total: totalSteps, summarized: summary?.steps ?? 0 };
-  const preamble = preambleOf(source, told.published, told.copy, told.forked, counts, told.unkept);
+  const preamble = preambleOf(
+    source,
+    told.published,
+    told.copy,
+    told.carried,
+    told.forked,
+    counts,
+    told.unkept,
+  );
   const message = told.messageId === undefined ? undefined : { messageId: told.messageId };
   return {
     replay: {
@@ -599,6 +685,8 @@ export function replayOf(
     startedFrom: {
       agentId: source.id,
       ...message,
+      ...(told.cut === undefined ? undefined : { messageSteps: told.cut.steps }),
+      ...(told.cut?.stepParts === undefined ? undefined : { messageStepParts: told.cut.stepParts }),
       steps: kept.length,
       totalSteps,
       ...(told.copy.copied ? { branch: told.copy.branch } : undefined),
@@ -619,16 +707,17 @@ function editedFiles(part: StoredToolPart): readonly string[] {
 }
 
 /**
- * The files the source's file tools edited after the message a fork is
- * taken at, each once, in the order first edited, read forward from the
- * cut's sequence up to `REPLAY_BOUNDS.MAX_ROWS` rows. Note that a page that
+ * The files the source's file tools edited after the point a fork is taken
+ * at, each once, in the order first edited: the steps of the cut message the
+ * fork left out, then the rows read forward from the cut's sequence up to
+ * `REPLAY_BOUNDS.MAX_ROWS` rows. Note that a page that
  * does not read, or rows past the cap, answer nothing rather than refusing
  * the fork or naming some of the files as all of them, because the fork
  * replays none of those rows and only its caveat names them.
  */
-const editedAfter = (source: CodingAgent, cutSeq: number) =>
+const editedAfter = (source: CodingAgent, cutSeq: number, rest: Parts) =>
   Effect.gen(function* () {
-    const files = new Set<string>();
+    const files = new Set(rest.filter(isStoredToolPart).flatMap(editedFiles));
     // A cursor past every revision reads the rows after the cut alone, never one amended before it.
     let cursor = { seq: cutSeq, revision: Number.MAX_SAFE_INTEGER };
     for (let read = 0; read < REPLAY_BOUNDS.MAX_ROWS; read += PAGE_ROWS) {
@@ -659,6 +748,120 @@ const editedAfter = (source: CodingAgent, cutSeq: number) =>
     );
     return past.read.ok && past.read.value.length === 0 ? [...files] : undefined;
   });
+
+/** Whether two repositories are one, as GitHub names them whatever their case. */
+function sameRepository(one: string, other: string | null): boolean {
+  return other !== null && one.toLowerCase() === other.toLowerCase();
+}
+
+/**
+ * The agents a source's work came down through, the source first: each
+ * one it was started from, read on while the newest read made no branch of
+ * its own, as one that failed or never ended a turn did not, up to
+ * `REPLAY_BOUNDS.CHAIN_DEPTH`, on the source's plan and in `repository`,
+ * the one the new agent clones, alone; and the work it carried, the nearest
+ * branch one of them left, its own or the copy of its work made for the
+ * agent after it, even where that agent can no longer be read. Note that a
+ * source with no branch of its own is read past, because the new agent sent
+ * to the default branch would lose the work the source only carried, and
+ * that the walk goes on past the work it found, because the context that
+ * bounds the replay is that of the first agent that measured one.
+ */
+const lineageOf = (userId: string, source: CodingAgent, repository: string | null) =>
+  Effect.gen(function* () {
+    const lineage: CodingAgent[] = [source];
+    let carried: CarriedWork | undefined;
+    let at = source;
+    for (let depth = 0; depth < REPLAY_BOUNDS.CHAIN_DEPTH; depth += 1) {
+      const link = at.startedFrom;
+      if (at.branch !== null || link === null || !sameRepository(at.repository, repository)) break;
+      const [found] = yield* listPublishedCodingAgentsById(userId, [link.agentId]);
+      const reached =
+        found !== undefined &&
+        found.agent.taskId === source.taskId &&
+        sameRepository(found.agent.repository, repository);
+      // A copy made for an agent was pushed to the repository that agent cloned, which was checked above.
+      const branch = reached ? found.agent.branch : null;
+      if (carried === undefined && (link.branch !== undefined || branch !== null)) {
+        carried = {
+          agent: reached ? found.agent : undefined,
+          published: reached ? found.published : null,
+          copiedBranch: link.branch,
+        };
+      }
+      if (!reached) break;
+      lineage.push(found.agent);
+      at = found.agent;
+    }
+    return { lineage, carried };
+  });
+
+/** One message's parts. */
+type Parts = StoredMessageRecord["message"]["parts"];
+
+/** A message's parts as a fork cuts them: those it keeps, and those it leaves out. */
+interface CutParts {
+  readonly kept: Parts;
+  readonly rest: Parts;
+}
+
+/** A source's records with the cut message's parts as a fork keeps them, and the parts of it left out. */
+interface PinnedRecords {
+  readonly records: readonly StoredMessageRecord[];
+  readonly rest: Parts;
+}
+
+/** Where a fork of a reply still being written cuts it: after its first `steps` steps, and within the last of them after its first `stepParts` words and calls, where that is named. */
+interface StepCut {
+  readonly steps: number;
+  readonly stepParts: number | undefined;
+}
+
+/** Whether a part is one the replay hands on, a step's words or a call, which a fork's cut within a step counts. */
+function isReplayedPart(part: Parts[number]): boolean {
+  return isTextUIPart(part) || isStoredToolPart(part);
+}
+
+/**
+ * A message's parts as a fork of a reply still being written keeps them,
+ * and the parts it leaves out: its first `steps` steps, the last of them
+ * only up to its first `stepParts` words and calls where those are named,
+ * and nothing after. Parts ahead of the first boundary are kept with the
+ * first step; a message of no more than that is kept whole. Note that a
+ * kept step's words and calls are kept as they stand when the Start reads
+ * them, so words still being drafted at the press, or a call's result that
+ * landed after it, come with them.
+ */
+function cutAtStep(parts: Parts, cut: StepCut): CutParts {
+  const boundaries = parts.flatMap((part, index) =>
+    part.type === UI_PART_TYPE.STEP_START ? [index] : [],
+  );
+  const stepStart = boundaries[cut.steps - 1];
+  // A message holding fewer steps than the press saw is not the one it saw, so it is kept whole.
+  if (stepStart === undefined) return { kept: parts, rest: [] };
+  const stepEnd = boundaries[cut.steps] ?? parts.length;
+  const counted = parts.flatMap((part, index) =>
+    index > stepStart && index < stepEnd && isReplayedPart(part) ? [index] : [],
+  );
+  const end = cut.stepParts === undefined ? stepEnd : (counted[cut.stepParts] ?? stepEnd);
+  return { kept: parts.slice(0, end), rest: parts.slice(end) };
+}
+
+/** The records with the cut message's parts cut where a fork names, and the parts left out; the records as read where it names no cut. */
+function pinnedRecords(
+  records: readonly StoredMessageRecord[],
+  messageId: string | undefined,
+  cut: StepCut | undefined,
+): PinnedRecords {
+  const at = records.findIndex(
+    (record) => record.id === messageId && record.message.role === MESSAGE_ROLE.ASSISTANT,
+  );
+  const record = records[at];
+  if (cut === undefined || record === undefined) return { records, rest: [] };
+  const { kept, rest } = cutAtStep(record.message.parts, cut);
+  const pinned = { ...record, message: { ...record.message, parts: kept } };
+  return { records: records.with(at, pinned), rest };
+}
 
 /** The steps a source's transcript replays, cut after the message named: refused where that message is none of its journals. */
 function transcriptSteps(
@@ -701,9 +904,19 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
+  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
+  const repository = Option.isSome(task) ? task.value.task.repository : null;
+  const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
+    lineageOf(userId, source, repository),
+  );
   const read = yield* hostedStoreOrUnavailable(recordsOf(source, from.messageId));
   if (read === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  const { records, cutSeq } = read;
+  const { cutSeq } = read;
+  const cut =
+    from.messageSteps === undefined
+      ? undefined
+      : { steps: from.messageSteps, stepParts: from.messageStepParts };
+  const { records, rest } = pinnedRecords(read.records, from.messageId, cut);
   const lines = records.filter((record) => record.message.role === MESSAGE_ROLE.USER);
   const senders = yield* hostedStoreOrUnavailable(
     lineSendersOf(
@@ -723,9 +936,10 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
   const copy = yield* copySourceWork(userId, source, forked, idempotencyKey);
   const edited =
-    cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq));
+    cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));
   return {
     source,
+    lineage,
     prompt: source.prompt === null ? undefined : handed.brief,
     attachments: files.attachments,
     steps: [...carried, ...mine],
@@ -737,9 +951,11 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     told: {
       published,
       copy,
+      carried: carriedWork,
       forked: { at: forked, edited },
       unkept: files.unkept,
       messageId: from.messageId,
+      cut,
     },
   };
 });

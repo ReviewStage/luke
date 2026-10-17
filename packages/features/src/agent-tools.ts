@@ -35,7 +35,10 @@ export const AGENT_TOOL = {
   START_AGENT: "start_agent",
   ARCHIVE_AGENT: "archive_agent",
   UNARCHIVE_AGENT: "unarchive_agent",
+  STOP_AGENT: "stop_agent",
   LIST_TASKS: "list_tasks",
+  // The models an agent may be started on, named for any agent offered `start_agent`.
+  LIST_MODELS: "list_models",
   // The public reads, every role's.
   SEARCH_WEB: "search_web",
   READ_WEB_PAGE: "read_web_page",
@@ -55,6 +58,7 @@ export const AGENT_TOOL = {
   POST_TO_INBOX: INBOX_TOOL.POST,
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
   READ_INBOX: INBOX_TOOL.READ,
+  REPLY_INBOX: INBOX_TOOL.REPLY,
   OPEN_PULL_REQUEST: "open_pull_request",
   // The workspace's chat, the planner's and every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,
