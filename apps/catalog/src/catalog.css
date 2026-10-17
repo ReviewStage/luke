@@ -391,6 +391,12 @@ body {
   width: 320px;
 }
 
+/* A screen as tall as a window's content, so a collection page scrolls in it. */
+.catalog-screen-collection {
+  display: flex;
+  height: 480px;
+}
+
 /* Luke's face at the size the OAuth cards open with. */
 .catalog-auth-mark {
   display: block;

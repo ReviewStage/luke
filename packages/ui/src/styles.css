@@ -16,11 +16,13 @@
 @import "./components/badge/badge.css";
 @import "./components/button/button.css";
 @import "./components/chip/chip.css";
+@import "./components/collection-page/collection-page.css";
 @import "./components/confirm-dialog/confirm-dialog.css";
 @import "./components/dialog/dialog.css";
 @import "./components/empty-state/empty-state.css";
 @import "./components/error-state/error-state.css";
 @import "./components/form-field/form-field.css";
+@import "./components/form-section/form-section.css";
 @import "./components/text-field/text-field.css";
 @import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";

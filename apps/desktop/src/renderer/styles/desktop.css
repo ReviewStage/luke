@@ -31,6 +31,11 @@
   --desktop-well: #0f0f12;
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
+  /* A tab's own bar under a tab strip and its hairline: a control's height
+     with --space-4 above and below it. Every tab that leads with a bar, in
+     the side panel or in a task's column, stands it this tall, so moving
+     between tabs never moves the content under the bar. */
+  --secondary-bar-height: calc(var(--control-height) + 2 * var(--space-4) + 1px);
   /* The call bar's own row, which the passing notices stand clear of. */
   --call-row-height: 36px;
   /* The spacing scale, one control's box, corner, and glyph, the gaps
@@ -4122,11 +4127,11 @@ button.integration-tool-head:hover,
 /* The window's Inbox, in the plan's place beside the sidebar, and a plan's
    own Inbox tab: the items in a column on the Inbox's own ground, so the
    list and the item read as one surface parted by a hairline, under a bar
-   the work column's height, and the chosen item beside it, at the Inbox's
-   own measure (`.desktop-inbox`). The column is as wide as it was last
-   dragged (`inbox-list.tsx`), held to what the Inbox's own width leaves the
-   pane, which is why the Inbox is the container it measures; its edge is
-   drawn as the sidebar's is. */
+   the work column's height (a tab's bar's in a task's tab), and the chosen
+   item beside it, at the Inbox's own measure (`.desktop-inbox`). The column
+   is as wide as it was last dragged (`inbox-list.tsx`), held to what the
+   Inbox's own width leaves the pane, which is why the Inbox is the
+   container it measures; its edge is drawn as the sidebar's is. */
 .inbox-view {
   container-type: inline-size;
   display: grid;
@@ -4210,6 +4215,13 @@ button.integration-tool-head:hover,
    drawn. */
 .desktop-shell[data-sidebar-collapsed] .desktop-task-main .inbox-view .desktop-toolbar {
   padding-inline: var(--column-inset);
+}
+
+/* Under the strip, its list's head and its item's bar are the tab's own bar,
+   as tall as every other tab's (`.file-view-bar`), rather than a top row. */
+.desktop-task-main .inbox-view .desktop-toolbar {
+  min-height: var(--secondary-bar-height);
+  padding-block: var(--space-4);
 }
 
 /* The list standing alone is a page rather than a column, so its name leads
