@@ -1,12 +1,12 @@
-import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { MarkdownMessage } from "../markdown-message";
 import {
   ConfirmDialog,
   DIALOG_TONE,
   type DialogConfirm,
   type DialogQuestion,
   useConfirmDialog,
-} from "../settings/confirm-dialog";
+} from "@luke/ui";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { MarkdownMessage } from "../markdown-message";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";

@@ -3,7 +3,16 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
-import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon } from "@luke/ui";
+import {
+  ConfirmDialog,
+  DIALOG_TONE,
+  ExternalIcon,
+  GearIcon,
+  KeyboardIcon,
+  ProviderMark,
+  UpdateIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -21,7 +30,6 @@ import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
 import { useOpenPerson } from "../person-door";
-import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
 

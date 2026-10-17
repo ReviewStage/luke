@@ -15,6 +15,7 @@
 @import "./components/badge/badge.css";
 @import "./components/button/button.css";
 @import "./components/chip/chip.css";
+@import "./components/confirm-dialog/confirm-dialog.css";
 @import "./components/dialog/dialog.css";
 @import "./components/form-field/form-field.css";
 @import "./components/text-field/text-field.css";
