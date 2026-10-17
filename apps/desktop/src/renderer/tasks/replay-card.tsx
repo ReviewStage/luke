@@ -147,11 +147,11 @@ function StepRow({ step, member }: { step: ReplayStep; member: string }): React.
   return (
     <Fold className="text-[12.5px]" data-replay-step={step.kind}>
       <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-        <span className="w-14 shrink-0 font-medium text-foreground">{who}</span>
+        <span className="w-[4.5rem] shrink-0 font-medium text-foreground">{who}</span>
         <span className="min-w-0 flex-1 truncate">{step.summary}</span>
       </FoldSummary>
       <FoldBody>
-        <pre className="m-0 mb-1 ml-16 whitespace-pre-wrap rounded-md bg-secondary px-2 py-1.5 font-mono text-[11.5px] text-foreground [overflow-wrap:anywhere]">
+        <pre className="m-0 mb-1 ml-[5.25rem] whitespace-pre-wrap rounded-md bg-secondary px-2 py-1.5 font-mono text-[11.5px] text-foreground [overflow-wrap:anywhere]">
           {step.words}
         </pre>
       </FoldBody>
@@ -178,7 +178,7 @@ function ReplayFoot({
       ? undefined
       : `#${pullRequest.number} ${pullRequest.title}`;
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-dashed border-border pt-2 text-[12.5px] text-muted-foreground">
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-0 border-t border-dashed border-border pt-2 text-[12.5px] text-muted-foreground">
       {branch === undefined ? null : (
         <span className="min-w-0">
           Builds on <code>{branch}</code>
@@ -203,7 +203,7 @@ function ReplayFoot({
       {onOpenTranscript === undefined ? null : (
         <button
           type="button"
-          className="text-link ml-auto"
+          className="text-link ml-auto cursor-pointer border-0 bg-transparent p-0 text-[12.5px] text-foreground"
           data-replay-open=""
           onClick={onOpenTranscript}
         >
