@@ -174,6 +174,7 @@ let previews: DiffViewProps[] = [];
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
+  window.localStorage.clear();
   opened = [];
   images = [];
   previews = [];
@@ -588,6 +589,159 @@ test("a review that only left line comments draws each thread under it: its file
     folded.querySelector(".pull-request-thread-comment")?.textContent ?? "",
     /Moved away\./u,
     "a press opens it",
+  );
+});
+
+/** The switch of the Conversation's filter named as given. */
+function filter(tab: HTMLElement, name: string): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>(
+      `.pull-request-filter [role="switch"][aria-label="${name}"]`,
+    ) ?? assert.fail(`the conversation offers ${name}`)
+  );
+}
+
+/** What a filter's switch says it leaves out, as a reader hears it. */
+function filterNote(tab: HTMLElement, name: string): string {
+  const note = filter(tab, name).getAttribute("aria-describedby");
+  return note === null ? "" : (document.getElementById(note)?.textContent ?? "");
+}
+
+/** Who wrote each entry still drawn, and how many threads stand under it. */
+function drawnEntries(tab: HTMLElement): string[] {
+  return [...tab.querySelectorAll(".pull-request-entry")].map(
+    (entry) =>
+      `${entry.querySelector(".changes-comment-head .actor-ref-name")?.textContent} ${entry.querySelectorAll(".pull-request-thread").length}`,
+  );
+}
+
+test("Hide bots and Hide resolved each count what they leave out, leave it out while on, a review whose every thread was resolved going with them, and stay as left for the next conversation drawn", async () => {
+  const devin = { login: "devin-ai-integration[bot]", bot: true };
+  const conversation: CodingAgentOverviewConversation = {
+    reviewers: [],
+    conversation: [
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: devin,
+        state: REVIEW_STATE.COMMENTED,
+        html: '<p dir="auto">Found one issue.</p>',
+        body: "",
+        at: 1_500,
+        url: `${PAGE}#pullrequestreview-1`,
+        threads: [thread({ resolved: true })],
+      },
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.COMMENTED,
+        html: '<p dir="auto">Two things.</p>',
+        body: "",
+        at: 2_000,
+        url: `${PAGE}#pullrequestreview-2`,
+        threads: [thread({ resolved: true }), thread({ path: "src/other.ts" })],
+      },
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.APPROVED,
+        html: '<p dir="auto">Settled.</p>',
+        body: "",
+        at: 2_500,
+        url: `${PAGE}#pullrequestreview-3`,
+        threads: [thread({ resolved: true })],
+      },
+      {
+        kind: CONVERSATION_ENTRY.COMMENT,
+        by: { login: "vercel[bot]", bot: true },
+        html: '<p dir="auto">Deployed.</p>',
+        body: "",
+        at: 3_000,
+        url: `${PAGE}#issuecomment-4`,
+      },
+      {
+        kind: CONVERSATION_ENTRY.COMMENT,
+        by: CHARLES_ON_GITHUB,
+        html: '<p dir="auto">Thanks.</p>',
+        body: "",
+        at: 3_500,
+        url: `${PAGE}#issuecomment-5`,
+      },
+    ],
+    earlier: 0,
+  };
+  const control = controlAnswering({
+    conversation: () => Promise.resolve({ pullRequest: conversation }),
+  });
+  const tab = await draw(control);
+
+  assert.deepEqual(
+    words(tab, ".pull-request-filter label"),
+    ["Hide resolved3", "Hide bots2"],
+    "each counts what it would leave out, resolved threads and bots' entries",
+  );
+  assert.equal(filterNote(tab, "Hide bots"), "Hides 2 comments and reviews by bots");
+  assert.equal(filterNote(tab, "Hide resolved"), "Hides 3 resolved review threads");
+  const all = [
+    "devin-ai-integration 1",
+    "Charles Pan 2",
+    "Charles Pan 1",
+    "vercel 0",
+    "Charles Pan 0",
+  ];
+  assert.deepEqual(drawnEntries(tab), all, "both start off, everything drawn");
+
+  act(() => filter(tab, "Hide bots").click());
+  assert.equal(filter(tab, "Hide bots").getAttribute("aria-checked"), "true");
+  assert.deepEqual(drawnEntries(tab), ["Charles Pan 2", "Charles Pan 1", "Charles Pan 0"]);
+
+  act(() => filter(tab, "Hide bots").click());
+  act(() => filter(tab, "Hide resolved").click());
+  assert.deepEqual(
+    drawnEntries(tab),
+    ["Charles Pan 1", "vercel 0", "Charles Pan 0"],
+    "a resolved thread goes, and a review whose every thread was resolved with it; a comment stays",
+  );
+
+  act(() => filter(tab, "Hide bots").click());
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+  const again = await draw(control);
+  assert.deepEqual(
+    [filter(again, "Hide resolved"), filter(again, "Hide bots")].map((each) =>
+      each.getAttribute("aria-checked"),
+    ),
+    ["true", "true"],
+    "the choice stands for the next conversation drawn",
+  );
+  assert.deepEqual(drawnEntries(again), ["Charles Pan 1", "Charles Pan 0"]);
+});
+
+test("where the filters leave nothing of the conversation, it says no comment matches", async () => {
+  window.localStorage.setItem(
+    "luke.conversation-filters",
+    JSON.stringify({ hideBots: true, hideResolved: false }),
+  );
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CONVERSATION,
+            conversation: CONVERSATION.conversation.map((entry) => ({
+              ...entry,
+              by: { login: "vercel[bot]", bot: true },
+            })),
+          },
+        }),
+    }),
+  );
+  const conversation =
+    tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
+  assert.equal(conversation.querySelector(".pull-request-entry"), null);
+  assert.equal(
+    conversation.querySelector(".pull-request-none")?.textContent,
+    "No matching comments.",
   );
 });
 

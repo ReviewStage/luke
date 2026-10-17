@@ -1715,6 +1715,38 @@ button.file-ref:hover .file-ref-path {
   color: var(--danger-text);
 }
 
+/* The Conversation's filters, Hide resolved and Hide bots, at the end of a
+   row that stays put over the conversation as it scrolls, each its word,
+   the quiet count of what it leaves out, and its switch; the word and the
+   count press it too. */
+.pull-request-filters {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-6) var(--space-16);
+  padding: var(--space-8) var(--column-inset) 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.side-panel-content .pull-request-filters {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+.pull-request-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  user-select: none;
+}
+
+.pull-request-filter > label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
 /* A tab's page has the header above it, so it starts close under the row. */
 .pull-request-view > .pull-request-page {
   padding-top: var(--space-4);
