@@ -25,6 +25,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useAct } from "../act";
+import { appBridge } from "../app-bridge";
 import { Tooltip } from "../tooltip";
 import type { OpenBrowser } from "./use-side-panel";
 
@@ -92,7 +93,7 @@ function notePage(page: BrowserPage): void {
 
 /** Hears main's word on this window's pages while anything reads them: a Browser tab's pane, or the strip naming its tabs. */
 function hearPages(listener: () => void): () => void {
-  if (listeners.size === 0) unhear = window.luke.onBrowserState(notePage);
+  if (listeners.size === 0) unhear = appBridge().onBrowserState(notePage);
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -385,12 +386,12 @@ export function BrowserPane({
       }
     };
     window.addEventListener("keydown", keys);
-    const unhearKeys = window.luke.onBrowserKey((key) => {
+    const unhearKeys = appBridge().onBrowserKey((key) => {
       if (key.browserId !== browserId) return;
       focusHere(body.current);
       pressHere(key);
     });
-    const unhearFocus = window.luke.onBrowserFocus((focus) => {
+    const unhearFocus = appBridge().onBrowserFocus((focus) => {
       if (focus.browserId === browserId) focusHere(body.current);
     });
     return () => {

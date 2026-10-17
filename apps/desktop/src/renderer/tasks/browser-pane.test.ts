@@ -6,6 +6,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/h
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { BrowserPane } from "./browser-pane";
 import type { OpenBrowser } from "./use-side-panel";
 
@@ -33,7 +34,6 @@ afterEach(() => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  Reflect.deleteProperty(window, "luke");
   Reflect.deleteProperty(document, "elementFromPoint");
 });
 
@@ -67,25 +67,23 @@ function main(options: { holdCapture?: boolean } = {}) {
     }
     return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
   };
-  Object.assign(window, {
-    luke: {
-      act: (request: Act) => {
-        sent.push(request);
-        if (options.holdCapture !== true || request.kind !== ACT_KIND.BROWSER_CAPTURE) {
-          return Promise.resolve(answer(request));
-        }
-        return new Promise<ActOutcome>((resolve) => held.push(() => resolve(answer(request))));
-      },
-      onBrowserState: (listener: (page: BrowserPage) => void) => {
-        tellPage = listener;
-        return () => undefined;
-      },
-      onBrowserKey: (listener: (key: BrowserKey) => void) => {
-        tellKey = listener;
-        return () => undefined;
-      },
-      onBrowserFocus: () => () => undefined,
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      if (options.holdCapture !== true || request.kind !== ACT_KIND.BROWSER_CAPTURE) {
+        return Promise.resolve(answer(request));
+      }
+      return new Promise<ActOutcome>((resolve) => held.push(() => resolve(answer(request))));
     },
+    onBrowserState: (listener: (page: BrowserPage) => void) => {
+      tellPage = listener;
+      return () => undefined;
+    },
+    onBrowserKey: (listener: (key: BrowserKey) => void) => {
+      tellKey = listener;
+      return () => undefined;
+    },
+    onBrowserFocus: () => () => undefined,
   });
   return {
     sent,

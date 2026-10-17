@@ -2253,6 +2253,57 @@ export function chatHead(
   });
 }
 
+/**
+ * The message at the place given, where the reader may see it; nothing
+ * where the account is not in the workspace, the reader is not of it, or no
+ * message it sees stands there.
+ */
+export function messageAt(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  seq: number,
+): ChatStoreEffect<Option.Option<ChatMessageRow>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return Option.none();
+    const rows = yield* visibleMessages(
+      reader.value,
+      [eq(chatMessage.seq, seq)],
+      READ_ORDER.NEWEST,
+      1,
+    );
+    const messages = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
+    return Option.fromNullishOr(messages[0]);
+  });
+}
+
+/**
+ * Moves the member's cursor on to the place given, never back and never
+ * past the workspace's head, letting go of a notice it passes: what a
+ * person's window says they have read to, across every channel. Answers
+ * where the cursor then stands; nothing where the account is not in the
+ * workspace or may not act as the member.
+ */
+export function readAllTo(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  seq: number,
+): ChatStoreEffect<Option.Option<number>> {
+  return transaction(
+    Effect.gen(function* () {
+      const reader = yield* readerIn(userId, organizationId, readerId);
+      if (Option.isNone(reader) || !actsAs(userId, reader.value)) return Option.none();
+      const to = Math.min(seq, yield* headOf(organizationId));
+      yield* moveCursor({ readerId, organizationId, to });
+      // Read again, because a move landing at once may have carried the cursor further than this one.
+      const moved = yield* findMemberInWorkspace({ organizationId, memberId: readerId });
+      return Option.map(moved, (member) => member.readSeq);
+    }),
+  );
+}
+
 /** Whose asks a read lists: one author's, or one channel's. */
 export type ChatAskScope = { readonly authorMemberId: string } | { readonly channelId: string };
 

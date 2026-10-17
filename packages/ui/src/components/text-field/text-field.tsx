@@ -56,6 +56,8 @@ type TextEntryProps = Named & {
   autoFocus?: boolean | undefined;
   name?: string | undefined;
   maxLength?: number | undefined;
+  /** Whether the system's spell check marks the words; off for a name, an identifier, or code. */
+  spellCheck?: boolean | undefined;
 };
 
 /** The attributes a text entry carries for its field, or its own name where it has none. */
@@ -71,6 +73,7 @@ function entryAttributes(props: TextEntryProps) {
     autoFocus: props.autoFocus,
     name: props.name,
     maxLength: props.maxLength,
+    spellCheck: props.spellCheck,
     value: props.value,
   };
 }

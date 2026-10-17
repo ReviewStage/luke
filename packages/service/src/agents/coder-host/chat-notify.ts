@@ -365,7 +365,7 @@ export function tellMessage(
 }
 
 /** The refusal a chat store's post answers, in the route's words. */
-const HOSTED_OF_CHAT_REFUSAL = {
+export const HOSTED_OF_CHAT_REFUSAL = {
   [CHAT_REFUSAL.NOT_FOUND]: HOSTED_REFUSAL.NOT_FOUND,
   [CHAT_REFUSAL.NAME_TAKEN]: HOSTED_REFUSAL.INVALID_REQUEST,
   [CHAT_REFUSAL.TOO_MANY_TOPICS]: HOSTED_REFUSAL.INVALID_REQUEST,

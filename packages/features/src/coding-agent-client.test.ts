@@ -364,3 +364,51 @@ it.effect(
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
+
+it.effect(
+  "writes to a workspace's chat with the write as sent, reads each refusal as its own failure, and sends no write the service would refuse by shape",
+  () =>
+    Effect.gen(function* () {
+      const write = { text: "Morning, @agent-2.", to: "#general", clientKey: "send-1" };
+      const api = fakeCloudApi({
+        "POST /api/workspaces/chat": { answer: () => ({ readSeq: 12 }) },
+      });
+
+      const read = yield* Effect.provide(
+        client().chatPost(WORKSPACE_ID, { readTo: 12 }),
+        api.layer,
+      );
+      const sent = yield* Effect.provide(client().chatPost(WORKSPACE_ID, write), api.layer);
+      const unsent = yield* Effect.provide(
+        client().chatPost(WORKSPACE_ID, { ...write, replyTo: 4 }),
+        api.layer,
+      );
+
+      assert.deepEqual(read, { readSeq: 12 });
+      assert.deepEqual(sent, { readSeq: 12 });
+      assert.deepEqual(unsent, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(
+        api.requests().map((request) => [request.url, JSON.parse(request.body ?? "{}")]),
+        [
+          [`https://tryluke.dev/api/workspaces/chat?workspaceId=${WORKSPACE_ID}`, { readTo: 12 }],
+          [`https://tryluke.dev/api/workspaces/chat?workspaceId=${WORKSPACE_ID}`, write],
+        ],
+      );
+      for (const [error, failure] of [
+        [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_CALL_FAILURE.NOT_FOUND],
+        [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED],
+      ] as const) {
+        const refusing = fakeCloudApi({
+          "POST /api/workspaces/chat": {
+            answer: () => ({ error }),
+            status: HTTP_STATUS.CONFLICT,
+          },
+        });
+        const refused = yield* Effect.provide(
+          client().chatPost(WORKSPACE_ID, write),
+          refusing.layer,
+        );
+        assert.deepEqual(refused, { failure }, error);
+      }
+    }),
+);

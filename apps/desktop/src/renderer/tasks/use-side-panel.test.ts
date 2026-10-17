@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   type OpenTask,
   SIDE_PANEL_TAB,
@@ -275,8 +276,11 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
 test("a Browser tab opens chosen on its plan alone, closes with its page, and is kept across no launch", () => {
   const sent: Act[] = [];
   // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
-  Object.assign(window, {
-    luke: { act: (request: Act) => Promise.resolve(void sent.push(request)) },
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+    },
   });
   const first = launch({ task: TASK, taskAgents: [] });
   act(() => first.control().onOpenBrowser("http://localhost:3000/"));
@@ -309,14 +313,16 @@ test("a Browser tab opens chosen on its plan alone, closes with its page, and is
 
   const second = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(second.control().browsers, []);
-  Reflect.deleteProperty(window, "luke");
 });
 
 test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
   const sent: Act[] = [];
   // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
-  Object.assign(window, {
-    luke: { act: (request: Act) => Promise.resolve(void sent.push(request)) },
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+    },
   });
   const panel = launch({ task: TASK, taskAgents: [] });
   act(() => panel.control().onOpenBrowser("http://localhost:3000/"));
@@ -336,7 +342,6 @@ test("the Browser tab experiment going off closes every Browser tab on every pla
     sent.map((request) => ("payload" in request ? request.payload : undefined)),
     [{ browserId: here.tab.browser }, { browserId: there.tab.browser }],
   );
-  Reflect.deleteProperty(window, "luke");
 });
 
 test("a plan whose strip holds no tab draws no panel, and the next plan with a tab draws it again, still open", () => {

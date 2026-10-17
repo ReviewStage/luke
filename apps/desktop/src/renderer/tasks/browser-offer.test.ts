@@ -10,6 +10,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -49,13 +50,10 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
-      onMenuCommand: () => () => undefined,
-      onBrowserState: () => () => undefined,
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
+    onMenuCommand: () => () => undefined,
+    onBrowserState: () => () => undefined,
   });
 });
 
