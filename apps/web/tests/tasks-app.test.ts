@@ -586,7 +586,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a plan never planned on reads as an empty conversation on the agent tab's wire, and as no code shown",
+    "a plan never planned on reads as an empty conversation on the agent tab's wire, in one look as much as held, and as no code shown",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -610,6 +610,20 @@ it.layer(getTestDB())("the plan routes", (it) => {
           )).status,
           HOSTED_HTTP_STATUS.BAD_REQUEST,
         );
+        // One look past a cursor is the only read `hold` names, and `none` the only word it takes.
+        const look = yield* ask(
+          request(MESSAGES, owner, { id: taskId, query: { after: page.cursor, hold: "none" } }),
+        );
+        assert.deepEqual(
+          readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, look).messages,
+          [],
+        );
+        for (const query of [{ hold: "none" }, { after: page.cursor, hold: "forever" }]) {
+          assert.equal(
+            (yield* ask(request(MESSAGES, owner, { id: taskId, query }))).status,
+            HOSTED_HTTP_STATUS.BAD_REQUEST,
+          );
+        }
       }),
   );
 

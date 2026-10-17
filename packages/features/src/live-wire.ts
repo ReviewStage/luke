@@ -179,3 +179,38 @@ export function inboxOfLiveRows(rows: typeof scopeInboxLiveRowsSchema.Type): rea
     ...items.filter((item) => item.status !== INBOX_STATUS.OPEN).toSorted(ordered),
   ];
 }
+
+/**
+ * A plan's planning conversation sealed for following: the address, and
+ * its mark as one statement, one row that moves whenever a read past the
+ * cursor would answer something new. The desktop holds its read of the
+ * conversation and asks it once, unheld, each time the mark moves, rather
+ * than holding a read the service looks again for on a clock. The service
+ * answers `not-found` for a plan the account does not reach, and
+ * `unavailable` where its deployment has no Realtime, and the desktop holds
+ * its read open as before.
+ */
+export const planConversationLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema }),
+});
+
+export type PlanConversationLiveAnswer = typeof planConversationLiveAnswerSchema.Type;
+
+/**
+ * Where the conversation stands as its row delivers it: the highest message
+ * sequence and the journal revision, the newest turn and its status (null
+ * before the first), and the running workers' turns, by id.
+ */
+const planConversationMarkSchema = EffectSchema.Struct({
+  seq: EffectSchema.Finite,
+  revision: EffectSchema.Finite,
+  turnId: EffectSchema.NullOr(EffectSchema.String),
+  turnStatus: EffectSchema.NullOr(EffectSchema.String),
+  workers: EffectSchema.Array(EffectSchema.String),
+});
+
+/** The conversation's mark as Realtime delivers it: one row, or none for a plan the account no longer reaches. */
+export const planConversationLiveRowsSchema = EffectSchema.Struct({
+  mark: EffectSchema.Array(planConversationMarkSchema),
+});

@@ -1,4 +1,9 @@
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import {
+  type LiveStatement,
+  liveSelection,
+  liveStatementOf,
+} from "@luke/database/core/live-statement";
+import { type DatabaseServices, type QueryError, queryBuilder } from "@luke/database/core/query";
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import {
   latestTurnsOf,
@@ -11,7 +16,10 @@ import {
   turnsBefore,
   turnsNamed,
 } from "@luke/database/models/message-reads";
+import { reachableTask } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { task } from "@luke/database/schemas/plan";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
@@ -21,6 +29,8 @@ import {
   type CodingAgentSubagentTitle,
 } from "@luke/features/coding-agent-wire";
 import { TASK_WORK_BOUNDS, TASK_WORK_STATE, type TaskWorkTurn } from "@luke/features/tasks-view";
+import { and, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
 import type { TitleAwaited } from "../agents/coder-host/transcript.js";
@@ -293,6 +303,21 @@ function sameTurns(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((id, index) => right[index] === id);
 }
 
+/** The page of one look as the route answers it, with the standing of the workers beside it. */
+const pageOfLook = (
+  target: ConversationTarget,
+  look: Effect.Success<ReturnType<typeof pagePast>>,
+): BrainEffect<BrainPage> =>
+  withStandings(
+    target,
+    {
+      messages: look.works.map((each) => messageOf(each.id, each.work, each.origin)),
+      cursor: look.cursor,
+      status: look.status,
+    },
+    look.works.map((each) => each.work),
+  );
+
 /**
  * The planner's conversation past the cursor: the turns whose journals
  * moved, or, while a turn runs or a worker does and nothing moved yet, the
@@ -321,15 +346,95 @@ export function brainPagePast(
       Effect.timeoutOption(CODER.MESSAGES_HOLD),
     );
     const read = Option.flatten(held);
-    const { works, cursor, status } = Option.isSome(read)
-      ? read.value
-      : yield* pagePast(target, after);
-    return yield* withStandings(
+    return yield* pageOfLook(
       target,
-      { messages: works.map((each) => messageOf(each.id, each.work, each.origin)), cursor, status },
-      works.map((each) => each.work),
+      Option.isSome(read) ? read.value : yield* pagePast(target, after),
     );
   });
+}
+
+/**
+ * The planner's conversation past the cursor as it stands now, in one look
+ * and never held: what a reader asks once the conversation's mark moved
+ * (`planConversationLiveStatements`), since the mark is what it would
+ * otherwise have looked again for.
+ */
+export function brainPageNow(
+  target: ConversationTarget,
+  after: MessageCursor,
+): BrainEffect<BrainPage> {
+  return Effect.flatMap(pagePast(target, after), (look) => pageOfLook(target, look));
+}
+
+/** The statement a plan's planning conversation is followed by live: its mark, one row. */
+export interface PlanConversationLiveStatements {
+  readonly mark: LiveStatement;
+}
+
+/** A conversation delegated from the one the mark is of: a worker's session. */
+const workerConversation = alias(conversations, "worker_conversation");
+
+/**
+ * Where a plan's planning conversation stands, written for Neon Realtime:
+ * one row that moves whenever `brainPagePast` would answer something it
+ * had not, so a reader holding it asks the conversation only once it
+ * moved, in one look (`brainPageNow`), rather than holding a read the
+ * service looks again for every `BRAIN_POLL`. The row is the cursor
+ * `messageCursorNow` reads (the highest sequence and the journal revision),
+ * the newest turn and its status `brainStatusNow` reads, and the running
+ * worker turns `runningChildTurns` reads, under the same account and rule
+ * of who may read them; a plan the account no longer reaches is no row,
+ * and one never planned on is the start, until its conversation opens.
+ * None where the statement names a value Realtime cannot carry.
+ */
+export function planConversationLiveStatements(
+  userId: string,
+  taskId: string,
+): Option.Option<PlanConversationLiveStatements> {
+  const highestSeq = queryBuilder
+    .select({ seq: max(messages.seq) })
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversations.id), eq(messages.userId, userId)));
+  const newestTurn = <Column extends typeof turns.id | typeof turns.status>(column: Column) =>
+    queryBuilder
+      .select({ value: column })
+      .from(turns)
+      .where(and(eq(turns.conversationId, conversations.id), eq(turns.userId, userId)))
+      .orderBy(desc(turns.queuedAt), desc(turns.id))
+      .limit(1);
+  const runningWorkers = queryBuilder
+    .select({ ids: sql`jsonb_agg(${turns.id} order by ${turns.id})` })
+    .from(turns)
+    .innerJoin(workerConversation, eq(turns.conversationId, workerConversation.id))
+    .where(
+      and(
+        eq(workerConversation.parentConversationId, conversations.id),
+        eq(workerConversation.userId, userId),
+        isNull(workerConversation.deletedAt),
+        inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
+      ),
+    );
+  const mark = queryBuilder
+    .select(
+      liveSelection({
+        seq: sql<number>`coalesce((${highestSeq}), 0)::float8`,
+        revision: sql<number>`coalesce(${conversations.journalRevision}, 0)::float8`,
+        turnId: sql<string | null>`(${newestTurn(turns.id)})::text`,
+        turnStatus: sql<string | null>`(${newestTurn(turns.status)})`,
+        workers: sql`coalesce((${runningWorkers}), '[]'::jsonb)`,
+      }),
+    )
+    .from(task)
+    .leftJoin(
+      conversations,
+      and(
+        eq(conversations.id, task.conversationId),
+        eq(conversations.userId, userId),
+        isNull(conversations.deletedAt),
+      ),
+    )
+    .where(reachableTask(userId, taskId));
+  return Option.map(liveStatementOf(mark), (statement) => ({ mark: statement }));
 }
 
 /**

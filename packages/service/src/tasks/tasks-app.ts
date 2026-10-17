@@ -95,6 +95,7 @@ import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import {
   BRAIN_POLL,
   type BrainPage,
+  brainPageNow,
   brainPagePast,
   brainStatusNow,
   brainTitleAwaited,
@@ -193,7 +194,7 @@ const TASKS_PATH = {
   TRANSCRIPT: "/api/plans/transcript",
   /** GET reads a page of the plan's work, before the turn `before` names where it names one, and on the newest page every code shown on it; the rewrite moves the path's id into the `id` query. */
   WORK: "/api/plans/work",
-  /** GET reads the plan's planning conversation as a coding agent's transcript is read: past the cursor `after` names, held while a turn or a worker runs; its newest turns where it names none; the turns before the one `before` names. The rewrite moves the path's id into the `id` query. */
+  /** GET reads the plan's planning conversation as a coding agent's transcript is read: past the cursor `after` names, held while a turn or a worker runs unless `hold=none` asks for one look; its newest turns where it names none; the turns before the one `before` names. The rewrite moves the path's id into the `id` query. */
   MESSAGES: "/api/plans/messages",
   /** GET reads one planning worker's session past the cursor, held while it runs; the rewrite moves the path's id and the call that started the worker into the `id` and `call` queries. */
   SUBAGENT_MESSAGES: "/api/plans/subagent-messages",
@@ -240,7 +241,11 @@ const BEFORE_TURN_QUERY = "before";
 const TRANSCRIPT_QUERY = {
   AFTER: "after",
   CALL: "call",
+  HOLD: "hold",
 } as const;
+
+/** The one word `hold` takes: a read past the cursor answered in one look, never held. */
+const HOLD_NONE = "none";
 
 /** The query naming one revision of the plan by its number. */
 const REVISION_SEQ_QUERY = "seq";
@@ -727,11 +732,25 @@ function transcriptAnswer(
   });
 }
 
+/** Whether a read past the cursor asks for one look rather than a hold; refused where `hold` names anything else. */
+const unheldOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<boolean, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(TRANSCRIPT_QUERY.HOLD);
+  if (named.length === 0) return false;
+  if (named.length !== 1 || named[0] !== HOLD_NONE) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return true;
+});
+
 /**
  * GET reads the plan's planning conversation as a coding agent's transcript
- * is read: past the cursor, held while a turn or a worker runs; with no
- * cursor, its newest turns, or with `before` the turns queued before that
- * one. A plan never planned on reads as an empty conversation.
+ * is read: past the cursor, held while a turn or a worker runs, or in one
+ * look where `hold=none` asks, as a reader following the conversation's
+ * mark over Neon Realtime does; with no cursor, its newest turns, or with
+ * `before` the turns queued before that one. A plan never planned on reads
+ * as an empty conversation.
  */
 const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskMessagesEndpoint")(function* (
   seams: TasksAppSeams,
@@ -745,7 +764,8 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskMessagesEndpoint")(f
   const userId = yield* resolvedUserId(seams, request);
   const after = yield* cursorQueryOf(request);
   const before = yield* beforeTurnOf(request);
-  if (after !== undefined && before !== undefined) {
+  const unheld = yield* unheldOf(request);
+  if ((after !== undefined && before !== undefined) || (unheld && after === undefined)) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
@@ -761,7 +781,7 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskMessagesEndpoint")(f
   const page = yield* hostedStoreOrUnavailable(
     after === undefined
       ? brainTurnsPage(target, before)
-      : brainPagePast(target, cursorOfWire(after)),
+      : (unheld ? brainPageNow : brainPagePast)(target, cursorOfWire(after)),
   );
   return transcriptAnswer(page, null);
 });

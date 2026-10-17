@@ -4,7 +4,12 @@ import { Database } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
 import { fillChildTitle } from "@luke/database/models/child-titles";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
-import { listJournals } from "@luke/database/models/message-reads";
+import {
+  latestTurnsOf,
+  listJournals,
+  messageCursorNow,
+  runningChildTurns,
+} from "@luke/database/models/message-reads";
 import { openTaskConversation } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { turns } from "@luke/database/schemas/storage";
@@ -22,6 +27,7 @@ import {
   TURN_ENDING,
   type TurnRecord,
 } from "@luke/features/coding-agent-wire";
+import { planConversationLiveRowsSchema } from "@luke/features/live-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
 import {
   TASK_WORK_BOUNDS,
@@ -31,7 +37,8 @@ import {
 } from "@luke/features/tasks-view";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Option } from "effect";
+import { Effect, Fiber, Option, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
@@ -47,10 +54,12 @@ import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import {
   BRAIN_POLL,
   type BrainPage,
+  brainPageNow,
   brainPagePast,
   brainTitleAwaited,
   brainTurnsPage,
   brainWorkerSession,
+  planConversationLiveStatements,
 } from "./brain-transcript.js";
 import { SHOW_CODE_TOOL } from "./show-code.js";
 import { taskWorkOf } from "./task-work.js";
@@ -981,4 +990,119 @@ test("a planner page's journal of a turn longer than the bound says its older pa
     page.messages.map((message) => message.earlierOmitted),
     [true, undefined],
   );
+});
+
+/** The plan's conversation mark as Realtime would deliver it to `reader`, its statement run as Realtime runs it and its rows decoded as the desktop decodes them. */
+function liveMarkOf(reader: string, taskId: string) {
+  return database.run(
+    Effect.gen(function* () {
+      const statement = Option.getOrThrow(planConversationLiveStatements(reader, taskId));
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql.unsafe(statement.mark.sql, [...statement.mark.params]);
+      return (yield* Schema.decodeUnknownEffect(planConversationLiveRowsSchema)({ mark: rows }))
+        .mark;
+    }),
+  );
+}
+
+/** The same mark as the held read's own reads say it: the cursor now, the newest turn, and the running workers. */
+function heldMarkOf(target: ConversationTarget) {
+  return database.run(
+    Effect.gen(function* () {
+      const cursor = yield* messageCursorNow(target.userId, target.conversationId);
+      const newest = (yield* latestTurnsOf(target.userId, [target.conversationId])).get(
+        target.conversationId,
+      );
+      return [
+        {
+          ...cursor,
+          turnId: newest?.id ?? null,
+          turnStatus: newest?.status ?? null,
+          workers: yield* runningChildTurns(target.userId, target.conversationId),
+        },
+      ];
+    }),
+  );
+}
+
+test("a plan's conversation mark, read live, is where the held read's own reads say it stands as a turn runs, its journal moves, a worker starts and ends, and the turn settles; the start for a teammate who owns none of it, and no row for a stranger", async () => {
+  const target = await taskConversation();
+  const teammate = await database.createUser();
+  await database.run(joinWorkspace(target.workspaceId, teammate));
+  const stranger = await database.createUser();
+  const marks: unknown[] = [];
+  const same = async () => {
+    const live = await liveMarkOf(target.userId, target.taskId);
+    assert.deepEqual(live, await heldMarkOf(target));
+    marks.push(live);
+  };
+
+  await same();
+  const standing = standingFor(target);
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: BRAIN_DELEGATE_TOOL.name,
+          input: { task: "Compare the two queue libraries." },
+          output:
+            "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
+        },
+      ]),
+    ],
+    standing,
+  );
+  await same();
+  const child = childConversationId(target.conversationId, "call-0-0");
+  await database.run(openChildConversation(target, child, "worker"));
+  const worker = await insertTurn(database.run, {
+    userId: target.userId,
+    conversationId: child,
+    origin: TURN_ORIGIN.CHILD,
+    status: TURN_STATUS.RUNNING,
+  });
+  await same();
+  await play(answeringStep(FIRST_EVE_TURN, 1, "A worker is comparing them."), standing);
+  await same();
+  await database.run(
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({ status: TURN_STATUS.SETTLED, settledAt: new Date() })
+        .where(eq(turns.id, worker)),
+    ),
+  );
+  await same();
+
+  // Each step the held read would answer moved the mark.
+  assert.equal(new Set(marks.map((mark) => JSON.stringify(mark))).size, marks.length);
+  assert.deepEqual(await liveMarkOf(teammate, target.taskId), [
+    { seq: 0, revision: 0, turnId: null, turnStatus: null, workers: [] },
+  ]);
+  assert.deepEqual(await liveMarkOf(stranger, target.taskId), []);
+});
+
+test("a plan never planned on is marked at the start, and a reader past the cursor of a turn still running asked for one look is answered at once", async () => {
+  const userId = await database.createUser();
+  const unplanned = await database.run(startTask(userId, { name: "Billing" }));
+  assert.deepEqual(await liveMarkOf(userId, unplanned.id), [
+    { seq: 0, revision: 0, turnId: null, turnStatus: null, workers: [] },
+  ]);
+
+  const target = await taskConversation();
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls" } },
+      ]),
+    ],
+    standingFor(target),
+  );
+  const { cursor, status } = await database.run(brainTurnsPage(target, undefined));
+  assert.equal(status, CODING_AGENT_STATUS.RUNNING);
+  const now = await database.run(brainPageNow(target, cursor));
+  assert.deepEqual(now.messages, []);
+  assert.equal(now.status, CODING_AGENT_STATUS.RUNNING);
 });

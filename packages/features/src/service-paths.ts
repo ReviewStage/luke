@@ -66,6 +66,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_INBOX: "/api/live/plan-inbox",
   /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a plan's is. */
   LIVE_AGENT_INBOX: "/api/live/agent-inbox",
+  /** One plan's planning conversation under `?id=`, its mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_TASK_CONVERSATION: "/api/live/plan-conversation",
   /**
    * A workspace's agents, on a plan or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
@@ -337,17 +339,18 @@ export function taskWorkPath(taskId: string, before?: string): string {
 /**
  * One plan's planning conversation as a coding agent's transcript is read
  * (GET), the same answer as `agentMessagesPath`'s read: past a cursor, held
- * open while a turn runs; with no cursor, its newest turns; with `before`,
- * the turns queued before that one.
+ * open while a turn runs, or in one look where `unheld` asks; with no
+ * cursor, its newest turns; with `before`, the turns queued before that one.
  */
 export function taskMessagesPath(
   taskId: string,
-  page: { after?: string; before?: string },
+  page: { after?: string; before?: string; unheld?: boolean },
 ): string {
   const path = `${taskPath(taskId)}/messages`;
   const query = new URLSearchParams({
     ...(page.after === undefined ? undefined : { after: page.after }),
     ...(page.before === undefined ? undefined : { before: page.before }),
+    ...(page.unheld === true ? { hold: "none" } : undefined),
   });
   return query.size === 0 ? path : `${path}?${query}`;
 }

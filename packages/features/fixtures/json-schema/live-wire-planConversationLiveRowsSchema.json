@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "properties": {
+    "mark": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "number"
+          },
+          "revision": {
+            "type": "number"
+          },
+          "turnId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "turnStatus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "seq",
+          "revision",
+          "turnId",
+          "turnStatus",
+          "workers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "mark"
+  ],
+  "additionalProperties": false
+}
