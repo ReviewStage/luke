@@ -27,6 +27,8 @@ import {
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  BUTTON_VARIANT,
+  Button,
   ChevronRightIcon,
   ConfirmDialog,
   ProviderMark,
@@ -123,7 +125,9 @@ import { ReadFailed } from "./settings-group";
  *
  * The search is `@luke/ui`'s `SearchField`, each section its
  * `SettingsSection`, and each row `MenuRow`'s `SettingsRow`, led by the
- * provider's mark, its line the row's description.
+ * provider's mark, its line the row's description. A row's Connect,
+ * Reconnect, Try again, and Cancel are the outline `Button`, and Reopen the
+ * quiet one beside Cancel.
  */
 
 /** The page's search: the query standing in its field, held by Settings so its own search can hand one down. */
@@ -608,34 +612,19 @@ function IntegrationRow({
             ),
           control: waiting ? (
             <>
-              <button
-                type="button"
-                className="toolbar-button quiet-button"
-                disabled={connecting}
-                onClick={connect}
-              >
+              <Button variant={BUTTON_VARIANT.QUIET} disabled={connecting} onClick={connect}>
                 {SIGN_IN_ACTION.REOPEN}
-              </button>
-              <button
-                type="button"
-                className="toolbar-button bordered-button"
-                disabled={connecting}
-                onClick={cancel}
-              >
+              </Button>
+              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={cancel}>
                 {SIGN_IN_ACTION.CANCEL}
-              </button>
+              </Button>
             </>
           ) : status === undefined ||
             status === INTEGRATION_STATUS.UNAVAILABLE ||
             (connected && !broken) ? null : (
-            <button
-              type="button"
-              className="toolbar-button bordered-button"
-              disabled={connecting}
-              onClick={connect}
-            >
+            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={connect}>
               {grantLabel(status, signIn)}
-            </button>
+            </Button>
           ),
         }}
       />

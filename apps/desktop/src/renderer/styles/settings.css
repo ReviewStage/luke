@@ -630,7 +630,7 @@
 .settings-state {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 .settings-state[data-state="connected"]::before {
@@ -638,12 +638,12 @@
   height: 6px;
   flex: none;
   border-radius: 50%;
-  background: var(--state-complete);
+  background: var(--luke-color-complete);
   content: "";
 }
 
 .settings-state[data-state="attention"] {
-  color: var(--state-attention);
+  color: var(--luke-color-attention);
 }
 
 /* A sign-in waiting on the browser wears the window's ring, at the line's size. */
