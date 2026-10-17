@@ -266,7 +266,12 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
           status: ACTION_RESULT_STATUS.REJECTED,
           reason: "Not opened: GitHub said: Validation Failed base invalid",
         });
-        assert.equal(refused.openings.length, 1, "the App does not try in the developer's place");
+        assert.ok(
+          refused.openings.every(
+            (sent) => sent.headers.get("authorization") === `Bearer ${DEVELOPER_TOKEN}`,
+          ),
+          "the App does not try in the developer's place",
+        );
       }),
   );
 
