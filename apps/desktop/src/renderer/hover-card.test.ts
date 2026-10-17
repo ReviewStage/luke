@@ -86,7 +86,7 @@ function hung(view: HTMLElement, selector: string): HTMLElement {
   act(() => {
     anchor.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector<HTMLElement>(".tooltip-card");
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card");
   assert.ok(card, "the card hangs");
   return card;
 }

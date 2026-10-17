@@ -159,7 +159,7 @@ test("a Changes card names the coding agent whose pull request it is by its tile
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     await Promise.resolve();
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card] .card-name");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card] .card-name");
   assert.equal(card?.textContent, "Expiry job", "the agent's own card hangs from its name");
   act(() => named.click());
   assert.deepEqual(opened, [THIRD.id]);

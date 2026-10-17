@@ -280,21 +280,18 @@ body {
   overflow-y: auto;
 }
 
-/* A settings card standing in for the section that holds a page's rows:
-   its edge, and a rule between rows. */
+/* The measure a settings page gives its sections. */
 .catalog-settings {
   max-width: 560px;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-10);
-  background: var(--luke-color-surface);
-}
-
-.catalog-settings > * + * {
-  border-top: 1px solid var(--luke-color-border);
 }
 
 .catalog-settings-narrow {
   max-width: 320px;
+}
+
+/* The tooltip example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
+.catalog-hinted {
+  display: inline-flex;
 }
 
 /* A bare text input standing in for a control an example holds. */

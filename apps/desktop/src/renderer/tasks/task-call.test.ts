@@ -302,7 +302,7 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     assert.ok(row, "the row is drawn");
     document.documentElement.dataset.keyboard = "true";
     act(() => row.focus());
-    const card = document.querySelector(".tooltip-card [data-tab-card]");
+    const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
     assert.ok(card, "the row hangs a tab's card");
     return [
       card.querySelector(".card-name")?.textContent,
@@ -363,7 +363,7 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   assert.equal(row.textContent, `Showed ${ref.path}, ${lines}`);
   document.documentElement.dataset.keyboard = "true";
   act(() => row.focus());
-  const card = document.querySelector(".tooltip-card [data-file-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.deepEqual(
     [
       card?.querySelector(".card-name")?.textContent,

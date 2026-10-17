@@ -267,7 +267,7 @@ test("the plan's own tab hangs the plan's card, as its sidebar row does, its age
   act(() => {
     tab?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-task-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
   assert.ok(card, "the plan's card is hung");
   assert.equal(card.querySelector(".card-name")?.textContent, TASK.name);
   assert.match(card.textContent ?? "", /acme\/relay/u);
@@ -286,7 +286,7 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   act(() => {
     tab.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".card-name")?.textContent, WORKING.title);
   assert.ok(card.querySelector(".card-rule"));
@@ -305,7 +305,7 @@ test("a page's tab hangs the page's card: its title and version over its newest 
   act(() => {
     tab.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-page-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's card is hung");
   assert.equal(card.querySelector(".card-name")?.textContent, FUNNEL.title);
   assert.equal(card.querySelector(".card-sub")?.textContent, "Version 3");

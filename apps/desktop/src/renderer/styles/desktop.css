@@ -7435,39 +7435,15 @@ button.automation-run:hover {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-/* A control with more to say than a pill hangs a card in the pill's place
-   (`tooltip.tsx`'s `card`), as a browser's tab hover card hangs: a small
-   panel of the window's own, light in the light, hung from the control's
-   start. Every card says what it says in the same parts (`hover-card.tsx`),
-   in one type scale: its head is its glyph where it wears one, on the name's
-   first line, then the name in the medium weight wrapped to two lines, or a
-   task standing in for one on a single line faded at its end, a quieter line
-   under the name a size down, and the corner muted a size down at the head's
-   right; under the head, its notes, read whole and so wrapped to three
-   lines, or one line of a latest step faded at its end, and a hairline
-   before what it lists. Its words stand as far in from its sides as a
-   menu's do, so a row it lists (`.task-card-line`) washes off its edge as a
-   menu item does. */
-.tooltip-card {
-  display: flex;
-  width: 280px;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-4);
-  padding: var(--space-6) calc(var(--menu-inset) + var(--row-inset));
-  border-color: var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
-  box-shadow: var(--menu-shadow);
-  color: var(--text-primary);
-  font-weight: 400;
-  white-space: normal;
-}
-
-.tooltip-card[data-side="below"] {
-  transform-origin: top left;
-}
-
+/* Every card the window hangs in a pill's place (`tooltip.tsx`'s `card`,
+   drawn as `@luke/ui`'s `TooltipCard`) says what it says in the same parts
+   (`hover-card.tsx`), in one type scale: its head is its glyph where it
+   wears one, on the name's first line, then the name in the medium weight
+   wrapped to two lines, or a task standing in for one on a single line
+   faded at its end, a quieter line under the name a size down, and the
+   corner muted a size down at the head's right; under the head, its notes,
+   read whole and so wrapped to three lines, or one line of a latest step
+   faded at its end, and a hairline before what it lists. */
 .card {
   display: flex;
   flex-direction: column;
@@ -7842,13 +7818,14 @@ button.automation-run:hover {
   border-radius: var(--control-radius);
 }
 
-/* Confirm dialog -------------------------------------------------------------- */
+/* Dialog parts ---------------------------------------------------------------- */
 
-/* An irreversible act asks the way every desktop app asks: the window dims
-   behind a centred card, which is `@luke/ui`'s shared dialog
-   (`luke-dialog`). Its body (the question, a list of choices, a note being
-   written) is the part that gives way and scrolls, so its title and its
-   answers stay on screen however short the window is. */
+/* The title, body, and answers of the window's dialogs not yet on
+   `@luke/ui`'s `ConfirmDialog` (New task, Send feedback, Move to
+   workspace), in `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a
+   list of choices, a note being written) is the part that gives way and
+   scrolls, so its title and its answers stay on screen however short the
+   window is. */
 .confirm-dialog-title {
   margin: 0;
   font-size: 15px;
