@@ -27,7 +27,7 @@ for the host you are in:
 | Worker reports back | `conductor message create --session <ORCHESTRATOR_SESSION_ID>` | `message_agent` with the orchestrator's agent id |
 | Check on a silent worker | `conductor session message <sessionId>` | `read_agent` with its agent id |
 | Stop a worker | `conductor session cancel <sessionId>` | `stop_agent` with its agent id |
-| Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url, your agent id, and "report to me" |
+| Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url and its branch, "keep this PR and open no second one", your agent id, and "report to me" |
 | Archive a worker | `conductor workspace archive <workspaceId>` | `archive_agent` with a short reason, once the agent is idle |
 | Point the user at a worker or PR | Deep links | The mentions `start_agent` answered, and the PR's URL |
 
@@ -159,10 +159,12 @@ table says, then continue it the same way, with the correction in the note.
 
 In Luke, the continued agent runs on the old one's task and model, with its
 transcript and a copy of its work. While the old worker's PR is open, the
-new agent carries that work onto the PR's branch and opens no second PR.
-If `start_agent` refuses because the old worker is still running, stop it
-and call again; if it names an agent that already continued it, track that
-one. In Conductor, the new session works in the old one's workspace, on its
+new agent carries that work onto the PR's branch and opens no second PR;
+the note says so too, since Luke may not have recorded the PR yet. If
+`start_agent` refuses because the old worker is still running, stop it,
+wait until `list_agents` no longer reads it `running`, and call again; if it
+names an agent that already continued it, track that one. In Conductor, the
+new session works in the old one's workspace, on its
 branch and PR; tell it to read the old transcript with `conductor session
 message <old sessionId>`.
 
