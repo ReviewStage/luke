@@ -6368,7 +6368,7 @@ button.automation-run:hover {
 
 /* A quiet act ends the line flush with the card's edge, its words rather than
    its hover's pill standing in the column. */
-.settings-page .luke-settings-page-actions .quiet-button {
+.settings-page .luke-settings-page-actions > .luke-button {
   margin-right: calc(-1 * var(--space-8));
 }
 
