@@ -41,7 +41,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState, stateWith } from "#testing/app-state";
-import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
+import { editorBundleLanded, installEditorLayout, typeInComposer } from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -150,6 +150,9 @@ let workspace: readonly CodingAgentSummary[] = [];
 /** The pull requests the workspace's GitHub App answers, by number; one it holds none for reads as none. */
 let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequestState }> =
   new Map();
+
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -1028,7 +1031,6 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
 });
 
 test("an @ in the agent's box names an archived agent of an archived task by that task's name, read from the window's archived tasks", async () => {
-  installEditorBundle();
   installEditorLayout();
   installScrollIntoView();
   const billing: Task = {

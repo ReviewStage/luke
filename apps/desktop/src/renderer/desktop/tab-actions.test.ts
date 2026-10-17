@@ -12,6 +12,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel";
@@ -113,12 +114,16 @@ function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): HTMLEleme
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, {
-          summary: UNPINNED_SUMMARY,
-          looks: NO_LOOKS,
-          captions: undefined,
-          tasks: control,
-        }),
+        // Only the tabs' bars are asked about, so no bundle lands under them.
+        onSideBundles(
+          unlandedBundles(),
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            captions: undefined,
+            tasks: control,
+          }),
+        ),
       ),
     ),
   );

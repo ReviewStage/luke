@@ -12,16 +12,19 @@ import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { AppSettingsView } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { appBridge } from "../app-bridge";
+import type { SideBundles } from "../bundle-loader";
 import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
 
 /**
@@ -33,8 +36,8 @@ import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
  * view; a diff too narrow to split is drawn unified, Split view dimmed, the
  * choice kept for a wider one. The settings are the app's own, read off the
  * document main hands the window and written back through it
- * (`handSettings`). The bundle, a script of its own the panel loads, is
- * stood in for at its global, which records what it was handed. Synthetic
+ * (`handSettings`). The bundle, a chunk of its own the panel imports, is
+ * stood in for at its importer, which records what it was handed. Synthetic
  * files only.
  */
 
@@ -133,10 +136,15 @@ const standIn: DiffViewModule = {
   },
 };
 
+let bundles: SideBundles;
+
+beforeAll(async () => {
+  bundles = await Effect.runPromise(landedBundles({ diffView: () => Promise.resolve(standIn) }));
+});
+
 beforeEach(() => {
   drawn = [];
   boxWidth = 900;
-  window.lukeDiffView = standIn;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -151,7 +159,6 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  delete window.lukeDiffView;
   vi.restoreAllMocks();
 });
 
@@ -166,13 +173,16 @@ async function drawTab(): Promise<DiffViewProps> {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(AgentChangesTab, {
-          agentId: AGENT.id,
-          control,
-          shown: true,
-          repository: "acme/relay",
-          tree: { open: false, onToggle: () => undefined },
-        }),
+        onSideBundles(
+          bundles,
+          createElement(AgentChangesTab, {
+            agentId: AGENT.id,
+            control,
+            shown: true,
+            repository: "acme/relay",
+            tree: { open: false, onToggle: () => undefined },
+          }),
+        ),
       ),
     ),
   );

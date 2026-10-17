@@ -48,8 +48,8 @@ import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { tellAct } from "../act";
 import { appBridge } from "../app-bridge";
+import { avatarSessionAtom } from "../bundle-loader";
 import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
-import { avatarSessionModuleAtom } from "./avatar-session-bundle";
 
 /** How long a refused play of the avatar's voice waits to be asked again, as the voice window's own element does. */
 const AUDIO_RETRY_MS = 1_000;
@@ -232,7 +232,7 @@ const subscription = <A>(subscribe: (deliver: (value: A) => void) => () => void)
 const windowDoors: CallAvatarDoors = {
   feeds: subscription<AvatarFeed>((deliver) => appBridge().onAvatarFeed(deliver)),
   report: (avatar) => Effect.sync(() => tellAct(ACT_KIND.AVATAR_REPORT, avatar)),
-  module: AtomRegistry.getResult(rendererRegistry, avatarSessionModuleAtom),
+  module: AtomRegistry.getResult(rendererRegistry, avatarSessionAtom),
 };
 
 /**

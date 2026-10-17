@@ -12,7 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import { installEditorBundle, installEditorLayout } from "#testing/composer";
+import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
@@ -85,9 +85,11 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 const roots: Root[] = [];
 let sent: Act[] = [];
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
   sent = [];
-  installEditorBundle();
   installEditorLayout();
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
