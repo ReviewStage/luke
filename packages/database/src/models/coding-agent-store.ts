@@ -44,8 +44,8 @@ import {
   type StoredArchive,
   type StoredAutomationOrigin,
 } from "../schemas/coding-agent.js";
-import { task } from "../schemas/plan.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
+import { task } from "../schemas/task.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {

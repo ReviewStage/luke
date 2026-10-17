@@ -1,10 +1,10 @@
 import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
-import { task } from "./plan.js";
+import { task } from "./task.js";
 
 /**
- * plan-pin.ts -- one plan an account pinned in its sidebar, and when.
+ * task-pin.ts -- one task an account pinned in its sidebar, and when.
  *
  * A pin lives on the account rather than on the plan because it is the
  * developer's reading of their own work, as a repository's pin is
@@ -18,12 +18,12 @@ import { task } from "./plan.js";
  * since every read gates on membership first.
  */
 export const taskPin = pgTable(
-  "plan_pin",
+  "task_pin",
   {
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    taskId: uuid("plan_id")
+    taskId: uuid("task_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
     // Where the pin stands in the sidebar's Pinned section once it has been dragged, a fractional index (`@luke/features/pin-order`); null stands it by `pinnedAt`.
@@ -33,6 +33,6 @@ export const taskPin = pgTable(
   (table) => [
     primaryKey({ columns: [table.userId, table.taskId] }),
     // A plan's delete cascades to its pins, found by the plan alone.
-    index("plan_pin_plan").on(table.taskId),
+    index("task_pin_task").on(table.taskId),
   ],
 );

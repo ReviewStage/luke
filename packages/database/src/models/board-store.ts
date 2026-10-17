@@ -9,7 +9,7 @@ import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices } from "../core/query.js";
-import { task, taskBoard } from "../schemas/plan.js";
+import { task, taskBoard } from "../schemas/task.js";
 import { TaskArchived, type TaskStoreEffect, type TaskStoreFailure } from "./task-store.js";
 import { reachableTask } from "./workspace-store.js";
 

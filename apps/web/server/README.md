@@ -419,7 +419,7 @@ where a statement is one expression. It takes no `relations` config, because not
 Drizzle's relational queries: a statement is the `db.select()` builder, never
 `db.query`, as the `drizzle` skill has it. The tables a statement names are
 named imports from their own module
-(`import { plan } from "@luke/database/schemas/plan"`), never the barrel,
+(`import { plan } from "@luke/database/schemas/task"`), never the barrel,
 which is what makes a renamed column a type error at the call site.
 
 The builder hands back the statement's rows, not a guarantee about them, so a

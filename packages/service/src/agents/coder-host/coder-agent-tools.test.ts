@@ -16,7 +16,7 @@ import { writePage } from "@luke/database/models/plan-pages";
 import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { task } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/task";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
