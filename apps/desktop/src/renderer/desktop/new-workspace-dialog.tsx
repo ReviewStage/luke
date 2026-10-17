@@ -68,7 +68,10 @@ export function useNewWorkspaceDialog(
         disabled={confirm.busy}
         onChange={(event) => {
           setName(event.target.value);
-          confirm.clear();
+          // Note that a refused answer has settled, so the refusal alone holds
+          // the card up: the question is asked again rather than cleared, or
+          // the first key typed after it would close the card.
+          if (confirm.rejection !== undefined) confirm.ask();
         }}
       />
     </ConfirmDialog>

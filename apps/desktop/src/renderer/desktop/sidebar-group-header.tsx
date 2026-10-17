@@ -53,7 +53,7 @@ function FoldedCount({
   return (
     <span className="sidebar-repository-count" data-steady={steady ? "true" : undefined}>
       {count}
-      <span className="visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
+      <span className="luke-visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
     </span>
   );
 }

@@ -386,7 +386,7 @@ test("Created by › Me lists only your tasks, wearing no faces, says so in a ch
   ]);
   assert.equal(chipWords(sidebar), "Created by me");
   const options = sidebar.querySelector('button[aria-label="View options"]');
-  assert.equal(options?.getAttribute("data-filtered"), "true");
+  assert.equal(options?.getAttribute("aria-description"), "Filtered");
   const pinned = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
     [...(pinned?.querySelectorAll(".sidebar-task-name") ?? [])].map((name) => name.textContent),
@@ -398,7 +398,7 @@ test("Created by › Me lists only your tasks, wearing no faces, says so in a ch
   assert.ok(clear, "the chip offers its ×");
   act(() => clear.click());
   assert.equal(chip(sidebar), null);
-  assert.equal(options?.getAttribute("data-filtered"), null);
+  assert.equal(options?.getAttribute("aria-description"), null);
   assert.equal(taskRows(sidebar).length, 3);
 });
 
@@ -503,7 +503,7 @@ test("the archived tasks stand in no group at the list's foot, and View options 
   assert.equal(sidebar.querySelector('nav[aria-label="Pinned"]'), null, "the pins stand aside");
   assert.equal(chipWords(sidebar), "Archived");
   const options = sidebar.querySelector('button[aria-label="View options"]');
-  assert.equal(options?.getAttribute("data-filtered"), "true");
+  assert.equal(options?.getAttribute("aria-description"), "Filtered");
 
   const back = chip(sidebar)?.querySelector("button");
   assert.ok(back, "the chip offers its ×");

@@ -77,10 +77,14 @@ type ButtonBase = BusyProps &
     ref?: Ref<HTMLButtonElement> | undefined;
     /** The id of the words that say more of what it does. */
     "aria-describedby"?: string | undefined;
+    /** What more it says of its state, where no words on screen say it ("Filtered"). */
+    "aria-description"?: string | undefined;
     /** The menu or popover it opens, and whether that stands open. */
     "aria-haspopup"?: "menu" | "listbox" | "dialog" | undefined;
     "aria-expanded"?: boolean | undefined;
     "aria-controls"?: string | undefined;
+    /** Whether it goes to the page on show, which it is drawn and announced as. */
+    "aria-current"?: "page" | undefined;
   };
 
 /** The attributes and handler a button carries for its state, shared by both kinds. */
@@ -97,9 +101,11 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     "aria-busy": props.busy === true ? true : undefined,
     "aria-label": busyName ?? name,
     "aria-describedby": props["aria-describedby"],
+    "aria-description": props["aria-description"],
     "aria-haspopup": props["aria-haspopup"],
     "aria-expanded": props["aria-expanded"],
     "aria-controls": props["aria-controls"],
+    "aria-current": props["aria-current"],
     "aria-keyshortcuts": props["aria-keyshortcuts"],
     onPointerEnter: props.onPointerEnter,
     onPointerLeave: props.onPointerLeave,

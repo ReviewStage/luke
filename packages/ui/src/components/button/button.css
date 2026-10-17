@@ -100,6 +100,13 @@
       var(--luke-button-ground, transparent);
   }
 
+  /* A button that goes to the page on show reads in the full ink, as one
+     under the pointer does, without a fill: the page is where it stands,
+     not a state it holds. */
+  .luke-button:is([data-variant="quiet"], [data-variant="outline"])[aria-current="page"] {
+    --luke-button-ink: var(--luke-color-text);
+  }
+
   .luke-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
     --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 12%, transparent);
   }
