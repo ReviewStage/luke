@@ -25,6 +25,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { MemberDirectory } from "../member-directory";
@@ -124,17 +125,13 @@ afterEach(() => {
 
 /** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`. */
 async function drawnFor(reader: string): Promise<readonly Element[]> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        ),
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      ),
   });
   // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
   let reads = 0;
@@ -198,7 +195,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
   const deanSees = await sendersFor(DEAN.userId);
   act(() => root?.unmount());
   const charlesSees = await sendersFor(CHARLES.userId);
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 
   // Neither the task nor the line from before senders were kept is named for Dean, nor Dean's own line.
   const others: readonly Seen[] = [
@@ -263,5 +260,5 @@ test("a sent message keeps its bubble on top, with its Copy, who sent it, and wh
   );
   // The reader's own message names nobody, and still offers its Copy under the bubble; one from a service older than the time names none.
   assert.deepEqual(readingOrder(own, "Use seven days."), ["words", "Copy"]);
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });

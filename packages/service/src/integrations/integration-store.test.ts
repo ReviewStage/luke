@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Effect, Layer, Redacted } from "effect";
 import { openGithubUser } from "../testing/github-app-fake.js";
 import { firstIntegrationAccount } from "../testing/integration-connect.js";
-import { noNetwork } from "../testing/no-network.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,

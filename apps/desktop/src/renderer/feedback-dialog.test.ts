@@ -10,6 +10,8 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand, useMenuCommands } from "./app-commands";
 import { FeedbackDialog } from "./feedback-dialog";
@@ -32,20 +34,19 @@ let menuListener: ((command: AppCommand) => void) | undefined;
 beforeEach(() => {
   sent = [];
   answer = { delivered: true };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        sent.push(request);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
-      },
-      onMenuCommand: (listener: (command: AppCommand) => void) => {
-        menuListener = listener;
-        return () => {
-          menuListener = undefined;
-        };
-      },
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
+    },
+  });
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    onMenuCommand: (listener: (command: AppCommand) => void) => {
+      menuListener = listener;
+      return () => {
+        menuListener = undefined;
+      };
     },
   });
 });
