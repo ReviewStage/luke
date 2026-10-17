@@ -8,10 +8,10 @@ import {
   type BridgeMethod,
   type BridgeResultFor,
 } from "@luke/host/bridge";
+import { windowAppState } from "@luke/host/client";
 import type { UnparsedWireValue } from "@luke/wire";
 import type { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
-import { windowAppState } from "./app-state";
 
 /** Which window a report came from, which is all a report's handler is told. */
 interface BridgeContext {

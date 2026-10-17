@@ -1,10 +1,12 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { AgentNoticeDoors, type AgentNotices } from "@luke/host/agent-notices";
 import {
-  AgentNoticeDoors,
-  type AgentNotices,
-  createAgentNotices,
-  noticeTaskTitle,
-} from "@luke/host/agent-notices";
+  AppStateStore,
+  createOperatorClient,
+  initialAppState,
+  linkClientNotices,
+  type OperatorClient,
+  publishAppStateChanges,
+} from "@luke/host/client";
 import {
   type ClientCapability,
   type DuplicateGatewayMethod,
@@ -16,16 +18,9 @@ import {
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
-import {
-  APP_SETTING_SCHEMA,
-  EXPERIMENT,
-  experimentOn,
-  HOST_CAPABILITY,
-  NO_EXPERIMENTS,
-} from "@luke/settings";
+import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
-import { Context, Effect, Layer, Stream } from "effect";
-import { AppStateStore, initialAppState } from "../app-state";
+import { Context, Effect, Layer } from "effect";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
@@ -35,7 +30,6 @@ import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
 import { createNativeNode, type NativeNode } from "./native-node";
-import { createOperatorClient, type OperatorClient } from "./operator-client";
 import { createTelemetryService, type TelemetryService } from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";
@@ -87,11 +81,6 @@ export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
   "@luke/desktop/Desktop",
 ) {}
 
-/** Whose account this is, as the host keys it, or nobody: what tells another account from the same one renewed. */
-function accountKey(account: AccountSnapshot): string | undefined {
-  return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
-}
-
 /**
  * The steps of the launch, in the order it has to keep, each one built into
  * the same scope so the quit is this list closed in reverse.
@@ -124,36 +113,26 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
   // answers it are the same document read twice, and a window's own write is
   // not raced against a broadcast: the version it is handed only ever rises.
   // Forked after the windows service has started, so nothing publishes to a
-  // window that is not yet there to receive it. A push that throws is
-  // reported rather than left to end the fiber: a `Stream.runForEach` that
-  // failed once would never resume, and every later write would then reach
-  // no window for the rest of the session.
+  // window that is not yet there to receive it.
   const stateBroadcast = Layer.effectDiscard(
-    Effect.forkScoped(
-      Stream.runForEach(state.changes, () =>
-        Effect.catchDefect(
-          // The theme and the zoom are steered first, so a window handed new
-          // settings already draws under the appearance they name.
-          Effect.andThen(
-            windows.applyAppearance(),
-            Effect.sync(() => {
-              windows.publishAppState();
-              // A gated feature's menu items follow the account's experiments and the platform's capabilities as the windows' surfaces do.
-              const held = state.snapshot();
-              config.showMenuBar({
-                experiments: held.settings?.experiments ?? NO_EXPERIMENTS,
-                capabilities: held.run.capabilities,
-              });
-            }),
-          ),
-          (defect) =>
-            Effect.sync(() => {
-              report(
-                `the app-state push to windows failed: ${defect instanceof Error ? defect.message : String(defect)}`,
-              );
-            }),
+    publishAppStateChanges(
+      state,
+      () =>
+        // The theme and the zoom are steered first, so a window handed new
+        // settings already draws under the appearance they name.
+        Effect.andThen(
+          windows.applyAppearance(),
+          Effect.sync(() => {
+            windows.publishAppState();
+            // A gated feature's menu items follow the account's experiments and the platform's capabilities as the windows' surfaces do.
+            const held = state.snapshot();
+            config.showMenuBar({
+              experiments: held.settings?.experiments ?? NO_EXPERIMENTS,
+              capabilities: held.run.capabilities,
+            });
+          }),
         ),
-      ),
+      report,
     ),
   );
   const throughWindows = layersInOrder([
@@ -209,7 +188,7 @@ export function composeDesktop(
       );
       const native = createNativeNode({ config, state });
       const operator = yield* createOperatorClient({
-        config,
+        report: config.report,
         gateway: host.gateway,
         nodes: host.nodes,
         node: native.capabilities,
@@ -251,13 +230,9 @@ export function composeDesktop(
           again: () => config.quit(),
         }),
       );
-      // The notices read the tasks' names from the document and write the
-      // unseen agents and the waiting inbox items back into it; a click
-      // brings the window forward and asks the panel to open the task on the
-      // agent's tab or its Inbox, and what the focused window should hear is
-      // handed to the panels' toast. Whose inbox is read follows the
-      // document's account, which the launch's bootstrap writes as well as
-      // every change after it.
+      // A click brings the window forward and asks the panel to open the task
+      // on the agent's tab or its Inbox, and what the focused window should
+      // hear is handed to the panels' toast.
       const noticeDoors = electronNoticeDoors({
         toPanels: windows.toastAgentEnd,
         inboxToPanels: windows.toastInboxItem,
@@ -270,88 +245,34 @@ export function composeDesktop(
         },
         report: config.report,
       });
-      const notices = yield* createAgentNotices({
-        listAgents: (planId) => operator.host.codingAgentList({ taskId: planId }),
-        readAgent: (agentId) => operator.host.codingAgentPage({ agentId }),
-        readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
-        taskName: (taskId) => noticeTaskTitle(state.snapshot().tasks, taskId),
-        open: (place) => {
-          windows.panels.focusExpanded();
-          windows.showAgent(place);
+      const notices = yield* linkClientNotices({
+        state,
+        host: operator.host,
+        presenter: {
+          open: (place) => {
+            windows.panels.focusExpanded();
+            windows.showAgent(place);
+          },
+          openInbox: (taskId) => {
+            windows.panels.focusExpanded();
+            windows.showInbox(taskId);
+          },
+          openTasklessItem: (item) => {
+            windows.panels.focusExpanded();
+            windows.showInboxItem(item);
+          },
+          openFailedRun: (place) => {
+            windows.panels.focusExpanded();
+            windows.showFailedRun(place);
+          },
+          openChat: (workspaceId) => {
+            windows.panels.focusExpanded();
+            windows.showChat(workspaceId);
+          },
         },
-        onUnseenChanged: (unseen) => state.update({ codingAgents: { unseen } }),
         onPanelFocusChanged: windows.onPanelFocusChanged,
-        notifying: () =>
-          state.snapshot().settings?.stored.agentNotifications ??
-          APP_SETTING_SCHEMA.agentNotifications.default,
-        signedInAs: () => accountKey(state.snapshot().account),
-        accountId: () => {
-          const { account } = state.snapshot();
-          return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
-        },
-        onAccountChanged: (listener) =>
-          operator.host.onAccountChanged((account) => listener(accountKey(account))),
-        // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.
-        onTaskAgentsMoved: () => {
-          void run(operator.host.tasksRefresh());
-        },
-        readAccountInbox: (after) => operator.host.codingAgentAccountInbox({ after }),
-        accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
-        onInboxChanged: (inbox) => state.update({ inbox }),
-        openInbox: (taskId) => {
-          windows.panels.focusExpanded();
-          windows.showInbox(taskId);
-        },
-        openTasklessItem: (item) => {
-          windows.panels.focusExpanded();
-          windows.showInboxItem(item);
-        },
-        openFailedRun: (place) => {
-          windows.panels.focusExpanded();
-          windows.showFailedRun(place);
-        },
-        automationsOn: () =>
-          experimentOn(
-            state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
-            EXPERIMENT.AUTOMATIONS,
-          ),
-        openChat: (workspaceId) => {
-          windows.panels.focusExpanded();
-          windows.showChat(workspaceId);
-        },
-        chatOn: () =>
-          experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
-      // The agents with no plan each list read carries are the notices' to
-      // hold, as every answer naming an agent is. A note that throws is
-      // reported rather than left to end the fiber, which would never resume.
-      yield* Effect.forkScoped(
-        Stream.runForEach(
-          Stream.changes(Stream.map(state.changes, (document) => document.tasks.tasklessAgents)),
-          (agents) =>
-            Effect.catchDefect(
-              Effect.sync(() => notices.observeTaskless(agents ?? [])),
-              (defect) =>
-                Effect.sync(() =>
-                  config.report(
-                    `the agents with no plan could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
-                  ),
-                ),
-            ),
-        ),
-      );
-      // A panel coming forward reads the account's workspaces again, which
-      // may follow a teammate's change or an installation made on GitHub;
-      // the host reads them no oftener than once a minute.
-      yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          windows.onPanelFocusChanged((focused) => {
-            if (focused) void run(operator.host.workspacesRefresh());
-          }),
-        ),
-        (unsubscribe) => Effect.sync(unsubscribe),
-      );
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,

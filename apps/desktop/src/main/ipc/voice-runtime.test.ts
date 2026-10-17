@@ -3,11 +3,11 @@ import { it } from "@effect/vitest";
 import { runModeFor } from "@luke/host";
 import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
+import { AppStateStore, initialAppState } from "@luke/host/client";
 import { VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import type { WireRecord } from "@luke/wire";
 import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
-import { AppStateStore, initialAppState } from "../app-state";
 import type { PanelManager } from "../window/panel-manager";
 import {
   type VoiceRuntimeDependencies,

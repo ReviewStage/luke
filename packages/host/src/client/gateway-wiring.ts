@@ -1,5 +1,5 @@
 /**
- * wiring.ts -- the Gateway boundary as the desktop client composes it: one
+ * gateway-wiring.ts -- the Gateway boundary as a client composes it: one
  * operator over the host it is handed, the host's events relayed to the
  * document the windows draw from, and this process's native capabilities
  * registered as one node on the host's registry. The runtime itself stands
@@ -12,11 +12,15 @@ import {
   type NodeRegistry,
   type RemoteNodeInvoker,
 } from "@luke/gateway";
-import { HOST_NATIVE_NODE_ID, HOST_NODE_CAPABILITY, HOST_NODE_CAPABILITY_LIST } from "@luke/host";
-import { createHostOperator, type HostOperator } from "@luke/host/host-operator";
 import { isWireString } from "@luke/wire";
 import { Effect, type Scope } from "effect";
-import type { AppStateStore } from "../app-state";
+import { createHostOperator, type HostOperator } from "../host-operator.js";
+import {
+  HOST_NATIVE_NODE_ID,
+  HOST_NODE_CAPABILITY,
+  HOST_NODE_CAPABILITY_LIST,
+} from "../node-capabilities.js";
+import type { AppStateStore } from "./app-state-store.js";
 
 export interface GatewayWiringDependencies {
   gateway: GatewayHost;
@@ -35,7 +39,7 @@ export interface GatewayWiring {
   readonly host: HostOperator;
 }
 
-export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(function* (
+export const wireGateway = /* @__PURE__ */ Effect.fn("client/wireGateway")(function* (
   dependencies: GatewayWiringDependencies,
 ): Effect.fn.Return<GatewayWiring, never, Scope.Scope> {
   const { gateway, state, report } = dependencies;
