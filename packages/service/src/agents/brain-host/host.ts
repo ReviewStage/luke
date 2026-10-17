@@ -30,7 +30,7 @@ import { type ModelCatalog, providerModelOf } from "../../providers/model-catalo
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
-import { HELD_DOORS } from "../coder-host/chat-notify.js";
+import { CHAT_DOORS } from "../coder-host/chat-notify.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
 import { AGENT_CALLER } from "../coding-agent-tools.js";
@@ -513,7 +513,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                         telling: {
                           eveFor,
                           writer: seams.writer(),
-                          doors: HELD_DOORS,
+                          doors: CHAT_DOORS,
                         },
                       },
                       clientKey: context.callId,
