@@ -113,6 +113,7 @@ import {
   inboxRejected,
   postToInbox,
   readOwnInbox,
+  replyInInbox,
 } from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
@@ -406,10 +407,10 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
+/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post and a reply carry the door to the session's sandbox, where their pictures are read. */
 export type InboxCall =
   | {
-      readonly tool: typeof INBOX_TOOL.POST;
+      readonly tool: typeof INBOX_TOOL.POST | typeof INBOX_TOOL.REPLY;
       readonly input: UnparsedWireValue;
       readonly sandbox: InboxSandboxDoor;
     }
@@ -816,6 +817,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             return yield* closeInInbox(agent, call.input);
           case INBOX_TOOL.READ:
             return yield* readOwnInbox(agent);
+          case INBOX_TOOL.REPLY:
+            return yield* replyInInbox(agent, call.input, call.sandbox);
         }
       }).pipe(
         Effect.tapError(logStoreFailure),

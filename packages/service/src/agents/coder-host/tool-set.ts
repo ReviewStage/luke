@@ -58,6 +58,7 @@ export const CODER_TOOL = {
   POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
   CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
+  REPLY_INBOX: AGENT_TOOL.REPLY_INBOX,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   READ_AGENT: AGENT_TOOL.READ_AGENT,
@@ -131,9 +132,9 @@ const readPostedBlocks = Schema.decodeUnknownOption(
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
  * a sandbox tool, for a page read from a file in the sandbox, for an
- * edit of the plan adding a picture read from one, or for a chat post or
- * an inbox post with a picture, which is read from a file in the sandbox,
- * or a message
+ * edit of the plan adding a picture read from one, for a chat post or an
+ * inbox post with a picture, or for an inbox reply with one, each read
+ * from a file in the sandbox, or a message
  * received with files, which eve stages in the sandbox before the
  * turn opens, opening it to do so.
  */
@@ -148,6 +149,9 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
             (action.toolName === CODER_TOOL.EDIT_PLAN &&
               Array.isArray(action.input.pictures) &&
               action.input.pictures.length > 0) ||
+            (action.toolName === CODER_TOOL.REPLY_INBOX &&
+              Array.isArray(action.input.images) &&
+              action.input.images.length > 0) ||
             (action.toolName === CODER_TOOL.POST_CHAT &&
               Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
                 blocks.some((block) => block.type === CHAT_BLOCK.IMAGE),

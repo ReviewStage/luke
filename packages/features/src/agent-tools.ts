@@ -57,6 +57,7 @@ export const AGENT_TOOL = {
   POST_TO_INBOX: INBOX_TOOL.POST,
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
   READ_INBOX: INBOX_TOOL.READ,
+  REPLY_INBOX: INBOX_TOOL.REPLY,
   OPEN_PULL_REQUEST: "open_pull_request",
   // The workspace's chat, the planner's and every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,

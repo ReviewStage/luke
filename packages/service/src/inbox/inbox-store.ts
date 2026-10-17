@@ -147,6 +147,18 @@ export interface InboxImage {
   readonly bytes: Uint8Array;
 }
 
+/** A picture as the agent's message on a thread carries it: its file's own name, the type its bytes were sniffed to be, and the bytes. */
+export interface InboxNamedImage extends InboxImage {
+  readonly name: string;
+}
+
+/** One file of a message's as the store writes it: its own name, its type, and its bytes. */
+interface MessageFile {
+  readonly name: string;
+  readonly contentType: CodingAgentAttachmentType;
+  readonly bytes: Uint8Array;
+}
+
 /** A file an item's answer carried as a read answers it: the type it travelled as, and the bytes; a picture of a block's reads the same way. */
 export interface InboxFile {
   readonly contentType: CodingAgentAttachmentType;
@@ -1364,7 +1376,7 @@ function sameMessage(
   sent: {
     readonly userId: string;
     readonly text: string;
-    readonly files: readonly CodingAgentAttachment[];
+    readonly files: readonly MessageFile[];
   },
 ): boolean {
   return (
@@ -1373,7 +1385,7 @@ function sameMessage(
     standing.files.length === sent.files.length &&
     standing.files.every(
       (file, at) =>
-        file.name === sent.files[at]?.name && file.mediaType === sent.files[at]?.mediaType,
+        file.name === sent.files[at]?.name && file.mediaType === sent.files[at]?.contentType,
     )
   );
 }
@@ -1393,7 +1405,7 @@ function writeInboxMessage(
   itemId: string,
   writer: InboxMessageWriter,
   text: string,
-  files: readonly CodingAgentAttachment[],
+  files: readonly MessageFile[],
 ): InboxStoreEffect<Option.Option<InboxMessageWritten>> {
   const member = writer.author === INBOX_MESSAGE_AUTHOR.MEMBER ? writer : undefined;
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -1415,10 +1427,8 @@ function writeInboxMessage(
               ...scope,
               itemId,
               messageId: written.value.id,
-              name: file.name,
+              ...file,
               position,
-              contentType: file.mediaType,
-              bytes: bytesOf(file),
               now,
             }),
           );
@@ -1439,7 +1449,7 @@ function repeatOutcome(
   itemId: string,
   member: { readonly userId: string; readonly clientKey: string } | undefined,
   text: string,
-  files: readonly CodingAgentAttachment[],
+  files: readonly MessageFile[],
 ): InboxStoreEffect<InboxMessageOutcome> {
   if (member === undefined) return Effect.succeed(INBOX_MESSAGE_OUTCOME.KEY_REUSED);
   return Effect.map(findKeyedMessage({ itemId, clientKey: member.clientKey }), (standing) =>
@@ -1470,7 +1480,54 @@ export function postInboxMessage(
           itemId,
           { author: INBOX_MESSAGE_AUTHOR.MEMBER, userId, clientKey: message.clientKey },
           message.text,
-          message.files ?? [],
+          (message.files ?? []).map((file) => ({
+            name: file.name,
+            contentType: file.mediaType,
+            bytes: bytesOf(file),
+          })),
+        ),
+  );
+}
+
+/** The agent's own item under the key, as its tools name one, where the member who started the agent is still a member of the item's workspace. */
+const findAgentItem = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId, key }) =>
+    Database.use((db) =>
+      db
+        .select({ id: inboxItem.id })
+        .from(inboxItem)
+        .where(
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.agentId, agentId),
+            eq(inboxItem.key, key),
+            itemReachableBy(userId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The agent's message on the thread of its own item under the key, open or
+ * settled, as `writeInboxMessage` writes one, with the pictures it read from
+ * its sandbox, each named by its file's own name; nothing where it has no
+ * item under the key, or its starter has left the item's workspace, which
+ * writes there as one outside it no longer.
+ */
+export function replyInboxItem(
+  agent: Pick<InboxAgent, "userId" | "agentId">,
+  key: string,
+  text: string,
+  pictures: readonly InboxNamedImage[] = [],
+): InboxStoreEffect<Option.Option<InboxItem>> {
+  return Effect.flatMap(findAgentItem({ ...agent, key }), (found) =>
+    Option.isNone(found)
+      ? Effect.succeed(Option.none())
+      : Effect.map(
+          writeInboxMessage(found.value.id, { author: INBOX_MESSAGE_AUTHOR.AGENT }, text, pictures),
+          Option.map((written) => written.item),
         ),
   );
 }

@@ -108,6 +108,10 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
+  [CODER_TOOL.REPLY_INBOX]: {
+    description: INBOX_TOOLS.REPLY.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.REPLY.inputSchema),
+  },
   [CODER_TOOL.OPEN_PULL_REQUEST]: {
     description: OPEN_PULL_REQUEST_TOOL.description,
     inputSchema: emitJsonSchema(OPEN_PULL_REQUEST_TOOL.inputSchema),

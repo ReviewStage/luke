@@ -28,15 +28,22 @@ import { CODER } from "./bounds.js";
  *
  * The replay is sized against the new agent's own context: the share of its
  * model's window eve compacts at, less its instructions, its brief and note,
- * and room for its first steps, each told in eve's own estimate of a
- * token, four bytes. A source that never compacted, run on the same window,
- * fits whole, since every step it replays fit in that window once. Past the
- * bound the newest steps are kept and the oldest summarized, as a compaction
- * would: one call per chunk of them on the new agent's own model at its
- * lowest effort, a few at a time, then one call combining the chunks'
- * summaries, the whole held to a timeout. A summary that cannot be written
- * in time, or at all, leaves the newest steps that fit alone, and never
- * fails the Start.
+ * and room for its first steps, each told in a token of two bytes
+ * (`BYTES_PER_TOKEN`), not eve's own four, since a replay is mostly tool
+ * JSON and a model reads that in more, shorter tokens. A source that never
+ * compacted, run on the same window, fits whole, since every step it
+ * replays fit in that window once; one that compacted, or whose raw steps
+ * far outgrow the context it last measured, replays verbatim no more than
+ * that context (`measuredBoundBytes`), since its raw rows hold everything
+ * eve folded away. Past the bound the newest steps are kept and the oldest
+ * summarized, as a compaction would: one call per chunk of them on the new
+ * agent's own model at its lowest effort, a few at a time, then one call
+ * combining the chunks' summaries, the whole held to a timeout. A summary
+ * that cannot be written in time, or at all, leaves the newest steps that
+ * fit alone, and never fails the Start. Once fitted, the whole first prompt
+ * is told against the window again, and steps, then the summary, are
+ * dropped until it fits (`withinWindow`), so no Start hands eve a prompt
+ * its model must refuse.
  */
 
 /** The bounds the replay's fit and its summary keep to. */
@@ -61,8 +68,23 @@ export const REPLAY_FIT = {
   TIMEOUT: Duration.seconds(60),
 } as const;
 
-/** The bytes a token stands for in eve's own estimate. */
-const BYTES_PER_TOKEN = 4;
+/**
+ * The bytes a token of replay text stands for. Note that we count two,
+ * not eve's four, because a replay is mostly tool calls' JSON, which reads
+ * at about 2.2 bytes a token: a continue of 3.03 MB was refused at
+ * 1,368,155 tokens, 1.77 times what four bytes a token told. Two holds
+ * prose and JSON alike under the window, prose with room to spare.
+ */
+const BYTES_PER_TOKEN = 2;
+
+/** The bytes a token stands for in eve's own estimate, which a step's recorded instructions are told in. */
+const EVE_BYTES_PER_TOKEN = 4;
+
+/** The most bytes one UTF-16 code unit of a string takes in UTF-8, which cuts a string to a byte bound by its length. */
+const UTF8_BYTES_PER_UNIT = 3;
+
+/** How far a source's raw steps may outgrow the context it last measured before they are taken to hold what eve folded away. */
+const RAW_PAST_MEASURED = 2;
 
 /** Room for the summary's marker and the line saying what was left out, past its words. */
 const SUMMARY_MARKER_BYTES = 256;
@@ -110,10 +132,26 @@ function countedOnLuke(userId: string): Effect.Effect<void, never, DatabaseServi
   );
 }
 
+/** The tokens text of these bytes is told at, as above. */
+export function replayTokens(bytes: number): number {
+  return Math.ceil(bytes / BYTES_PER_TOKEN);
+}
+
+/** Tokens eve estimated at four bytes each, told again at two, as the replay beside them is. */
+export function fromEveEstimate(tokens: number): number {
+  return replayTokens(tokens * EVE_BYTES_PER_TOKEN);
+}
+
+/** The context a source last measured: the tokens its newest step read, and whether eve had compacted its conversation. */
+export interface MeasuredContext {
+  readonly inputTokens: number;
+  readonly compacted: boolean;
+}
+
 /**
  * The bytes the replay's steps and summary may take: the share of the
  * window eve compacts at, less the instructions, the first message's own
- * words, and the headroom, in tokens of four bytes; none where nothing is
+ * words, and the headroom, in tokens of two bytes; none where nothing is
  * left.
  */
 export function replayBudgetBytes(
@@ -122,9 +160,25 @@ export function replayBudgetBytes(
   firstMessageBytes: number,
 ): number {
   const threshold = Math.floor(windowTokens * CODER.COMPACTION_THRESHOLD_SHARE);
-  const words = Math.ceil(firstMessageBytes / BYTES_PER_TOKEN);
+  const words = replayTokens(firstMessageBytes);
   const left = threshold - instructionsTokens - words - REPLAY_FIT.HEADROOM_TOKENS;
   return Math.max(0, left) * BYTES_PER_TOKEN;
+}
+
+/**
+ * The most bytes of a source's steps replayed verbatim, by the context it
+ * last measured: that context, where eve compacted the source or its raw
+ * steps outgrow that context `RAW_PAST_MEASURED` times over, because its
+ * rows then hold what eve had folded into a summary and its model no longer
+ * read; no bound past the window's otherwise, or where it never measured one.
+ */
+export function measuredBoundBytes(
+  measured: MeasuredContext | undefined,
+  rawBytes: number,
+): number | undefined {
+  if (measured === undefined) return undefined;
+  const bound = measured.inputTokens * BYTES_PER_TOKEN;
+  return measured.compacted || rawBytes > bound * RAW_PAST_MEASURED ? bound : undefined;
 }
 
 /**
@@ -168,7 +222,7 @@ function chunksOf(parts: readonly SummaryPart[], chunkBytes: number): SummaryPar
     }
     current.push(
       size > chunkBytes
-        ? { ...part, words: part.words.slice(0, Math.floor(chunkBytes / BYTES_PER_TOKEN)) }
+        ? { ...part, words: part.words.slice(0, Math.floor(chunkBytes / UTF8_BYTES_PER_UNIT)) }
         : part,
     );
     used += Math.min(size, chunkBytes);
@@ -272,6 +326,12 @@ export function summarizeSteps(
   );
 }
 
+/** The steps a replay keeps and the summary ahead of them. */
+export interface FittedSteps {
+  readonly kept: readonly ReplayStep[];
+  readonly summary: ReplaySummary | undefined;
+}
+
 /**
  * The steps a replay keeps within its budget, and the summary of the ones
  * before them: every step, with the summary the source's own replay carried
@@ -288,10 +348,7 @@ export function fitReplay(
     dropped: readonly ReplayStep[],
     earlier: ReplaySummary | undefined,
   ) => Effect.Effect<Option.Option<ReplaySummary>>,
-): Effect.Effect<{
-  readonly kept: readonly ReplayStep[];
-  readonly summary: ReplaySummary | undefined;
-}> {
+): Effect.Effect<FittedSteps> {
   return Effect.gen(function* () {
     if (stepsBytes(steps) + summaryBytes(carried) <= budgetBytes) {
       return { kept: steps, summary: carried };
@@ -310,6 +367,36 @@ export function fitReplay(
     }
     return { kept: newestStepsWithin(steps, budgetBytes), summary: undefined };
   });
+}
+
+/**
+ * The fitted replay held to the window as the whole first prompt reads,
+ * `promptTokens` telling that prompt for the steps and summary given: as it
+ * stands where it fits, else with the oldest steps kept dropped by what it
+ * runs over, a step at least each round, then the summary, until it fits or
+ * nothing of the replay is left. Note that the fit is told again rather
+ * than trusted, because the budget it was made to leaves out what the
+ * brief, the preamble, and the files come to once the message is written.
+ */
+export function withinWindow(
+  fitted: FittedSteps,
+  promptTokens: (fitted: FittedSteps) => number,
+  windowTokens: number,
+): FittedSteps {
+  let held = fitted;
+  for (;;) {
+    const over = promptTokens(held) - windowTokens;
+    if (over <= 0) return held;
+    if (held.kept.length > 0) {
+      const room = Math.max(0, stepsBytes(held.kept) - over * BYTES_PER_TOKEN);
+      const fewer = newestStepsWithin(held.kept, room);
+      held = { ...held, kept: fewer.length < held.kept.length ? fewer : held.kept.slice(1) };
+    } else if (held.summary !== undefined) {
+      held = { kept: held.kept, summary: undefined };
+    } else {
+      return held;
+    }
+  }
 }
 
 /**
