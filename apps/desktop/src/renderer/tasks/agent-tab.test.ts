@@ -8,6 +8,8 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ProviderMark } from "@luke/ui";
 import { CHAT_PLACE, type ChatPlace, chatNames } from "@luke/ui/chat-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
@@ -17,6 +19,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -407,8 +411,8 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the row hangs a tab's card");
   return [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-corner")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-corner")?.textContent,
   ];
 }
 
@@ -472,7 +476,7 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", "Working…"]);
 });
 
-test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, a chip that is no target of its own inside the row", () => {
+test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that is no target of its own inside the row", () => {
   const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
   const cards = taskCards({
     agents,
@@ -491,7 +495,15 @@ test("a call about an agent names it by its chip in the place of the words, as i
     toolPart(
       "archive_agent",
       { agentId: "agent-8" },
-      { status: "accepted", agent: { id: "agent-8", title: "Retry audit", onYourTask: false } },
+      {
+        status: "accepted",
+        agent: {
+          id: "agent-8",
+          title: "Retry audit",
+          model: "openai/gpt-6.1-sol",
+          onYourTask: false,
+        },
+      },
     ),
     toolPart("start_agent", { prompt: "Ship the invoice export" }),
   ]);
@@ -520,6 +532,10 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.equal(said("message_agent"), "Messaged Invoice export Rebase on main");
   assert.equal(chip("archive_agent"), "Retry audit", "an agent the plan lists not by its answer");
   assert.equal(said("archive_agent"), "Archived Retry audit");
+  assert.ok(
+    line("archive_agent")?.querySelector(".tool-agent-chip img.harness-mark"),
+    "an agent the plan lists not wears the harness its answer's model runs in, Codex's here",
+  );
   assert.equal(chip("start_agent"), undefined, "a start that names no agent yet keeps its words");
   assert.equal(said("start_agent"), "Started a coding agent Ship the invoice export");
   const row = line("message_agent");
@@ -527,6 +543,77 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.equal(row.querySelector("button, a"), null, "the chip is no target inside the row");
   act(() => row.querySelector<HTMLElement>(".tool-agent-chip")?.click());
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }], "it opens the row's");
+});
+
+/** Main's document holding one agent on no task, running on Codex, as the plan list carries it. */
+function stateHoldingCodexAgent(agentId: string): AppStateSnapshot {
+  const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
+  return {
+    ...snapshot,
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      tasklessAgents: [
+        {
+          id: agentId,
+          planId: null,
+          turnId: null,
+          title: "Retry audit",
+          model: "openai/gpt-6.1-sol",
+          effort: "high",
+          status: CODING_AGENT_STATUS.COMPLETED,
+          createdAt: 1_000,
+          automationId: null,
+          workspaceId: "workspace-acme",
+          repository: "acme/relay",
+          activityAt: 1_000,
+        },
+      ],
+    },
+  };
+}
+
+test("a call about an agent the place lists not, whose answer names no model, wears the harness the window last read the agent running on", async () => {
+  const state = stateHoldingCodexAgent("agent-8");
+  fakeAppBridge({
+    recordSurfaceEvent: () => undefined,
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  // An answer from a service before it named the agent's model.
+  const message = assistant([
+    toolPart(
+      "archive_agent",
+      { agentId: "agent-8" },
+      { status: "accepted", agent: { id: "agent-8", title: "Retry audit", onYourTask: false } },
+    ),
+  ]);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: true,
+          delegation: { models: [], onOpenTarget: () => undefined },
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const chip = container.querySelector('[data-call-id="call-archive_agent"] .tool-agent-chip');
+
+  assert.equal(chip?.textContent, "Retry audit");
+  // Codex's mark is its picture.
+  assert.ok(chip?.querySelector("img.harness-mark"), "the chip wears Codex's mark");
+  fakeAppBridge({});
 });
 
 /** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */
@@ -732,4 +819,39 @@ test("a notice of a message holding no Markdown, a link alone, keeps the notice'
     container.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Chat: @agent-2 in #teammate-invitations asked about memberships.",
   );
+});
+
+/** A chat call's row drawn with Chat offered or not, every place it opens recorded. */
+function chatCallDrawn(chatOn: boolean) {
+  const opened: ToolTarget[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(AgentMessage, {
+        message: assistant([toolPart("post_chat", { text: "Rebased." }, ACCEPTED)]),
+        plan: false,
+        lead: AGENT_LEAD,
+        moving: false,
+        delegation: { models: [], chatOn, onOpenTarget: (target) => opened.push(target) },
+      }),
+    ),
+  );
+  return { container, opened };
+}
+
+test("a chat call's row opens the task's Chat while Chat is offered, and folds open as any call's does while it is off", () => {
+  const on = chatCallDrawn(true);
+  const row = on.container.querySelector<HTMLButtonElement>(
+    'button[data-call-id="call-post_chat"]',
+  );
+  assert.ok(row, "the row is a button");
+  act(() => row.click());
+  assert.deepEqual(on.opened, [{ kind: TOOL_TARGET.CHAT }]);
+
+  const off = chatCallDrawn(false);
+  assert.equal(off.container.querySelector('button[data-call-id="call-post_chat"]'), null);
+  assert.ok(off.container.querySelector("details"), "the row folds its call open in place");
 });

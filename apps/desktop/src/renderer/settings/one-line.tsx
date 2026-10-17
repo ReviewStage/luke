@@ -1,5 +1,5 @@
+import { useClipped } from "@luke/ui/use-clipped";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 
 /**
  * one-line.tsx -- a row's words held to one line, an ellipsis where the row cuts them short, and the pointer resting on them reading them whole.
@@ -15,8 +15,8 @@ export function OneLine({
   as: Element,
   text,
 }: {
-  /** The row's name (`strong`) or the detail under it (`small`). */
-  as: "strong" | "small";
+  /** The row's name (`strong`, or `span` in a shared row's label) or the detail under it (`small`). */
+  as: "strong" | "span" | "small";
   text: string;
 }): React.JSX.Element {
   const [line, clipped] = useClipped();

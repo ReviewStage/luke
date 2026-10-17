@@ -5,8 +5,8 @@ import {
   type TurnTokens,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
 import { HarnessMark } from "../harness-marks";
-import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { spanText } from "./task-time";
@@ -135,7 +135,7 @@ export function RunCard({
   );
   return (
     <HoverCard data-run-card={kind}>
-      <CardHead
+      <HoverCardHead
         glyph={provider === undefined ? undefined : <HarnessMark provider={provider} />}
         name={
           model === undefined ? (
@@ -149,10 +149,10 @@ export function RunCard({
           ending === undefined ? undefined : <span data-ending={ending.reason}>{ending.word}</span>
         }
       />
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
+      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
       {figures === undefined ? null : (
         <>
-          <CardRule />
+          <HoverCardRule />
           <dl className="run-card-figures" aria-label={figures.label}>
             {figures.rows.map(([label, said]) => (
               <div key={label} className="run-card-figure">

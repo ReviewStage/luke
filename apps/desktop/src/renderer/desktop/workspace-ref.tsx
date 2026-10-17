@@ -1,6 +1,6 @@
 import type { Workspace } from "@luke/features/workspace-wire";
+import { HoverCard, HoverCardHead } from "@luke/ui";
 import type { ReactNode } from "react";
-import { CardHead, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
 
@@ -63,7 +63,7 @@ export function WorkspaceCard({
     <HoverCard data-workspace-card="">
       <div className="workspace-card-head">
         <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
-        <CardHead name={workspace.name} sub={sharedWords(workspace.memberCount, personal)} />
+        <HoverCardHead name={workspace.name} sub={sharedWords(workspace.memberCount, personal)} />
       </div>
     </HoverCard>
   );

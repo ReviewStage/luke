@@ -145,11 +145,14 @@ test("a Changes card names the coding agent whose pull request it is by its tile
       ),
     ),
   );
-  assert.equal(container.querySelector(".card-name")?.textContent, "Expire invitations");
-  assert.equal(container.querySelector(".card-corner")?.textContent, "#42");
-  assert.match(container.querySelector(".card-note")?.textContent ?? "", /^6 files changed/);
+  assert.equal(container.querySelector(".luke-hover-card-name")?.textContent, "Expire invitations");
+  assert.equal(container.querySelector(".luke-hover-card-corner")?.textContent, "#42");
+  assert.match(
+    container.querySelector(".luke-hover-card-note")?.textContent ?? "",
+    /^6 files changed/,
+  );
   const named = container.querySelector<HTMLButtonElement>(
-    '.card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-hover-card-sub button.actor-ref[data-kind="agent"]',
   );
   assert.ok(named, "the agent is named as an actor");
   assert.equal(named.textContent, "Expiry job");
@@ -159,7 +162,7 @@ test("a Changes card names the coding agent whose pull request it is by its tile
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     await Promise.resolve();
   });
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card] .card-name");
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card] .luke-hover-card-name");
   assert.equal(card?.textContent, "Expiry job", "the agent's own card hangs from its name");
   act(() => named.click());
   assert.deepEqual(opened, [THIRD.id]);

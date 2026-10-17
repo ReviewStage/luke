@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "attachmentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "name": {
+      "type": "string"
+    },
+    "mediaType": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "attachmentId",
+    "name",
+    "mediaType"
+  ],
+  "additionalProperties": false
+}

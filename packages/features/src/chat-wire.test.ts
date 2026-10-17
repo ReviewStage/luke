@@ -5,10 +5,13 @@ import { Result, type Schema } from "effect";
 import { test } from "vitest";
 import {
   CHAT_ASK,
+  CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_REPLY,
   chatChannelNameSchema,
   chatHandleSchema,
   chatTargetSchema,
+  chatWriteRequestSchema,
   mentionedHandles,
   postChatAskInputSchema,
   postChatInputSchema,
@@ -129,4 +132,44 @@ test("the handles a post mentions are each named once, in order, and an address 
   assert.deepEqual(mentionedHandles("nobody here"), []);
   // A handle glued to more words is no handle, rather than the handle before its last hyphen.
   assert.deepEqual(mentionedHandles("@agent-2-TEAM and @agent-2-Ops"), []);
+});
+
+test("a window's write is a post with its words one way and one place, an answer, a resolve, or a read, and refuses anything between", () => {
+  const key = "send-1";
+  const link = {
+    type: CHAT_BLOCK.LINK,
+    url: "https://github.com/acme/relay/pull/12",
+    label: "#12",
+  };
+  for (const write of [
+    { text: "Morning.", clientKey: key },
+    { text: "@agent-2 take the table.", to: "#billing-export", clientKey: key },
+    { text: "On it.", replyTo: 41, clientKey: key },
+    { blocks: [link], to: "@agent-2", clientKey: key },
+    { answer: { seq: 41, revision: 2, reply: { reply: CHAT_REPLY.APPROVED } }, clientKey: key },
+    { resolve: { seq: 41, reason: "Settled in the call." } },
+    { readTo: 41 },
+    { readTo: 41, channelId: "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f" },
+  ]) {
+    assert.equal(takes(chatWriteRequestSchema, write), true, JSON.stringify(write));
+  }
+  for (const write of [
+    { clientKey: key },
+    { text: "Both.", blocks: [link], clientKey: key },
+    { text: "Two places.", to: "#general", replyTo: 41, clientKey: key },
+    { text: "No key." },
+    { text: "", clientKey: key },
+    { blocks: [], clientKey: key },
+    {
+      blocks: [{ type: CHAT_BLOCK.IMAGE, path: "shot.png", alt: "A picture." }],
+      clientKey: key,
+    },
+    { text: "Stray.", clientKey: key, delivery: "queue" },
+    { answer: { seq: 41, revision: 2, reply: { reply: CHAT_REPLY.APPROVED } } },
+    { resolve: { seq: 41, reason: "" } },
+    { readTo: -1 },
+    { readTo: 41, channelId: "general" },
+  ]) {
+    assert.equal(takes(chatWriteRequestSchema, write), false, JSON.stringify(write));
+  }
 });

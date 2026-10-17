@@ -3,13 +3,13 @@ import {
   PRODUCT_UPDATE_ACTION,
   type RecordProductEvent,
 } from "@luke/features/analytics";
-import { jsonStateFile } from "@luke/host";
+import type { AppStateStore } from "@luke/host/client";
+import { jsonStateFile } from "@luke/host/node";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "@luke/host/update-service";
 import type { UpdateSnapshot } from "@luke/settings/update";
 import { text } from "@luke/wire";
 import { Effect, type Scope } from "effect";
 import { type UpdateMenuAct, updateMenuAct } from "../app-menu";
-import type { AppStateStore } from "../app-state";
 import type { DesktopConfig } from "./desktop-config";
 
 export interface UpdateServiceHost {
@@ -127,6 +127,7 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
           lastRunVersionFile.update(() => ({ version }));
         },
       },
+      report: config.report,
     });
 
     // The timed check and the first check are handles the quit takes back: a check firing into a process already draining reads the

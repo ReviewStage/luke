@@ -88,10 +88,14 @@ export function codingAgentsControl(
     readSkills: undefined,
     draft: undefined,
     onNewDraft: () => "draft",
+    onForkDraft: () => "draft",
+    onContinueDraft: () => "draft",
+    onDropFork: ignore,
     onDraftChange: ignore,
     onDraftAttachments: ignore,
     onDiscardDraft: ignore,
     startPrompt: () => Promise.resolve(undefined),
+    startFork: () => Promise.resolve(undefined),
     listFailed: false,
     listMissing: false,
     onRetryList: ignore,
@@ -100,6 +104,7 @@ export function codingAgentsControl(
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,
+    continueAgent: undefined,
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
     onStop: () => Promise.resolve(),
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -130,6 +135,7 @@ export function codingAgentsControl(
     changesPeople: new Map(),
     readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    messageInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,
   };
@@ -255,6 +261,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     sectionReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
+    onShowChat: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,
@@ -270,6 +277,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     inbox: [],
     inboxShown: null,
+    chatShown: null,
     inboxTasks: [],
     inboxView: {
       open: false,
@@ -277,6 +285,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onOpen: ignore,
       onClose: ignore,
       onChoose: ignore,
+      pages: undefined,
+      onRereadPages: () => undefined,
     },
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
     personView: {
@@ -304,7 +314,10 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     callTaskId: undefined,
     chatView: {
       open: false,
+      available: false,
       chat: undefined,
+      failed: false,
+      onRetry: ignore,
       place: FOR_YOU,
       onOpen: ignore,
       onClose: ignore,

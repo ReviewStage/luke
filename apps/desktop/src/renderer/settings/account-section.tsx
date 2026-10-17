@@ -1,12 +1,20 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { ConfirmDialog, DIALOG_TONE, ProviderMark, useConfirmDialog } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ConfirmDialog,
+  DIALOG_TONE,
+  ProviderMark,
+  SettingsRow,
+  SettingsSection,
+  useConfirmDialog,
+} from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { OneLine } from "./one-line";
-import { SettingsGroup } from "./settings-group";
 
 /**
  * Who is signed in, and the two ways out of that, at the head of the Account
@@ -36,41 +44,41 @@ export function AccountSection({
   });
   const deletion = useConfirmDialog(surroundings, onDeleteAccount);
 
+  const busy = signOut.busy || deletion.busy;
+
+  // Note that each row stands in a wrapper wearing its search anchor, because
+  // a pressed result lands on and rings the whole row, as it did before the
+  // row was shared, and the shared row takes no attribute of a caller's.
   return (
-    <SettingsGroup title="Account">
-      <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.SIGN_OUT)}>
-        {/* The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue. */}
-        <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />
-        <span className="settings-copy">
-          <OneLine as="strong" text={account.email} />
-          <small className="account-provider">
-            Signed in with
-            <ProviderMark provider={account.provider} />
-            {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
-          </small>
-        </span>
-        <button
-          type="button"
-          className="toolbar-button bordered-button"
-          disabled={signOut.busy || deletion.busy}
-          onClick={signOut.ask}
+    <SettingsSection title="Account">
+      <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.SIGN_OUT)}>
+        <SettingsRow
+          // The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue.
+          leading={<ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />}
+          label={<OneLine as="span" text={account.email} />}
+          description={
+            <span className="account-provider">
+              Signed in with
+              <ProviderMark provider={account.provider} />
+              {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
+            </span>
+          }
         >
-          Sign out
-        </button>
+          {() => (
+            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={busy} onClick={signOut.ask}>
+              Sign out
+            </Button>
+          )}
+        </SettingsRow>
       </div>
-      <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
-        <span className="settings-copy">
-          <strong>Delete account</strong>
-        </span>
-        <button
-          type="button"
-          className="toolbar-button bordered-button"
-          data-danger="true"
-          disabled={signOut.busy || deletion.busy}
-          onClick={deletion.ask}
-        >
-          Delete account
-        </button>
+      <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
+        <SettingsRow label="Delete account">
+          {() => (
+            <Button variant={BUTTON_VARIANT.DANGER_OUTLINE} disabled={busy} onClick={deletion.ask}>
+              Delete account
+            </Button>
+          )}
+        </SettingsRow>
       </div>
       <ConfirmDialog
         confirm={signOut}
@@ -90,6 +98,6 @@ export function AccountSection({
           running: "Deleting account",
         }}
       />
-    </SettingsGroup>
+    </SettingsSection>
   );
 }

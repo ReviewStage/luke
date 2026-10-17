@@ -13,6 +13,7 @@ export * from "./github-install-intent.js";
 export * from "./github-installation.js";
 export * from "./inbox.js";
 export * from "./inbox-attachment.js";
+export * from "./inbox-message.js";
 export * from "./integration.js";
 export * from "./issue.js";
 export * from "./mac-command.js";

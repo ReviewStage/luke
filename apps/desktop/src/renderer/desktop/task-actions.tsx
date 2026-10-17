@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, type TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   ConfirmDialog,
@@ -9,19 +10,20 @@ import {
   type DialogQuestion,
   EllipsisIcon,
   ExternalIcon,
+  IconButton,
   PinIcon,
   ProviderMark,
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
   useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { usePlanDrafted } from "../composer-drafts";
@@ -44,7 +46,7 @@ import { useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useAppState, useExperiment } from "../use-app-state";
-import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
@@ -332,7 +334,7 @@ function useTaskMenu(
   );
   const moving = useMoveTaskDialog(tasks, plan);
   const copy = useCopyToast();
-  const { open, drawn, close, trigger, contextMenu } = useActionMenu(tasks.shown && doors.drawn);
+  const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
@@ -413,15 +415,12 @@ export function TaskActions({
     <>
       {button ? (
         <Tooltip label="Task actions">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Task actions"
+          <IconButton
+            icon={<EllipsisIcon />}
+            label="Task actions"
             disabled={deletion.busy}
             {...actions.trigger()}
-          >
-            <EllipsisIcon />
-          </button>
+          />
         </Tooltip>
       ) : null}
       {actions.menu}
