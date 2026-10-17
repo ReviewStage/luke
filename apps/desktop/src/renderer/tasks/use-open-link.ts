@@ -49,14 +49,23 @@ export const OpenHereProvider = OpenHereContext.Provider;
 /**
  * A place's opener for its agents' pull requests: a link to the page on
  * GitHub of one of them, however it is spelled, opens through `open`, the
- * agent's Pull request tab, and any other link is the window's.
+ * agent's Pull request tab, and any other link is the window's. `drawn` is
+ * the agents whose tabs the place draws, none before they are read. Note that
+ * an agent's pull request whose tab the place no longer draws, an archived
+ * agent's on a task, is the window's, since claiming it would open nothing.
  */
 export function openPullRequestsHere(
-  pullRequests: ReadonlyMap<string, { readonly url: string }>,
+  agents: {
+    readonly pullRequests: ReadonlyMap<string, { readonly url: string }>;
+    readonly agentIds: readonly string[] | undefined;
+  },
   open: (agentId: string) => void,
 ): OpenHere {
   return (href) => {
-    const opened = [...pullRequests].map(([agentId, { url }]) => ({ agentId, url }));
+    const { pullRequests, agentIds: drawn } = agents;
+    const opened = [...pullRequests].flatMap(([agentId, { url }]) =>
+      drawn === undefined || drawn.includes(agentId) ? [{ agentId, url }] : [],
+    );
     const agentId = pullRequestAgentOf(href, opened);
     if (agentId === undefined) return false;
     open(agentId);

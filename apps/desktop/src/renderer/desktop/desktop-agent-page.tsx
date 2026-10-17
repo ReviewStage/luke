@@ -277,7 +277,7 @@ export function DesktopAgentPage({
   const openPullRequest = (published: string) =>
     showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
   // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task.
-  const openHere = openPullRequestsHere(control.pullRequests, openPullRequest);
+  const openHere = openPullRequestsHere(control, openPullRequest);
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,

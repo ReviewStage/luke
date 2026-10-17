@@ -604,7 +604,7 @@ test("a plan's document opens on its Edited by line, with no crumb over it", () 
   container.remove();
 });
 
-test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation, and another pull request's opens on GitHub", () => {
+test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation, and another pull request's, or an archived agent's, opens on GitHub", () => {
   const agent: CodingAgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: TASK.id,
@@ -617,6 +617,13 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   };
   const url = "https://github.com/acme/relay/pull/42";
   const other = "https://github.com/acme/relay/pull/7";
+  const archived: CodingAgentSummary = {
+    ...agent,
+    id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+    title: "An earlier try",
+    archivedAt: 4,
+  };
+  const archivedUrl = "https://github.com/acme/relay/pull/9";
   const opened: unknown[] = [];
   const onGitHub: string[] = [];
   Object.defineProperty(window, "luke", {
@@ -634,7 +641,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
     ...TASK,
     repository: "acme/relay",
     document: {
-      body: `## Rollout\n\nShipped in [@relay#42](${url}/), after [@relay#7](${other}).\n`,
+      body: `## Rollout\n\nShipped in [@relay#42](${url}/), after [@relay#7](${other}) and [@relay#9](${archivedUrl}).\n`,
       assumptions: [],
     },
   };
@@ -659,6 +666,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
             },
             agents: codingAgentsControl({
               agents: [agent],
+              archived: [archived],
               agentIds: [agent.id],
               pullRequests: new Map([
                 [
@@ -672,6 +680,19 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
                     additions: 12,
                     deletions: 3,
                     changedFiles: 2,
+                  },
+                ],
+                [
+                  archived.id,
+                  {
+                    number: 9,
+                    title: "Send invitations at once",
+                    url: archivedUrl,
+                    state: PULL_REQUEST_STATE.CLOSED,
+                    checks: CHECK_SUMMARY.NONE,
+                    additions: 4,
+                    deletions: 1,
+                    changedFiles: 1,
                   },
                 ],
               ]),
@@ -697,6 +718,11 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
 
   act(() => chip("relay#7")?.click());
   assert.deepEqual(onGitHub, [other]);
+
+  // An archived agent's Pull request tab is not drawn on the task, so its pull request opens on GitHub.
+  act(() => chip("relay#9")?.click());
+  assert.deepEqual(onGitHub, [other, archivedUrl]);
+  assert.equal(opened.length, 2, "no tab was asked for");
   act(() => root.unmount());
   container.remove();
 });

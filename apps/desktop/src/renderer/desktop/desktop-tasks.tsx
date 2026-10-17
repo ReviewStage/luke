@@ -524,7 +524,7 @@ function PlanDocument({
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION);
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
   // a transcript, or an Inbox item, opens that same tab rather than GitHub.
-  const openHere = openPullRequestsHere(agents.pullRequests, openPullRequest);
+  const openHere = openPullRequestsHere(agents, openPullRequest);
   const openTaskLink = (href: string) => {
     if (!openHere(href)) openLink(href);
   };
