@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { runModeFor } from "@luke/host";
+import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import type { WireRecord } from "@luke/wire";
 import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
-import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { PanelManager } from "../window/panel-manager";
 import {
@@ -65,7 +65,7 @@ function fixture() {
   const dependencies = {
     panels,
     voiceWindow,
-    state: new AppStateStore(initialAppState(RUN, false), Context.empty()),
+    state: new AppStateStore(initialAppState(RUN, false, []), Context.empty()),
     openExternal: async () => undefined,
     liveSession: {
       createLiveSession: (sdp: string) =>

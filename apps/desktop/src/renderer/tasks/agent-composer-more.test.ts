@@ -10,11 +10,12 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
-import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
@@ -78,7 +79,8 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();

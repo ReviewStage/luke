@@ -181,8 +181,9 @@ An Effect describes work; only a runtime edge runs one. The edges are listed
 in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/main.ts`
 (the desktop's one `ManagedRuntime`), `apps/desktop/src/main/services/compose-desktop.ts`
 (the layer that runtime is built from), the renderer root
-`apps/desktop/src/renderer/index.tsx` (loaded once per window, the panels and
-the voice window alike, so no two windows share a browser registry),
+`apps/desktop/src/renderer/window-root.tsx` (loaded once per window by each
+window's own entry, the panels' and the voice window's alike, so no two windows
+share a browser registry),
 `apps/desktop/src/renderer/renderer-runtime.ts` (the module the root's
 runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
 reads it, the moment the root first reaches it, so the edge is here rather than

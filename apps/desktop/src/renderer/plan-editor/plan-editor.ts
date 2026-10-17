@@ -90,6 +90,34 @@ const DocumentParagraph = Paragraph.extend({
   },
 });
 
+/** What an empty task item's words are written as: TipTap's own mark for an empty paragraph. */
+const EMPTY_TASK_WORDS = "&nbsp;";
+
+/** How many characters TipTap's task item mark, `- [ ] ` or `- [x] `, takes before its words. */
+const TASK_MARK_LENGTH = "- [ ] ".length;
+
+/**
+ * A task item that stays one when it holds no words. Note that TipTap's own
+ * writes an empty one as `- [ ] `, which GFM, and so the read view, reads as
+ * a bullet saying "[ ]", and which loses its trailing space the moment a
+ * block's ending is trimmed; so its words are written as `&nbsp;`, which
+ * GFM reads as a task, and read back as no words. They are laid in after
+ * the mark rather than as a text node, which would escape the `&`.
+ */
+const DocumentTaskItem = TaskItem.extend({
+  parseMarkdown(token, helpers) {
+    const empty = token.text === EMPTY_TASK_WORDS;
+    return this.parent?.(empty ? { ...token, text: "", tokens: [] } : token, helpers) ?? [];
+  },
+  renderMarkdown(node, helpers, context) {
+    const written = this.parent?.(node, helpers, context) ?? "";
+    const [words] = node.content ?? [];
+    const empty = words?.type === "paragraph" && (words.content ?? []).length === 0;
+    if (!empty) return written;
+    return written.slice(0, TASK_MARK_LENGTH) + EMPTY_TASK_WORDS + written.slice(TASK_MARK_LENGTH);
+  },
+});
+
 /** The class a link whose target names a mention wears in the editor, which `tasks.css` draws in a chip's light look. */
 const MENTION_LINK_CLASS = "plan-mention-link";
 
@@ -153,7 +181,7 @@ export function markdownExtensions(
     DocumentHeading,
     Markdown,
     TaskList,
-    TaskItem,
+    DocumentTaskItem,
     TableKit,
     pictureNode(pictures),
     RawBlock,
