@@ -13,16 +13,30 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * that is one group and whose title already says what the rows are. A
  * headed section is a region named by its heading, so a reader moving by
  * landmark hears what the rows are for before reaching them. The room
- * between sections is the page's.
+ * between sections is the page's. A section of one control that draws its
+ * own frame, a text area, stands it under the heading with no card, so no
+ * frame is drawn within a frame.
  */
+
+/** Whether the children stand in the card, or bare under the heading for one control that is its own frame. */
+export const SETTINGS_SECTION_FRAME = {
+  CARD: "card",
+  NONE: "none",
+} as const;
+
+export type SettingsSectionFrame =
+  (typeof SETTINGS_SECTION_FRAME)[keyof typeof SETTINGS_SECTION_FRAME];
 
 /** A card of `children`, one row or line each, under `title` when there is one. */
 export function SettingsSection({
   title,
+  frame = SETTINGS_SECTION_FRAME.CARD,
   children,
 }: {
   /** The group's name, or nothing when the page's title already names it. */
   title?: ReactNode;
+  /** The card around the children, or none for one control that draws its own frame. */
+  frame?: SettingsSectionFrame;
   /** The rows, each drawn edge to edge with a rule above every one but the first. */
   children: ReactNode;
 }): React.JSX.Element {
@@ -42,7 +56,11 @@ export function SettingsSection({
           </Text>
         </div>
       ) : null}
-      <div className="luke-settings-section-card">{children}</div>
+      {frame === SETTINGS_SECTION_FRAME.CARD ? (
+        <div className="luke-settings-section-card">{children}</div>
+      ) : (
+        children
+      )}
     </section>
   );
 }

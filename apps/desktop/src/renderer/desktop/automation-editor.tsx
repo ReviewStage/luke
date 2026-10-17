@@ -71,6 +71,7 @@ import {
   IconButton,
   POPOVER_ALIGN,
   ProviderMark,
+  SETTINGS_SECTION_FRAME,
   SettingsRow,
   SettingsSection,
   SidePanelIcon,
@@ -102,7 +103,6 @@ import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
-import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
 import { Spinner } from "../spinner";
 import { AgentModelChip } from "../tasks/agent-model-chip";
@@ -1444,7 +1444,7 @@ function EditorForm({
           onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
         />
       )}
-      <SettingsGroup title="Prompt" framed={false}>
+      <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
         <TextArea
           ref={prompt}
           label="Prompt"
@@ -1455,7 +1455,7 @@ function EditorForm({
           onChange={(text) => onDraft({ prompt: text })}
         />
         <Problem problem={problems[DRAFT_FIELD.PROMPT]} />
-      </SettingsGroup>
+      </SettingsSection>
       <RunsGroup
         draft={draft}
         mine={automation === undefined || automation.mine === true}
