@@ -78,6 +78,7 @@ let copied: string[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
+  window.localStorage.clear();
   standing = [];
   lists = [];
   listed = [];
@@ -1021,6 +1022,29 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.ok(stillListed, "the list is what the page goes back to");
   assert.ok(page.querySelector("[data-issue-column]"), "Board lays it out as the board again");
   assert.equal(page.querySelector(".home-section"), null);
+});
+
+test("the page opens again in the layout last chosen, the list after List and the board after Board", async () => {
+  standing = [issue(1)];
+  mount();
+  await settle();
+  showList();
+  act(() => root?.unmount());
+
+  const reopened = mount();
+  await settle();
+  const listedAgain = reopened.querySelector(".home-section") !== null;
+  const boardAgain = reopened.querySelector("[data-issue-column]") !== null;
+  act(() => button("View options").click());
+  act(() => menuItem("Board").click());
+  act(() => root?.unmount());
+  const thirdTime = mount();
+  await settle();
+
+  assert.ok(listedAgain, "List chosen, the page opens as the list");
+  assert.equal(boardAgain, false);
+  assert.ok(thirdTime.querySelector("[data-issue-column]"), "Board chosen, it opens as the board");
+  assert.equal(thirdTime.querySelector(".home-section"), null);
 });
 
 test("a workspace with no issue yet still stands the board's columns, each saying it holds none", async () => {
