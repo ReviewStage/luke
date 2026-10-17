@@ -525,7 +525,7 @@ function preambleOf(
       : ` The oldest ${counts.summarized} of its ${counts.total} steps did not fit, so a summary of them comes first, written by Luke rather than by that agent: read it as a recap, not its words.`;
   const dropped =
     left > 0
-      ? ` The oldest ${left} of its ${counts.total} steps are left out to fit${counts.summarized === 0 ? "" : ", ahead of what the summary covers"}.`
+      ? ` ${counts.summarized === 0 ? "The oldest" : "Besides those the summary covers,"} ${left} of its ${counts.total} steps are left out to fit.`
       : "";
   const files =
     unkept.length === 0

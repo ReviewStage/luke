@@ -185,5 +185,11 @@ it.effect(
         },
       );
       assert.deepEqual(folded, [earlier]);
+
+      // A new summary that cannot be written keeps the carried one beside fewer of the newest steps.
+      const many = Array.from({ length: 40 }, (_, at) => said(at, 2_000));
+      const fallback = yield* fitReplay(many, earlier, 60_000, () => Effect.succeed(Option.none()));
+      assert.equal(fallback.summary, earlier);
+      assert.equal(fallback.kept.at(-1), many.at(-1));
     }),
 );

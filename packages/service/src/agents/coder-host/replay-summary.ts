@@ -258,7 +258,8 @@ export function summarizeSteps(
  * before them: every step, with the summary the source's own replay carried
  * of those before them, where all fit; otherwise the newest that fit beside
  * room for a summary, with a summary of the rest, the carried one folded in,
- * where one is written and fits, or else the newest that fit alone.
+ * where one is written and fits, or else the newest that fit beside the
+ * carried summary where it fits, or alone.
  */
 export function fitReplay(
   steps: readonly ReplayStep[],
@@ -282,6 +283,11 @@ export function fitReplay(
     const summary = yield* summarize(steps.slice(0, steps.length - beside.length), carried);
     if (Option.isSome(summary) && stepsBytes(beside) + summaryBytes(summary.value) <= budgetBytes) {
       return { kept: beside, summary: summary.value };
+    }
+    // A summary that could not be written leaves the carried one, where it fits, beside the newest steps.
+    const carriedBytes = summaryBytes(carried);
+    if (carried !== undefined && carriedBytes <= budgetBytes) {
+      return { kept: newestStepsWithin(steps, budgetBytes - carriedBytes), summary: carried };
     }
     return { kept: newestStepsWithin(steps, budgetBytes), summary: undefined };
   });
