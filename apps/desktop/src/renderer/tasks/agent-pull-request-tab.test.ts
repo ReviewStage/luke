@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentOverviewChecksAnswerView,
@@ -25,8 +26,10 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { Effect } from "effect";
+import { Clock, Context, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
@@ -35,6 +38,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
 import type { DiffViewProps } from "../diff-view/contract";
 import { MemberDirectory } from "../member-directory";
+import { rendererRuntime } from "../renderer-runtime";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
@@ -288,17 +292,25 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A registry whose atoms count on this clock, as the window's count on its own. */
+function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  return AtomRegistry.make({
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+  });
+}
+
 /** Draws the agent's tab inside the workspace's member directory, its reads landed. */
 async function draw(
   control: CodingAgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
+  registry = AtomRegistry.make(),
 ) {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
     root?.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(MemberDirectory, {
           workspace: { id: "workspace-acme", memberCount: 2 },
           readerId: "user-dana",
@@ -437,7 +449,132 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "1 failed, 1 running, 1 passed",
   );
   assert.deepEqual(words(tab, ".pull-request-check-name"), ["lint", "build", "test"]);
-  assert.deepEqual(words(tab, ".pull-request-check-time"), ["1m 5s", "1m 5s"]);
+  assert.deepEqual(
+    words(tab, '.pull-request-check-time:not([role="timer"])'),
+    ["1m 5s", "1m 5s"],
+    "a finished check says how long it ran",
+  );
+});
+
+it.effect(
+  "a check wears its App's avatar, a status's picture off GitHub's avatar host read through the service; a running one counts each second from when it started, a finished one says how long it ran",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      yield* TestClock.setTime(66_000);
+      const checks: CodingAgentOverviewChecks = {
+        checks: [
+          {
+            ...check("build", CHECK_STATE.PENDING),
+            avatarUrl: "https://avatars.githubusercontent.com/in/15368?v=4",
+          },
+          { ...check("vercel", CHECK_STATE.PASSED), app: null, avatarUrl: BADGE },
+          check("lint", CHECK_STATE.PASSED),
+        ],
+      };
+      const tab = yield* Effect.promise(() =>
+        draw(
+          controlAnswering({ checks: () => Promise.resolve({ pullRequest: checks }) }),
+          PULL_REQUEST_VIEW.CONVERSATION,
+          registry,
+        ),
+      );
+      yield* Effect.promise(() => choose(tab, "Checks"));
+
+      const rows = [...tab.querySelectorAll(".pull-request-check")];
+      assert.equal(
+        rows[0]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
+        "an App's logo is drawn from GitHub's avatar host at its size",
+      );
+      assert.ok(
+        images.every((src) => !src.startsWith("https://avatars.githubusercontent.com/")),
+        "a picture GitHub's avatar host serves is never asked of the service",
+      );
+      assert.equal(
+        rows[1]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
+        "any other is drawn as the service read it",
+      );
+      assert.equal(
+        rows[2]?.querySelector(".pull-request-check-avatar"),
+        null,
+        "no avatar, none drawn",
+      );
+      assert.deepEqual(words(tab, '[role="timer"]'), ["1m 5s"]);
+
+      yield* TestClock.adjust("1 second");
+      yield* Effect.promise(settle);
+      assert.deepEqual(words(tab, '[role="timer"]'), ["1m 6s"], "the running one counts on");
+      assert.deepEqual(words(tab, '.pull-request-check-time:not([role="timer"])'), [
+        "1m 5s",
+        "1m 5s",
+      ]);
+
+      yield* Effect.promise(() => choose(tab, "Conversation"));
+      assert.deepEqual(
+        words(tab, '[role="timer"]'),
+        [],
+        "a count behind a hidden tab reads no clock",
+      );
+      yield* TestClock.adjust("1 second");
+      yield* Effect.promise(() => choose(tab, "Checks"));
+      assert.deepEqual(
+        words(tab, '[role="timer"]'),
+        ["1m 7s"],
+        "shown again, it counts from the clock",
+      );
+      act(() => root?.unmount());
+      root = undefined;
+      registry.dispose();
+    }),
+);
+
+test("past five checks the list folds behind Show all, keeping every one that failed or still runs above the fold, and folds again on Show less", async () => {
+  const passing = Array.from({ length: 6 }, (_, at) => check(`test ${at}`, CHECK_STATE.PASSED));
+  const few: CodingAgentOverviewChecks = {
+    checks: [check("lint", CHECK_STATE.FAILED), check("build", CHECK_STATE.PENDING), ...passing],
+  };
+  const tab = await draw(controlAnswering({ checks: () => Promise.resolve({ pullRequest: few }) }));
+  await choose(tab, "Checks");
+  const fold = () =>
+    tab.querySelector<HTMLButtonElement>(".pull-request-checks-fold") ??
+    assert.fail("the list folds");
+  assert.deepEqual(words(tab, ".pull-request-check-name"), [
+    "lint",
+    "build",
+    "test 0",
+    "test 1",
+    "test 2",
+  ]);
+  assert.equal(fold().textContent, "Show all 8");
+  assert.equal(fold().getAttribute("aria-expanded"), "false");
+
+  act(() => fold().click());
+  assert.equal(words(tab, ".pull-request-check-name").length, 8);
+  assert.equal(fold().textContent, "Show less");
+  assert.equal(fold().getAttribute("aria-expanded"), "true");
+
+  act(() => fold().click());
+  assert.equal(words(tab, ".pull-request-check-name").length, 5);
+});
+
+test("a check that failed or still runs never folds away, however many there are, and five or fewer checks do not fold", async () => {
+  const failing = Array.from({ length: 6 }, (_, at) => check(`lint ${at}`, CHECK_STATE.FAILED));
+  const many: CodingAgentOverviewChecks = {
+    checks: [...failing, check("build", CHECK_STATE.PENDING), check("test", CHECK_STATE.PASSED)],
+  };
+  const tab = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: many }) }),
+  );
+  await choose(tab, "Checks");
+  assert.equal(words(tab, ".pull-request-check-name").length, 7);
+  assert.equal(tab.querySelector(".pull-request-checks-fold")?.textContent, "Show all 8");
+
+  act(() => root?.unmount());
+  const five = await draw(controlAnswering());
+  await choose(five, "Checks");
+  assert.equal(five.querySelector(".pull-request-checks-fold"), null);
 });
 
 test("the earlier entries a read left on GitHub are counted first, in the heading too, and open the pull request", async () => {
@@ -801,7 +938,7 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
   assert.equal(count("Files changed")?.textContent, "+4 −1");
 
   await choose(tab, "Checks");
-  assert.equal(count("Checks")?.textContent, "3");
+  assert.equal(count("Checks")?.textContent, "1", "beside a failure, how many failed");
   assert.equal(count("Checks")?.getAttribute("data-check-summary"), CHECK_SUMMARY.FAILING);
 
   act(() => option(tab, "Checks").focus());
@@ -816,6 +953,54 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
     "true",
     "the arrows move along the row",
   );
+});
+
+test("the Checks tab counts what its glyph says: beside a wait how many still run, and where all passed how many there are", async () => {
+  const running: CodingAgentOverviewChecks = {
+    checks: [
+      check("build", CHECK_STATE.PENDING),
+      check("e2e", CHECK_STATE.PENDING),
+      check("test", CHECK_STATE.PASSED),
+    ],
+  };
+  const waits = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: running }) }),
+  );
+  await choose(waits, "Checks");
+  const countOf = (tab: HTMLElement) =>
+    option(tab, "Checks").querySelector(".pull-request-tab-count");
+  assert.equal(countOf(waits)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PENDING);
+  assert.equal(countOf(waits)?.textContent, "2");
+
+  act(() => root?.unmount());
+  const passing: CodingAgentOverviewChecks = {
+    checks: [
+      check("lint", CHECK_STATE.PASSED),
+      check("test", CHECK_STATE.PASSED),
+      check("docs", CHECK_STATE.SKIPPED),
+    ],
+  };
+  const passed = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: passing }) }),
+  );
+  await choose(passed, "Checks");
+  assert.equal(countOf(passed)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PASSING);
+  assert.equal(countOf(passed)?.textContent, "3");
+});
+
+test("a check that ran for no time, skipped or cancelled before it began, says no duration", async () => {
+  const none: CodingAgentOverviewChecks = {
+    checks: [
+      { ...check("cancelled", CHECK_STATE.FAILED), completedAt: 1_000 },
+      { ...check("docs", CHECK_STATE.SKIPPED), completedAt: 1_000 },
+      check("test", CHECK_STATE.PASSED),
+    ],
+  };
+  const tab = await draw(
+    controlAnswering({ checks: () => Promise.resolve({ pullRequest: none }) }),
+  );
+  await choose(tab, "Checks");
+  assert.deepEqual(words(tab, ".pull-request-check-time"), ["1m 5s"]);
 });
 
 test("a merged pull request says so on the bar, as its overview read it, says nothing of merging, and one with no description, checks, or comments says so", async () => {

@@ -68,6 +68,9 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "avatarUrl": {
+                        "type": "string"
                       }
                     },
                     "required": [
