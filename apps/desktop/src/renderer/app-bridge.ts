@@ -12,7 +12,7 @@
  * each reads it at the moment it calls, never at module load.
  */
 
-import type { AppBridge } from "#shared/bridge";
+import type { AppBridge } from "@luke/host/bridge";
 
 let installed: AppBridge | undefined;
 

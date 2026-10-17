@@ -1,3 +1,4 @@
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   IconButton,
@@ -19,7 +20,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import {
   FIND_SKIP_ATTRIBUTE,

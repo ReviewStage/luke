@@ -14,7 +14,7 @@
 
 import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@luke/features/analytics";
 import type { FramedPage } from "@luke/features/page-frame";
-import type { AppCommand } from "#shared/shortcuts";
+import type { AppCommand } from "@luke/settings/shortcuts";
 
 /** The capabilities a window's shell answers, each as the panel asks for it. */
 export interface AppPlatform {

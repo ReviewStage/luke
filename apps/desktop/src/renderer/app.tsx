@@ -14,6 +14,7 @@ import {
 } from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
@@ -38,7 +39,6 @@ import {
 } from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { appBridge } from "./app-bridge";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";

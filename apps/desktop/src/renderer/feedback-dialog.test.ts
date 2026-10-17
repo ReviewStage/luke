@@ -5,11 +5,11 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/cr
 import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@luke/features/feedback";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";

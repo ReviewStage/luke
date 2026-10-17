@@ -10,9 +10,8 @@ import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-gra
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
-import { type Act, type ActOutcome, isActOutcome, parsedAct } from "@luke/host/acts";
-import { type AppStateSnapshot, isAppStateSnapshot } from "@luke/host/app-state";
 import { liveExchangeActive } from "@luke/live";
+import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
 import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
 import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/avatar-view";
 import {
@@ -31,7 +30,8 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { Result } from "effect";
-import { type AppCommand, isAppCommand } from "./shortcuts";
+import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./acts.js";
+import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
 
 type BridgeArguments = readonly unknown[];
 type BridgeKind = "invoke" | "send" | "subscribe";

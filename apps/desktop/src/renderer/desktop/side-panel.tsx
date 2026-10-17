@@ -12,6 +12,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CollapseIcon,
   EmptyState,
@@ -51,7 +52,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { appPlatform } from "../app-platform";

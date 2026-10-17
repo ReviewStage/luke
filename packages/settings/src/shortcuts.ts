@@ -14,8 +14,13 @@
  * to the menu and from there to the same nothing.
  */
 
-import { EXPERIMENT, type Experiment, type ExperimentChoices, experimentOn } from "@luke/settings";
 import { isWireString, type UnparsedWireValue } from "@luke/wire";
+import {
+  EXPERIMENT,
+  type Experiment,
+  type ExperimentChoices,
+  experimentOn,
+} from "./experiments.js";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
