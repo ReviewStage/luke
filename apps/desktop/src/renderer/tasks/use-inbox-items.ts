@@ -1,124 +1,66 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxAnswerView,
-} from "@luke/features/coding-agent-view";
-import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { InboxReader } from "./use-task-inbox";
+import { useMemo } from "react";
+import { useFollowedInboxes, useWindowInboxFollower } from "./use-followed-inboxes";
 
 /**
- * use-inbox-items.ts -- every listed plan's inbox items for the window's Inbox, each plan read once and again only when main says it changed.
+ * use-inbox-items.ts -- every listed plan's inbox items for the window's Inbox, each plan followed while it is listed and pushed as it changes.
  *
  * The window's Inbox lists the items of every plan holding one, settled as
  * well as waiting, and main's read of the account carries only what waits,
- * in brief. So each plan main lists is read whole here, from the start, which
- * the service answers at once, and read again only when main's list says
- * the plan's latest item moved, rather than holding a read open on every
- * plan: main's own read is already held open on the account, and is what
- * hears a change. The plan whose item is chosen holds its own read open
- * besides (`use-task-inbox.ts`), which answers and is drawn in this one's
- * place, so an answer shows at once. An answer to a read a newer one
- * overtook is let go, items and failure alike. A read that did not answer leaves the
- * plan as it was last read, or unread, and says so, with Try again; a
- * later change of the plan's asks again of its own accord.
+ * in brief. So each plan main lists is followed whole here
+ * (`use-followed-inboxes.ts`), and its items are pushed to the window as
+ * they change rather than read again. A plan that could not be read
+ * leaves its items as they were last pushed, or none, and says so, with
+ * Try again; one main lists no more keeps its items as last pushed.
  */
-
-/** One plan's items as last read, and the moment main said its latest item changed when they were asked for. */
-interface Read {
-  readonly at: number;
-  readonly items: readonly InboxItem[];
-}
-
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** What the window's Inbox lists from. */
 export interface InboxItemsControl {
-  /** Each plan's items as last read, by plan; a plan not yet read is absent. */
+  /** Each plan's items as last pushed, by plan; a plan not yet pushed is absent. */
   readonly items: ReadonlyMap<string, readonly InboxItem[]>;
-  /** Whether a plan's last read did not answer, so the list offers to try again. */
+  /** Whether a listed plan could not be read, so the list offers to try again. */
   readonly failed: boolean;
-  /** Whether a listed plan has changed since its items were last read, and no read of it has failed: its items may be older than it. */
+  /** Whether a listed plan has not been pushed as main says it now stands, and was not refused: its items are on their way. */
   readonly pending: boolean;
-  /** The plans whose items are read as of main's latest word of them, or read and listed no more, so an item they do not hold is not theirs. */
+  /** The plans pushed as main says they now stand, or pushed and listed no more, which stand for them whole, so an item they do not hold is not theirs. */
   readonly current: ReadonlySet<string>;
   readonly onRetry: () => void;
+}
+
+/** When the latest of the items changed; nothing for none. */
+function newest(items: readonly InboxItem[]): number {
+  return items.reduce((latest, item) => Math.max(latest, item.updatedAt), Number.NEGATIVE_INFINITY);
 }
 
 export function useInboxItems(input: {
   /** Every plan the Inbox lists, as main last read them. */
   holdings: readonly AppInboxTaskHolding[];
-  readInbox: InboxReader;
 }): InboxItemsControl {
-  const { holdings, readInbox } = input;
-  const [reads, setReads] = useState<ReadonlyMap<string, Read>>(new Map());
-  const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
-  const [attempt, setAttempt] = useState(0);
-  // The read out for each plan, by the moment it asks for, so a plan is asked once per change.
-  const asking = useRef(new Map<string, number>());
-  // The latest moment each plan was asked for, so an answer to an earlier ask, landing last, is let go.
-  const newest = useRef(new Map<string, number>());
-  const live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
-  const latest = useRef({ readInbox, reads });
-  latest.current = { readInbox, reads };
-
-  // A retry's press asks again of the plans whose read failed, the ones not yet read.
-  useEffect(() => {
-    for (const { taskId, updatedAt } of holdings) {
-      if (latest.current.reads.get(taskId)?.at === updatedAt) continue;
-      if (asking.current.get(taskId) === updatedAt) continue;
-      asking.current.set(taskId, updatedAt);
-      newest.current.set(taskId, Math.max(newest.current.get(taskId) ?? updatedAt, updatedAt));
-      latest.current
-        .readInbox({ taskId: taskId, after: INBOX_CURSOR_START })
-        .catch((): CodingAgentInboxAnswerView => UNANSWERED)
-        .then((answer) => {
-          if (asking.current.get(taskId) === updatedAt) asking.current.delete(taskId);
-          // Note that a superseded answer moves neither the items nor the failure, because the newer ask's answer says both.
-          if (!live.current || updatedAt < (newest.current.get(taskId) ?? updatedAt)) return;
-          const failure = "failure" in answer;
-          setFailed((was) => {
-            if (was.has(taskId) === failure) return was;
-            const next = new Set(was);
-            if (failure) next.add(taskId);
-            else next.delete(taskId);
-            return next;
-          });
-          if (failure) return;
-          setReads((was) => new Map(was).set(taskId, { at: updatedAt, items: answer.items }));
-        });
-    }
-  }, [holdings, attempt]);
-
-  const onRetry = useCallback(() => {
-    setFailed(new Set());
-    setAttempt((count) => count + 1);
-  }, []);
-  const items = useMemo(
-    () => new Map([...reads].map(([taskId, read]) => [taskId, read.items])),
-    [reads],
+  const { holdings } = input;
+  const ids = useMemo(() => holdings.map((holding) => holding.taskId), [holdings]);
+  const { items, failed, onRetry } = useFollowedInboxes(
+    INBOX_SCOPE_KIND.PLAN,
+    ids,
+    useWindowInboxFollower(),
   );
-  // Note that only a plan still listed fails the list, because one another workspace listed is not drawn.
-  const pending = holdings.some(
-    ({ taskId: planId, updatedAt }) => reads.get(planId)?.at !== updatedAt && !failed.has(planId),
-  );
-  // Note that a plan main lists no more has no newer read on its way, so its last read stands.
-  const current = new Set(
-    [...reads].flatMap(([planId, read]) => {
-      const holding = holdings.find((each) => each.taskId === planId);
-      return holding === undefined || holding.updatedAt === read.at ? [planId] : [];
-    }),
+  // Note that a plan main says changed later than anything pushed of it is not current yet, because
+  // its push may land a moment after main's own word of the change.
+  const current = useMemo(
+    () =>
+      new Set(
+        [...items].flatMap(([taskId, held]) => {
+          const holding = holdings.find((each) => each.taskId === taskId);
+          return holding === undefined || newest(held) >= holding.updatedAt ? [taskId] : [];
+        }),
+      ),
+    [items, holdings],
   );
   return {
     items,
-    failed: holdings.some((holding) => failed.has(holding.taskId)),
-    pending,
+    failed: ids.some((taskId) => failed.has(taskId)),
+    pending: ids.some((taskId) => !current.has(taskId) && !failed.has(taskId)),
     current,
     onRetry,
   };

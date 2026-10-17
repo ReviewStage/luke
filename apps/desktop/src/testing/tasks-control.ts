@@ -121,7 +121,11 @@ export function codingAgentsControl(
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readOverview: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     changesPeople: new Map(),
-    readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    inboxFollower: {
+      follow: () => undefined,
+      unfollow: () => undefined,
+      onInbox: () => () => undefined,
+    },
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,

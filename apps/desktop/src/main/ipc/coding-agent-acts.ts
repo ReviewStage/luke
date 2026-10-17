@@ -1,7 +1,6 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-  type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
@@ -10,10 +9,8 @@ import {
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -59,9 +56,10 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
  * panel's own answer; on its way it is noted by the notices
  * (`@luke/host/agent-notices`), which hold where each agent stands so an end
  * the panel is not looking at is still announced, and which plan's Inbox
- * the panel shows, so an item it is looking at is not. The plan's inbox is
- * answered to the panel alone: the notices watch what waits across the
- * account on a read of their own. Nothing else is held here.
+ * the panel shows, so an item it is looking at is not. An item's answer is
+ * the panel's alone, and a plan's inbox is followed for it apart
+ * (`inbox-follow-acts.ts`): the notices watch what waits across the account
+ * on a follow of their own. Nothing else is held here.
  *
  * The account's own provider keys, which an agent runs on, are asked here
  * too, from Settings in the same panel: a save's key passes through to the
@@ -121,10 +119,6 @@ export interface CodingAgentActsDependencies {
     dictationTranscribe(
       params: DictationTranscribeParams,
     ): Effect.Effect<DictationTranscribeAnswerView>;
-    codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
-    codingAgentAgentInbox(
-      params: CodingAgentAgentInboxParams,
-    ): Effect.Effect<CodingAgentInboxAnswerView>;
     codingAgentInboxAnswer(
       params: CodingAgentInboxAnswerParams,
     ): Effect.Effect<CodingAgentInboxAnsweredView>;
@@ -180,8 +174,6 @@ type CodingAgentActKind =
   | typeof ACT_KIND.PLAN_TEMPLATE_REVISION
   | typeof ACT_KIND.PLAN_TEMPLATE_RESTORE
   | typeof ACT_KIND.DICTATION_TRANSCRIBE
-  | typeof ACT_KIND.CODING_AGENTS_INBOX
-  | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT
   | typeof ACT_KIND.CODING_AGENTS_PICTURE;
@@ -348,14 +340,6 @@ export function codingAgentActRows(
     [ACT_KIND.DICTATION_TRANSCRIBE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.DICTATION_TRANSCRIBE, sender);
       return host.dictationTranscribe(params);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX, sender);
-      return host.codingAgentInbox(params);
-    },
-    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_AGENT_INBOX, sender);
-      return host.codingAgentAgentInbox(params);
     },
     [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, sender);

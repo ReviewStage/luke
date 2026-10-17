@@ -22,7 +22,6 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
@@ -31,7 +30,6 @@ import {
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
-  codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChooseParamsSchema,
@@ -41,10 +39,8 @@ import {
   codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerParamsSchema,
-  codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxAttachmentViewSchema,
-  codingAgentInboxParamsSchema,
   codingAgentInboxScopeSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
@@ -484,20 +480,13 @@ export const ACT_KIND = {
    */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
-   * The plan's inbox of what its coding agents need of the developer: read
-   * past a cursor (held open by the service while nothing changed), and one
-   * item answered against the revision the panel drew, under the panel's own
-   * key. The window holds what it draws; nothing here does.
-   */
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
-  /**
    * A plan's inbox, or one agent's, followed by the window that asks and let
    * go by it: what it holds is pushed to that window alone on `app:inbox`,
    * each time it changes, until the window lets it go or its page is gone.
    */
   CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
   CODING_AGENTS_INBOX_UNFOLLOW: "codingAgents.inboxUnfollow",
+  /** One item of an inbox answered against the revision the panel drew, under the panel's own key. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
@@ -1361,16 +1350,6 @@ export const ACT = {
       isReadable(dictationTranscribeAnswerViewSchema),
     ),
     refusal: "Could not transcribe the recording on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX]: {
-    payload: actSchema(codingAgentInboxParamsSchema),
-    result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
-    refusal: "Could not read the task's inbox on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: {
-    payload: actSchema(codingAgentAgentInboxParamsSchema),
-    result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
-    refusal: "Could not read the agent's inbox on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: {
     payload: actSchema(codingAgentInboxScopeSchema),

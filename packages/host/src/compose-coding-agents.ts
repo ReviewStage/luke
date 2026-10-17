@@ -6,7 +6,6 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxChanged,
   type CodingAgentInboxScope,
@@ -16,14 +15,12 @@ import {
   type CodingAgentOverviewAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
-  codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
   codingAgentGitHubImageParamsSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAttachmentParamsSchema,
-  codingAgentInboxParamsSchema,
   codingAgentInboxScopeSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -71,7 +68,6 @@ import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
   type InboxScopeKey,
-  inboxPast,
   type ScopeInboxes,
   scopeInboxes,
 } from "./scope-inbox-follow.js";
@@ -79,14 +75,15 @@ import {
 /**
  * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the plan's inbox, one item of it answered, and what waits across the account.
  *
- * Nothing is held here but the account inbox's follower. The window holds the agents it draws and the
+ * Nothing is held here but the followers of the account's inbox and of
+ * each followed plan's or agent's. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
  * agent, and while an agent's tab shows its running transcript, and every
  * ask is one call of the service answered whole. The transcript read is
  * one the service holds open while the agent runs and nothing new stands,
- * and the inbox read another, held while nothing in it changed, so each of
- * the window's loops is one held read after another rather than a clock of
- * its own, and a loop ends when the window stops asking. What waits across
+ * and a plan's or an agent's inbox is followed rather than asked: main
+ * follows it while a window draws it, and it is heard as `INBOX_CHANGED`
+ * events (`scope-inbox-follow.ts`). What waits across
  * the account is followed rather than asked: main follows it while an
  * account is signed in (`agent-notices.ts`), and it is heard as events,
  * over Neon Realtime where the service seals it (`account-inbox-follow.ts`),
@@ -475,35 +472,6 @@ function composed(
         );
         const answer = yield* asked(client.githubImage(agentId, src));
         return carried<CodingAgentGitHubImageView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_INBOX]: (params) =>
-      Effect.gen(function* () {
-        const { taskId, after } = yield* read(
-          codingAgentInboxParamsSchema,
-          params,
-          "reading a plan's inbox names the plan and a cursor",
-        );
-        const answer = gate()
-          ? yield* inboxPast(inboxes, `plan:${taskId}`, after, asked(client.inbox(taskId, after)))
-          : UNANSWERED;
-        return carried<CodingAgentInboxAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, after } = yield* read(
-          codingAgentAgentInboxParamsSchema,
-          params,
-          "reading an agent's inbox names the agent and a cursor",
-        );
-        const answer = gate()
-          ? yield* inboxPast(
-              inboxes,
-              `agent:${agentId}`,
-              after,
-              asked(client.agentInbox(agentId, after)),
-            )
-          : UNANSWERED;
-        return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW]: (params) =>
       Effect.gen(function* () {

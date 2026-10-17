@@ -12,11 +12,11 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerView,
   type CodingAgentListAnswer,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
-  INBOX_CURSOR_START,
   INBOX_FIELD,
   INBOX_IMAGE_TYPE,
   INBOX_REPLY,
@@ -42,6 +42,7 @@ import { handState } from "#testing/app-state";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { focusByKeyboard, layWindowStyles, ringClippedBy, ringOf } from "#testing/focus-ring";
+import { followedInboxes } from "#testing/followed-inboxes";
 import { relayout } from "#testing/resize-observer";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
@@ -167,8 +168,6 @@ interface ReadOutcome {
   readonly value: CodingAgentInboxAnswerView;
 }
 
-/** How the next held read of a plan, one past the cursor, answers: held open while nothing changes unless a test says. */
-let heldRead: (taskId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
 /** How a read of a plan from the start answers, where a test holds it in its own hands. */
 let startRead: ((taskId: string) => Promise<ReadOutcome> | undefined) | undefined;
 /** Each agent with no plan's items, as its own inbox read answers them. */
@@ -185,13 +184,57 @@ let pageAgents = new Map<string, CodingAgentSummary>();
 /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
 let imageReads: (() => void)[] = [];
 
+/** Main's follows for the window, each followed inbox pushed as the knobs above say. */
+let main = followedInboxes(() => undefined);
+
+/** A read's answer as main pushes it: the items, or why there are none. */
+function pushedOf(answer: CodingAgentInboxAnswerView) {
+  return "failure" in answer ? { failure: answer.failure } : { items: answer.items };
+}
+
+/** A plan's inbox as main pushes it now: as `startRead` settles it, where it holds one, or as `inboxes` holds it. */
+function answerPlan(taskId: string) {
+  const held = startRead?.(taskId);
+  if (held === undefined) return { items: inboxes.get(taskId) ?? [] };
+  void held.then((outcome) =>
+    main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: taskId }, pushedOf(outcome.value)),
+  );
+  return undefined;
+}
+
+/** An agent's inbox as main pushes it now, the push counted: refused, held in the test's hands, or as `agentInboxes` holds it. */
+function answerAgent(agentId: string) {
+  agentReads.push(agentId);
+  if (agentReadFails) return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+  const items = agentInboxes.get(agentId) ?? [];
+  const hold = holdAgentRead;
+  if (hold === undefined) return { items };
+  hold(() => main.push({ kind: INBOX_SCOPE_KIND.AGENT, id: agentId }, { items }));
+  return undefined;
+}
+
+/** Every followed inbox pushed again as it now stands, as main pushes a change. */
+function pushAgain(): void {
+  for (const taskId of [...inboxes.keys(), BILLING.id, INVITES.id]) {
+    const scope = { kind: INBOX_SCOPE_KIND.PLAN, id: taskId };
+    if (!main.isFollowed(scope)) continue;
+    const inbox = answerPlan(taskId);
+    if (inbox !== undefined) main.push(scope, inbox);
+  }
+  for (const agentId of agentInboxes.keys()) {
+    const scope = { kind: INBOX_SCOPE_KIND.AGENT, id: agentId };
+    if (!main.isFollowed(scope)) continue;
+    const inbox = answerAgent(agentId);
+    if (inbox !== undefined) main.push(scope, inbox);
+  }
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   inboxes = new Map([
     [BILLING.id, [THRESHOLD, RETRY]],
     [INVITES.id, [EXPIRY]],
   ]);
-  heldRead = () => new Promise(() => undefined);
   startRead = undefined;
   listedAgents = [AGENT];
   agentInboxes = new Map();
@@ -204,11 +247,15 @@ beforeEach(() => {
   copied = [];
   pageAgents = new Map();
   imageReads = [];
+  main = followedInboxes((scope) => {
+    return scope.kind === INBOX_SCOPE_KIND.PLAN ? answerPlan(scope.id) : answerAgent(scope.id);
+  });
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
+      onInbox: main.onInbox,
       act: (request: Act) => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
@@ -256,28 +303,8 @@ beforeEach(() => {
             ),
           );
         }
-        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-          const { agentId, after } = request.payload;
-          if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
-          agentReads.push(agentId);
-          if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-          const items = agentInboxes.get(agentId) ?? [];
-          const hold = holdAgentRead;
-          if (hold !== undefined) {
-            return new Promise((resolve) =>
-              hold(() =>
-                resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } }),
-              ),
-            );
-          }
-          return done({ items, cursor: "1" });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
-          const { taskId, after } = request.payload;
-          // A read past the cursor is held open while nothing changes, as the service holds it.
-          if (after !== INBOX_CURSOR_START) return heldRead(taskId);
-          return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
-        }
+        const followed = main.act(request);
+        if (followed !== undefined) return followed;
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       },
     },
@@ -309,9 +336,16 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly TaskSummary[]>([BILLING, INVITES]);
-    setHolding = setHeld;
+    // Note that main's word of a change comes with the change pushed, as the host follows both.
+    setHolding = (next) => {
+      setHeld(next);
+      pushAgain();
+    };
     const [taskless, setWaiting] = useState(firstTaskless);
-    setTaskless = setWaiting;
+    setTaskless = (next) => {
+      setWaiting(next);
+      pushAgain();
+    };
     setTasks = setListed;
     return createElement(DesktopInbox, {
       tasks: tasksControl({
@@ -1627,30 +1661,6 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
   assert.ok(listReads.length > 0, "the agent heard the note, so its list is read again");
 });
 
-/** An answer the act gives the renderer, the view it carries settled now. */
-function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
-  return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-}
-
-/** A read the test answers when it chooses. */
-interface PendingRead {
-  readonly promise: Promise<ReadOutcome>;
-  readonly settle: (value: CodingAgentInboxAnswerView) => void;
-}
-
-/** A read held until the test settles it. */
-function pending(): PendingRead {
-  let settle: PendingRead["settle"] = () => undefined;
-  const promise = new Promise<ReadOutcome>((resolve) => {
-    settle = (value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-  });
-  return { promise, settle };
-}
-
-const UNANSWERED_READ: CodingAgentInboxAnswerView = {
-  failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
-};
-
 test("a chosen item whose plan leaves the account's list, archived on another Mac, gives way to the first item still waiting", async () => {
   const { page } = mount();
   await settle();
@@ -1667,74 +1677,6 @@ test("a chosen item whose plan leaves the account's list, archived on another Ma
   assert.equal(
     page.querySelector(".inbox-view-items [data-inbox-title]")?.textContent,
     "Expire after 7 days?",
-  );
-});
-
-test("once the chosen plan's own held read fails, the list's read of that plan stands again, so an item posted since still lists", async () => {
-  heldRead = () => answered(UNANSWERED_READ);
-  const { page } = mount();
-  await settle();
-  const posted = item("a1b2c3d4-0000-4000-8000-000000000004", "Page on-call too?", 7_000);
-  inboxes.set(BILLING.id, [THRESHOLD, RETRY, posted]);
-  act(() =>
-    setHolding([
-      { taskId: BILLING.id, items: 3, updatedAt: 7_000 },
-      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
-    ]),
-  );
-  await settle();
-  assert.ok(listed(page).includes("*Page on-call too?"), listed(page).join(" | "));
-});
-
-test("once the chosen plan's own held read fails, an image the list's read draws since still lands", async () => {
-  heldRead = () => answered(UNANSWERED_READ);
-  const { page } = mount();
-  await settle();
-  const shot = {
-    type: INBOX_BLOCK.IMAGE,
-    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c72",
-    alt: "The retry schedule",
-  };
-  inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, blocks: [shot] }, RETRY]);
-  act(() =>
-    setHolding([
-      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
-      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
-    ]),
-  );
-  await settle();
-  for (const land of imageReads.splice(0)) land();
-  await settle();
-  assert.equal(
-    page.querySelector<HTMLImageElement>("[data-inbox-image] img")?.alt,
-    "The retry schedule",
-  );
-});
-
-test("an answer to a plan's read that a newer one overtook moves nothing: the newer read's failure still says so with Try again", async () => {
-  const first = pending();
-  const second = pending();
-  const reads = [first, second];
-  startRead = (taskId) => (taskId === INVITES.id ? reads.shift()?.promise : undefined);
-  const { page } = mount();
-  await settle();
-  act(() =>
-    setHolding([
-      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
-      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
-    ]),
-  );
-  await settle();
-  second.settle(UNANSWERED_READ);
-  await settle();
-  first.settle({ items: [EXPIRY], cursor: "1" });
-  await settle();
-  const note = page.querySelector<HTMLElement>('.inbox-tasks [role="alert"]');
-  assert.match(note?.textContent ?? "", /Some items could not be read\./u);
-  assert.equal(
-    listed(page).includes("*Expire after 7 days?"),
-    false,
-    "the overtaken read lists nothing",
   );
 });
 
@@ -1961,29 +1903,6 @@ test("a read of an agent with no plan that fails is said with Retry, which reads
 
   assert.ok(agentReads.filter((agentId) => agentId === SECOND_AGENT).length > before);
   assert.doesNotMatch(page.querySelector(".inbox-tasks")?.textContent ?? "", /could not be read/u);
-});
-
-test("an agent whose waiting items come back to what it was read for lets go of the read asked between, so its late answer draws nothing", async () => {
-  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
-  await settle();
-  // The read asked for the items between is held, to land only after they came back.
-  let landBetween: () => void = () => undefined;
-  const answered = agentInboxes;
-  agentInboxes = new Map([[SECOND_AGENT, []]]);
-  holdAgentRead = (respond) => {
-    landBetween = respond;
-  };
-  act(() => setTaskless([QUARANTINE, THIRD_ASK].map(waitingTaskless)));
-  await settle();
-  holdAgentRead = undefined;
-  agentInboxes = answered;
-  act(() => setTaskless([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless)));
-  await settle();
-  act(() => landBetween());
-  await settle();
-
-  assert.ok(listed(page).includes("*Skip the slow suite?"), listed(page).join(" | "));
 });
 
 test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {

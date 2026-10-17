@@ -178,8 +178,6 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
         }),
       codingAgentPage: () =>
         Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
-      codingAgentAgentInbox: () =>
-        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
       codingAgentPullRequest: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`pull-request:${agentId}`);
@@ -259,11 +257,6 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
         Effect.sync(() => {
           asked.push(`transcribe:${audio}:${keywords.join(",")}`);
           return { text: "Run the tests" };
-        }),
-      codingAgentInbox: ({ taskId, after }) =>
-        Effect.sync(() => {
-          asked.push(`inbox:${taskId}:${after}`);
-          return { items: [ITEM], cursor: "7" };
         }),
       codingAgentInboxAnswer: ({ itemId, revision, reply, clientKey }) =>
         Effect.sync(() => {

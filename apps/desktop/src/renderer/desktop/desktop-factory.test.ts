@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -23,6 +23,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { followedInboxes } from "#testing/followed-inboxes";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -499,22 +500,7 @@ test("a question a teammate's agent asks, which main does not count as the reade
     postedAt: NOW - HOUR,
     updatedAt: NOW - HOUR,
   };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        const value: CodingAgentInboxAnswerView = {
-          items: request.payload.taskId === BILLING.id ? [asked] : [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
-    },
-  });
+  answerInbox((planId) => (planId === BILLING.id ? [asked] : []));
   const { page } = mount([SEARCH, BILLING], {
     // Main's own count holds nothing: the agent is a teammate's.
     inbox: [],
@@ -532,32 +518,47 @@ test("a question a teammate's agent asks, which main does not count as the reade
   ]);
 });
 
-/** The bridge answering a plan's Inbox read as `answer` says, counting the reads. */
+/** The question main counts on Billing, answered since, as the plan's inbox holds it. */
+const ANSWERED: InboxItem = {
+  id: "i1",
+  agentId: AGENT_ID,
+  key: "1",
+  revision: 2,
+  version: INBOX_WIRE_VERSION,
+  title: QUESTION,
+  blocks: [],
+  response: { type: INBOX_RESPONSE.APPROVAL },
+  needsReply: true,
+  status: INBOX_STATUS.ANSWERED,
+  postedAt: NOW - HOUR,
+  updatedAt: NOW - HOUR,
+};
+
+/** Main pushing a plan's inbox as `answer` says once it is followed, or that it could not be read where it says nothing, counting the follows. */
 function answerInbox(answer: (planId: string) => readonly InboxItem[] | undefined) {
-  const counted = { reads: 0 };
+  const main = followedInboxes(({ id }) => {
+    const items = answer(id);
+    return items === undefined ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { items };
+  });
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       ...window.luke,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        counted.reads += 1;
-        const items = answer(request.payload.taskId);
-        if (items === undefined) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No service." });
-        }
-        const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
+      onInbox: main.onInbox,
+      act: (request: Act) =>
+        main.act(request) ??
+        Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
     },
   });
-  return counted;
+  return {
+    get reads() {
+      return main.asked.length;
+    },
+  };
 }
 
 test("a question answered since main last counted it leaves Build once the Inbox's read says so", async () => {
-  answerInbox(() => []);
+  answerInbox(() => [ANSWERED]);
   const { page } = mount([SEARCH, BILLING], {
     inbox: [
       {
@@ -607,7 +608,7 @@ test("questions that could not be read say so with Retry, and the reader's own s
 });
 
 test("one plan's failed Inbox read keeps main's count for that plan alone: a question another plan's read shows answered stays gone", async () => {
-  const counted = answerInbox((planId) => (planId === BILLING.id ? [] : undefined));
+  const counted = answerInbox((planId) => (planId === BILLING.id ? [ANSWERED] : undefined));
   const other = task(7, "Invites", HOUR);
   const { page } = mount([SEARCH, BILLING, other], {
     inbox: [
@@ -653,9 +654,8 @@ test("a question read that fails says so even while a refresh of the task list h
   assert.ok(alerts.some((each) => /Your tasks could not be read\./u.test(each)));
 });
 
-test("a question main counts after a plan's last read stands while that plan's reread is out or failed", async () => {
-  let fail = false;
-  answerInbox(() => (fail ? undefined : []));
+test("a question main counts later than a plan's last push stands until the plan's push catches up", async () => {
+  answerInbox(() => [ANSWERED]);
   const listed = (updatedAt: number) => ({
     tasks: [SEARCH, BILLING],
     archived: [],
@@ -669,8 +669,7 @@ test("a question main counts after a plan's last read stands while that plan's r
   const { page, redraw } = mount([SEARCH, BILLING], { listed: listed(NOW - HOUR) });
   await settle();
   assert.deepEqual(rows(page, "build"), ["Plan index · Search across plans"]);
-  // Main counts a new question on the plan; its reread fails.
-  fail = true;
+  // Main counts a new question on the plan before the plan's own push of it lands.
   redraw({ listed: listed(NOW), inbox: [asked] });
   await settle();
   assert.equal(rows(page, "build")[0], `${QUESTION} · Mercury payouts (waits)`);

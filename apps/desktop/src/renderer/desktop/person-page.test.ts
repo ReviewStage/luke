@@ -9,7 +9,7 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -29,6 +29,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
+import { followedInboxes } from "#testing/followed-inboxes";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { OpenSettingsProvider } from "../open-settings";
@@ -202,26 +203,29 @@ beforeEach(() => {
   inboxHeld = false;
   copied = [];
   window.localStorage.clear();
+  // Main pushes each plan's inbox, and the sweep agent's, as it is followed, unless the test holds or refuses them.
+  const main = followedInboxes(({ kind, id }) => {
+    if (inboxHeld) return undefined;
+    if (kind === INBOX_SCOPE_KIND.AGENT) return { items: [SWEEP_ITEM] };
+    return inboxRefused
+      ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+      : { items: INBOXES.get(id) ?? [] };
+  });
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
+      onInbox: main.onInbox,
       act: (request: Act) => {
-        const inbox =
-          request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
-          request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
-        if (inbox && inboxHeld) return new Promise(() => undefined);
+        const followed = main.act(request);
+        if (followed !== undefined) return followed;
         if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
           copied.push(request.payload.words);
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
         }
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-          const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST && !automationsRefused) {
           return Promise.resolve({
@@ -231,13 +235,6 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
-          const value: CodingAgentInboxAnswerView = {
-            items: INBOXES.get(request.payload.taskId) ?? [],
-            cursor: "1",
-          };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
       },

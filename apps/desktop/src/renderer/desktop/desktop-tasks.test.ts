@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerView,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import {
-  INBOX_CURSOR_START,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -25,6 +25,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { followedInboxes } from "#testing/followed-inboxes";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { relayout } from "#testing/resize-observer";
 import { runAppCommand, useAppKeymap } from "../app-commands";
@@ -175,10 +176,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
             },
             agents: codingAgentsControl({
               agentIds: [agentId],
-              readInbox: ({ after }) =>
-                after === INBOX_CURSOR_START
-                  ? Promise.resolve({ items: [], cursor: "1" })
-                  : new Promise(() => undefined),
+              inboxFollower: followedInboxes(() => ({ items: [] })).follower,
             }),
           }),
         }),
@@ -233,7 +231,7 @@ async function narrowTaskInbox(
   items: readonly InboxItem[],
   fullScreen = false,
   width = 700,
-  /** What the read held open past the first answers, where a test settles it; else it stays open. */
+  /** What is pushed after the first push, where a test settles it; else nothing is. */
   later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
 ) {
   Object.defineProperty(window, "matchMedia", {
@@ -244,6 +242,14 @@ async function narrowTaskInbox(
       removeEventListener: () => undefined,
     }),
   });
+  // The inbox is pushed as `items` once followed, and again as `later` says once it settles.
+  const main = followedInboxes(() => ({ items }));
+  void later.then((answer) =>
+    main.push(
+      { kind: INBOX_SCOPE_KIND.PLAN, id: TASK.id },
+      "failure" in answer ? { failure: answer.failure } : { items: answer.items },
+    ),
+  );
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
@@ -266,12 +272,7 @@ async function narrowTaskInbox(
             sidePanel: { ...tasksControl().sidePanel, open: fullScreen, fullScreen },
             agents: codingAgentsControl({
               agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
-              readInbox: ({ after }) =>
-                after === INBOX_CURSOR_START
-                  ? Promise.resolve({ items, cursor: "1" })
-                  : after === "1"
-                    ? later
-                    : new Promise(() => undefined),
+              inboxFollower: main.follower,
             }),
           }),
         }),

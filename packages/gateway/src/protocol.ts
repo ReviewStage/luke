@@ -176,9 +176,6 @@ export const GATEWAY_METHOD = {
   PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
-  /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   /**
    * One plan's inbox, or one agent's, followed from now until it is let go
    * or the account signs out: over Neon Realtime where the service seals it,
