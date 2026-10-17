@@ -90,7 +90,7 @@ export const REPLY_TO_COMMENT_TOOL = {
   name: AGENT_TOOL.REPLY_TO_COMMENT,
   description:
     "Reply in one comment thread on this task's plan, by its id, as yourself; every member of the workspace sees it beside " +
-    "the words it is on. Reply where someone sent you the thread, answering what it asks; posting asks no one anything.",
+    "the words it is on. Reply where someone sent you the thread, answering what it asks; your replies send the thread to no one.",
   inputSchema: REPLY_INPUT,
 } as const;
 

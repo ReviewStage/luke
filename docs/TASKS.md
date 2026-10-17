@@ -38,7 +38,7 @@ A reviewer can hold the build to these as easily as to the layout:
   edited section reaches it as the document it is handed, marked as the
   developer's own words. The plan's open comment threads reach it the same
   way, as data beside the document; a thread reaches Luke as a request only
-  when a member sends it to him with Send to, and he answers it in the thread
+  when a member mentions him in it with \`@\`, and he answers it in the thread
   rather than on a call.
 - No Approve button, no readiness meter, no progress or coverage score, and
   no separate export or handoff screen. Earlier versions of the plan are

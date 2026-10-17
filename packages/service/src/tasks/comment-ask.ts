@@ -26,7 +26,8 @@ import {
 /**
  * comment-ask.ts -- a plan's comment thread sent to Luke or to one of the task's coding agents: the words it is handed over in, and the hand-over.
  *
- * A member's Send to hands the thread itself over as the request: who wrote
+ * A member's \`@\` of Luke or of one of the task's agents in a comment hands
+ * the thread itself over as the request: who wrote
  * what in it, the words of the plan it is on, and what the one asked is to
  * do with it, which is to read the thread and the plan and answer in the
  * thread, and nothing more of what it discusses. A coding agent hears it as
@@ -34,9 +35,10 @@ import {
  * message to an agent takes (`coder-host/steer.ts`); Luke hears it as a
  * typed ask on the plan's planning conversation (`brain-host/brain-ask.ts`),
  * under the member's own bearer, which is the only way a typed turn opens.
- * Either is sent under the key the member's client made for the send, so a
- * send tried again is handed over once. Posting a comment hands nothing to
- * anyone; only this does.
+ * Either is sent under a key drawn from the one the member's client made for
+ * the comment, so a comment sent again is handed over once. A comment that
+ * mentions no one hands nothing to anyone, and an agent's own reply never
+ * does.
  */
 
 /** How long a comment of the thread may run in the words it is handed over in, so a long thread stays a message. */

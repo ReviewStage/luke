@@ -452,4 +452,133 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
         assert.equal(opened.length, handed, "nothing was handed over under the reply's key");
       }),
   );
+
+  it.effect(
+    "a reply that mentions Luke hands him the thread once, sent again or not, and one that mentions an agent not on the task asks no one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, taskId } = yield* openSharedTask;
+        const thread = threadIn(
+          yield* answer(
+            "comments",
+            request(COMMENTS, teammate, { id: taskId }, startBody("Is withdrawing in v1?")),
+          ),
+        );
+        const reply = (words: string, clientKey: string) =>
+          answer(
+            "comments",
+            request(
+              THREAD,
+              owner,
+              { id: taskId, thread: thread.id },
+              { action: PLAN_COMMENT_ACTION.REPLY, clientKey, words },
+            ),
+          );
+        const before = opened.length;
+        const key = randomUUID();
+        const words = `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) what do you think?`;
+
+        const first = threadIn(yield* reply(words, key));
+        yield* reply(words, key);
+        const elsewhere = threadIn(
+          yield* reply(
+            `[@Other](https://tryluke.dev/acme/plan/${randomUUID()}/agent/${randomUUID()}) saw this`,
+            randomUUID(),
+          ),
+        );
+
+        assert.equal(opened.length - before, 1, "Luke was handed the thread once");
+        assert.ok(
+          JSON.stringify(opened.at(-1)?.message).includes(
+            "Dean Stratakos sent you a comment thread",
+          ),
+        );
+        assert.deepEqual(
+          first.entries.map((entry) => [entry.kind, entry.asked?.actor]),
+          [
+            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
+            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
+            [PLAN_COMMENT_ENTRY.ASKED, PLAN_COMMENT_ACTOR.LUKE],
+          ],
+        );
+        assert.equal(
+          elsewhere.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED).length,
+          1,
+          "the other task's agent was asked nothing",
+        );
+      }),
+  );
+
+  it.effect(
+    "a reply the store refuses hands no one the thread, though its words mention Luke",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedTask;
+        const taken = randomUUID();
+        yield* answer(
+          "comments",
+          request(
+            COMMENTS,
+            owner,
+            { id: taskId },
+            { ...startBody("First thread"), clientKey: taken },
+          ),
+        );
+        const other = threadIn(
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("Second"))),
+        );
+        const before = opened.length;
+
+        const refused = yield* answer(
+          "comments",
+          request(
+            THREAD,
+            owner,
+            { id: taskId, thread: other.id },
+            {
+              action: PLAN_COMMENT_ACTION.REPLY,
+              clientKey: taken,
+              words: `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) please answer`,
+            },
+          ),
+        );
+
+        assert.deepEqual(JSON.parse(refused.body), { refused: PLAN_COMMENT_REFUSAL.KEY_TAKEN });
+        assert.equal(opened.length, before, "Luke was handed nothing");
+      }),
+  );
+
+  it.effect(
+    "a reply sent again under its key with other words that mention Luke hands him nothing, since those words never posted",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedTask;
+        const thread = threadIn(
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("v1?"))),
+        );
+        const key = randomUUID();
+        const reply = (words: string) =>
+          answer(
+            "comments",
+            request(
+              THREAD,
+              owner,
+              { id: taskId, thread: thread.id },
+              { action: PLAN_COMMENT_ACTION.REPLY, clientKey: key, words },
+            ),
+          );
+        yield* reply("No action needed.");
+        const before = opened.length;
+
+        const again = threadIn(
+          yield* reply(`[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) please answer`),
+        );
+
+        assert.equal(opened.length, before, "Luke was handed nothing");
+        assert.equal(
+          again.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED).length,
+          0,
+        );
+      }),
+  );
 });

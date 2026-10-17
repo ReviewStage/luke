@@ -9,6 +9,7 @@ import {
   withdrawPlanCommentAsk,
 } from "@luke/database/models/plan-comments";
 import { readTask } from "@luke/database/models/task-store";
+import { askedInWords } from "@luke/features/mention-link";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -17,6 +18,7 @@ import {
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENTS_CURSOR_START,
   type PlanCommentActionRequest,
+  type PlanCommentAsked,
   type PlanCommentsAnswer,
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
@@ -71,7 +73,8 @@ import {
  * answered with the thread as it now stands. Every member of the plan's
  * workspace reads and writes every thread; a plan the account does not reach,
  * or an archived one for a write, answers as not found, and a thread the plan
- * does not hold as not found too. Posting a comment asks no agent anything.
+ * does not hold as not found too. A member's comment that mentions Luke or
+ * one of the task's agents with \`@\` hands each the thread (\`mentionsHandedOver\`).
  */
 
 const PLAN_COMMENTS_PATH = {
@@ -203,7 +206,19 @@ const commentsEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentsEndpoint")(f
   const outcome = yield* hostedStoreOrUnavailable(
     startPlanCommentThread(writer, taskId, start.success),
   );
-  return yield* outcomeAnswer(outcome, true);
+  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) {
+    return yield* outcomeAnswer(outcome, true);
+  }
+  const asked = postedAsSent(outcome.answer.thread, userId, start.success.words)
+    ? yield* mentionsHandedOver(seams, request, {
+        userId,
+        taskId,
+        threadId: outcome.answer.thread.id,
+        words: start.success.words,
+        clientKey: start.success.clientKey,
+      })
+    : undefined;
+  return yield* outcomeAnswer(asked ?? outcome, true);
 });
 
 /** POST does one thing to one thread of the plan, as the member the bearer is. */
@@ -244,8 +259,110 @@ const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint"
     });
     if (refused !== undefined) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { refused });
   }
+  // Note that a reply the store refused, at its bound or under a key another thread holds, posted nothing, so it hands nothing over.
+  if (
+    action.success.action === PLAN_COMMENT_ACTION.REPLY &&
+    outcome.status === PLAN_COMMENT_OUTCOME.DONE &&
+    "thread" in outcome.answer
+  ) {
+    const asked = postedAsSent(outcome.answer.thread, userId, action.success.words)
+      ? yield* mentionsHandedOver(seams, request, {
+          userId,
+          taskId,
+          threadId,
+          words: action.success.words,
+          clientKey: action.success.clientKey,
+        })
+      : undefined;
+    return yield* outcomeAnswer(asked ?? outcome, false);
+  }
   return yield* outcomeAnswer(outcome, false);
 });
+
+/**
+ * The thread handed to each one a member's words mention with \`@\`: Luke,
+ * where they mention this task's, and each of the task's standing agents;
+ * an agent of another task, or an archived one, is a reference, which asks
+ * no one. Each ask is written under a key drawn from the words' own, so the
+ * words sent again ask no one twice. A hand-over that does not land is taken
+ * back and goes unsaid, the words posted all the same. Answers the thread as
+ * the last ask that landed left it, or nothing where none did.
+ */
+const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: PlanCommentsAppSeams,
+  request: Request,
+  input: {
+    readonly userId: string;
+    readonly taskId: string;
+    readonly threadId: string;
+    readonly words: string;
+    readonly clientKey: string;
+  },
+) {
+  const { userId, taskId, threadId, words, clientKey } = input;
+  const asked = askedInWords(words);
+  const tos: readonly PlanCommentAsked[] = [
+    ...(asked.lukeOn.includes(taskId) ? [{ actor: PLAN_COMMENT_ACTOR.LUKE }] : []),
+    ...asked.agentIds.map((agentId) => ({ actor: PLAN_COMMENT_ACTOR.AGENT, agentId })),
+  ];
+  const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId } as const;
+  let landed: PlanCommentOutcome | undefined;
+  for (const to of tos) {
+    const handed = yield* Effect.gen(function* () {
+      if (
+        to.actor === PLAN_COMMENT_ACTOR.AGENT &&
+        (yield* askableAgent(userId, taskId, to)) === undefined
+      ) {
+        return undefined;
+      }
+      const ask = {
+        action: PLAN_COMMENT_ACTION.ASK,
+        clientKey: mentionKey(clientKey, to),
+        to,
+      } as const;
+      const outcome = yield* hostedStoreOrUnavailable(
+        actOnPlanCommentThread(writer, taskId, threadId, ask),
+      );
+      if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE) return undefined;
+      const refused = yield* askedHandedOver(seams, request, {
+        userId,
+        taskId,
+        answer: outcome.answer,
+        ask,
+      });
+      return refused === undefined ? outcome : undefined;
+    }).pipe(
+      // Note that one mention not taken leaves the others, and the words, as they are.
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    if (handed !== undefined) landed = handed;
+  }
+  return landed;
+});
+
+/**
+ * Whether the thread holds the member's comment in the words they sent: a
+ * key sent again with other words answers the comment first posted under
+ * it, whose words, not the new ones, say whom it asks, so it asks no one.
+ */
+function postedAsSent(thread: PlanCommentThread, userId: string, words: string): boolean {
+  return thread.entries.some(
+    (entry) =>
+      entry.kind === PLAN_COMMENT_ENTRY.COMMENT &&
+      entry.writer.by?.userId === userId &&
+      entry.words === words,
+  );
+}
+
+/**
+ * The key a mention's ask is written under: the words' own and whom it
+ * asks, each kept whole in one encoded record rather than spelled into one
+ * another, so no two comments and recipients spell the same key, and each is
+ * asked once whatever times the words are sent.
+ */
+function mentionKey(clientKey: string, to: PlanCommentAsked): string {
+  return JSON.stringify({ comment: clientKey, actor: to.actor, agent: to.agentId ?? null });
+}
 
 /** The section a thread's words stand in, by where they stand, else by its heading; nothing where neither is found. */
 function sectionOf(text: string, thread: PlanCommentThread): string | undefined {
