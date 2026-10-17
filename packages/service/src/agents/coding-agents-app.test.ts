@@ -141,6 +141,7 @@ import { and, eq } from "drizzle-orm";
 import {
   Clock,
   DateTime,
+  Deferred,
   Duration,
   Effect,
   Fiber,
@@ -4626,9 +4627,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       const checkout = sourceCheckout(yield* Effect.promise(() => temporaryDirectory(t, "copy-")));
       writeFileSync(join(checkout.checkout, "invites.ts"), "export const ttl = 7;\n");
       const sandbox = sourceSandbox(checkout, "stopped");
-      const opened = yield* sourceAgentOn((sent) =>
-        sandbox.answer(sent.url, sent.method, sent.body),
-      );
+      const opened = yield* sourceAgentOn(sandbox.answer);
       yield* claimRuntimeSession(opened.stored, "wrun_source", new Date());
       const continued = Effect.gen(function* () {
         const started = readAnswer(
@@ -4685,6 +4684,8 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const fresh = fetchedAsHanded(checkout, preamble);
         assert.equal(checkout.sh(fresh, "git", "branch", "--show-current"), branch);
         assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+        // The stop runs behind the Start, which answered without waiting on it.
+        yield* Deferred.await(sandbox.stopAsked);
         assert.deepEqual(
           [sandbox.ran, sandbox.stops],
           [[SOURCE_SANDBOX.WOKEN], [SOURCE_SANDBOX.WOKEN]],
