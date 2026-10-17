@@ -11,7 +11,7 @@ import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accou
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, RefreshFailureNotice, WindowSwitcher } from "../chrome/controls";
 import { RosterNote } from "../chrome/notes";
-import { PageHeader, type ViewerAccount } from "../chrome/page-header";
+import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import {
   FAVORITE_PATH,
@@ -171,19 +171,17 @@ export function UsersScreen({
         : list.rows;
 
       return frame(
-        <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
-          <PageHeader
-            title="Users"
-            account={account}
-            onSignOut={signOut}
-            controls={
-              <>
-                <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
-                <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
-              </>
-            }
-          />
-
+        <AdminPage
+          title="Users"
+          account={account}
+          onSignOut={signOut}
+          controls={
+            <>
+              <WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />
+              <HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />
+            </>
+          }
+        >
           <RefreshFailureNotice
             failure={state.refreshFailure}
             refreshing={refreshing}
@@ -227,7 +225,7 @@ export function UsersScreen({
               searched={list.search !== undefined}
             />
           </div>
-        </main>,
+        </AdminPage>,
       );
     }
   }

@@ -3,7 +3,8 @@ import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ConfirmDialog,
   EmptyState,
@@ -17,7 +18,6 @@ import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
@@ -28,6 +28,7 @@ import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
+import { useChatOn } from "../tasks/chat-gate";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
@@ -64,7 +65,8 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { useExperiment } from "../use-app-state";
+import { useCapability, useExperiment } from "../use-app-state";
+import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
@@ -352,6 +354,7 @@ function PlanDocument({
   const { region } = tasks;
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
+  const chatOn = useChatOn();
   const { act } = useAct();
   const openLink = useOpenLink();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
@@ -373,6 +376,9 @@ function PlanDocument({
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
+  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
+  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -541,7 +547,7 @@ function PlanDocument({
   // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
   const { repository } = task;
   const openOnMac =
-    repository === null
+    repository === null || !macTerminalOffered
       ? undefined
       : (agentId: string) => {
           sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
@@ -566,6 +572,8 @@ function PlanDocument({
         return openColumnTab(MAIN_TAB.PLAN);
       case TOOL_TARGET.INBOX:
         return openColumnTab(MAIN_TAB.INBOX);
+      case TOOL_TARGET.CHAT:
+        return chatOn ? openColumnTab(MAIN_TAB.CHAT) : undefined;
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -667,8 +675,13 @@ function PlanDocument({
                         keys={tasks.shown && !sideFocused}
                         shown={tasks.shown}
                         inbox={inbox.board.open.length}
+                        chat={chatOn && tasks.chatView.available}
                         actionsSlot={actionsSlot}
-                        onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
+                        onOpenTerminal={
+                          terminalsOffered
+                            ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)
+                            : undefined
+                        }
                         onOpenOnMac={openOnMac}
                       />
                     }
@@ -684,12 +697,14 @@ function PlanDocument({
                       </p>
                     ) : null}
                     <CopyChord copy={tasks.copy} />
-                    <TerminalCommands
-                      here={terminalHere}
-                      agents={agents}
-                      sidePanel={sidePanel}
-                      onShown={showSide}
-                    />
+                    {terminalsOffered ? (
+                      <TerminalCommands
+                        here={terminalHere}
+                        agents={agents}
+                        sidePanel={sidePanel}
+                        onShown={showSide}
+                      />
+                    ) : null}
                     {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
                     {tasks.history.viewing === undefined ? (
                       <NewTabChord
@@ -784,7 +799,14 @@ function PlanDocument({
                           }}
                         />
                       ) : null}
-                      {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
+                      {tab === MAIN_TAB.CHAT && chatOn ? (
+                        <section className="desktop-plan-chat" role="tabpanel" aria-label="Chat">
+                          <TaskChatTab tasks={tasks} taskId={task.id} />
+                        </section>
+                      ) : null}
+                      {tab === MAIN_TAB.PLAN ||
+                      tab === MAIN_TAB.INBOX ||
+                      tab === MAIN_TAB.CHAT ? null : (
                         <AgentPane
                           label={mainTabLabel(tab, agents)}
                           tabbed
@@ -803,6 +825,14 @@ function PlanDocument({
                               ? undefined
                               : (fork) => openColumnTab({ draft: agents.onForkDraft(fork) })
                           }
+                          onContinue={
+                            archived
+                              ? undefined
+                              : (agentId, words, attachments) =>
+                                  openColumnTab({
+                                    draft: agents.onContinueDraft(agentId, words, attachments),
+                                  })
+                          }
                         />
                       )}
                     </FindScope>
@@ -818,7 +848,7 @@ function PlanDocument({
                   </div>
                   {/* Note that a call of the plan's own still stands, so it can be
             ended, when only a race left one on a plan just archived. */}
-                  {archived && !tasks.stop.shown ? null : (
+                  {!voiceOffered || (archived && !tasks.stop.shown) ? null : (
                     <div className="desktop-call-bar">
                       {captions}
                       <CallBar

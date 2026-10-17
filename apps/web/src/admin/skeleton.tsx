@@ -15,7 +15,7 @@
  * time, so a section added to a page is a line here, not a page-shaped copy
  * that drifts from the page the moment either moves.
  */
-export function Skeleton({
+function Skeleton({
   className,
   circle = false,
 }: {
