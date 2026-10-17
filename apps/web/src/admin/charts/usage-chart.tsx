@@ -8,7 +8,7 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
-import { ChartHeading } from "./chart-heading";
+import { ChartFrame, ChartTrend } from "./chart-frame";
 
 export const USAGE_CHART = {
   calls: { label: "Hosted calls", color: "var(--chart-1)" },
@@ -40,12 +40,11 @@ export function UsageChart({
 }): React.JSX.Element {
   if (seriesHasNoData(daily.map((point) => point.calls))) {
     return (
-      <div className="rounded-lg border border-border bg-card p-5">
-        <ChartHeading label={label} trend={trend} />
+      <ChartFrame title={label} aside={<ChartTrend trend={trend} />}>
         <p className="m-0 py-6 text-center text-sm text-muted-foreground">
           No hosted-tier calls recorded in this window yet.
         </p>
-      </div>
+      </ChartFrame>
     );
   }
 
@@ -61,8 +60,7 @@ export function UsageChart({
     };
   }
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <ChartHeading label={label} trend={trend} />
+    <ChartFrame title={label} aside={<ChartTrend trend={trend} />}>
       <ChartContainer
         config={USAGE_CHART}
         className={`aspect-auto h-48 w-full ${onOpenDay ? "cursor-pointer" : ""}`}
@@ -95,6 +93,6 @@ export function UsageChart({
           </Bar>
         </BarChart>
       </ChartContainer>
-    </div>
+    </ChartFrame>
   );
 }

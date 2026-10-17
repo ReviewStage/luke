@@ -1,3 +1,5 @@
+import { ChartFrameSkeleton } from "./charts/chart-frame";
+
 /**
  * The first load's stand-in: the page's own layout with bones where the data
  * will land, so the answer replaces the skeleton without moving what the
@@ -125,15 +127,12 @@ function SkeletonStatCard({ grouped }: { grouped: boolean }): React.JSX.Element 
   );
 }
 
+/** Only the sign-in methods chart has no trend across from its heading. */
 function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <SkeletonLine box="h-4" bone="h-3 w-36" />
-        <SkeletonLine box="h-4" bone="h-3 w-56" />
-      </div>
+    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false}>
       <Skeleton className={`w-full ${plot}`} />
-    </div>
+    </ChartFrameSkeleton>
   );
 }
 
@@ -143,15 +142,9 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
  */
 function SkeletonCalendarCard(): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4">
-        <SkeletonLine box="h-4" bone="h-3 w-52" />
-      </div>
+    <ChartFrameSkeleton aside={false} legend>
       <Skeleton className="h-[156px] w-full" />
-      <div className="mt-4">
-        <SkeletonLine box="h-4" bone="h-3 w-96 max-w-full" />
-      </div>
-    </div>
+    </ChartFrameSkeleton>
   );
 }
 
