@@ -8,11 +8,12 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/h
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
-import { installEditorBundle, installEditorLayout } from "#testing/composer";
+import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
 import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
@@ -33,8 +34,10 @@ const PLAN: Task = {
 
 const roots: Root[] = [];
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
-  installEditorBundle();
   installEditorLayout();
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> =>

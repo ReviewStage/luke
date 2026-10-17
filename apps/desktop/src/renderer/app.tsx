@@ -43,6 +43,7 @@ import { useAct } from "./act";
 import { appBridge } from "./app-bridge";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { appPlatform } from "./app-platform";
+import { usePrefetchEditorBundle } from "./bundle-loader";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useCallCardVideo } from "./call/panel-avatar";
 import { useWindowFocused } from "./call/use-window-focused";
@@ -52,7 +53,6 @@ import { DesktopShell } from "./desktop/desktop-shell";
 import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
-import { prefetchEditorBundle } from "./editor-bundle";
 import { FeedbackDialog } from "./feedback-dialog";
 import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
@@ -150,7 +150,8 @@ export function App(): React.JSX.Element {
     applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
   // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
-  useEffect(prefetchEditorBundle, []);
+  const prefetchEditorBundle = usePrefetchEditorBundle();
+  useEffect(prefetchEditorBundle, [prefetchEditorBundle]);
   // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
   useEffect(prefetchMarkdownHtmlParser, []);
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.

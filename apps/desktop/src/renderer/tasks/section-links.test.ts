@@ -15,6 +15,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { DOCUMENT_TASK } from "#testing/document-task";
+import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
@@ -235,7 +236,7 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
   ]);
 });
 
-/** The task's page drawn editable, as a task's own page is. */
+/** The task's page drawn editable, as a task's own page is, its editor's bundle not yet landed so that an editor opened is its host alone. */
 function drawnEditable(): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -243,12 +244,15 @@ function drawnEditable(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task: TASK,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
-      }),
+      onSideBundles(
+        unlandedBundles(),
+        createElement(PlanBody, {
+          task: TASK,
+          live: false,
+          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
+        }),
+      ),
     ),
   );
   return container;

@@ -15,7 +15,7 @@ import type {
  * Shiki colouring it, which is too large for the bundle every window parses,
  * so it ships as a bundle of its own (`diff-view.js`, built from
  * `./index.ts`) that the view loads the first time a diff is shown, as a File
- * tab loads its tree. That bundle sets one global, `window.lukeDiffView`, and
+ * tab loads its tree. That bundle exports one module, `diffView`, and
  * this file is the whole of what the two share: no Pierre type crosses, only
  * the patch as git writes it and how to draw it, in the settings' own words
  * for a diff (`@luke/settings/diff-view`, which imports nothing), so the
@@ -74,7 +74,7 @@ export interface DiffViewHandle {
   readonly unmount: () => void;
 }
 
-/** What the diff bundle sets on `window` once it has loaded. */
+/** What the diff bundle's entry exports, which the panel imports the first time it is needed (`../bundle-loader.ts`). */
 export interface DiffViewModule {
   /**
    * Draws the patch under `host`, in a shadow root whose words the tab's
@@ -82,12 +82,3 @@ export interface DiffViewModule {
    */
   readonly mount: (host: HTMLElement, props: DiffViewProps) => DiffViewHandle;
 }
-
-declare global {
-  interface Window {
-    lukeDiffView?: DiffViewModule;
-  }
-}
-
-/** The file the diff bundle is, beside `index.html`: an ES module, whose chunks (a language's grammar, a theme) it imports as it needs them. */
-export const DIFF_VIEW_ASSET = { SCRIPT: "diff-view.js" } as const;

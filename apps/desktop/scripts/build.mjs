@@ -28,19 +28,21 @@ const DOCK_ICON_IMAGES = {
 // reaches three things the board never uses through dynamic imports: the
 // Mermaid converter, every interface language but English, and the font
 // subsetter an SVG export embeds its fonts with (1.8 MB of WebAssembly), the
-// board offering no export. An IIFE inlines a dynamic import, so each is
-// answered with an empty module here rather than carried; the English
-// strings are Excalidraw's own built-ins. The locales folder also holds the
-// translation-progress table, which Excalidraw imports statically, so it is
-// kept.
+// board offering no export. Each would be split into chunks the app ships and
+// never loads, so each is answered with an empty module here rather than
+// carried; the English strings are Excalidraw's own built-ins. The locales
+// folder also holds the translation-progress table, which Excalidraw imports
+// statically, so it is kept.
 const EXCALIDRAW_UNUSED =
   /^(@excalidraw\/mermaid-to-excalidraw|\.\/locales\/[^/]+\.js|\.\/subset-(shared|worker)\.chunk\.js)$/;
 const EXCALIDRAW_KEPT_LOCALE = /^\.\/locales\/percentages-/;
+// Only Excalidraw's own imports are answered, since the build is the renderer's whole.
+const EXCALIDRAW_IMPORTER = /[\\/]@excalidraw[\\/]/;
 const excalidrawTrim = {
   name: "excalidraw-trim",
   setup(build) {
     build.onResolve({ filter: EXCALIDRAW_UNUSED }, (args) =>
-      EXCALIDRAW_KEPT_LOCALE.test(args.path)
+      !EXCALIDRAW_IMPORTER.test(args.importer) || EXCALIDRAW_KEPT_LOCALE.test(args.path)
         ? undefined
         : { path: args.path, namespace: "excalidraw-unused" },
     );
@@ -115,6 +117,39 @@ const diffMarkupInDataAttributes = {
     build.onResolve({ filter: /^hast-util-to-html$/ }, (args) =>
       args.importer === DIFF_MARKUP ? undefined : { path: DIFF_MARKUP },
     );
+  },
+};
+
+// The stylesheets a bundle's entry imports for itself (`import "./index.css"`),
+// each built on its own below to the file named here. esbuild writes a
+// stylesheet a split chunk imports and never loads it, so the import is
+// answered with a module that links the built file from beside the chunk
+// that imports it, which is where the renderer's chunks all stand. A bundler
+// that loads a chunk's stylesheets itself, as Vite does, needs none of this.
+const WHITEBOARD_STYLESHEET = path.join(appRoot, "src/renderer/whiteboard/index.css");
+const TERMINAL_STYLESHEET = path.join(appRoot, "src/renderer/terminal/index.css");
+const SIDE_STYLESHEETS = new Map([
+  [WHITEBOARD_STYLESHEET, "whiteboard.css"],
+  [TERMINAL_STYLESHEET, "terminal.css"],
+]);
+const sideStylesheetsLinked = {
+  name: "side-stylesheets-linked",
+  setup(build) {
+    build.onResolve({ filter: /\.css$/ }, (args) => {
+      const stylesheet = path.resolve(args.resolveDir, args.path);
+      return args.kind === "import-statement" && SIDE_STYLESHEETS.has(stylesheet)
+        ? { path: stylesheet, namespace: "side-stylesheet" }
+        : undefined;
+    });
+    build.onLoad({ filter: /.*/, namespace: "side-stylesheet" }, (args) => ({
+      contents: [
+        'const link = document.createElement("link");',
+        'link.rel = "stylesheet";',
+        `link.href = new URL(${JSON.stringify(SIDE_STYLESHEETS.get(args.path))}, import.meta.url).href;`,
+        "document.head.append(link);",
+      ].join("\n"),
+      loader: "js",
+    }));
   },
 };
 
@@ -207,16 +242,44 @@ const WINDOW_ENTRIES = {
   call: { source: "src/renderer/call/index.tsx", document: "call.html" },
 };
 
+// The bundles too large for any window's entry, each reached through a
+// dynamic `import()` of its own entry (`src/renderer/bundle-loader.ts`), so no
+// window parses one before it is needed: the editors (TipTap), the whiteboard
+// (Excalidraw), a File tab's tree (Pierre's tree), a Terminal tab's screen
+// (xterm.js), a plan's diagrams (Mermaid), a Files changed diff (Pierre's
+// diffs and Shiki), a call's avatar (Keyframe's SDK over LiveKit), and session
+// replay's recorder (rrweb). Each is an entry rather than a chunk only so that
+// it keeps a name of its own for the budget to read; what each reaches
+// through dynamic imports of its own, a diagram type's layout or a language's
+// grammar, is a chunk of its own, loaded when it is drawn.
+const SIDE_BUNDLE_ENTRIES = {
+  "plan-editor": "src/renderer/plan-editor/index.ts",
+  whiteboard: "src/renderer/whiteboard/index.tsx",
+  "file-tree": "src/renderer/file-tree/index.ts",
+  terminal: "src/renderer/terminal/index.ts",
+  diagram: "src/renderer/diagram/index.ts",
+  "diff-view": "src/renderer/diff-view/index.ts",
+  "avatar-session": "src/renderer/avatar-session/index.ts",
+  "session-recorder": "src/renderer/session-recorder/index.ts",
+};
+
 // The renderer, as ES modules: one entry per window role, so a window parses
-// only the surface it mounts, and the chunks the entries share, with no
-// wrapper around the whole, which is about 6 KB gzipped smaller than the same
-// code as one script. The chunks are named by their content, because esbuild
-// names every shared one `chunk`. The metafile is what the bundle budget
-// reads the chunks off.
+// only the surface it mounts, the side bundles above, and the chunks the
+// entries share, with no wrapper around the whole, which is about 6 KB
+// gzipped smaller than the same code as one script. The chunks are named by
+// their content, because esbuild names every shared one `chunk`. The metafile
+// is what the bundle budget reads the chunks off.
 const rendererBuild = build({
-  entryPoints: Object.fromEntries(
-    Object.entries(WINDOW_ENTRIES).map(([name, { source }]) => [name, path.join(appRoot, source)]),
-  ),
+  entryPoints: Object.fromEntries([
+    ...Object.entries(WINDOW_ENTRIES).map(([name, { source }]) => [
+      name,
+      path.join(appRoot, source),
+    ]),
+    ...Object.entries(SIDE_BUNDLE_ENTRIES).map(([name, source]) => [
+      name,
+      path.join(appRoot, source),
+    ]),
+  ]),
   outdir: path.join(outputRoot, "renderer"),
   bundle: true,
   platform: "browser",
@@ -226,11 +289,20 @@ const rendererBuild = build({
   target: "chrome140",
   jsx: "automatic",
   minify: true,
-  plugins: [markdownHtmlParserOnDemand, lucideWholeOnDemand, ...sentryPlugins()],
+  conditions: ["production"],
+  plugins: [
+    markdownHtmlParserOnDemand,
+    lucideWholeOnDemand,
+    diffMarkupInDataAttributes,
+    excalidrawTrim,
+    sideStylesheetsLinked,
+    ...sentryPlugins(),
+  ],
   sourcemap: true,
   logLevel: "info",
   define: {
     "process.env.NODE_ENV": '"production"',
+    "process.env.IS_PREACT": '"false"',
     // The analytics project the screen recorder files into, from the
     // packaging environment rather than source, where secret scanners
     // cannot tell a published project key from a real secret. A build without one records nothing at all — the same
@@ -240,62 +312,8 @@ const rendererBuild = build({
   },
 });
 
-// A plan's diagrams, Mermaid, its own bundle so the bundle every window
-// parses never carries it; the plan's page loads it the first time a
-// diagram is shown (`src/renderer/diagram/contract.ts`). Unlike the bundles
-// below it is an ES module split into chunks, because Mermaid reaches each
-// diagram type and its layouts through dynamic imports, which a script would
-// inline all of (about 950 KB gzipped) where a flowchart needs a quarter of
-// that. Its chunks stand in `diagram/`, apart from the renderer's own, and
-// its metafile is what the bundle budget reads them off.
-const diagramBuild = build({
-  entryPoints: { diagram: path.join(appRoot, "src/renderer/diagram/index.ts") },
-  outdir: path.join(outputRoot, "renderer"),
-  chunkNames: "diagram/[name]-[hash]",
-  bundle: true,
-  platform: "browser",
-  format: "esm",
-  splitting: true,
-  metafile: true,
-  target: "chrome140",
-  minify: true,
-  conditions: ["production"],
-  plugins: sentryPlugins(),
-  sourcemap: true,
-  logLevel: "info",
-  define: { "process.env.NODE_ENV": '"production"' },
-});
-
-// A Files changed diff, Pierre's diffs with Shiki colouring it, its own
-// bundle so the bundle every window parses never carries either; the view
-// loads it the first time a diff is shown (`src/renderer/diff-view/contract.ts`).
-// An ES module split into chunks, as the diagrams' is, because Shiki reaches
-// each language's grammar and each theme through a dynamic import, which a
-// script would inline every one of, where a diff needs its file's alone. Its
-// chunks stand in `diff-view/`, and its metafile is what the bundle budget
-// reads them off. Pierre draws in a shadow root with no React of its own.
-const diffViewBuild = build({
-  entryPoints: { "diff-view": path.join(appRoot, "src/renderer/diff-view/index.ts") },
-  outdir: path.join(outputRoot, "renderer"),
-  chunkNames: "diff-view/[name]-[hash]",
-  bundle: true,
-  platform: "browser",
-  format: "esm",
-  splitting: true,
-  metafile: true,
-  target: "chrome140",
-  minify: true,
-  conditions: ["production"],
-  plugins: [diffMarkupInDataAttributes, ...sentryPlugins()],
-  sourcemap: true,
-  logLevel: "info",
-  define: { "process.env.NODE_ENV": '"production"' },
-});
-
 await Promise.all([
   rendererBuild,
-  diagramBuild,
-  diffViewBuild,
   build({
     entryPoints: [path.join(appRoot, "src/main/index.ts")],
     outfile: path.join(outputRoot, "main.js"),
@@ -341,100 +359,25 @@ await Promise.all([
     sourcemap: true,
     logLevel: "info",
   }),
-  // The Plans tab's whiteboard, its own bundle and stylesheet so the bundle
-  // every window parses never carries Excalidraw; the tab loads both the
-  // first time a board is shown (`src/renderer/whiteboard/contract.ts`).
+  // The stylesheets the whiteboard's and a Terminal tab's entries import,
+  // each linked as its entry runs (`sideStylesheetsLinked` above).
   build({
-    entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.tsx")],
-    outfile: path.join(outputRoot, "renderer/whiteboard.js"),
+    entryPoints: [WHITEBOARD_STYLESHEET],
+    outfile: path.join(outputRoot, "renderer", SIDE_STYLESHEETS.get(WHITEBOARD_STYLESHEET)),
     bundle: true,
-    platform: "browser",
-    format: "iife",
     target: "chrome140",
-    jsx: "automatic",
-    minify: true,
     conditions: ["production"],
-    plugins: [excalidrawTrim, ...sentryPlugins()],
-    sourcemap: true,
-    logLevel: "info",
-    define: { "process.env.NODE_ENV": '"production"', "process.env.IS_PREACT": '"false"' },
-  }),
-  // A File tab's tree, its own bundle so the bundle every window parses
-  // never carries Pierre's tree; the tab loads it the first time a tree is
-  // shown (`src/renderer/file-tree/contract.ts`). Pierre draws with its own
-  // Preact inside a shadow root, so no React rides along, and its styles
-  // reach the shadow root as constructed sheets, which the panel's policy
-  // admits.
-  build({
-    entryPoints: [path.join(appRoot, "src/renderer/file-tree/index.ts")],
-    outfile: path.join(outputRoot, "renderer/file-tree.js"),
-    bundle: true,
-    platform: "browser",
-    format: "iife",
-    target: "chrome140",
-    minify: true,
-    conditions: ["production"],
-    plugins: sentryPlugins(),
-    sourcemap: true,
-    logLevel: "info",
-    define: { "process.env.NODE_ENV": '"production"' },
-  }),
-  // The editor bundle, a plan's editor and an agent's message box, its own
-  // bundle so the bundle every window parses, the voice window's among them,
-  // never carries TipTap; the panel starts loading it as it first paints
-  // (`src/renderer/plan-editor/contract.ts`). It mounts with TipTap's own
-  // DOM, so no React rides along.
-  build({
-    entryPoints: [path.join(appRoot, "src/renderer/plan-editor/index.ts")],
-    outfile: path.join(outputRoot, "renderer/plan-editor.js"),
-    bundle: true,
-    platform: "browser",
-    format: "iife",
-    target: "chrome140",
-    minify: true,
-    conditions: ["production"],
-    plugins: sentryPlugins(),
-    sourcemap: true,
-    logLevel: "info",
-    define: { "process.env.NODE_ENV": '"production"' },
-  }),
-  // A Terminal tab's screen, its own bundle and stylesheet so the bundle
-  // every window parses never carries xterm.js; the tab loads both the first
-  // time a terminal is shown (`src/renderer/terminal/contract.ts`). It draws
-  // on its own canvas, so no React rides along.
-  build({
-    entryPoints: [path.join(appRoot, "src/renderer/terminal/index.ts")],
-    outfile: path.join(outputRoot, "renderer/terminal.js"),
-    bundle: true,
-    platform: "browser",
-    format: "iife",
-    target: "chrome140",
-    minify: true,
-    plugins: sentryPlugins(),
-    sourcemap: true,
-    logLevel: "info",
-  }),
-  build({
-    entryPoints: [path.join(appRoot, "src/renderer/terminal/index.css")],
-    outfile: path.join(outputRoot, "renderer/terminal.css"),
-    bundle: true,
-    target: "chrome140",
+    // Its `url(./fonts/...)` stay as written, and reach the fonts copied beside it below.
+    external: ["*.woff2"],
     minify: true,
     logLevel: "info",
   }),
-  // Session replay's recorder, its own bundle so the bundle every window
-  // parses never carries rrweb; session replay loads it before it starts the
-  // client, in a window that records (`src/renderer/session-recorder/contract.ts`).
   build({
-    entryPoints: [path.join(appRoot, "src/renderer/session-recorder/index.ts")],
-    outfile: path.join(outputRoot, "renderer/session-recorder.js"),
+    entryPoints: [TERMINAL_STYLESHEET],
+    outfile: path.join(outputRoot, "renderer", SIDE_STYLESHEETS.get(TERMINAL_STYLESHEET)),
     bundle: true,
-    platform: "browser",
-    format: "iife",
     target: "chrome140",
     minify: true,
-    plugins: sentryPlugins(),
-    sourcemap: true,
     logLevel: "info",
   }),
   // The avatar feed's AudioWorklet, its own bundle because a worklet loads a
@@ -450,35 +393,6 @@ await Promise.all([
     target: "chrome140",
     minify: true,
     sourcemap: true,
-    logLevel: "info",
-  }),
-  // A call's avatar, its own bundle so the bundle every window parses never
-  // carries Keyframe's SDK or the LiveKit client under it; the panel
-  // loads it the first time an avatar is shown
-  // (`@luke/ui/avatar-session-contract`).
-  build({
-    entryPoints: [path.join(appRoot, "src/renderer/avatar-session/index.ts")],
-    outfile: path.join(outputRoot, "renderer/avatar-session.js"),
-    bundle: true,
-    platform: "browser",
-    format: "iife",
-    target: "chrome140",
-    minify: true,
-    conditions: ["production"],
-    plugins: sentryPlugins(),
-    sourcemap: true,
-    logLevel: "info",
-    define: { "process.env.NODE_ENV": '"production"' },
-  }),
-  build({
-    entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
-    outfile: path.join(outputRoot, "renderer/whiteboard.css"),
-    bundle: true,
-    target: "chrome140",
-    conditions: ["production"],
-    // Its `url(./fonts/...)` stay as written, and reach the fonts copied beside it below.
-    external: ["*.woff2"],
-    minify: true,
     logLevel: "info",
   }),
 ]);
@@ -537,13 +451,7 @@ await Promise.all(
 // fetched when that code first runs, and is left out. Each file is gzipped on
 // its own, as each is read on its own.
 const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
-const metafile = {
-  outputs: {
-    ...(await rendererBuild).metafile.outputs,
-    ...(await diagramBuild).metafile.outputs,
-    ...(await diffViewBuild).metafile.outputs,
-  },
-};
+const { metafile } = await rendererBuild;
 const measured = Object.fromEntries(
   await Promise.all(
     Object.keys(budget.gzipBytes).map(async (bundle) => {

@@ -42,7 +42,7 @@ import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   QUIET_COMPOSER,
@@ -204,8 +204,8 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   standing = "acme/relay";
