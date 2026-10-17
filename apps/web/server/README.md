@@ -594,21 +594,23 @@ a byte they never asked for.
 Every request meets the cookie origin guard
 (`packages/service/src/http/origin-guard.ts`) before the handler is built or
 the router reads it. A state-changing request, any method but GET, HEAD, and
-OPTIONS, that carries a cookie and no `Authorization` header is refused with
-the vocabulary's `not-permitted` (403) unless its `Origin` is one of the
-deployment's own, `authDeployment`'s `ownOrigins`: production's registered
-address, or a Preview's two hostnames. Where a browser names no `Origin`, a
-`Sec-Fetch-Site` of `same-origin` stands in for it. A request that carries
-`Authorization`, where the desktop names its account, goes on untouched,
-since a browser never attaches that header on its own, and so does one that
-carries no cookie, which holds no session to ride on. The list is the guard's
-own rather than Better Auth's `trustedOrigins`, which on production trusts
-every preview and the dev server for the OAuth proxy. Two kinds of path are
-let through from any page: Better Auth's own `/api/auth/*`, which checks a
-request's origin itself, and the four addresses a provider returns the
-browser to (`/api/github/installed`, `/api/github/installed/authorized`,
-`/api/account/integrations/connected`, `/api/workspaces/linear/connected`),
-each admitted by its connect's `state` and never by the cookie.
+OPTIONS, that carries a cookie is refused with the vocabulary's
+`not-permitted` (403), its path and `Origin` logged at warn, unless its
+`Origin` is one of the deployment's own, `authDeployment`'s `ownOrigins`:
+production's registered address, or a Preview's two hostnames, and none at
+all for a production or Preview that names no address of its own. Where a
+browser names no `Origin`, a `Sec-Fetch-Site` of `same-origin` stands in for
+it. A request that carries no cookie goes on untouched, since it holds no
+session to ride on: the desktop, which names its account in
+`Authorization`, the scheduled sweep, and the webhooks send none. An
+`Authorization` header beside a cookie buys nothing, because Better Auth
+reads the session from the cookie whenever that header is not a bearer it
+signed. The list is the guard's own rather than Better Auth's
+`trustedOrigins`, which on production trusts every preview and the dev server
+for the OAuth proxy. Only Better Auth's own `/api/auth/*`, which checks a
+request's origin itself, is let through from any page; a provider returns
+the browser to every other address with a GET, which the guard never
+refuses.
 
 ## Signing in on a Preview deployment
 

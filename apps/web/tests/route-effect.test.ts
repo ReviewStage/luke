@@ -6,14 +6,16 @@ import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
   hostedMethod,
+  hostedNotFoundRoute,
   hostedRefusalResponse,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
 import { ANY_METHOD } from "@luke/service/route";
 import { HTTP_METHOD } from "@luke/wire";
-import { Effect, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest } from "effect/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { DISPATCH_QUERY, dispatchRoutes } from "../server/function-dispatch.js";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 
@@ -55,6 +57,7 @@ const OWN_ORIGIN = "https://luke.test";
 const FOREIGN_ORIGIN = "https://evil.example";
 const SESSION_COOKIE = "__Secure-better-auth.session_token=fixture";
 const WRITE_PATH = "/api/write";
+const WRITE_ROUTE_KEY = "write";
 
 /** Names the deployment production at its own origin, whatever environment the suite runs in. */
 function stubProduction(): void {
@@ -64,6 +67,16 @@ function stubProduction(): void {
 
 function post(path: string, headers: Record<string, string>): Request {
   return new Request(`${OWN_ORIGIN}${path}`, { method: "POST", headers });
+}
+
+/** A route whose one path answers whatever reaches it, beside the hosted vocabulary's own not-found. */
+function writeRoute() {
+  return routeFromHttpRouter(
+    Layer.mergeAll(
+      HttpRouter.add(ANY_METHOD, WRITE_PATH, hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {})),
+      hostedNotFoundRoute,
+    ),
+  );
 }
 
 /**
@@ -144,11 +157,9 @@ test("the route built from a route layer answers the gate's own refusals", async
   );
 });
 
-test("a route refuses a cookie POST a foreign page sent, and answers its own page's and a bearer's", async () => {
+test("a route refuses a cookie POST a foreign page sent, and answers its own page's and the desktop's", async () => {
   stubProduction();
-  const route = routeFromHttpRouter(
-    HttpRouter.add(ANY_METHOD, WRITE_PATH, hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {})),
-  );
+  const route = writeRoute();
 
   const foreign = await route.fetch(
     post(WRITE_PATH, { cookie: SESSION_COOKIE, origin: FOREIGN_ORIGIN }),
@@ -162,8 +173,25 @@ test("a route refuses a cookie POST a foreign page sent, and answers its own pag
   const own = await route.fetch(post(WRITE_PATH, { cookie: SESSION_COOKIE, origin: OWN_ORIGIN }));
   assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
 
-  const bearer = await route.fetch(post(WRITE_PATH, { authorization: AUTHORIZATION }));
-  assert.equal(bearer.status, HOSTED_HTTP_STATUS.OK);
+  const desktop = await route.fetch(post(WRITE_PATH, { authorization: AUTHORIZATION }));
+  assert.equal(desktop.status, HOSTED_HTTP_STATUS.OK);
+});
+
+test("a dispatch that names Better Auth's path on another route reaches none of that route's handlers", async () => {
+  stubProduction();
+  const dispatcher = dispatchRoutes(new Map([[WRITE_ROUTE_KEY, writeRoute()]]));
+  const dispatched = (query: string) =>
+    post(`/api/default.js?${DISPATCH_QUERY.ROUTE}=${WRITE_ROUTE_KEY}${query}`, {
+      cookie: SESSION_COOKIE,
+      origin: FOREIGN_ORIGIN,
+    });
+
+  const named = await dispatcher.fetch(dispatched(`&${DISPATCH_QUERY.PATH}=auth/sign-in/social`));
+  assert.equal(named.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+  assert.deepEqual(await named.json(), HOSTED_REFUSAL.NOT_FOUND);
+
+  const plain = await dispatcher.fetch(dispatched(""));
+  assert.equal(plain.status, HOSTED_HTTP_STATUS.FORBIDDEN);
 });
 
 test("Better Auth's own route takes a cookie POST a foreign page sent, and answers it itself", async () => {

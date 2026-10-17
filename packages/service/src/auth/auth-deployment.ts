@@ -74,6 +74,9 @@ export const AUTH_SECRET_ENVIRONMENT = {
 /** Where the site answers when nothing names a deployment: the Vite dev server. */
 const LOCAL_AUTH_URL = "http://localhost:5173";
 
+/** The schemes a web page is served under; any other address's origin, the opaque `null` among them, is no page's. */
+const WEB_ORIGIN_SCHEMES = ["https://", "http://"] as const;
+
 /**
  * The origins production trusts beyond its own: every Vercel preview of this
  * project, by deployment (`luke-<hash>-stage-review.vercel.app`) or by branch
@@ -85,10 +88,12 @@ export interface AuthDeployment {
   /** The address this deployment calls itself, and the origin it trusts by default. */
   baseURL: string;
   /**
-   * The origins this deployment's own pages are served from: its base URL's,
-   * and on a preview its remaining hostname's. Unlike `trustedOrigins`, never
-   * another deployment's, so this is what a check that a request came from
-   * one of this deployment's own pages reads.
+   * The origins this deployment's own pages are served from: production's
+   * registered address, a preview's two hostnames, or the dev server's where
+   * no Vercel environment is named. Unlike `trustedOrigins`, never another
+   * deployment's, so this is what a check that a request came from one of
+   * this deployment's own pages reads; a production or a preview that names
+   * no address of its own has none.
    */
   ownOrigins: string[];
   /**
@@ -156,6 +161,31 @@ function deploymentOrigin(host: string | undefined): string | undefined {
   }
 }
 
+/** Whether an origin is a web page's: one under `https:` or `http:`, never the opaque `null`. */
+function webOrigin(origin: string | undefined): origin is string {
+  return origin !== undefined && WEB_ORIGIN_SCHEMES.some((scheme) => origin.startsWith(scheme));
+}
+
+/**
+ * The origins a deployment's own pages are served from. Note that the dev
+ * server stands in only where no Vercel environment is named, because a
+ * production or a preview that names no address of its own is misconfigured,
+ * and it then owns no origin rather than a page on whatever machine answers
+ * at `localhost`.
+ */
+function ownOriginsOf(
+  environment: string | undefined,
+  previewOrigins: readonly string[],
+  productionURL: string | undefined,
+): string[] {
+  if (environment === DEPLOYMENT_ENVIRONMENT.PREVIEW) return previewOrigins.filter(webOrigin);
+  const address =
+    environment === DEPLOYMENT_ENVIRONMENT.PRODUCTION
+      ? productionURL
+      : (productionURL ?? LOCAL_AUTH_URL);
+  return [deploymentOrigin(address)].filter(webOrigin);
+}
+
 /**
  * The auth service's own secrets, sealed. Read from the record rather than
  * through `Config`, because `betterAuth` is built at module scope with no
@@ -200,12 +230,13 @@ export function authDeployment(variables: Record<string, string | undefined>): A
         ]
       : [];
   const [previewBaseURL, ...previewAliases] = previewOrigins;
-  const baseURL = previewBaseURL ?? productionURL ?? LOCAL_AUTH_URL;
 
   return {
-    baseURL,
-    ownOrigins: [deploymentOrigin(baseURL), ...previewAliases].filter(
-      (origin): origin is string => origin !== undefined,
+    baseURL: previewBaseURL ?? productionURL ?? LOCAL_AUTH_URL,
+    ownOrigins: ownOriginsOf(
+      variables[AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT],
+      previewOrigins,
+      productionURL,
     ),
     trustedOrigins:
       variables[AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT] === DEPLOYMENT_ENVIRONMENT.PRODUCTION

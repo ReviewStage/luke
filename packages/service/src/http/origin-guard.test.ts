@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { type CookieOriginGuard, cookieOriginGuard } from "./origin-guard.js";
 
@@ -22,9 +22,12 @@ const PREVIEW = {
   BETTER_AUTH_URL: PRODUCTION_ORIGIN,
 } as const;
 
+/** The Vite dev server, which stands in for the deployment only where nothing names one. */
+const DEV_SERVER_ORIGIN = "http://localhost:5173";
+
 const FOREIGN_ORIGIN = "https://evil.example";
 
-const SESSION_COOKIE = "__Secure-better-auth.session_token=fixture";
+const SESSION_COOKIE = "__Secure-better-auth.session_token=session-cookie-value";
 
 /** A route that takes the browser's session today: a workspace renamed by an owner or an admin. */
 const COOKIE_ROUTE = HOSTED_SERVICE_PATH.WORKSPACES_RENAME;
@@ -33,6 +36,15 @@ const REFUSED = {
   status: HOSTED_HTTP_STATUS.FORBIDDEN,
   body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
 } as const;
+
+// The guard says what it refused at warn; the suite keeps those lines off its own output.
+beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function request(
   path: string,
@@ -90,14 +102,18 @@ test("a cookie POST from a foreign origin is refused, whatever else it says", as
   );
 });
 
-test("a cookie POST, PUT, or DELETE from the deployment's own origin goes on to its route", async () => {
+test("an origin spelled other than a browser spells the deployment's own is refused", async () => {
   const guard = cookieOriginGuard(PRODUCTION);
 
-  assert.equal(
-    await verdict(guard, cookiePost(COOKIE_ROUTE, { origin: PRODUCTION_ORIGIN })),
-    undefined,
-  );
-  for (const method of ["PUT", "DELETE", "PATCH"]) {
+  for (const origin of ["https://TRYLUKE.dev", "https://tryluke.dev:443", "https://tryluke.dev/"]) {
+    assert.deepEqual(await verdict(guard, cookiePost(COOKIE_ROUTE, { origin })), REFUSED, origin);
+  }
+});
+
+test("a cookie POST, PUT, DELETE, or PATCH from the deployment's own origin goes on to its route", async () => {
+  const guard = cookieOriginGuard(PRODUCTION);
+
+  for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
     const sent = request(COOKIE_ROUTE, {
       method,
       headers: { cookie: SESSION_COOKIE, origin: PRODUCTION_ORIGIN },
@@ -115,42 +131,28 @@ test("a cookie POST that names no origin goes on where the browser says its page
   );
 });
 
-test("a bearer POST goes on to its route, whatever cookie or origin rides beside it", async () => {
+test("a cookie POST is held to its origin whatever Authorization rides beside it", async () => {
   const guard = cookieOriginGuard(PRODUCTION);
-  const authorization = "Bearer desktop-token";
+  const authorization = "Bearer not-a-signed-session";
 
-  assert.equal(
-    await verdict(guard, request(COOKIE_ROUTE, { headers: { authorization } })),
-    undefined,
-  );
-  assert.equal(await verdict(guard, cookiePost(COOKIE_ROUTE, { authorization })), undefined);
-  assert.equal(
+  assert.deepEqual(
     await verdict(guard, cookiePost(COOKIE_ROUTE, { authorization, origin: FOREIGN_ORIGIN })),
+    REFUSED,
+  );
+  assert.deepEqual(await verdict(guard, cookiePost(COOKIE_ROUTE, { authorization })), REFUSED);
+  assert.equal(
+    await verdict(guard, cookiePost(COOKIE_ROUTE, { authorization, origin: PRODUCTION_ORIGIN })),
     undefined,
   );
 });
 
-test("a blank Authorization header is no bearer", async () => {
+test("a request with no cookie goes on to its route from any page, the desktop's and a webhook's among them", async () => {
   const guard = cookieOriginGuard(PRODUCTION);
 
-  assert.deepEqual(await verdict(guard, cookiePost(COOKIE_ROUTE, { authorization: " " })), REFUSED);
-});
-
-test("a GET, HEAD, or OPTIONS goes on to its route from any page", async () => {
-  const guard = cookieOriginGuard(PRODUCTION);
-
-  for (const method of ["GET", "HEAD", "OPTIONS"]) {
-    const sent = request(COOKIE_ROUTE, {
-      method,
-      headers: { cookie: SESSION_COOKIE, origin: FOREIGN_ORIGIN },
-    });
-    assert.equal(await verdict(guard, sent), undefined, method);
-  }
-});
-
-test("a POST that carries no cookie goes on to its route from any page", async () => {
-  const guard = cookieOriginGuard(PRODUCTION);
-
+  assert.equal(
+    await verdict(guard, request(COOKIE_ROUTE, { headers: { authorization: "Bearer desktop" } })),
+    undefined,
+  );
   assert.equal(await verdict(guard, request("/api/github/webhook")), undefined);
   assert.equal(
     await verdict(guard, request(COOKIE_ROUTE, { headers: { origin: FOREIGN_ORIGIN } })),
@@ -158,17 +160,36 @@ test("a POST that carries no cookie goes on to its route from any page", async (
   );
 });
 
-test("Better Auth's own routes and the provider returns take a cookie POST from a foreign page", async () => {
+test("a GET, HEAD, or OPTIONS goes on to its route from any page, a provider's return among them", async () => {
   const guard = cookieOriginGuard(PRODUCTION);
 
-  for (const path of [
-    "/api/auth/sign-in/social",
-    "/api/auth/callback/github",
-    HOSTED_SERVICE_PATH.GITHUB_INSTALLED,
-    HOSTED_SERVICE_PATH.GITHUB_INSTALLED_AUTHORIZED,
-    HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED,
-    HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECTED,
-  ]) {
+  for (const path of [COOKIE_ROUTE, HOSTED_SERVICE_PATH.GITHUB_INSTALLED]) {
+    for (const method of ["GET", "HEAD", "OPTIONS"]) {
+      const sent = request(path, {
+        method,
+        headers: { cookie: SESSION_COOKIE, origin: FOREIGN_ORIGIN },
+      });
+      assert.equal(await verdict(guard, sent), undefined, `${method} ${path}`);
+    }
+  }
+});
+
+test("a lowercase or unknown method is guarded as a state-changing one", async () => {
+  const guard = cookieOriginGuard(PRODUCTION);
+
+  for (const method of ["patch", "PROPFIND"]) {
+    const sent = request(COOKIE_ROUTE, {
+      method,
+      headers: { cookie: SESSION_COOKIE, origin: FOREIGN_ORIGIN },
+    });
+    assert.deepEqual(await verdict(guard, sent), REFUSED, method);
+  }
+});
+
+test("Better Auth's own routes take a cookie POST from a foreign page", async () => {
+  const guard = cookieOriginGuard(PRODUCTION);
+
+  for (const path of ["/api/auth/sign-in/social", "/api/auth/callback/github"]) {
     assert.equal(
       await verdict(guard, cookiePost(path, { origin: FOREIGN_ORIGIN })),
       undefined,
@@ -178,15 +199,16 @@ test("Better Auth's own routes and the provider returns take a cookie POST from 
   }
 });
 
-test("an exempt path spelled any other way is guarded like every other path", async () => {
+test("every other path is guarded, a provider's return and another spelling of Better Auth's among them", async () => {
   const guard = cookieOriginGuard(PRODUCTION);
 
   for (const path of [
+    HOSTED_SERVICE_PATH.GITHUB_INSTALLED,
+    HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED,
     "/api/auth",
     "/api/authorize",
     "/API/auth/sign-in/social",
-    `${HOSTED_SERVICE_PATH.GITHUB_INSTALLED}/`,
-    HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECTED.replace("/api/", "/api//"),
+    "/api//auth/sign-in/social",
   ]) {
     assert.deepEqual(
       await verdict(guard, cookiePost(path, { origin: FOREIGN_ORIGIN })),
@@ -199,7 +221,7 @@ test("an exempt path spelled any other way is guarded like every other path", as
 test("production holds foreign every origin Better Auth trusts beyond its own", async () => {
   const guard = cookieOriginGuard(PRODUCTION);
 
-  for (const origin of [PREVIEW_ORIGIN, PREVIEW_BRANCH_ORIGIN, "http://localhost:5173"]) {
+  for (const origin of [PREVIEW_ORIGIN, PREVIEW_BRANCH_ORIGIN, DEV_SERVER_ORIGIN]) {
     assert.deepEqual(await verdict(guard, cookiePost(COOKIE_ROUTE, { origin })), REFUSED, origin);
   }
 });
@@ -214,4 +236,50 @@ test("a preview's own origins are both its hostnames, and production's is foreig
     await verdict(guard, cookiePost(COOKIE_ROUTE, { origin: PRODUCTION_ORIGIN })),
     REFUSED,
   );
+});
+
+test("a production or a preview that names no address of its own owns no origin, the dev server's included", async () => {
+  const production = cookieOriginGuard({ VERCEL_ENV: "production" });
+  const preview = cookieOriginGuard({ VERCEL_ENV: "preview", BETTER_AUTH_URL: PRODUCTION_ORIGIN });
+
+  for (const origin of [DEV_SERVER_ORIGIN, PRODUCTION_ORIGIN]) {
+    assert.deepEqual(
+      await verdict(production, cookiePost(COOKIE_ROUTE, { origin })),
+      REFUSED,
+      origin,
+    );
+    assert.deepEqual(await verdict(preview, cookiePost(COOKIE_ROUTE, { origin })), REFUSED, origin);
+  }
+});
+
+test("where no Vercel environment is named, the dev server is the deployment's own", async () => {
+  const guard = cookieOriginGuard({});
+
+  assert.equal(
+    await verdict(guard, cookiePost(COOKIE_ROUTE, { origin: DEV_SERVER_ORIGIN })),
+    undefined,
+  );
+});
+
+test("an address that is no web page's owns no origin, so an opaque origin is refused", async () => {
+  for (const variables of [
+    { BETTER_AUTH_URL: "file:///srv/luke" },
+    { VERCEL_ENV: "production", BETTER_AUTH_URL: "file:///srv/luke" },
+  ]) {
+    const guard = cookieOriginGuard(variables);
+    assert.deepEqual(await verdict(guard, cookiePost(COOKIE_ROUTE, { origin: "null" })), REFUSED);
+  }
+});
+
+test("a refusal is logged with its path and origin, and nothing of its query or cookie", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const guard = cookieOriginGuard(PRODUCTION);
+
+  guard(cookiePost(`${COOKIE_ROUTE}?token=query-secret`, { origin: FOREIGN_ORIGIN }));
+
+  const logged = warn.mock.calls.flat().join("\n");
+  assert.ok(logged.includes(COOKIE_ROUTE), logged);
+  assert.ok(logged.includes(FOREIGN_ORIGIN), logged);
+  assert.equal(logged.includes("query-secret"), false, logged);
+  assert.equal(logged.includes("session-cookie-value"), false, logged);
 });
