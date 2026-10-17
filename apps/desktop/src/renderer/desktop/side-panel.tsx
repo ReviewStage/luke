@@ -1865,8 +1865,11 @@ export function SidePanel({
     holder === SIDE_PANEL_HOLDER.INBOX
       ? NO_TERMINALS
       : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
-  // A Browser tab stands while the experiment is on, never beside the Inbox; turned off, it closes (`app.tsx`).
-  const browsing = useExperiment(EXPERIMENT.BROWSER) && holder !== SIDE_PANEL_HOLDER.INBOX;
+  // A Browser tab stands while the experiment is on, beside the Inbox too, which
+  // borrows its task's panel and may find one chosen there; turned off, it
+  // closes (`app.tsx`). Note that only a task's own "+" opens one, since the
+  // Inbox's offers no kind of tab.
+  const browsing = useExperiment(EXPERIMENT.BROWSER);
   const browsers = browsing ? panel.browsers : NO_BROWSERS;
   const browserPages = useBrowserPages(browsing);
   // A page's tab stands while the plan lists the page.
@@ -1926,7 +1929,8 @@ export function SidePanel({
             onNew: (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW),
           },
         }),
-    onNewBrowser: browsing ? () => panel.onOpenBrowser() : undefined,
+    onNewBrowser:
+      browsing && holder !== SIDE_PANEL_HOLDER.INBOX ? () => panel.onOpenBrowser() : undefined,
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
