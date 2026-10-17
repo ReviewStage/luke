@@ -17,9 +17,13 @@
  * on either: a naming that fails names everyone as themself on GitHub. The
  * overview's two reads that name anyone, the pull request itself and its
  * conversation, are each named on their own, so neither waits on the other.
+ * The pull requests of the stack the overview's pull request stands in are
+ * named by the agent of its workspace whose branch is each one's head, read
+ * from the agents' own rows, so naming them asks GitHub nothing.
  */
 
 import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
 import { account, member } from "@luke/database/schemas/auth";
 import type {
   CodingAgentAuthor,
@@ -27,12 +31,14 @@ import type {
   CodingAgentOverviewConversation,
   CodingAgentOverviewPullRequest,
   GitHubPerson,
+  PullRequestStackEntry,
 } from "@luke/features/coding-agent-wire";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlSchema } from "effect/sql";
 import { GITHUB_PROVIDER_ID } from "./github-app.js";
+import type { StackEntry } from "./pull-request-stack.js";
 import {
   type GitHubAccount,
   type GitHubOverviewConversation,
@@ -187,22 +193,62 @@ const overviewNamer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return (held) => personOf(held, linked);
 });
 
+/** How many agents on a stack's branches are read for each pull request of it: enough that one of another workspace, or archived, leaves room for the one that names it. */
+const AGENTS_PER_STACK_ENTRY = 4;
+
+/**
+ * The stack's pull requests as the wire carries them, each named by the
+ * newest agent of the workspace, not archived, whose branch is its head.
+ * Note that a lookup that fails names no agent, said once in the log,
+ * because each pull request still opens on GitHub.
+ */
+const namedStack = /* @__PURE__ */ Effect.fnUntraced(function* (
+  agent: { readonly organizationId: string; readonly repository: string },
+  stack: readonly StackEntry[],
+) {
+  if (stack.length === 0) return [];
+  const heads = [...new Set(stack.map((entry) => entry.head))];
+  const agents = yield* listCodingAgentsOnBranches(
+    agent.repository,
+    heads,
+    heads.length * AGENTS_PER_STACK_ENTRY,
+  ).pipe(
+    Effect.catch((failure) =>
+      Effect.as(Effect.logWarning(`the stack's agents were not read: ${failure._tag}`), []),
+    ),
+  );
+  const owners = new Map<string, { readonly id: string; readonly taskId: string | null }>();
+  for (const { agent: each } of agents) {
+    const mine = each.organizationId === agent.organizationId && each.archivedAt === null;
+    if (!mine || each.branch === null || owners.has(each.branch)) continue;
+    owners.set(each.branch, { id: each.id, taskId: each.taskId });
+  }
+  return stack.map(({ head, ...entry }): PullRequestStackEntry => {
+    const owner = owners.get(head);
+    return owner === undefined ? entry : { ...entry, agent: owner };
+  });
+});
+
 /**
  * A pull request itself as the wire carries it for its overview, who opened
- * it and who it asks for a review named as `overviewNamer` names them, with
- * who the agent writes as.
+ * it and who it asks for a review named as `overviewNamer` names them, the
+ * stack it stands in named by its agents, with who the agent writes as.
  */
 export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOverviewPullRequest")(
   function* (
     agent: {
       readonly organizationId: string;
+      readonly repository: string;
       readonly author: CodingAgentAuthor | null;
     },
     read: GitHubOverviewPullRequest,
   ): Effect.fn.Return<CodingAgentOverviewPullRequest, never, DatabaseServices> {
-    const { pullRequest, author, requested, ...rest } = read;
+    const { pullRequest, author, requested, stack, ...rest } = read;
     const accounts = [...(author === undefined ? [] : [author]), ...requested];
-    const person = yield* overviewNamer(agent.organizationId, accounts, pullRequest.number);
+    const [person, named] = yield* Effect.all(
+      [overviewNamer(agent.organizationId, accounts, pullRequest.number), namedStack(agent, stack)],
+      { concurrency: "unbounded" },
+    );
     return {
       number: pullRequest.number,
       title: pullRequest.title,
@@ -212,6 +258,7 @@ export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOver
       ...(author === undefined ? undefined : { author: person(author) }),
       ...(agent.author === null ? undefined : { writtenAs: agent.author }),
       requested: requested.map(person),
+      stack: named,
     };
   },
 );

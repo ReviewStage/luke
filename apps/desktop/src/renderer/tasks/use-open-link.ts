@@ -49,6 +49,11 @@ export function useOpenTask(): ((mention: PlanMention) => void) | undefined {
   );
 }
 
+/** The window's opener for a place in Luke, as a link names it; nothing outside the window. */
+export function useOpenPlace(): ((link: ReadLink) => void) | undefined {
+  return useContext(OpenLinkContext);
+}
+
 /**
  * Whether a link is one the window opens. Note that it asks the two acts'
  * own schemas, because an address both refuse would be drawn as a press

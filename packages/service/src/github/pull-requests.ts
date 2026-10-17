@@ -29,7 +29,11 @@
  * by one, read by the pull request's own head ref so it waits on no read of
  * the head's commit, and beside them its head's deployments in one GraphQL
  * read; and its comments, its reviews, and its review threads, made one
- * conversation in time order.
+ * conversation in time order. The pull request's read carries its labels
+ * as GitHub answers them, and, for one still open, the stack it stands in
+ * (`pull-request-stack.ts`), worked out from GraphQL reads of the
+ * repository's open pull requests asked beside it, so the stack costs no
+ * wait.
  */
 
 import {
@@ -75,6 +79,7 @@ import {
   readBody,
   send,
 } from "./github-app.js";
+import { type StackCandidate, type StackEntry, stackOf } from "./pull-request-stack.js";
 
 /** A pull request as much as the agent's pill and its summary row draw: where it stands, its head, and its size. */
 export interface GitHubPullRequest {
@@ -916,6 +921,10 @@ export interface GitHubOverviewPullRequest {
   readonly author: GitHubAccount | undefined;
   /** Who it still asks for a review, up to the bound. */
   readonly requested: readonly GitHubAccount[];
+  /** Its labels, up to the bound. */
+  readonly labels: readonly GitHubLabel[];
+  /** The stack it stands in, base first and itself among it; empty where it stands in none, or is not open. */
+  readonly stack: readonly StackEntry[];
 }
 
 /** A pull request's conversation as its overview holds it, every account as GitHub names it. */
@@ -1161,6 +1170,9 @@ const REVIEW_THREADS_QUERY = `query ReviewThreads($owner: String!, $name: String
 }`;
 
 const GRAPHQL_PATH = "/graphql";
+
+/** How many of the repository's open pull requests a stack is worked out from: one page, GitHub's most, the most recently updated. */
+const STACK_CANDIDATES = 100;
 
 /** GitHub's GraphQL word for an App's bot, and for the left side of a diff. */
 const GRAPHQL_BOT = "Bot";
@@ -1431,26 +1443,145 @@ function conversationOf(
 }
 
 /**
+ * The repository's open pull requests a stack is worked out from, the most
+ * recently updated first up to one page, in one GraphQL read: each by its
+ * number, words, and branches, and whether its head is a fork's.
+ */
+const OPEN_PULL_REQUESTS_QUERY = `query OpenPullRequests($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: OPEN, first: ${STACK_CANDIDATES}, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      nodes { number title url isDraft headRefName baseRefName isCrossRepository }
+    }
+  }
+}`;
+
+const OpenPullRequestsAnswerSchema = Schema.Struct({
+  data: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        repository: Schema.NullOr(
+          Schema.Struct({
+            pullRequests: Schema.Struct({
+              nodes: Schema.Array(
+                Schema.NullOr(
+                  Schema.Struct({
+                    number: Schema.Number,
+                    title: Schema.String,
+                    url: Schema.String,
+                    isDraft: Schema.Boolean,
+                    headRefName: Schema.String,
+                    baseRefName: Schema.String,
+                    isCrossRepository: Schema.Boolean,
+                  }),
+                ),
+              ),
+            }),
+          }),
+        ),
+      }),
+    ),
+  ),
+  errors: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+});
+
+/**
+ * The repository's open pull requests, as a stack is worked out from them.
+ * Note that a read that fails, or that GitHub answers only with errors,
+ * lists none, said once in the log, because the header stands without its
+ * stack.
+ */
+function openPullRequestsOf(
+  token: Redacted.Redacted,
+  fullName: string,
+): Effect.Effect<readonly StackCandidate[], never, HttpClient.HttpClient> {
+  const [owner = "", name = ""] = fullName.split("/");
+  const request = githubPost(GRAPHQL_PATH, token, {
+    query: OPEN_PULL_REQUESTS_QUERY,
+    variables: { owner, name },
+  });
+  return Effect.scoped(
+    Effect.flatMap(send(request), (response) => readBody(response, OpenPullRequestsAnswerSchema)),
+  ).pipe(
+    Effect.flatMap((answer) => {
+      const nodes = answer.data?.repository?.pullRequests.nodes;
+      if (nodes === undefined) {
+        return Effect.as(
+          Effect.logWarning(
+            `GitHub answered no open pull requests of the repository (${answer.errors?.length ?? 0} errors)`,
+          ),
+          [],
+        );
+      }
+      return Effect.succeed(
+        nodes.flatMap((node) =>
+          node === null
+            ? []
+            : [
+                {
+                  number: node.number,
+                  title: node.title,
+                  url: node.url,
+                  draft: node.isDraft,
+                  head: node.headRefName,
+                  base: node.baseRefName,
+                  crossRepository: node.isCrossRepository,
+                },
+              ],
+        ),
+      );
+    }),
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(`the repository's open pull requests were not read: ${failure._tag}`),
+        [],
+      ),
+    ),
+  );
+}
+
+/**
  * A pull request itself as its overview draws it, read on the token in one
  * ask with GitHub's rendering of its description: its branches, its times,
- * its mergeability, who opened it, and who it still asks for a review. None
- * where the repository holds no such pull request.
+ * its mergeability, who opened it, who it still asks for a review, and its
+ * labels. Where `stacked` says it was open as last read, the repository's
+ * open pull requests are read beside it for the stack it stands in, which
+ * one no longer open stands in none of. None where the repository holds no
+ * such pull request.
  */
 export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOverview")(function* (
   token: Redacted.Redacted,
   fullName: string,
   number: number,
+  stacked: boolean,
 ): Effect.fn.Return<
   Option.Option<GitHubOverviewPullRequest>,
   PullRequestReadFailure,
   HttpClient.HttpClient
 > {
   const path = `${repositoryPath(fullName)}/pulls/${number}`;
-  const read = yield* readOptional(withRendering(githubRead(path, token)), OverviewPullSchema);
+  const [read, open] = yield* Effect.all(
+    [
+      readOptional(withRendering(githubRead(path, token)), OverviewPullSchema),
+      stacked ? openPullRequestsOf(token, fullName) : Effect.succeed([]),
+    ],
+    { concurrency: "unbounded" },
+  );
   if (Option.isNone(read)) return Option.none();
   const pull = read.value;
+  const pullRequest = pullRequestOf(pull);
+  const current: StackCandidate = {
+    number: pullRequest.number,
+    title: pullRequest.title,
+    url: pullRequest.url,
+    draft: pullRequest.state === PULL_REQUEST_STATE.DRAFT,
+    head: pull.head.ref,
+    base: pull.base.ref,
+    crossRepository: false,
+  };
+  const stands =
+    pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return Option.some({
-    pullRequest: pullRequestOf(pull),
+    pullRequest,
     html: pull.body_html?.trim() ?? "",
     base: nameOf(pull.base.ref),
     head: nameOf(pull.head.ref),
@@ -1459,6 +1590,8 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     merge: GITHUB_MERGE_STATE.get(pull.mergeable_state ?? "") ?? MERGE_STATE.UNKNOWN,
     author: pull.user === null ? undefined : accountOf(pull.user),
     requested: distinctAccounts((pull.requested_reviewers ?? []).map(accountOf)),
+    labels: (pull.labels ?? []).slice(0, OVERVIEW_BOUNDS.MAX_LABELS),
+    stack: stands ? stackOf(current, open) : [],
   });
 });
 
