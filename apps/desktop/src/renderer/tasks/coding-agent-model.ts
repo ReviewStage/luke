@@ -126,12 +126,6 @@ export function agentUsageLine(usage: CodingAgentUsage | undefined): string | un
   return `This agent: ${cost === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${cost}`}`;
 }
 
-/** The line with what the turn cost after it, where known. */
-function withCost(line: string, usage: CodingAgentUsage | undefined): string {
-  const cost = costLabel(usage);
-  return cost === undefined ? line : `${line}${LINE_SEPARATOR}${cost}`;
-}
-
 /**
  * The teammate who started an agent, by name, whose key pays for it and whose
  * Mac its commands run on; none for the reader's own agent, one whose starter
@@ -233,8 +227,9 @@ export function agentActor(
  * What sent one of the developer's messages to an agent, as the actor named
  * over it: a teammate read against the workspace's `members` for their
  * face, a former member, Luke, an automation, another coding agent of the
- * workspace by its name on the mark of no known harness, since the service
- * keeps no more of it than its name, or the GitHub login GitHub
+ * workspace by its name on its harness's mark, read off the model the
+ * service answers it runs on, and the mark of no known harness where it
+ * answers none, or the GitHub login GitHub
  * told the agent of, a person's circle by their avatar or an App's bot's
  * square by whether the login is a bot's (`githubLoginActor`); none for the reader's own,
  * a message whose sender was not kept, or a member's read with no account
@@ -257,7 +252,9 @@ export function lineSender(
     return {
       kind: ACTOR_KIND.AGENT,
       name: sentBy.name,
-      provider: undefined,
+      ...(sentBy.agentId === undefined ? undefined : { agentId: sentBy.agentId }),
+      ...(sentBy.taskId === undefined ? undefined : { taskId: sentBy.taskId }),
+      provider: sentBy.model === undefined ? undefined : providerOf(sentBy.model),
       state: ACTOR_STATE.REST,
     };
   }
@@ -278,30 +275,53 @@ export function lineSender(
   }
 }
 
+/** The parts of the line a transcript ends on: its words, what the turn cost where known, and whether it tells of a failure, which is drawn as one. */
+export interface EndLineParts {
+  readonly words: string;
+  readonly cost?: string | undefined;
+  readonly failed: boolean;
+}
+
 /**
  * The quiet line a transcript ends on once its turn failed or was stopped,
- * with what the turn cost where known; nothing for an agent still writing or
- * one that completed. A teammate's agent names its starter's key, since it
- * runs on theirs and not the reader's.
+ * in parts, so its words and its cost can be drawn apart; nothing for an
+ * agent still writing or one that completed. A teammate's agent names its
+ * starter's key, since it runs on theirs and not the reader's. An agent
+ * another already `continued` is not told to start a new one.
  */
-export function endLine(
+export function endLineParts(
   status: CodingAgentStatus,
   failure: CodingAgentFailure | undefined,
   turnUsage?: CodingAgentUsage,
   starter?: string,
-): string | undefined {
+  continued = false,
+): EndLineParts | undefined {
+  const cost = costLabel(turnUsage);
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
-      return withCost("Stopped", turnUsage);
+      return { words: "Stopped", cost, failed: false };
     case CODING_AGENT_STATUS.FAILED: {
-      const words = failure === undefined ? undefined : agentFailureWords(failure, starter);
-      return withCost(words === undefined ? "Failed" : `Failed: ${words}`, turnUsage);
+      const words =
+        failure === undefined ? undefined : agentFailureWords(failure, starter, continued);
+      return { words: words === undefined ? "Failed" : `Failed: ${words}`, cost, failed: true };
     }
     case CODING_AGENT_STATUS.STARTING:
     case CODING_AGENT_STATUS.RUNNING:
     case CODING_AGENT_STATUS.COMPLETED:
       return undefined;
   }
+}
+
+/** The end line as one string (`endLineParts`), for a hover card and a notification, which draw it as words alone. */
+export function endLine(
+  status: CodingAgentStatus,
+  failure: CodingAgentFailure | undefined,
+  turnUsage?: CodingAgentUsage,
+  starter?: string,
+): string | undefined {
+  const parts = endLineParts(status, failure, turnUsage, starter);
+  if (parts === undefined) return undefined;
+  return parts.cost === undefined ? parts.words : `${parts.words}${LINE_SEPARATOR}${parts.cost}`;
 }
 
 /** What mends a failed turn from its end line: the API keys' page for a key refused; nothing else there is the developer's to mend. */
@@ -364,9 +384,69 @@ const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_RETIRED]: "This agent has ended. Start a new one.",
   [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
 } as const;
+
+/** What a Start from an agent whose session has ended says. */
+const START_RETIRED = "This agent has ended. Start a new one.";
+
+/** What a message to an agent whose session has ended says, its box closed on it, beside the press that continues it in a new agent (`ContinueAgent`). */
+export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one to carry on.";
+
+/** What the press that starts a new agent on another's whole transcript says. */
+export const CONTINUE_LABEL = "Continue in new agent";
+
+/** What the line naming the agents that continued another says before their chips. */
+export const CONTINUED_IN = "Continued in";
+
+/**
+ * The agents of the task that continue `agentId`: each started from it on
+ * its whole transcript, naming no message, archived ones among them, in the
+ * order started. Note that a fork names the message it was cut at, so it
+ * continues nothing.
+ */
+export function continuationsOf(
+  agentId: string,
+  agents: readonly CodingAgentSummary[] | undefined,
+  archived: readonly CodingAgentSummary[] | undefined,
+): readonly CodingAgentSummary[] {
+  return [...(agents ?? []), ...(archived ?? [])]
+    .filter((each) => each.from?.agentId === agentId && each.from.messageId === undefined)
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+/**
+ * The ids of the agents that continue `agent`, oldest first: those the
+ * service names on its summary (`continuedBy`), so a page that lists the
+ * agent alone still names them, then any the task's agents name that the
+ * summary does not yet (`continuationsOf`), as one just started. Note that
+ * a service older than `continuedBy` leaves the key out, which reads the
+ * list alone, and that a fork is never a continuation.
+ */
+export function continuedByIds(
+  agent: CodingAgentSummary,
+  agents: readonly CodingAgentSummary[] | undefined,
+  archived: readonly CodingAgentSummary[] | undefined,
+): readonly string[] {
+  const named = (agent.continuedBy ?? [])
+    .filter((each) => !each.forked && each.messageId === undefined)
+    .map((each) => each.agentId);
+  const listed = continuationsOf(agent.id, agents, archived).map((each) => each.id);
+  return [...new Set([...named, ...listed])];
+}
+
+/** The titles the summary gives the agents that continue it, by id, for a page whose list does not hold them; none for one with no title yet. */
+export function continuedByTitles(agent: CodingAgentSummary): ReadonlyMap<string, string> {
+  const titled = (agent.continuedBy ?? []).flatMap((each) =>
+    each.title === null ? [] : [[each.agentId, each.title] as const],
+  );
+  return new Map(titled);
+}
+
+/** Whether a turn's end line is where an agent may be continued: it failed, and not on a refused API key, which a new agent would meet the same. */
+export function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): boolean {
+  return status === CODING_AGENT_STATUS.FAILED && endReason !== FAILURE_REASON.API_KEY;
+}
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
 export const MODEL_CHANGE_FAILED = "The model could not be changed. Try again.";
@@ -517,11 +597,12 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
       return "This task no longer exists.";
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "The agent could not be started. Try again.";
+    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+      return START_RETIRED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
@@ -546,11 +627,12 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "Luke didn't hear back. Retry sends it again, once.";
+    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+      return MESSAGE_RETIRED;
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
@@ -1107,6 +1189,20 @@ export function agentListCallIds(messages: readonly CodingAgentMessage[]): reado
     );
 }
 
+/** The answered starts of a transcript that made a new task, by call id: what the tasks are read again on as each lands, so the new task stands in the sidebar. */
+export function newTaskCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+  return messages
+    .flatMap(agentParts)
+    .flatMap((part) =>
+      part.kind === AGENT_PART.TOOL &&
+      part.tool === AGENT_TOOL.START_AGENT &&
+      isRecord(part.output) &&
+      isRecord(part.output.newTask)
+        ? [part.callId]
+        : [],
+    );
+}
+
 /** Whether a call is a delegation to a worker, a coding agent's or the brain's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
   return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
@@ -1532,6 +1628,8 @@ export interface SentLine {
   readonly known: ReadonlySet<string>;
   /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
   readonly steers: boolean;
+  /** Whether the agent refused it for good, its session ended, so it stands where it went marked as not delivered, and no row will read it back. */
+  readonly undelivered?: boolean;
 }
 
 /**
@@ -1579,6 +1677,8 @@ export function unreadSentLines(
 ): SentLinesRead {
   const claimed = new Set(taken);
   const lines = sent.filter((line) => {
+    // A line the agent refused for good has no row to be read back by.
+    if (line.undelivered === true) return true;
     const row = developerRows(messages).find(
       (message) =>
         !line.known.has(message.id) &&

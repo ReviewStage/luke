@@ -11,12 +11,14 @@ import {
   type ExperimentChoices,
   NO_EXPERIMENTS,
 } from "@luke/settings";
-import { experimentsOn, settingsView } from "@luke/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -50,17 +52,13 @@ beforeEach(() => {
   sent = [];
   feedbackAbout = [];
   written = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act) => {
-        sent.push(request);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: {} },
-        });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(settingsView()) },
+      });
     },
   });
 });
@@ -76,6 +74,7 @@ function rowsInput(experiments: ExperimentChoices) {
     settings: settingsView({ experiments }),
     voiceControlsDrawn: false,
     accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
   };
 }
 
@@ -164,8 +163,11 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
   const chip = page.querySelector<HTMLButtonElement>('[aria-label="Avatar: Atlas"]');
   assert.ok(chip, "the avatar is a choice, Atlas at first");
   // Each experiment is a card of its own, and the avatar stands in Video calls' card, under its switch.
-  const cards = [...page.querySelectorAll(".settings-card")].map((card) =>
-    [...card.querySelectorAll(".settings-row strong")].map((label) => label.textContent),
+  const cards = [...page.querySelectorAll("section")].map((card) =>
+    [...card.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
+      // A chip's name ends with the value it names, which is not the row's.
+      (control) => control.getAttribute("aria-label")?.split(": ")[0],
+    ),
   );
   assert.deepEqual(cards, [
     ["Sections"],
@@ -216,5 +218,5 @@ test("with Video calls off, no avatar is offered", () => {
   });
 
   assert.equal(page.querySelector('[aria-label^="Avatar"]'), null);
-  assert.equal(page.querySelectorAll(".settings-card").length, EXPERIMENTS.length);
+  assert.equal(page.querySelectorAll("section").length, EXPERIMENTS.length);
 });

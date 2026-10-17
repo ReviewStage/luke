@@ -13,7 +13,13 @@ import {
   type TaskWorkTurn,
   type TaskWorkWorker,
 } from "@luke/features/tasks-view";
-import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
+import {
+  isRecord,
+  isWireString,
+  UNKNOWN_ACTION_STATUS,
+  type WireRecord,
+  type WireValue,
+} from "@luke/wire";
 import { Schema } from "effect";
 import {
   BRAIN_DELEGATE_TOOL,
@@ -56,6 +62,10 @@ export const SUBAGENT_JOURNALS = 10;
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
 const isDelegateInput = Schema.is(BRAIN_DELEGATE_TOOL.storedInputSchema);
 const isText = Schema.is(Schema.String);
+/** The envelope the record answers a call with that nothing answered (`writer.ts`): its effect is unknown. */
+const isUnknownOutcome = Schema.is(
+  Schema.Struct({ status: Schema.Literal(UNKNOWN_ACTION_STATUS) }),
+);
 
 /** What a worker call carries, in one shape: the message the worker was handed, and the task a call sent more to. */
 type WorkerInput = { readonly message: string; readonly taskId?: string | null };
@@ -129,6 +139,9 @@ function isWorkerCall(part: StoredToolPart): boolean {
  * Where the worker of each of the journal's worker calls stands, by the
  * call: as its call stood, but one whose call answered stands as the turn
  * does until a later step shows its findings arrived (`workerAnswered`).
+ * A call the record answered itself, with the envelope of an unknown
+ * outcome, as a retried step's abandoned one, started no worker the turn
+ * waits on, so it stands as its call does.
  * The parts are split at each step marker, so those steps can be read.
  */
 function workerStatesOf(
@@ -144,7 +157,10 @@ function workerStatesOf(
   steps.forEach((step, index) => {
     for (const part of step.filter(isStoredToolPart).filter(isWorkerCall)) {
       const called = callStateOf(part, turnState);
-      const answered = called !== TASK_WORK_STATE.DONE || workerAnswered(steps, index);
+      const answered =
+        called !== TASK_WORK_STATE.DONE ||
+        isUnknownOutcome(part.output) ||
+        workerAnswered(steps, index);
       states.set(part.toolCallId, answered ? called : turnState);
     }
   });

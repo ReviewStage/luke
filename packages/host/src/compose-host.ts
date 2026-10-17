@@ -24,6 +24,7 @@ import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
@@ -33,9 +34,10 @@ import { composeIntegrations } from "./compose-integrations.js";
 import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
+import { composeMacTerminal } from "./compose-mac-terminal.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeTasks } from "./compose-tasks.js";
-import { composeTerminals } from "./compose-terminals.js";
+import { composeTerminals, type TerminalsComposer } from "./compose-terminals.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
@@ -46,27 +48,21 @@ import {
   Reporter,
   type SecretCipher,
   ShutdownSignal,
+  type SignInConsent,
+  TerminalSocket,
+  VoiceSocket,
 } from "./effect/seams.js";
+import {
+  HOST_CONCERN,
+  HOST_PLATFORM_CONCERN,
+  type HostConcern,
+  type HostPlatformConcern,
+  isPlatformConcern,
+  unavailableConcern,
+} from "./host-concerns.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
-import { openTerminalSocketOverWs } from "./terminal/socket-over-ws.js";
-
-/** The concerns, by the name each is built under. */
-const HOST_CONCERN = {
-  SETTINGS: "settings",
-  ACCOUNT: "account",
-  LIVE: "live",
-  TASKS: "planning",
-  CODING_AGENTS: "codingAgents",
-  AUTOMATIONS: "automations",
-  ISSUES: "issues",
-  INTEGRATIONS: "integrations",
-  MAC_COMMANDS: "macCommands",
-  TERMINALS: "terminals",
-} as const;
-
-type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
 
 /**
  * The order the launch has to keep: the account is read before anything
@@ -84,35 +80,55 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.MAC_COMMANDS,
 ];
 
+/** What every assembly asks for, whichever platform concerns it was built with. */
+type HostAssemblyRequirements =
+  | HostKernelTag
+  | HostService
+  | Reporter
+  | VoiceSocket
+  | Environment
+  | SecretCipher
+  | AppIdentity
+  | ShutdownSignal
+  | SignInConsent
+  | FileSystem.FileSystem
+  | Path.Path
+  | HttpClient.HttpClient;
+
+/** What each platform concern adds to the assembly's requirements when it is chosen. */
+interface PlatformConcernRequirements {
+  [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
+  [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
+  [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
+}
+
 /**
  * Every concern constructed, linked, and merged, with nothing yet begun: the
  * composers in the launch's order, the arming that follows the last of them,
  * and the drain. A method two concerns claim fails this build, so which
  * concern answers a method is checked before anything starts.
+ *
+ * The platform concerns are the ones `chosen` names. One left out is never
+ * started, adds nothing to the layer's requirements, and answers each of its
+ * methods with a refusal (`host-concerns.ts`).
  */
-export const hostAssemblyLayer: Layer.Layer<
+export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
+  chosen: readonly Chosen[],
+): Layer.Layer<
   HostAssemblyTag,
   DuplicateGatewayMethod,
-  | HostKernelTag
-  | HostService
-  | Reporter
-  | Environment
-  | SecretCipher
-  | AppIdentity
-  | ShutdownSignal
-  | FileSystem.FileSystem
-  | Path.Path
-  | ChildProcessSpawner.ChildProcessSpawner
-> = Layer.effect(
-  HostAssemblyTag,
-  Effect.gen(function* () {
+  HostAssemblyRequirements | PlatformConcernRequirements[Chosen]
+> {
+  const platform = new Set<HostPlatformConcern>(chosen);
+  const build = Effect.gen(function* () {
     const kernel = yield* HostKernelTag;
     const hostService = yield* HostService;
     const shutdownSignal = yield* ShutdownSignal;
     const { report } = yield* Reporter;
+    const openVoiceSocket = yield* VoiceSocket;
 
     const settings = yield* composeSettings();
-    const account = yield* composeAccount({ settings });
+    const account = yield* composeAccount({ settings, openSocket: openVoiceSocket });
     // No brain runs on this Mac: the exchange is the service's, and Luke
     // speaks only on a task's call the developer opened.
     // The tasks composer is built after the live one and ends its calls, so
@@ -195,27 +211,34 @@ export const hostAssemblyLayer: Layer.Layer<
           (result) => result.status === NODE_CAPABILITY_STATUS.OK,
         ),
     });
-    const macCommands = yield* composeMacCommands({
-      kernel,
-      account,
-      enabled: Effect.map(
-        Effect.orDie(settings.store.snapshot()),
-        (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
-      ),
-      client: new HostedMacCommandClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
-      }),
-    });
-    const terminals = yield* composeTerminals({
-      kernel,
-      account,
-      client: new HostedTerminalClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
-      }),
-      openSocket: openTerminalSocketOverWs,
-    });
+    const macCommands = platform.has(HOST_PLATFORM_CONCERN.MAC_COMMANDS)
+      ? yield* composeMacCommands({
+          kernel,
+          account,
+          enabled: Effect.map(
+            Effect.orDie(settings.store.snapshot()),
+            (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
+          ),
+          client: new HostedMacCommandClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            ...account.token,
+          }),
+        })
+      : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
+    const macTerminal = platform.has(HOST_PLATFORM_CONCERN.MAC_TERMINAL)
+      ? composeMacTerminal({ store: settings.store })
+      : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_TERMINAL);
+    const terminals: TerminalsComposer = platform.has(HOST_PLATFORM_CONCERN.TERMINALS)
+      ? yield* composeTerminals({
+          kernel,
+          account,
+          client: new HostedTerminalClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            ...account.token,
+          }),
+          openSocket: yield* TerminalSocket,
+        })
+      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
     activeTaskId = tasks.activeTaskId;
     showPlanDraft = tasks.showDraft;
     showTaskActivity = tasks.showActivity;
@@ -268,8 +291,11 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.ISSUES]: issues,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
+      [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,
     } satisfies Readonly<Record<HostConcern, Composer>>;
+    // Note that the platform concerns are the only ones a host may leave out.
+    const running = (name: HostConcern) => !isPlatformConcern(name) || platform.has(name);
 
     /**
      * The one method no composer can own: it reads several of them at once,
@@ -328,7 +354,8 @@ export const hostAssemblyLayer: Layer.Layer<
     const assembly: HostAssembly = {
       gateway: service.gateway,
       nodes: kernel.nodes,
-      startOrder: HOST_START_ORDER.map((name) => concerns[name]),
+      concerns: new Set(Object.values(HOST_CONCERN).filter(running)),
+      startOrder: HOST_START_ORDER.filter(running).map((name) => concerns[name]),
       /**
        * The launch's own arming: where the account's capabilities already
        * stand open, the launch opens the gate exactly as a sign-in does.
@@ -351,5 +378,20 @@ export const hostAssemblyLayer: Layer.Layer<
       },
     };
     return assembly;
-  }),
-);
+  });
+  // Note that the build is checked against every platform concern's seam
+  // first, so a requirement a composer gains is never dropped from `R`.
+  const checked: Layer.Layer<
+    HostAssemblyTag,
+    DuplicateGatewayMethod,
+    HostAssemblyRequirements | PlatformConcernRequirements[HostPlatformConcern]
+  > = Layer.effect(HostAssemblyTag, build);
+  // SAFETY: the build asks for a platform concern's own seam only on the
+  // branch that composes that concern, so a concern left out of `chosen`
+  // never reads what `PlatformConcernRequirements` would have added for it.
+  return checked as Layer.Layer<
+    HostAssemblyTag,
+    DuplicateGatewayMethod,
+    HostAssemblyRequirements | PlatformConcernRequirements[Chosen]
+  >;
+}

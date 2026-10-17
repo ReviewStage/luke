@@ -16,6 +16,14 @@ export const DIALOG_ROLE = {
 
 export type DialogRole = (typeof DIALOG_ROLE)[keyof typeof DIALOG_ROLE];
 
+/** How wide the card stands: a question's measure, or wider for a note being written. */
+export const DIALOG_SIZE = {
+  CONFIRM: "confirm",
+  WIDE: "wide",
+} as const;
+
+export type DialogSize = (typeof DIALOG_SIZE)[keyof typeof DIALOG_SIZE];
+
 /**
  * What Tab may land on inside the card: its enabled controls and links, and
  * anything else given a place in the Tab order. Note that one taken out of
@@ -37,6 +45,8 @@ type CardData = { [attribute: `data-${string}`]: string | undefined };
 /** What a dialog is told: who names it, whether it is at work, where focus lands, and how it is put away. */
 export interface DialogProps {
   role?: DialogRole | undefined;
+  /** How wide the card stands, a question's measure unless asked. */
+  size?: DialogSize | undefined;
   /** The id of the card's title. */
   labelledBy: string;
   /** The id of what the card says, where it is a question. */
@@ -53,6 +63,8 @@ export interface DialogProps {
   dropTarget?:
     | Pick<React.HTMLAttributes<HTMLDivElement>, "onDragOver" | "onDragLeave" | "onDrop">
     | undefined;
+  /** Whether a drag the dimmed window would take is over it, which rings the card that will take it. */
+  dropping?: boolean | undefined;
   children: React.ReactNode;
 }
 
@@ -129,6 +141,7 @@ function classes(own: string, extra: string | undefined): string {
  */
 export function DialogFrame({
   role = DIALOG_ROLE.DIALOG,
+  size = DIALOG_SIZE.CONFIRM,
   className,
   backdropClassName,
   labelledBy,
@@ -138,6 +151,7 @@ export function DialogFrame({
   onDismiss,
   onKeyDown,
   dropTarget,
+  dropping = false,
   children,
   ...data
 }: DialogFrameProps): React.JSX.Element {
@@ -189,6 +203,8 @@ export function DialogFrame({
       {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role is a dialog or an alert dialog, and both are modal. */}
       <div
         {...data}
+        data-size={size}
+        data-dropping={dropping}
         ref={card}
         className={classes("luke-dialog", className)}
         role={role}

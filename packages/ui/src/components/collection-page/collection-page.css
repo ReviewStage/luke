@@ -4,7 +4,9 @@
    and the admin's wider column on the web. The page queries its own width
    rather than the viewport's, so a page in a narrow pane narrows its inset
    as it would in a narrow window; a container query cannot read a custom
-   property, so the width it narrows under is a literal here. */
+   property, so the width it narrows under is a literal here. Under the
+   window's toolbar the page draws no header, and a board's content stands
+   across the room, scrolling sideways past it. */
 
 @layer components {
   .luke-collection-page {
@@ -130,6 +132,27 @@
     flex: 1 0 auto;
     flex-direction: column;
     padding-bottom: var(--luke-collection-page-inset);
+  }
+
+  /* Under a toolbar with no filters, the content opens the filters' gap
+     below the toolbar's hairline, inside the scroll so the wheel works
+     right up to it. */
+  .luke-collection-page[data-frame="toolbar"] > .luke-collection-page-scroll:first-child,
+  .luke-collection-page[data-frame="toolbar"]
+    > :not(.luke-collection-page-top)
+    + .luke-collection-page-scroll {
+    padding-top: var(--luke-section-gap);
+  }
+
+  /* A board's content stands across the room at the page's inset and
+     scrolls sideways past it. */
+  .luke-collection-page[data-width="full"]
+  :is(.luke-collection-page-header, .luke-collection-page-filters, .luke-collection-page-content) {
+    max-width: none;
+  }
+
+  .luke-collection-page[data-width="full"] > .luke-collection-page-scroll {
+    overflow-x: auto;
   }
 
   /* A filter's search field stands at a search's width, not the line's. */

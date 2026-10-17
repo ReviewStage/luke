@@ -4,13 +4,15 @@ import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   QUIET_COMPOSER,
@@ -39,19 +41,15 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (_request: Act): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-      recordSurfaceEvent: ignore,
-    },
+  fakeAppBridge({
+    act: (_request: Act): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
 });
 
@@ -164,8 +162,8 @@ function cardOn(element: Element | undefined): (string | null | undefined)[] {
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-note")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-note")?.textContent,
   ];
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));

@@ -77,6 +77,17 @@ export const CODER = {
    * starting forever and no transcript read is held for it.
    */
   STARTING_GRACE: Duration.minutes(5),
+  /**
+   * How long a line of the developer's may stand with no turn to take it
+   * while none runs, and still read the agent as running. eve opens the
+   * turn on a line it took in seconds, as it lands the first turn of a
+   * Start (`STARTING_GRACE`, whose length this shares); a line still
+   * waiting past this is one whose turn is not coming, as when the session
+   * failed with the store's hooks failing beside it, so no failed turn was
+   * written. It is read as failed rather than running forever, so the
+   * developer is offered Continue on it.
+   */
+  LINE_GRACE: Duration.minutes(5),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

@@ -1,0 +1,35 @@
+/* folding-button.css -- a FoldingButton's box, and its fold: under an
+   element whose `--luke-fold` is `folded`, the button is a square around
+   its glyph and its words are drawn nowhere, though a reader still has them.
+
+   The fold is a style query, so the toolbar that folds its buttons says so
+   with one custom property from its own container query, and owns nothing
+   inside them. */
+
+@layer components {
+  .luke-folding-button {
+    display: inline-flex;
+    flex: none;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  @container style(--luke-fold: folded) {
+    .luke-folding-button > .luke-button {
+      width: var(--luke-control-height);
+      padding: 0;
+    }
+
+    .luke-folding-button .luke-button-words {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+}

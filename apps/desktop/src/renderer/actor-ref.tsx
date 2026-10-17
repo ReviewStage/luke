@@ -8,7 +8,16 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import type { AutomationSummary } from "@luke/features/automation-wire";
-import { WingFace } from "@luke/ui";
+import {
+  AVATAR_SIZE,
+  Avatar,
+  type AvatarSize,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  HoverCardRule,
+  WingFace,
+} from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -16,8 +25,6 @@ import {
   type ActorState,
   actorName,
   type GitHubActor,
-  identityHue,
-  identityLetter,
   LUKE_ACTOR,
   type PersonActor,
   ROLE_WORDS,
@@ -26,7 +33,6 @@ import {
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
-import { CardHead, CardNote, CardRule, HoverCard } from "./hover-card";
 import { useActorDoor } from "./person-door";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
 import { RelativeTime } from "./tasks/relative-time";
@@ -37,9 +43,9 @@ import { Tooltip } from "./tooltip";
 /**
  * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.
  *
- * A person's circle holds their sign-in picture once it loads, and the first
- * letter of their name on the hue read off their id until then and where it
- * fails, as a workspace's tile does; a member who left keeps their own
+ * A person's circle is the shared `Avatar`: their sign-in picture once it
+ * loads, and the first letter of their name on the hue read off their id
+ * until then and where it fails, as a workspace's tile does; a member who left keeps their own
  * picture or letter, grayed and muted, their name saying they left, so
  * colour is never the only sign; someone the service names nobody for
  * stands on a quiet outline. Someone GitHub names
@@ -98,36 +104,61 @@ const GLYPH_OF_STATE = {
   [ACTOR_STATE.REST]: GLYPH_STATE.REST,
 } as const satisfies Record<ActorState, GlyphState>;
 
-/**
- * A picture once it loads, and `stand` until then and where it fails: a
- * person's letter on the hue read off `id`, or a bot's own glyph on its
- * tile, which never holds a letter. A picture GitHub serves is asked for at
- * the size the disc draws it (`githubAvatarAt`).
- */
-function PictureFace({
+/** The disc a person's face is drawn at for each size an actor is. */
+const AVATAR_OF_SIZE = {
+  [ACTOR_SIZE.MARK]: AVATAR_SIZE.MARK,
+  [ACTOR_SIZE.INLINE]: AVATAR_SIZE.INLINE,
+  [ACTOR_SIZE.STACK]: AVATAR_SIZE.STACK,
+  [ACTOR_SIZE.ROW]: AVATAR_SIZE.ROW,
+  [ACTOR_SIZE.ACCOUNT]: AVATAR_SIZE.ACCOUNT,
+  [ACTOR_SIZE.CARD]: AVATAR_SIZE.CARD,
+  [ACTOR_SIZE.PAGE]: AVATAR_SIZE.PAGE,
+} as const satisfies Record<ActorSize, AvatarSize>;
+
+/** A picture's address at the size a disc draws it, which GitHub serves sized (`githubAvatarAt`). */
+function pictureAt(pictureUrl: string | undefined, size: ActorSize): string | undefined {
+  return pictureUrl === undefined
+    ? undefined
+    : githubAvatarAt(pictureUrl, ACTOR_PIXELS[size] * PICTURE_DENSITY);
+}
+
+/** A person's disc: their picture once it loads, and the first letter of `name` on the hue read off `id` until then and where it fails. */
+function PersonDisc({
   id,
+  name,
   pictureUrl,
   size,
-  stand,
 }: {
   id: string;
+  name: string;
   pictureUrl: string | undefined;
   size: ActorSize;
-  stand: { readonly letter: string } | { readonly glyph: ReactNode };
 }): React.JSX.Element {
+  const src = pictureAt(pictureUrl, size);
+  return (
+    <span className="actor-face">
+      <Avatar
+        id={id}
+        name={name}
+        {...(src === undefined ? {} : { src })}
+        size={AVATAR_OF_SIZE[size]}
+        decorative
+      />
+    </span>
+  );
+}
+
+/** An App's bot on GitHub: its avatar once it loads, and its robot until then and where it fails, since a bot's square never holds a letter. */
+function BotFace({ actor, size }: { actor: GitHubActor; size: ActorSize }): React.JSX.Element {
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
   const [loadedUrl, setLoadedUrl] = useState<string | undefined>(undefined);
-  const sized =
-    pictureUrl === undefined
-      ? undefined
-      : githubAvatarAt(pictureUrl, ACTOR_PIXELS[size] * PICTURE_DENSITY);
+  const sized = pictureAt(actor.avatarUrl, size);
   const url = sized !== failedUrl ? sized : undefined;
   const shown = url !== undefined && url === loadedUrl;
-  const lettered = "letter" in stand;
-  // Note that the stand-in stands until the picture has loaded, because a picture on the network may take a while, and goes once it has, so a transparent one shows nothing through.
+  // Note that the robot stands until the picture has loaded, because a picture on the network may take a while, and goes once it has, so a transparent one shows nothing through.
   return (
-    <span className="actor-face" data-hue={shown || !lettered ? undefined : identityHue(id)}>
-      {shown ? null : lettered ? stand.letter : stand.glyph}
+    <span className="actor-face">
+      {shown ? null : <BotIcon />}
       {url === undefined ? null : (
         <img
           className="actor-picture"
@@ -144,35 +175,13 @@ function PictureFace({
   );
 }
 
-/** A person's picture once it loads, their letter on its hue until then and where it fails. */
-function PersonFace({ actor, size }: { actor: PersonActor; size: ActorSize }): React.JSX.Element {
-  return (
-    <PictureFace
-      id={actor.userId}
-      pictureUrl={actor.pictureUrl}
-      size={size}
-      stand={{ letter: identityLetter(actor.name) }}
-    />
-  );
-}
-
-/** Someone on GitHub: their avatar once it loads, a person's letter or a bot's glyph until then. */
-function GitHubFace({ actor, size }: { actor: GitHubActor; size: ActorSize }): React.JSX.Element {
-  return (
-    <PictureFace
-      id={actor.login}
-      pictureUrl={actor.avatarUrl}
-      size={size}
-      stand={actor.bot ? { glyph: <BotIcon /> } : { letter: identityLetter(actor.login) }}
-    />
-  );
-}
-
 /** What stands on an actor's circle or square, at its size. */
 function Face({ actor, size }: { actor: Actor; size: ActorSize }): React.JSX.Element {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
-      return <PersonFace actor={actor} size={size} />;
+      return (
+        <PersonDisc id={actor.userId} name={actor.name} pictureUrl={actor.pictureUrl} size={size} />
+      );
     case ACTOR_KIND.LUKE:
       return (
         <span className="actor-face">
@@ -195,16 +204,20 @@ function Face({ actor, size }: { actor: Actor; size: ActorSize }): React.JSX.Ele
         </span>
       );
     case ACTOR_KIND.GITHUB:
-      return <GitHubFace actor={actor} size={size} />;
+      return actor.bot ? (
+        <BotFace actor={actor} size={size} />
+      ) : (
+        <PersonDisc id={actor.login} name={actor.login} pictureUrl={actor.avatarUrl} size={size} />
+      );
     case ACTOR_KIND.SOMEONE:
       // A member who left keeps their own face, grayed by the mark, where the service still names them.
       if (actor.reason === SOMEONE_REASON.FORMER && actor.name !== undefined) {
         return (
-          <PictureFace
+          <PersonDisc
             id={actor.userId ?? actor.name}
+            name={actor.name}
             pictureUrl={actor.pictureUrl}
             size={size}
-            stand={{ letter: identityLetter(actor.name) }}
           />
         );
       }
@@ -288,12 +301,7 @@ export function PictureMark({
 }): React.JSX.Element {
   return (
     <span className="actor-mark" data-kind={ACTOR_KIND.PERSON} data-size={size} aria-hidden="true">
-      <PictureFace
-        id={id}
-        pictureUrl={pictureUrl}
-        size={size}
-        stand={{ letter: identityLetter(name) }}
-      />
+      <PersonDisc id={id} name={name} pictureUrl={pictureUrl} size={size} />
     </span>
   );
 }
@@ -342,7 +350,7 @@ function ActorHead({
   return (
     <div className="actor-card-head">
       <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
-      <CardHead
+      <HoverCardHead
         name={
           you ? (
             <span className="actor-card-name">
@@ -382,8 +390,8 @@ export function PersonCard({
       />
       {latest === undefined ? null : (
         <>
-          <CardRule />
-          <CardNote>{latest}</CardNote>
+          <HoverCardRule />
+          <HoverCardNote>{latest}</HoverCardNote>
         </>
       )}
     </HoverCard>
@@ -405,8 +413,8 @@ export function LukeCard({
       <ActorHead actor={LUKE_ACTOR} sub={sub} />
       {latest === undefined ? null : (
         <>
-          <CardRule />
-          <CardNote>{latest}</CardNote>
+          <HoverCardRule />
+          <HoverCardNote>{latest}</HoverCardNote>
         </>
       )}
     </HoverCard>
@@ -435,7 +443,7 @@ function SomeoneCard({
         actor={actor}
         sub={former && actor.name !== undefined ? "Former member" : undefined}
       />
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
+      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
     </HoverCard>
   );
 }
@@ -453,7 +461,7 @@ function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
     <HoverCard data-actor-card={actor.kind}>
       <div className="actor-card-head">
         <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
-        <CardHead
+        <HoverCardHead
           name={
             actor.bot ? (
               <span className="actor-card-name">
@@ -518,13 +526,13 @@ export function AutomationCard({
         corner={automationOwnerName(automationOwner(automation), workspaceName)}
         onOpen={onOpen}
       />
-      <CardNote>{automationNextText(automation, now)}</CardNote>
+      <HoverCardNote>{automationNextText(automation, now)}</HoverCardNote>
       {lastRun === null ? null : (
-        <CardNote>
+        <HoverCardNote>
           {"Last ran "}
           <RelativeTime at={lastRun.firedAt} now={now} hint={false} ago />
           {` · ${automationRunLine(lastRun, automation.mine === true ? undefined : "its creator")}`}
-        </CardNote>
+        </HoverCardNote>
       )}
     </HoverCard>
   );
