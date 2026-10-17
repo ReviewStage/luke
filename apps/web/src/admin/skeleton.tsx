@@ -1,12 +1,4 @@
-import {
-  GAP,
-  Inline,
-  JUSTIFY,
-  Skeleton as LineBone,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
-} from "@luke/ui";
+import { Skeleton as LineBone, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { ChartFrameSkeleton } from "./charts/chart-frame";
 import {
   METRIC_STATUS,
@@ -128,9 +120,7 @@ const STAT_CARDS_GRID = {
 /** Only the sign-in methods chart has no trend across from its heading. */
 function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
   return (
-    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false}>
-      <Skeleton className={`w-full ${plot}`} />
-    </ChartFrameSkeleton>
+    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false} plot={plot} />
   );
 }
 
@@ -139,11 +129,7 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
  * and seven day rows with the grid's own gaps.
  */
 function SkeletonCalendarCard(): React.JSX.Element {
-  return (
-    <ChartFrameSkeleton aside={false} legend>
-      <Skeleton className="h-[156px] w-full" />
-    </ChartFrameSkeleton>
-  );
+  return <ChartFrameSkeleton aside={false} legend plot="h-[156px]" />;
 }
 
 function SkeletonAccountsTable({
@@ -217,7 +203,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <div
           className={
-            shape.plots.length > 1 ? "grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]" : undefined
+            shape.plots.length > 1
+              ? "grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+              : undefined
           }
         >
           {shape.plots.map((plot) => (
@@ -266,14 +254,18 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
             <div>
               {bones(5).map((row) => (
                 <div key={row} className="border-b border-border py-3 last:border-0">
-                  <Inline justify={JUSTIFY.BETWEEN} gap={GAP.FIELD} wrap={false}>
+                  {/* Note that the tracks start at zero, so the bones give way in a
+                  narrow card rather than holding it wider than its column. */}
+                  <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-4">
                     <Text as={TEXT_ELEMENT.DIV}>
                       <LineBone width="192px" />
                     </Text>
-                    <Text as={TEXT_ELEMENT.DIV}>
-                      <LineBone width="96px" />
-                    </Text>
-                  </Inline>
+                    <div className="flex justify-end">
+                      <Text as={TEXT_ELEMENT.DIV}>
+                        <LineBone width="96px" />
+                      </Text>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

@@ -1,7 +1,7 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { DocumentIcon, EmptyState } from "@luke/ui";
+import { DocumentIcon, EmptyState, IconButton, useMenu } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -21,7 +21,7 @@ import { useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
@@ -35,7 +35,7 @@ import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
-import { INBOX_COLUMNS, type InboxColumnsShown } from "./inbox-columns";
+import { INBOX_COLUMNS, type InboxColumnsShown, needsYouButton } from "./inbox-columns";
 import {
   holderKey,
   holderName,
@@ -240,7 +240,7 @@ export function InboxItemRow({
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
   const waitsOnTeammate = starter !== undefined && item.status === INBOX_STATUS.OPEN;
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
@@ -406,7 +406,7 @@ function ViewOptions({
   grouping: InboxGrouping;
   onGrouping: (grouping: InboxGrouping) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const choices: MenuAction[] = [
     {
       label: "Group by task",
@@ -430,9 +430,7 @@ function ViewOptions({
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
-        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -458,19 +456,17 @@ function NeedsYouOnly({
 }): React.JSX.Element {
   return (
     <Tooltip label={waitingOnly ? NEEDS_YOU_PRESS.ALL : NEEDS_YOU_PRESS.ONLY}>
-      <button
-        type="button"
-        className="icon-button inbox-needs-you-only"
-        aria-label={NEEDS_YOU.LABEL}
-        aria-pressed={waitingOnly}
-        data-waiting={String(waiting)}
+      <IconButton
+        icon={
+          <InboxIcon className="inbox-needs-you-glyph" data-waiting={String(waiting)}>
+            {/* Note that the dot's place and size are desktop.css's, beside the cut it stands in. */}
+            {waiting ? <circle className="inbox-needs-you-dot" /> : null}
+          </InboxIcon>
+        }
+        label={NEEDS_YOU.LABEL}
+        pressed={waitingOnly}
         onClick={() => onWaitingOnly(!waitingOnly)}
-      >
-        <InboxIcon className="icon-button-glyph">
-          {/* Note that the dot's place and size are desktop.css's, beside the cut it stands in. */}
-          {waiting ? <circle className="inbox-needs-you-dot" /> : null}
-        </InboxIcon>
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -570,7 +566,7 @@ function useRowFocusKept(): RowFocus {
     if ([...rows].some((each) => each.dataset.itemId === row)) return;
     focusedRow.current = undefined;
     if (document.activeElement !== null && document.activeElement !== document.body) return;
-    list.querySelector<HTMLElement>(".inbox-needs-you-only")?.focus();
+    needsYouButton(list)?.focus();
   });
   return {
     ref,

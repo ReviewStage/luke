@@ -6,7 +6,7 @@
  * the log of the run that drew it. A development build hands each error a
  * window's page logs to the reporter main writes its own lines through,
  * naming the document it came from, since the panels, the voice window, and
- * the call window all run the one bundle. Only errors cross: a warning or a
+ * the call window share the renderer's chunks. Only errors cross: a warning or a
  * log line is the page's to keep, and DevTools shows it.
  *
  * Note that an error naming an access token is withheld whole, as Sentry's

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
+import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
@@ -23,8 +24,10 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { FOR_YOU } from "@luke/ui/chat-model";
+import { experimentsOn } from "@luke/settings/testing";
+import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -41,10 +44,12 @@ import {
 } from "@luke/voice/voice-view";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastAction, newestToastSays } from "#testing/toast";
@@ -84,6 +89,11 @@ const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
     agentId: Schema.NullOr(Schema.String),
     inboxTaskId: Schema.NullOr(Schema.String),
+    chatShown: Schema.optionalKey(
+      Schema.NullOr(
+        Schema.Struct({ workspaceId: Schema.String, planId: Schema.NullOr(Schema.String) }),
+      ),
+    ),
   }),
 );
 
@@ -125,6 +135,8 @@ function mount(
   const shownAgents: (string | null)[] = [];
   /** Which task's Inbox main was told is shown, each time it was told. */
   const shownInboxes: (string | null)[] = [];
+  /** Which Chat main was told is on screen, each time it was told. */
+  const shownChats: ({ workspaceId: string; planId: string | null } | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
@@ -171,6 +183,7 @@ function mount(
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
             shownInboxes.push(shown.inboxTaskId);
+            shownChats.push(shown.chatShown ?? null);
           }
           const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
@@ -210,6 +223,7 @@ function mount(
     agentActs,
     shownAgents,
     shownInboxes,
+    shownChats,
     voiceCommands,
     payloads,
     /** Every Settings link the tab followed, in order. */
@@ -790,6 +804,16 @@ test("Show panel on a plan whose strip holds no tab opens the tab last closed th
   assert.equal(fresh.control().sidePanel.open, false);
   act(() => fresh.control().sidePanel.onToggle());
   assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.CALL });
+});
+
+test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows the panel empty, though another plan stands open behind it", () => {
+  const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  assert.deepEqual(tab.control().sidePanel.strip, []);
+
+  act(() => tab.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
 });
 
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
@@ -2338,4 +2362,123 @@ test("opening Chat on a place, as a chat notice's Open in Chat does, asks first 
   assert.equal(asked.length, 1);
   act(() => asked[0]?.());
   assert.equal(tab.control().chatView.open, true);
+});
+
+test("a live run reads the listed workspace's chat only while the account has Chat on", async () => {
+  handState({});
+  const off = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  await settle();
+  assert.ok(!off.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat off reads no chat");
+  assert.equal(off.control().chatView.available, false);
+
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const on = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat on reads its chat");
+  });
+});
+
+test("a channel chosen in Chat is the listed workspace's, so another workspace listed puts Chat back on For you", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  act(() => tab.control().chatView.onOpen());
+  const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
+  act(() => tab.control().chatView.onChoose(channel));
+  assert.deepEqual(tab.control().chatView.place, channel);
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  assert.equal(tab.control().chatView.open, true, "Chat stays open");
+  assert.deepEqual(tab.control().chatView.place, FOR_YOU);
+});
+
+test("a chat notification's click, listing the workspace its message waits in and opening Chat in one press, stands on that workspace's Chat", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  act(() => {
+    tab.control().onChooseWorkspace(ACME.id);
+    tab.control().chatView.onOpen();
+  });
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.equal(tab.control().chatView.open, true);
+  assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, planId: null });
+});
+
+test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only while the account has Chat on", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  act(() => on.control().onShowChat(TASK.id));
+  assert.ok(on.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+
+  handState({});
+  const off = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  act(() => off.control().onShowChat(TASK.id));
+  assert.ok(!off.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+});
+
+test("main is told a task's Chat tab on screen shows only its plan's channel, where the window's Chat shows the whole workspace's", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {},
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().onShowChat(TASK.id));
+  const onTab = tab.shownChats.at(-1);
+  act(() => tab.control().chatView.onOpen());
+
+  assert.deepEqual(onTab, { workspaceId: PERSONAL.id, planId: TASK.id });
+  assert.deepEqual(tab.shownChats.at(-1), { workspaceId: PERSONAL.id, planId: null });
+  assert.deepEqual(tab.control().chatShown, tab.shownChats.at(-1));
+});
+
+test("the task's Chat tab on screen marks the task's plan channel read, as the window's Chat on that channel does", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const channelId = "c0ffee00-0000-4000-8000-000000000002";
+  const answer = {
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    channels: [
+      { id: channelId, kind: CHANNEL_KIND.PLAN, name: "invites", archived: false, planId: TASK.id },
+    ],
+    messages: [
+      {
+        id: "d0d0d0d0-0000-4000-8000-000000000003",
+        seq: 4,
+        touchedSeq: 4,
+        channelId,
+        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
+        blocks: [],
+        mentions: [],
+        postedAt: 1,
+      },
+    ],
+    cursor: "4",
+  };
+  let reads = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
+        reads += 1;
+        return reads === 1 ? Promise.resolve(answer) : new Promise(() => undefined);
+      },
+      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().onShowChat(TASK.id));
+  await vi.waitFor(async () => {
+    await settle();
+    const wrote = tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_CHAT_POST);
+    assert.deepEqual(
+      wrote.map((each) => each.payload),
+      [{ workspaceId: PERSONAL.id, write: { readTo: 4, channelId } }],
+    );
+  });
 });

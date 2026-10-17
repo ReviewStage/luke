@@ -1,7 +1,7 @@
 /**
  * copy-feedback.tsx -- the window's one answer to a copy: a button's glyph turning to a check for a moment, or a toast for a copy made from a menu.
  *
- * Every copy goes to main's clipboard (`ACT_KIND.WINDOW_COPY_TEXT`) and is
+ * Every copy goes to the shell's clipboard (`appPlatform().copyText`) and is
  * answered the way Linear, GitHub, and Vercel answer one. A copy button's
  * glyph crossfades to a check in the success colour for `BUTTON_HOLD`, then
  * back; its label and accessible name stay as they were, so nothing beside
@@ -14,11 +14,10 @@
  */
 
 import { useAtom } from "@effect/atom-react";
-import { ACT_KIND } from "@luke/host/acts";
 import { Duration, Effect } from "effect";
 import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import { useAct } from "./act";
+import { appPlatform } from "./app-platform";
 import { rendererRuntime } from "./renderer-runtime";
 import { TOAST_TONE, useToast } from "./toast";
 
@@ -78,12 +77,11 @@ interface CopyFeedback {
 }
 
 /**
- * One copy button's state and its press. The press hands the words to main's
- * clipboard and, once it answers, shows the check or the alert for the hold;
+ * One copy button's state and its press. The press hands the words to the
+ * shell's clipboard and, once it answers, shows the check or the alert for the hold;
  * a press while one stands starts the hold again from its own answer.
  */
 export function useCopyFeedback(): CopyFeedback {
-  const { act } = useAct();
   const [hold] = useState(buttonHoldAtom);
   const [held, restart] = useAtom(hold);
   const [landed, setLanded] = useState<CopyState>(COPY_STATE.IDLE);
@@ -93,7 +91,7 @@ export function useCopyFeedback(): CopyFeedback {
   const copy = (words: string) => {
     latest.current += 1;
     const press = latest.current;
-    copyAnswer(act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then((answer) => {
+    copyAnswer(appPlatform().copyText(words)).then((answer) => {
       if (press !== latest.current) return;
       setLanded(answer);
       restart();
@@ -127,16 +125,15 @@ export function CopyGlyph({ state }: { state: CopyState }): React.JSX.Element {
 }
 
 /**
- * Copies from a menu: hands the words to main's clipboard and says what came
+ * Copies from a menu: hands the words to the shell's clipboard and says what came
  * of it in a toast reading `label` ("Plan copied"), or the failure.
  */
 export function useCopyToast(): (words: string, label: string) => void {
-  const { act } = useAct();
   const show = useToast();
   return (words, label) => {
     latestMenuCopy += 1;
     const press = latestMenuCopy;
-    copyAnswer(act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then((answer) => {
+    copyAnswer(appPlatform().copyText(words)).then((answer) => {
       if (press !== latestMenuCopy) return;
       show(
         answer === COPY_STATE.COPIED

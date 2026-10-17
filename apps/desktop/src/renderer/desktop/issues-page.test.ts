@@ -9,12 +9,14 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
@@ -119,87 +121,79 @@ beforeEach(() => {
   heldCreates = undefined;
   changeRefused = false;
   copied = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.ISSUES_LIST) {
-          listed.push(request.payload.workspaceId);
-          const value = lists.shift() ?? {
-            issues: standing.filter((each) => each.archivedAt === null),
-          };
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.ISSUES_LIST) {
+        listed.push(request.payload.workspaceId);
+        const value = lists.shift() ?? {
+          issues: standing.filter((each) => each.archivedAt === null),
+        };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.ISSUES_CREATE) {
+        creates.push(request.payload);
+        if (createRefused) {
+          const value = { failure: ISSUE_CALL_FAILURE.INVALID };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
-        if (request.kind === ACT_KIND.ISSUES_CREATE) {
-          creates.push(request.payload);
-          if (createRefused) {
-            const value = { failure: ISSUE_CALL_FAILURE.INVALID };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-          }
-          const { title, status, priority } = request.payload;
-          const made = issue(standing.length + 1, {
-            title,
-            updatedAt: 1_000,
-            ...(status === undefined ? undefined : { status }),
-            ...(priority === undefined ? undefined : { priority }),
-          });
-          standing = [made, ...standing];
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
-          const held = heldCreates;
-          if (held === undefined) return Promise.resolve(done);
-          return new Promise((resolve) => held.push(() => resolve(done)));
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
-        }
-        if (request.kind === ACT_KIND.ISSUES_READ) {
-          reads.push(request.payload.issueId);
-          const found = standing.find((each) => each.id === request.payload.issueId);
-          const value =
-            found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.ISSUES_CHANGE) {
-          changes.push(request.payload);
-          const { issueId, change } = request.payload;
-          const was = standing.find((each) => each.id === issueId);
-          if (changeRefused) {
-            const refused = {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
-            };
-            const held = heldChanges;
-            if (held === undefined) return Promise.resolve(refused);
-            return new Promise((resolve) => held.push(() => resolve(refused)));
-          }
-          if (was === undefined) {
-            const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-          }
-          const { archived, ...fields } = change;
-          const changed: Issue = {
-            ...was,
-            ...fields,
-            archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
-            updatedAt: was.updatedAt + 1,
+        const { title, status, priority } = request.payload;
+        const made = issue(standing.length + 1, {
+          title,
+          updatedAt: 1_000,
+          ...(status === undefined ? undefined : { status }),
+          ...(priority === undefined ? undefined : { priority }),
+        });
+        standing = [made, ...standing];
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
+        const held = heldCreates;
+        if (held === undefined) return Promise.resolve(done);
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+      }
+      if (request.kind === ACT_KIND.ISSUES_READ) {
+        reads.push(request.payload.issueId);
+        const found = standing.find((each) => each.id === request.payload.issueId);
+        const value =
+          found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.ISSUES_CHANGE) {
+        changes.push(request.payload);
+        const { issueId, change } = request.payload;
+        const was = standing.find((each) => each.id === issueId);
+        if (changeRefused) {
+          const refused = {
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
           };
-          standing = standing.map((each) => (each.id === issueId ? changed : each));
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
           const held = heldChanges;
-          if (held === undefined) return Promise.resolve(done);
-          return new Promise((resolve) => held.push(() => resolve(done)));
+          if (held === undefined) return Promise.resolve(refused);
+          return new Promise((resolve) => held.push(() => resolve(refused)));
         }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        if (was === undefined) {
+          const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        const { archived, ...fields } = change;
+        const changed: Issue = {
+          ...was,
+          ...fields,
+          archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
+          updatedAt: was.updatedAt + 1,
+        };
+        standing = standing.map((each) => (each.id === issueId ? changed : each));
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
+        const held = heldChanges;
+        if (held === undefined) return Promise.resolve(done);
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -280,7 +274,7 @@ async function settle(): Promise<void> {
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll(".home-section, [data-issue-column]")]
     .map((group): [string, string[]] => [
-      group.querySelector(".home-section-title, .factory-head")?.textContent ?? "",
+      group.querySelector("h2")?.textContent ?? "",
       [...group.querySelectorAll(".sidebar-task-item")].map(
         (row) =>
           `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
@@ -292,7 +286,7 @@ function groups(page: HTMLElement): [string, string[]][] {
 /** The board's columns, each its heading and its cards' identifiers, left to right. */
 function columns(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll("[data-issue-column]")].map((column) => [
-    column.querySelector(".factory-head")?.textContent ?? "",
+    column.querySelector("h2")?.textContent ?? "",
     [...column.querySelectorAll(".issue-row-identifier")].map((id) => id.textContent ?? ""),
   ]);
 }
@@ -654,7 +648,7 @@ test("under the title an issue's page says who filed it, by their face as the me
   const page = await openIssue(filed.id);
 
   assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
-  const picture = page.querySelector<HTMLImageElement>(".issue-byline img.actor-picture");
+  const picture = page.querySelector<HTMLImageElement>(".issue-byline .actor-mark img");
   assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
 });
 
@@ -683,17 +677,6 @@ test("an issue whose creator is gone and unchanged since it was filed says only 
   await settle();
 
   assert.deepEqual(bylineOf(page), ["Created · 5h ago", "Last edited · 5h ago"]);
-});
-
-test("the list stands in the window's own frame: the Automations page's view and scroll, Home's sections and rows", async () => {
-  standing = [issue(1)];
-  const page = mount();
-  await settle();
-  showList();
-
-  assert.ok(page.querySelector("section.automations-view > .automations-scroll .home-column"));
-  assert.ok(page.querySelector(".home-section > h2.home-section-title > .home-section-count"));
-  assert.ok(page.querySelector(".home-section > ul.sidebar-tasks > li.sidebar-task-item.home-row"));
 });
 
 test("Archive asks first, then sends the archive and goes back to a list without the issue", async () => {
@@ -930,7 +913,7 @@ test("while a new issue is being filed its card's chips take no pick", async () 
   file("Flaky checkout test");
   await settle();
   const chips = [
-    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] .settings-picker-chip"),
+    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button[aria-haspopup=dialog]"),
   ];
   const lockedWhileOut = chips.length === 2 && chips.every((chip) => chip.disabled);
   act(() => held[0]?.());
@@ -975,10 +958,7 @@ test("the page opens as a board: a column for every status in the order work mov
     ["Done1", ["ACME-1"]],
     ["Canceled", []],
   ]);
-  assert.equal(
-    page.querySelector("[data-issue-column='in-progress'] .factory-idle")?.textContent,
-    "No issues",
-  );
+  assert.equal(page.querySelector("[data-issue-column='in-progress'] p")?.textContent, "No issues");
   assert.equal(page.querySelector(".home-section"), null, "no list stands beside the board");
 });
 
@@ -1140,7 +1120,12 @@ test("a workspace with no issue yet still stands the board's columns, each sayin
     ["Done", []],
     ["Canceled", []],
   ]);
-  assert.equal(page.querySelectorAll(".factory-idle").length, 5);
+  assert.equal(
+    [...page.querySelectorAll("[data-issue-column] p")].filter(
+      (idle) => idle.textContent === "No issues",
+    ).length,
+    5,
+  );
 });
 
 test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
@@ -1357,4 +1342,143 @@ test("a card moved once the developer has gone on to New issue takes no keyboard
 
   assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
   assert.equal(document.activeElement, composerField());
+});
+
+/**
+ * The board laid out for a drag: each column 300px wide and 600px tall, side
+ * by side from the window's left, each card 40px tall, 50px apart, from
+ * 40px down its column. jsdom lays nothing out and captures no pointer, so
+ * this answers the geometry and the capture the browser would.
+ */
+function layCardsOut(page: HTMLElement): void {
+  const COLUMN = 300;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const columns = [...document.querySelectorAll("[data-issue-column]")];
+    if (this.matches(".issue-board")) return new DOMRect(0, 0, columns.length * COLUMN, 600);
+    const at = columns.indexOf(this);
+    if (at >= 0) return new DOMRect(at * COLUMN, 0, COLUMN, 600);
+    const column = columns.indexOf(this.closest("[data-issue-column]") ?? this);
+    if (!this.matches("li[data-issue-id]") || column < 0) return new DOMRect();
+    const row = [...(this.parentElement?.children ?? [])].indexOf(this);
+    return new DOMRect(column * COLUMN + 8, 40 + row * 50, COLUMN - 16, 40);
+  });
+  for (const list of page.querySelectorAll(".issue-column-cards")) {
+    Object.assign(list, { setPointerCapture: () => undefined });
+  }
+}
+
+/** A pointer event at a point in the window, as the primary button makes one. */
+function pointer(type: string, x: number, y: number): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
+}
+
+/** What the board showed with a dragged card held over a point: the column marked as where it lands, and whether a copy of it was carried. */
+interface HeldDrag {
+  marked: string | undefined;
+  carried: boolean;
+}
+
+/**
+ * Presses a card, drags it to a point, and lets it go there, answering
+ * what the board showed with the pointer held there: the column marked as
+ * the one it would land in, and whether a copy of the card was carried.
+ */
+function dragCard(page: HTMLElement, issueId: string, to: { x: number; y: number }): HeldDrag {
+  const card = cardOf(page, issueId);
+  const box = card.closest("li")?.getBoundingClientRect() ?? assert.fail("the card stands");
+  const from = { x: box.x + 20, y: box.y + 20 };
+  let held: HeldDrag = { marked: undefined, carried: false };
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", from.x, from.y));
+    window.dispatchEvent(pointer("pointermove", from.x + 10, from.y));
+    window.dispatchEvent(pointer("pointermove", to.x, to.y));
+    held = {
+      marked:
+        page.querySelector<HTMLElement>("[data-drop-target='true']")?.dataset.issueColumn ??
+        undefined,
+      carried: page.querySelector(".issue-board > [data-carried]") !== null,
+    };
+    window.dispatchEvent(pointer("pointerup", to.x, to.y));
+  });
+  return held;
+}
+
+test("a Todo card dragged onto Done is carried there, Done marked as where it lands, and it is sent done and lands in Done", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const held = dragCard(page, issue(1).id, { x: 1000, y: 120 });
+  await settle();
+
+  assert.deepEqual(held, { marked: ISSUE_STATUS.DONE, carried: true });
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page), [
+    ["Backlog", []],
+    ["Todo1", ["ACME-2"]],
+    ["In progress", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled", []],
+  ]);
+  assert.equal(
+    page.querySelectorAll("[data-carried], [data-dragging], [data-drop-target]").length,
+    0,
+  );
+  assert.deepEqual(opened, [], "the drop opens nothing");
+});
+
+test("a card let go over its own column sends nothing, and a press that does not move still opens it", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const held = dragCard(page, issue(1).id, { x: 450, y: 400 });
+  await settle();
+  const card = cardOf(page, issue(1).id);
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", 350, 60));
+    window.dispatchEvent(pointer("pointerup", 350, 60));
+    card.click();
+  });
+  await settle();
+
+  assert.deepEqual(held, { marked: undefined, carried: true });
+  assert.deepEqual(changes, []);
+  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
+});
+
+test("a card dragged onto Done whose change the service refused stays in Todo and says so", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO })];
+  changeRefused = true;
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  dragCard(page, issue(1).id, { x: 1000, y: 120 });
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[1], ["Todo1", ["ACME-1"]]);
+  assert.deepEqual(columns(page)[3], ["Done", []]);
+  assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
+});
+
+test("a card is sent the status of the column it is let go over, though the last move reported another", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const card = cardOf(page, issue(1).id);
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", 350, 60));
+    window.dispatchEvent(pointer("pointermove", 750, 120));
+    window.dispatchEvent(pointer("pointerup", 1000, 120));
+  });
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
 });

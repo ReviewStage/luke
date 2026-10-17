@@ -1,3 +1,4 @@
+export { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
 export { EXPERIMENT_COUNTED_AS, SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
 export {
   EXPERIMENT,

@@ -5,6 +5,7 @@ import {
   EllipsisIcon,
   GAP,
   IconButton,
+  PAGE_FRAME,
   PencilIcon,
   Stack,
   TEXT_ELEMENT,
@@ -19,7 +20,8 @@ import { CatalogSection } from "../section";
  * detail-page.tsx -- one thing's page with a secondary column beside its
  * main content, each scrolling on its own; the same page with no secondary
  * column; and the page in a phone's width, where the secondary column
- * follows the main content in the one scroll. Every name is made up.
+ * follows the main content in the one scroll; and the page under a window's
+ * toolbar, which holds its title and acts. Every name is made up.
  */
 
 const SECTIONS = [
@@ -54,6 +56,8 @@ const SECTIONS = [
     body: "Whether the acme-corporation-engineering-platform workspace needs a window of its own.",
   },
 ] as const;
+
+const TITLE = "Migrate the workspaces onto the new runners";
 
 const FACTS = [
   { id: "owner", label: "Owner", value: "Ada Lovelace" },
@@ -96,7 +100,7 @@ function Facts(): React.JSX.Element {
 function Plan({ secondary }: { secondary: boolean }): React.JSX.Element {
   return (
     <DetailPage
-      title="Migrate the workspaces onto the new runners"
+      title={TITLE}
       description="A plan in the platform workspace."
       actions={
         <>
@@ -107,6 +111,27 @@ function Plan({ secondary }: { secondary: boolean }): React.JSX.Element {
         </>
       }
       secondary={secondary ? { label: "Details", content: <Facts /> } : undefined}
+    >
+      <Sections />
+    </DetailPage>
+  );
+}
+
+function PlanUnderToolbar(): React.JSX.Element {
+  return (
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label={TITLE}
+      toolbar={
+        <header className="catalog-window-toolbar">
+          <h1 className="catalog-window-toolbar-title">{TITLE}</h1>
+          <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PencilIcon />}>
+            Edit
+          </Button>
+          <IconButton icon={<EllipsisIcon />} label="More for this plan" />
+        </header>
+      }
+      secondary={{ label: "Details", content: <Facts /> }}
     >
       <Sections />
     </DetailPage>
@@ -132,6 +157,11 @@ function DetailPages(): React.JSX.Element {
       >
         <div className="catalog-screen catalog-screen-phone catalog-screen-detail">
           <Plan secondary />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="detail-page-toolbar" title="Under the window's toolbar">
+        <div className="catalog-screen catalog-screen-detail">
+          <PlanUnderToolbar />
         </div>
       </CatalogSection>
     </>

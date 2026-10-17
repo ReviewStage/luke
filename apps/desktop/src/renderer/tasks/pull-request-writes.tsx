@@ -15,10 +15,11 @@ import {
   type PullRequestActionRequest,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useMenu } from "@luke/ui";
 import { ChevronDownIcon, GitPullRequestDraftIcon, GitPullRequestIcon, XIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useAct } from "../act";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { useGitHubConnection } from "../github-connect";
 import { Tooltip } from "../tooltip";
 import { PullRequestMark } from "./pull-request-mark";
@@ -194,7 +195,7 @@ export function PullRequestStateMenu({
   writes: PullRequestWrites;
 }): React.JSX.Element {
   const actions = actionsFrom(pullRequest.state);
-  const menu = useActionMenu(actions.length > 0);
+  const menu = useMenu(actions.length > 0);
   const label = `Pull request ${STATE_WORDS[pullRequest.state]}`;
   const inner = (
     <>

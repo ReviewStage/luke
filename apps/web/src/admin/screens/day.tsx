@@ -229,17 +229,24 @@ export function DayScreen({
             </div>
 
             <SectionHeading>Hosted tier · this day</SectionHeading>
-            <div className="grid grid-cols-2 gap-3">
-              <StatCard
-                label="Active accounts"
-                value={formatNumber(detail.totals.accounts)}
-                hint={soFar}
-              />
-              <StatCard
-                label="Hosted calls"
-                value={formatNumber(detail.totals.calls)}
-                hint={soFar}
-              />
+            {/* Note that each card shares the row from nothing up but never
+            shrinks below its own figure, so the pair stacks once a figure
+            needs the room rather than overflowing its card. */}
+            <div className="flex flex-wrap gap-3">
+              <div className="flex-1">
+                <StatCard
+                  label="Active accounts"
+                  value={formatNumber(detail.totals.accounts)}
+                  hint={soFar}
+                />
+              </div>
+              <div className="flex-1">
+                <StatCard
+                  label="Hosted calls"
+                  value={formatNumber(detail.totals.calls)}
+                  hint={soFar}
+                />
+              </div>
             </div>
 
             <SectionHeading>Accounts active this day</SectionHeading>

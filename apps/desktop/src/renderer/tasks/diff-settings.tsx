@@ -12,7 +12,7 @@ import {
   INLINE_DIFF,
   INLINE_DIFF_LABEL,
 } from "@luke/settings/diff-view";
-import { AnchoredPopover, CloseIcon, POPOVER_ALIGN } from "@luke/ui";
+import { AnchoredPopover, CloseIcon, POPOVER_ALIGN, SETTINGS_ROW_DENSITY } from "@luke/ui";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Segmented } from "../segmented";
@@ -117,13 +117,9 @@ function ThemeRow<Id extends string>({
   const chosen = themes.find((theme) => theme.id === value);
   return (
     <PickerRow
+      density={SETTINGS_ROW_DENSITY.COMPACT}
       label={label}
-      copy={
-        <strong>
-          {label}
-          {changed ? <ChangedMark /> : null}
-        </strong>
-      }
+      changed={changed}
       value={value}
       valueLabel={chosen?.label ?? value}
       rows={themes.map((theme) => ({ id: theme.id, label: theme.label }))}
@@ -160,6 +156,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           onChange={(diffIndicators) => change("diffIndicators", diffIndicators)}
         />
         <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Inline diffs"
           value={settings.inlineDiff}
           options={INLINE_DIFF_OPTIONS}
@@ -170,18 +167,21 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       </div>
       <div className="diff-settings-group">
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Backgrounds"
           checked={settings.diffBackgrounds}
           changed={changed("diffBackgrounds")}
           onChange={(diffBackgrounds) => change("diffBackgrounds", diffBackgrounds)}
         />
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Wrapping"
           checked={settings.wordWrap}
           changed={changed("wordWrap")}
           onChange={(wordWrap) => change("wordWrap", wordWrap)}
         />
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Line numbers"
           checked={settings.lineNumbers}
           changed={changed("lineNumbers")}
@@ -206,6 +206,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       </div>
       <div className="diff-settings-group">
         <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Font"
           value={settings.diffFont}
           options={FONT_OPTIONS}
@@ -214,6 +215,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           onChange={(diffFont) => change("diffFont", diffFont)}
         />
         <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Font size"
           value={settings.diffFontSize}
           options={FONT_SIZE_OPTIONS}
@@ -222,6 +224,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           onChange={(diffFontSize) => change("diffFontSize", diffFontSize)}
         />
         <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Line height"
           value={settings.diffLineHeight}
           options={LINE_HEIGHT_OPTIONS}
@@ -230,6 +233,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           onChange={(diffLineHeight) => change("diffLineHeight", diffLineHeight)}
         />
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Ligatures"
           checked={settings.diffLigatures}
           changed={changed("diffLigatures")}
@@ -238,6 +242,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       </div>
       <div className="diff-settings-group">
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Minimize inline comments"
           checked={settings.diffMinimizeComments}
           changed={changed("diffMinimizeComments")}
