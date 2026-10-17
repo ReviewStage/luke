@@ -164,3 +164,12 @@ test("a step over a few large screenshots past the byte budget sends the newest 
   assert.deepEqual(received.pictures, pictures.slice(1));
   assert.equal(leftOutWords(received.words).length, 1);
 });
+
+test("a step over one picture past the byte budget still sends it", async () => {
+  const pictures = [pictureData(0, 17 * MIB)];
+
+  const received = await stepOver(screenshotsRead(pictures));
+
+  assert.deepEqual(received.pictures, pictures);
+  assert.deepEqual(leftOutWords(received.words), []);
+});

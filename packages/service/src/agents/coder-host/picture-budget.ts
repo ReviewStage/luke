@@ -87,12 +87,15 @@ function pictureSizesOf(prompt: ModelCallOptions["prompt"]): number[] {
  * How many of the oldest pictures a step leaves out: none while every
  * picture fits, else the fewest that leave the newest inside the budget,
  * rounded up to a whole batch where that still keeps one, since a few
- * large pictures may fill the budget long before a batch is sent.
+ * large pictures may fill the budget long before a batch is sent. The
+ * newest is never left out: one picture alone past the budget may still
+ * fit the provider's request, and leaving it out would blind the agent.
  */
 function leftOutCount(sizes: readonly number[]): number {
   let leftOut = Math.max(0, sizes.length - PICTURE_BUDGET.MOST);
   let kept = sizes.slice(leftOut).reduce((total, size) => total + size, 0);
-  while (kept > PICTURE_BUDGET.BYTES && leftOut < sizes.length) {
+  // Note that the newest is always kept, whatever its size, since it is what the agent just asked to see.
+  while (kept > PICTURE_BUDGET.BYTES && leftOut < sizes.length - 1) {
     kept -= sizes[leftOut] ?? 0;
     leftOut += 1;
   }
