@@ -786,3 +786,41 @@ test("a thread being started keeps its card through a press away while its words
     "and takes them back where the send fails",
   );
 });
+
+test("in the Comments tab a thread's quote stands under its first comment's writer, so its tools keep the card's top corner", () => {
+  const { container } = drawn("tab");
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  const entry = card?.querySelector(".comment-entry");
+
+  assert.ok(
+    entry?.querySelector(
+      ":scope > .comment-head + * .comment-quote, :scope > .comment-head + .comment-quote",
+    ),
+  );
+  assert.equal(card?.firstElementChild?.classList.contains("comment-entry"), true);
+});
+
+test("a thread's resolve reads as its writer's own line, glyph first, and an empty tab says how a thread starts", () => {
+  const resolved = threadOn(ID.RESOLVED, "teammate", "A guest, too?", {
+    status: PLAN_COMMENT_STATUS.RESOLVED,
+    entries: [
+      ...threadOn(ID.RESOLVED, "teammate", "A guest, too?").entries,
+      {
+        id: `${ID.RESOLVED.slice(0, -4)}bbbb`,
+        kind: PLAN_COMMENT_ENTRY.RESOLVED,
+        writer: {
+          actor: PLAN_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-dean", name: "Dean Stratakos" },
+        },
+        at: 2,
+      },
+    ],
+  });
+  const { container } = drawn("tab", [resolved]);
+
+  assert.ok(container.querySelector(".luke-empty-state")?.textContent?.includes("No comments"));
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
+  const event = container.querySelector<HTMLElement>(".comment-event[data-kind='resolved']");
+  assert.ok(event?.querySelector(".comment-event-glyph svg"));
+  assert.ok(event?.textContent?.includes("Dean Stratakos resolved this"));
+});
