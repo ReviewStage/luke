@@ -752,8 +752,9 @@ export function TranscriptOpeningCall({
 }
 
 /**
- * How a to-do of each status is drawn: its glyph and the glyph's ink, how
- * its words are set, and what the glyph says aloud. Pending is an empty
+ * How a to-do of each status is drawn: its glyph and what the glyph says
+ * aloud; its ink and its words' are the item's status's (tasks.css's
+ * `.todo-item`). Pending is an empty
  * circle, done a check in the muted ink with its words muted beside it, as
  * Linear and Things mark a finished item, and in progress a dotted circle
  * in the full ink, so the one item the list is at is the one that stands
@@ -763,28 +764,10 @@ export function TranscriptOpeningCall({
  * wrapped lines reads as noise over words the muted ink already quiets.
  */
 const TODO_LOOK = {
-  [CODING_AGENT_TODO_STATUS.PENDING]: {
-    Icon: CircleIcon,
-    mark: "text-muted-foreground",
-    words: "",
-    label: "Pending",
-  },
-  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: {
-    Icon: CircleDotIcon,
-    mark: "text-foreground",
-    words: "",
-    label: "In progress",
-  },
-  [CODING_AGENT_TODO_STATUS.DONE]: {
-    Icon: CircleCheckIcon,
-    mark: "text-muted-foreground",
-    words: "text-muted-foreground",
-    label: "Done",
-  },
-} as const satisfies Record<
-  CodingAgentTodoStatus,
-  { Icon: LucideIcon; mark: string; words: string; label: string }
->;
+  [CODING_AGENT_TODO_STATUS.PENDING]: { Icon: CircleIcon, label: "Pending" },
+  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotIcon, label: "In progress" },
+  [CODING_AGENT_TODO_STATUS.DONE]: { Icon: CircleCheckIcon, label: "Done" },
+} as const satisfies Record<CodingAgentTodoStatus, { Icon: LucideIcon; label: string }>;
 
 export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
@@ -808,38 +791,25 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
 function TodoItems({
   todos,
   live,
-  className,
 }: {
   todos: CodingAgentTodos["todos"];
   live: boolean;
-  className?: string;
 }): ReactNode {
   return (
-    <ul
-      className={cn(
-        "m-0 flex list-none flex-col gap-1 p-0 leading-5 [--state-glyph-size:14px]",
-        className,
-      )}
-    >
+    <ul className="todo-items">
       {todos.map((todo, index) => {
         const look = TODO_LOOK[todo.status];
         const working = live && todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS;
         return (
-          <li key={index} className="flex items-start gap-2" data-todo-status={todo.status}>
-            <span
-              className={cn("flex h-[1lh] w-4 shrink-0 items-center justify-center", look.mark)}
-              role="img"
-              aria-label={look.label}
-            >
+          <li key={index} className="todo-item" data-todo-status={todo.status}>
+            <span className="todo-mark" role="img" aria-label={look.label}>
               {working ? (
                 <StateGlyph state={GLYPH_STATE.WORKING} />
               ) : (
                 <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
               )}
             </span>
-            <span className={cn("min-w-0 [overflow-wrap:anywhere]", look.words)}>
-              {todo.content}
-            </span>
+            <span className="todo-words">{todo.content}</span>
           </li>
         );
       })}
@@ -874,13 +844,10 @@ export function TranscriptTodos({
         subject={subject}
         subjectIsCode={words.code}
       />
-      <FoldBody className="mt-0.5 mb-1 ml-7 select-text">
+      <FoldBody className="todos-body">
         <TodoItems todos={todos} live={live} />
         {errorText === undefined ? null : (
-          <p
-            className="m-0 mt-1 text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
-            role="alert"
-          >
+          <p className="todos-error" role="alert">
             {errorText}
           </p>
         )}
@@ -911,19 +878,15 @@ export function TranscriptTodosDock({
   focus: string | undefined;
 }): ReactNode {
   return (
-    <Fold
-      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px] [--focus-ring-offset:var(--focus-ring-inset)]"
-      data-todos-dock=""
-      aria-label="To-dos"
-    >
-      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 rounded-[inherit] px-3 transition-colors hover:bg-secondary [[open]>&]:rounded-b-none">
-        <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="shrink-0 text-muted-foreground">{summary}</span>
-        {focus === undefined ? null : <span className="min-w-0 flex-1 truncate">{focus}</span>}
-        <FoldChevron className="ml-auto" />
+    <Fold className="todos-dock" data-todos-dock="" aria-label="To-dos">
+      <FoldSummary className="todos-dock-head">
+        <ListTodoIcon className="todos-dock-icon" aria-hidden="true" />
+        <span className="todos-dock-summary">{summary}</span>
+        {focus === undefined ? null : <span className="todos-dock-focus">{focus}</span>}
+        <FoldChevron className="todos-dock-chevron" />
       </FoldSummary>
-      <FoldBody className="border-t border-border">
-        <TodoItems todos={todos} live className="px-3 py-2" />
+      <FoldBody className="todos-dock-body">
+        <TodoItems todos={todos} live />
       </FoldBody>
     </Fold>
   );
