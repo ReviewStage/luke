@@ -8,14 +8,27 @@ import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wi
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { ConfirmDialog, type DialogQuestion, ResetIcon, useConfirmDialog } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ConfirmDialog,
+  type DialogQuestion,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  ResetIcon,
+  SettingsPage,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useConfirmDialog,
+} from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { BANNER_LOOK, Banner } from "../banner";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import type { TaskReader } from "../tasks/edit-ref";
 import { PlanBody } from "../tasks/plan-body";
 import type { PlanEditDoor } from "../tasks/use-plan-editing";
@@ -300,8 +313,8 @@ function TemplateNote(): React.JSX.Element {
         </span>
       }
     >
-      <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
-      <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
+      <Text variant={TEXT_VARIANT.SECTION}>{PAGE_LINE.NOTE}</Text>
+      <Text tone={TEXT_TONE.MUTED}>{PAGE_LINE.NOTE_DETAIL}</Text>
     </Banner>
   );
 }
@@ -309,7 +322,8 @@ function TemplateNote(): React.JSX.Element {
 /**
  * The page's actions at the right end of its title line, as every Settings
  * page carries its own: the version history, and Reset to default while the
- * account holds a template of its own.
+ * account holds a template of its own. They are `@luke/ui`'s quiet
+ * `IconButton` and outline `Button`.
  */
 function TitleActions({
   custom,
@@ -323,20 +337,12 @@ function TitleActions({
   return (
     <span className="task-title-actions">
       <Tooltip label={HISTORY_LABEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={HISTORY_LABEL}
-          onClick={onShowHistory}
-        >
-          <HistoryIcon />
-        </button>
+        <IconButton icon={<HistoryIcon />} label={HISTORY_LABEL} onClick={onShowHistory} />
       </Tooltip>
       {custom ? (
-        <button type="button" className="toolbar-button bordered-button" onClick={onReset}>
-          <ResetIcon />
+        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onReset}>
           Reset to default
-        </button>
+        </Button>
       ) : null}
     </span>
   );
@@ -398,22 +404,14 @@ function TemplateState({
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
       <div className="desktop-empty">
-        <ReadFailure
-          line={PAGE_LINE.READ_FAILED}
-          onRetry={template.retry}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
+        <ErrorState onRetry={template.retry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {PAGE_LINE.READ_FAILED}
+        </ErrorState>
       </div>
     );
   }
   // While the read is out the page is its name alone, where every page's stands, and the rest arrives whole.
-  return (
-    <div className="settings-page-scroll scroll-fade-top" aria-busy="true">
-      <header className="settings-page-head">
-        <h1 className="settings-page-title">{TEMPLATE_TITLE}</h1>
-      </header>
-    </div>
-  );
+  return <SettingsPage title={TEMPLATE_TITLE}>{null}</SettingsPage>;
 }
 
 /**
@@ -435,7 +433,11 @@ export function PlanTemplatePage({
   const template = useTemplate(signedIn, act);
   const drawn = account !== undefined && template.read === TEMPLATE_READ.READ;
   return (
-    <section className="settings-page" aria-label={TEMPLATE_TITLE}>
+    <section
+      className="settings-page"
+      aria-label={TEMPLATE_TITLE}
+      aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
+    >
       {/* Settings has no top bar: the page's title and its actions stand in the page. */}
       <div className="desktop-drag-strip" />
       {drawn ? (

@@ -6,7 +6,9 @@ import { afterEach, expect, test, vi } from "vitest";
  * admin-shell.test.ts -- the admin's shell says where a maintainer is and
  * what it is doing: a view whose read is still out stands under its own
  * title with a status saying it is loading, the navigation marks that view
- * as the current page, and a press on another section moves both. The page
+ * as the current page, and a press on another section moves both; the
+ * account menu opens over the page from its avatar and closes on Escape or a
+ * press outside it. The page
  * runs as it does in the browser, mounted on its own `#root`; the network,
  * the HTTP boundary to Luke and Better Auth, is a fake that answers the
  * session and leaves every admin read hanging.
@@ -91,4 +93,38 @@ test("a press on another section makes it the current page", async () => {
   expect(currentSections(page)).toEqual(["Users", "Users"]);
   expect(saysLoading(page)).toBe(true);
   expect(window.location.search).toBe("?view=users");
+});
+
+test("the account menu opens on its avatar, and Escape or a press outside closes it", async () => {
+  const page = await openAdmin();
+  const trigger = await vi.waitFor(() => {
+    const found = page.querySelector<HTMLButtonElement>(
+      'button[aria-label="Account menu for Ada Lovelace"]',
+    );
+    if (!found) throw new Error("No account menu yet");
+    return found;
+  });
+
+  await act(async () => {
+    trigger.click();
+  });
+  const signOut = document.querySelector('[role="menu"] [role="menuitem"]');
+  expect(signOut?.textContent).toBe("Sign out");
+  expect(document.activeElement).toBe(signOut);
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+
+  await act(async () => {
+    signOut?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(document.activeElement).toBe(trigger);
+
+  await act(async () => {
+    trigger.click();
+  });
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  await act(async () => {
+    document.querySelector("main h1")?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+  });
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });

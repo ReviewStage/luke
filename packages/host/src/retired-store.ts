@@ -1,5 +1,13 @@
+import { DEFAULT_AGENT_ID } from "@luke/runtime/vocabulary";
 import { Cause, Effect, Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
+
+/**
+ * The agents' directory under Luke's application data, one entry per agent:
+ * where earlier builds kept the local brain's store and workspace, and what a
+ * launch still looks under to remove the retired store.
+ */
+const AGENTS_DIRECTORY = "agents";
 
 /**
  * What an earlier build kept under the agent's directory and this one never
@@ -27,8 +35,8 @@ const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
 ];
 
 interface RemoveRetiredStoreOptions {
-  /** The agent's own directory under Luke's application data. */
-  agentRoot: string;
+  /** Luke's own application-state root, the agents' directory beneath it. */
+  stateRoot: string;
   report: (message: string) => void;
 }
 
@@ -46,10 +54,11 @@ export const removeRetiredStore = (
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const agentRoot = path.join(options.stateRoot, AGENTS_DIRECTORY, DEFAULT_AGENT_ID);
     yield* Effect.forEach(
       RETIRED_STORE_ENTRIES,
       (entry) => {
-        const target = path.join(options.agentRoot, entry);
+        const target = path.join(agentRoot, entry);
         return Effect.catchCause(
           fileSystem.remove(target, { recursive: true, force: true }),
           (cause) =>

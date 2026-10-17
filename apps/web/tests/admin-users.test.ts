@@ -68,18 +68,41 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+function answer(body: AdminUserList): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 /** The roster's page, signed in, with its read answered by `body`, or left hanging without one. */
 async function openUsers(body: AdminUserList | undefined): Promise<HTMLElement> {
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
-    body === undefined
-      ? new Promise(() => undefined)
-      : Promise.resolve(
-          new Response(JSON.stringify(body), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        ),
+    body === undefined ? new Promise(() => undefined) : Promise.resolve(answer(body)),
   );
+  return mount();
+}
+
+/** The roster's page with its first read held until the returned `land` answers it with `body`. */
+async function openUsersAnsweredLater(): Promise<{
+  page: HTMLElement;
+  land: (body: AdminUserList) => Promise<void>;
+}> {
+  let resolve: (response: Response) => void = () => undefined;
+  const pending = new Promise<Response>((settle) => {
+    resolve = settle;
+  });
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => pending);
+  const page = await mount();
+  return {
+    page,
+    land: async (body) => {
+      await act(async () => resolve(answer(body)));
+    },
+  };
+}
+
+async function mount(): Promise<HTMLElement> {
   window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
   const page = document.createElement("div");
   document.body.replaceChildren(page);
@@ -168,4 +191,27 @@ test("a search no account answers says so in the table's place", async () => {
   expect(page.textContent).toContain("No account matches.");
   expect(page.textContent).toContain("0 of 2 accounts");
   expect(searchBox(page).value).toBe("nobody");
+});
+
+test("a search typed while loading keeps its focus when the first answer lands", async () => {
+  const { page, land } = await openUsersAnsweredLater();
+  const box = searchBox(page);
+  act(() => box.focus());
+  type(box, "a");
+
+  await land(roster());
+
+  expect(searchBox(page)).toBe(box);
+  expect(document.activeElement).toBe(box);
+});
+
+test("a miss among a truncated roster's loaded rows still says search reads every account", async () => {
+  const page = await openUsers(roster({ total: 1284 }));
+
+  type(searchBox(page), "nobody");
+
+  expect(page.textContent).toContain("No account matches.");
+  expect(page.textContent).toContain(
+    "Only the 2 most recently active accounts are listed. Search reads every account.",
+  );
 });

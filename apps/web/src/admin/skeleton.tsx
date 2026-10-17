@@ -1,18 +1,13 @@
-import {
-  GAP,
-  Inline,
-  JUSTIFY,
-  Skeleton as LineBone,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
-} from "@luke/ui";
+import { Skeleton as LineBone, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { ChartFrameSkeleton } from "./charts/chart-frame";
 import {
   METRIC_STATUS,
   MetricCardSkeleton,
   SectionHeading,
+  STAT_CELL,
   STAT_GROUP_COLUMNS,
+  STAT_PAIR,
+  STAT_ROW,
   StatGroup,
 } from "./charts/stat-card";
 
@@ -118,15 +113,12 @@ function bones(count: number): readonly number[] {
 const STAT_CARDS_GRID = {
   1: "grid gap-3",
   2: "grid grid-cols-2 gap-3",
-  4: "grid grid-cols-2 gap-3 min-[720px]:grid-cols-4",
 } as const;
 
 /** Only the sign-in methods chart has no trend across from its heading. */
 function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
   return (
-    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false}>
-      <Skeleton className={`w-full ${plot}`} />
-    </ChartFrameSkeleton>
+    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false} plot={plot} />
   );
 }
 
@@ -135,11 +127,7 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
  * and seven day rows with the grid's own gaps.
  */
 function SkeletonCalendarCard(): React.JSX.Element {
-  return (
-    <ChartFrameSkeleton aside={false} legend>
-      <Skeleton className="h-[156px] w-full" />
-    </ChartFrameSkeleton>
-  );
+  return <ChartFrameSkeleton aside={false} legend plot="h-[156px]" />;
 }
 
 function SkeletonAccountsTable({
@@ -198,6 +186,24 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
         </StatGroup>
       );
     case SKELETON_SHAPE.STAT_CARDS:
+      // Note that four cards stand in the loaded page's two wrapping pairs,
+      // so the bones break where the figures will rather than at a breakpoint
+      // of their own.
+      if (shape.columns === 4) {
+        return (
+          <div className={STAT_ROW}>
+            {bones(2).map((pair) => (
+              <div key={pair} className={STAT_PAIR}>
+                {bones(2).map((card) => (
+                  <div key={card} className={STAT_CELL}>
+                    <MetricCardSkeleton />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      }
       return (
         <div className={STAT_CARDS_GRID[shape.columns]}>
           {bones(shape.count).map((card) => (
@@ -209,7 +215,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <div
           className={
-            shape.plots.length > 1 ? "grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]" : undefined
+            shape.plots.length > 1
+              ? "grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+              : undefined
           }
         >
           {shape.plots.map((plot) => (
@@ -252,14 +260,18 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
             <div>
               {bones(5).map((row) => (
                 <div key={row} className="border-b border-border py-3 last:border-0">
-                  <Inline justify={JUSTIFY.BETWEEN} gap={GAP.FIELD} wrap={false}>
+                  {/* Note that the tracks start at zero, so the bones give way in a
+                  narrow card rather than holding it wider than its column. */}
+                  <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-4">
                     <Text as={TEXT_ELEMENT.DIV}>
                       <LineBone width="192px" />
                     </Text>
-                    <Text as={TEXT_ELEMENT.DIV}>
-                      <LineBone width="96px" />
-                    </Text>
-                  </Inline>
+                    <div className="flex justify-end">
+                      <Text as={TEXT_ELEMENT.DIV}>
+                        <LineBone width="96px" />
+                      </Text>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

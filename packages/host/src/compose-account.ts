@@ -24,7 +24,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@luke/gateway";
-import { VoiceCapabilityAssembler } from "@luke/voice";
+import { type OpenSocket, VoiceCapabilityAssembler } from "@luke/voice";
 import { Config, Effect, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
@@ -33,8 +33,7 @@ import type { Composer } from "./composer.js";
 import { agentTraceDirectory } from "./devtrace/trace-directory.js";
 import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AppIdentity, Environment } from "./effect/seams.js";
-import { openSocketOverWs } from "./voice/socket-over-ws.js";
+import { AppIdentity, Environment, SignInConsent } from "./effect/seams.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 
@@ -76,6 +75,8 @@ export interface AccountComposer extends Composer {
 
 interface AccountDependencies {
   settings: SettingsComposer;
+  /** How the voice sideband's socket is opened; the platform's own WebSocket, handed in. */
+  openSocket: OpenSocket;
 }
 
 /**
@@ -91,12 +92,19 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
 ): Effect.fn.Return<
   AccountComposer,
   never,
-  HostKernelTag | Environment | AppIdentity | FileSystem.FileSystem | Path.Path | Scope.Scope
+  | HostKernelTag
+  | Environment
+  | AppIdentity
+  | SignInConsent
+  | FileSystem.FileSystem
+  | Path.Path
+  | Scope.Scope
 > {
-  const { settings } = dependencies;
+  const { settings, openSocket } = dependencies;
   const kernel = yield* HostKernelTag;
   const environment = yield* Environment;
   const identity = yield* AppIdentity;
+  const consent = yield* SignInConsent;
   const { runMode, report } = kernel;
   const late = yield* lateService<AccountLinks>();
 
@@ -119,6 +127,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
     requiresAccount: runMode.requiresAccount,
     openExternal: (url) => kernel.openExternalThroughNode(url),
+    openConsent: consent.open,
+    report,
     startCapabilities: Effect.flatMap(late.value, (links) => links.startCapabilities),
     stopCapabilities: Effect.flatMap(late.value, (links) => links.stopCapabilities),
   });
@@ -165,7 +175,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       ? Option.none<string>()
       : yield* Effect.orDie(agentTraceDirectory.parse(environment));
   const agentTrace = Option.isSome(traceDirectory)
-    ? yield* AgentTraceWriter.make({ directory: traceDirectory.value })
+    ? yield* AgentTraceWriter.make({ directory: traceDirectory.value, report })
     : undefined;
   if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
 
@@ -224,7 +234,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       packaged: identity.packaged,
       override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
     }),
-    openSocket: openSocketOverWs,
+    openSocket,
     refreshAccount: session.renewOnce,
   });
 

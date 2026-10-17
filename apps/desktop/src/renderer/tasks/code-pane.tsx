@@ -344,8 +344,7 @@ export function CodePane({
   return (
     <section ref={pane} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
-        {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; cards fade beneath it. */}
-        <ConversationContent className="checkpoint-log scroll-fade pt-0">
+        <ConversationContent className="checkpoint-log scroll-fade">
           {codeFeedCalls(shown, calls).map((call) => (
             <CodeFeedRun key={call.key} call={call} now={now} onOpenFile={onOpenFile} />
           ))}

@@ -1,3 +1,8 @@
+/**
+ * back-link.tsx -- the way back from a page under an admin section to the
+ * section itself.
+ */
+
 import { type AdminTab, plainLeftClick, tabHref } from "../routing";
 
 /**

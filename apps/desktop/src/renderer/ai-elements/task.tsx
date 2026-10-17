@@ -1,4 +1,3 @@
-import { cn } from "@luke/ui";
 import type { ReactNode } from "react";
 import {
   Fold,
@@ -10,6 +9,14 @@ import {
   type FoldSummaryProps,
 } from "./fold";
 
+/** How an opened card sets what it holds: as running words, or as blocks stacked a group's gap apart. */
+export const PLAN_BODY_LAYOUT = {
+  FLOW: "flow",
+  STACK: "stack",
+} as const;
+
+type PlanBodyLayout = (typeof PLAN_BODY_LAYOUT)[keyof typeof PLAN_BODY_LAYOUT];
+
 /**
  * task.tsx -- AI Elements' Plan: a plan as a card across the column, its title on the header and the plan itself under it once opened.
  *
@@ -20,43 +27,38 @@ import {
  * here. Neither is its streaming title, because the plan a coding agent is
  * handed is finished before the agent starts. Closed by default, as
  * docs/TASKS.md's rule for an agent's transcript asks: the plan is
- * there to be read, never in the way of the agent's own words. The card
- * clips what it holds to its rounded corners, so the header's hover fill
- * follows the card's radius, and what is in it rings inside itself
- * (base.css's inset), on a header rounded as the card is.
+ * there to be read, never in the way of the agent's own words. Its look is
+ * tasks.css's `.plan-card` rules.
  */
 
-export type TaskProps = FoldProps;
+export type TaskProps = Omit<FoldProps, "className">;
 
-export function Plan({ className, children, ...props }: TaskProps): ReactNode {
+export function Plan({ children, ...props }: TaskProps): ReactNode {
   return (
-    <Fold
-      className={cn(
-        "overflow-clip rounded-lg border border-border bg-muted text-[12.5px] [--focus-ring-offset:var(--focus-ring-inset)]",
-        className,
-      )}
-      {...props}
-    >
+    <Fold className="plan-card" {...props}>
       {children}
     </Fold>
   );
 }
 
-export type TaskHeaderProps = FoldSummaryProps;
+export type TaskHeaderProps = Omit<FoldSummaryProps, "className">;
 
 /** The one line a closed card shows, which opens and closes it: the chevron, then whatever names the plan. */
-export function PlanHeader({ className, children, ...props }: TaskHeaderProps): ReactNode {
+export function PlanHeader({ children, ...props }: TaskHeaderProps): ReactNode {
   return (
-    <FoldSummary
-      className={cn(
-        "flex h-8 items-center gap-2 rounded-[inherit] px-3 transition-colors hover:bg-secondary [[open]>&]:rounded-b-none",
-        className,
-      )}
-      {...props}
-    >
+    <FoldSummary className="plan-card-head" {...props}>
       <FoldChevron />
       {children}
     </FoldSummary>
+  );
+}
+
+/** The seat a header's icon stands in, before the title, whatever icon the caller hands it. */
+export function PlanIcon({ children }: { children: ReactNode }): ReactNode {
+  return (
+    <span className="plan-card-icon" aria-hidden="true">
+      {children}
+    </span>
   );
 }
 
@@ -69,22 +71,25 @@ export type TaskTitleProps = {
 /** The plan's title on the header, cut to the line, behind its label where it has one. */
 export function PlanTitle({ label, children }: TaskTitleProps): ReactNode {
   return (
-    <span className="min-w-0 flex-1 truncate">
-      {label === undefined ? null : <span className="text-muted-foreground">{label} · </span>}
-      <span className="font-medium">{children}</span>
+    <span className="plan-card-title">
+      {label === undefined ? null : <span className="plan-card-label">{label} · </span>}
+      <span className="plan-card-name">{children}</span>
     </span>
   );
 }
 
-export type TaskContentProps = FoldBodyProps;
+export type TaskContentProps = Omit<FoldBodyProps, "className"> & {
+  layout?: PlanBodyLayout;
+};
 
 /** The plan itself, drawn only once the card is opened. */
-export function PlanContent({ className, children, ...props }: TaskContentProps): ReactNode {
+export function PlanContent({
+  layout = PLAN_BODY_LAYOUT.FLOW,
+  children,
+  ...props
+}: TaskContentProps): ReactNode {
   return (
-    <FoldBody
-      className={cn("border-t border-border px-3 py-2 text-[13px] leading-normal", className)}
-      {...props}
-    >
+    <FoldBody className="plan-card-body" data-layout={layout} {...props}>
       {children}
     </FoldBody>
   );

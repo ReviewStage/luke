@@ -1,24 +1,4 @@
 /**
- * Which surface a window exists to draw. Every window loads the same renderer
- * bundle, so the role is what tells the hidden voice window apart from the
- * panel windows — decided in the main process by which window asked, never by
- * anything the renderer could claim about itself.
- */
-export const WINDOW_ROLE = {
-  PANEL: "panel",
-  /** The one hidden window that will hold the live conversation; it draws nothing. */
-  VOICE: "voice",
-  /**
-   * The floating call window, shown while a call stands and no Luke window
-   * has the keyboard: it draws the call card and sends its controls, and
-   * records nothing.
-   */
-  CALL: "call",
-} as const;
-
-export type WindowRole = (typeof WINDOW_ROLE)[keyof typeof WINDOW_ROLE];
-
-/**
  * How screen recording is armed, decided in the main process and carried on
  * every version of the app-state document.
  *

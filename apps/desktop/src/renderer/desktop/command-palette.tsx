@@ -47,15 +47,8 @@
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import type { HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
-import { GearIcon, PinIcon, SearchIcon, UnpinIcon } from "@luke/ui";
-import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
-import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
-import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
-import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
-import { Command, defaultFilter } from "cmdk";
-import { LinkIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APP_COMMAND,
   APP_SHORTCUT_GROUPS,
@@ -68,13 +61,32 @@ import {
   PALETTE_COMMANDS,
   SHORTCUT_KEY,
   type ShortcutChord,
-} from "#shared/shortcuts";
+} from "@luke/settings/shortcuts";
+import {
+  CHIP_LOOK,
+  Chip,
+  GearIcon,
+  PinIcon,
+  SearchIcon,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  UnpinIcon,
+} from "@luke/ui";
+import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
+import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
+import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
+import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
+import { Command, defaultFilter } from "cmdk";
+import { LinkIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { Highlighted } from "../search-field";
-import { settingsPageOf } from "../settings/pages";
+import { settingsPageOf, settingsPageShown } from "../settings/pages";
 import {
   landOnSettingsRow,
   resultPageWord,
@@ -83,6 +95,7 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import { useChatOn } from "../tasks/chat-gate";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { refusalLine } from "../tasks/file-tab-model";
@@ -94,7 +107,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { agentEntries, inboxEntries } from "./main-tabs";
+import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, taskWorkers } from "./side-panel";
 import { taskOf } from "./task-actions";
 import { WorkspaceRef } from "./workspace-ref";
@@ -463,7 +476,7 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 }
 
 /**
- * The open task's Inbox and coding agents, as the column's "+" lists them,
+ * The open task's Inbox, Chat, and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
  * lists them, then its archived agents (`archivedAgentRows`), each in its
  * row's look and words, found by its row's words, and beside the task's
@@ -472,12 +485,17 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
  * subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
  */
-function agentRows(tasks: TasksControl, show: (pick: () => void) => void): readonly PaletteRow[] {
+function agentRows(
+  tasks: TasksControl,
+  chatOn: boolean,
+  show: (pick: () => void) => void,
+): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
   const workers = taskWorkers(workRowsOf(tasks.work.conversation, tasks.work.callLive));
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
+  const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
@@ -492,7 +510,7 @@ function agentRows(tasks: TasksControl, show: (pick: () => void) => void): reado
         changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
       }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
-  const entries = [...inbox, ...agents, ...subagents];
+  const entries = [...inbox, ...chat, ...agents, ...subagents];
   const standing = entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,
@@ -712,9 +730,12 @@ function agentPinRows(
   ];
 }
 
-/** Every Settings page, in the sidebar's order, under its own glyph and name. */
-function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteRow[] {
-  return SETTINGS_PAGE_LIST.map((page) => {
+/** Every Settings page this platform offers, in the sidebar's order, under its own glyph and name. */
+function settingsPageRows(
+  capabilities: readonly HostCapability[],
+  open: (page: SettingsView) => void,
+): readonly PaletteRow[] {
+  return SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, capabilities)).map((page) => {
     const { title, icon } = settingsPageOf(page);
     return {
       icon,
@@ -816,10 +837,9 @@ function FilterChips({
   return (
     <fieldset className="command-palette-filters" aria-label="Filter">
       {PALETTE_FILTERS.map((each) => (
-        <button
+        <Chip
           key={each}
-          type="button"
-          className="command-palette-filter"
+          look={CHIP_LOOK.FILTER}
           aria-pressed={each === filter}
           // Note that a chip takes no focus, because the caret belongs in the
           // field and Return there opens the row chosen, not the chip.
@@ -828,7 +848,7 @@ function FilterChips({
           onClick={() => onFilter(each)}
         >
           {FILTER_LABEL[each]}
-        </button>
+        </Chip>
       ))}
     </fieldset>
   );
@@ -875,12 +895,15 @@ export function CommandPalette({
   /** What the settings pages draw now, which the Settings rows are; the page a row lands on is shown through `onViewChange`. */
   settings: {
     rows: SettingsSearchInput | undefined;
+    /** What the platform offers, which decides the Settings pages listed, whether or not the rows have been read. */
+    capabilities: readonly HostCapability[];
     onViewChange: (view: SettingsView) => void;
   };
   /** Lists everything in the task's repository in one read, which the Files rows are. */
   readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const chatOn = useChatOn();
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
@@ -1053,7 +1076,7 @@ export function CommandPalette({
     [PALETTE_FILTER.TASKS]: () => [
       plans.signedIn ? taskRows(plans, members, (id) => onTasks(() => plans.onSelect(id))) : [],
     ],
-    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onTasks)],
+    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, chatOn, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, plans.me, (userId) => onTasks(() => plans.personView.onOpen(userId))),
     ],
@@ -1068,7 +1091,10 @@ export function CommandPalette({
         ...agentPinRows(plans, choose),
       ],
     ],
-    [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],
+    [PALETTE_FILTER.SETTINGS]: () => [
+      settingsPageRows(settings.capabilities, openPage),
+      settingRows(settings.rows, land),
+    ],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
@@ -1124,9 +1150,17 @@ export function CommandPalette({
       <FilterChips filter={filter} onFilter={changeFilter} />
       <Command.List className="command-palette-list scroll-fade" label="Results">
         {notice === undefined ? (
-          <Command.Empty className="command-palette-empty">Nothing matches.</Command.Empty>
+          <Command.Empty className="command-palette-empty">
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              Nothing matches.
+            </Text>
+          </Command.Empty>
         ) : (
-          <div className="command-palette-empty">{notice}</div>
+          <div className="command-palette-empty">
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              {notice}
+            </Text>
+          </div>
         )}
         {sections.map((section) => (
           <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
@@ -1144,7 +1178,13 @@ export function CommandPalette({
             })}
           </Command.Group>
         ))}
-        {cut ? <div className="command-palette-notice">{TRUNCATED_LINE}</div> : null}
+        {cut ? (
+          <div className="command-palette-notice">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {TRUNCATED_LINE}
+            </Text>
+          </div>
+        ) : null}
       </Command.List>
       <PaletteFooter typed={query !== ""} />
     </Command.Dialog>

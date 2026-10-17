@@ -6,7 +6,7 @@ import {
   sizeLabel,
 } from "@luke/features/attachment-model";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
-import { RemoveIcon } from "@luke/ui";
+import { AttachmentChip } from "@luke/ui";
 import { isRecord, isWireString } from "@luke/wire";
 import { type ReactNode, useState } from "react";
 import { AttachmentViewer } from "./attachment-viewer";
@@ -54,21 +54,6 @@ export function messageFileChips(message: CodingAgentMessage): FileChip[] {
   );
 }
 
-/** What a chip shows: an image's thumbnail, or any other file's icon, name, and size where it has bytes. */
-function ChipFace({ file }: { file: FileChip }): React.JSX.Element {
-  const base64 = chipBase64(file);
-  if (base64 !== "" && attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
-    return <img src={file.url} alt={file.name} />;
-  }
-  return (
-    <>
-      <FileTypeIcon name={file.name} />
-      <span className="attached-file-name">{file.name}</span>
-      {base64 === "" ? null : <span className="attached-file-size">{sizeLabel(base64)}</span>}
-    </>
-  );
-}
-
 export function AttachedFileChips({
   files,
   onRemove,
@@ -83,34 +68,21 @@ export function AttachedFileChips({
   const openable = files.filter((file) => chipBase64(file) !== "");
   return (
     <ul className="attached-files" aria-label="Attached files">
-      {files.map((file, index) => (
-        <li key={`${String(index)}-${file.name}`} className="attached-file" title={file.name}>
-          {chipBase64(file) === "" ? (
-            <span className="attached-file-face">
-              <ChipFace file={file} />
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="attached-file-face"
-              aria-label={`Open ${file.name}`}
-              onClick={() => setViewing(openable.indexOf(file))}
-            >
-              <ChipFace file={file} />
-            </button>
-          )}
-          {onRemove === undefined ? null : (
-            <button
-              type="button"
-              className="corner-dismiss"
-              aria-label={`Remove ${file.name}`}
-              onClick={() => onRemove(index)}
-            >
-              <RemoveIcon />
-            </button>
-          )}
-        </li>
-      ))}
+      {files.map((file, index) => {
+        const base64 = chipBase64(file);
+        const thumbnail = base64 !== "" && attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
+        return (
+          <AttachmentChip
+            key={`${String(index)}-${file.name}`}
+            name={file.name}
+            image={thumbnail ? file.url : undefined}
+            icon={<FileTypeIcon name={file.name} />}
+            detail={base64 === "" ? undefined : sizeLabel(base64)}
+            onOpen={base64 === "" ? undefined : () => setViewing(openable.indexOf(file))}
+            onRemove={onRemove === undefined ? undefined : () => onRemove(index)}
+          />
+        );
+      })}
       {viewing === undefined ? null : (
         <AttachmentViewer
           files={openable}
