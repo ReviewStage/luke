@@ -6,14 +6,14 @@ import type {
   IssueListView,
   IssueView,
 } from "@luke/features/issue-view";
-import { ACT, ACT_KIND } from "@luke/host/acts";
 import type { Effect } from "effect";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
+import { ACT, ACT_KIND } from "../acts.js";
+import { ActRefused, type ActRows, type ActSender } from "./router.js";
 
 /**
  * issue-acts.ts -- the Issues page's asks of the host about a workspace's issues.
  *
- * The one check this process makes is who asked: only a panel draws the
+ * The one check these rows make is who asked: only a panel draws the
  * Issues page, so every row refuses the takeover and the hidden voice
  * window. What the service answers comes back as the panel's own answer, or
  * why there is none. Nothing is held here.
@@ -27,7 +27,7 @@ export interface IssueActsDependencies {
   };
 }
 
-type IssueActKind =
+export type IssueActKind =
   | typeof ACT_KIND.ISSUES_LIST
   | typeof ACT_KIND.ISSUES_READ
   | typeof ACT_KIND.ISSUES_CREATE

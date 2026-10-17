@@ -67,6 +67,7 @@ import {
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
+import { Effect } from "effect";
 import {
   ACT,
   ACT_KIND,
@@ -75,14 +76,13 @@ import {
   isGitHubAddress,
   LINEAR_UNAVAILABLE_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "@luke/host/acts";
-import { Effect } from "effect";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
+} from "../acts.js";
+import { ActRefused, type ActRows, type ActSender } from "./router.js";
 
 /**
  * tasks-acts.ts -- the Tasks tab's acts: the panel's asks of the host about the named tasks.
  *
- * The one check this process makes is who asked. Only a panel draws the
+ * The one check these rows make is who asked. Only a panel draws the
  * Tasks tab, and the takeover and the hidden voice window draw no task, so
  * every row refuses them. What the host does with an ask — which task is
  * active, what the service answers — is the host's to
@@ -162,7 +162,7 @@ export interface TasksActsDependencies {
   openExternal: (url: string) => Promise<void>;
   /** The hosted service's origin, without a trailing slash, the only origin a page the host names may open on. */
   serviceBaseUrl: string;
-  /** The task the panel has open, as main holds the host's view of it. */
+  /** The task the panel has open, as the bridge's side holds the host's view of it. */
   activeTaskId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the task's microphone was pressed. */
   talkAboutTask: (taskId: string) => void;
@@ -174,7 +174,7 @@ export interface TasksActsDependencies {
   colourCode: (language: string, code: string) => CodeLines;
 }
 
-type TasksActKind =
+export type TasksActKind =
   | typeof ACT_KIND.TASKS_REFRESH
   | typeof ACT_KIND.TASKS_SELECT
   | typeof ACT_KIND.TASKS_CLOSE
@@ -250,9 +250,10 @@ type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_LEAVE;
 
 /**
- * The longest page whose source main colours. Note that a longer one is
+ * The longest page whose source the row colours. Note that a longer one is
  * drawn plain rather than cut, as a transcript's long block is, because
- * colouring holds main for about a millisecond per hundred characters.
+ * colouring holds the host's thread for about a millisecond per hundred
+ * characters.
  */
 const PAGE_SOURCE_COLOURED_MAX_CHARS = 64 * 1024;
 

@@ -7,14 +7,14 @@ import type {
   IntegrationStatusView,
   IntegrationToolsView,
 } from "@luke/features/integration-view";
-import { ACT, ACT_KIND } from "@luke/host/acts";
 import type { Effect } from "effect";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
+import { ACT, ACT_KIND } from "../acts.js";
+import { ActRefused, type ActRows, type ActSender } from "./router.js";
 
 /**
  * integration-acts.ts -- Settings' integration rows: the panel's asks of the host about the account's integrations.
  *
- * The one check this process makes is who asked: only a panel draws
+ * The one check these rows make is who asked: only a panel draws
  * Settings, so every row refuses the takeover and the hidden voice window.
  * What the service answers comes back as the panel's own answer; a Connect
  * answers whether the host sent the browser to sign in, and the address it
@@ -31,7 +31,7 @@ export interface IntegrationActsDependencies {
   };
 }
 
-type IntegrationActKind =
+export type IntegrationActKind =
   | typeof ACT_KIND.INTEGRATIONS_STATUS
   | typeof ACT_KIND.INTEGRATIONS_CONNECT
   | typeof ACT_KIND.INTEGRATIONS_CANCEL

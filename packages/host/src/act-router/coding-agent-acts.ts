@@ -53,15 +53,15 @@ import {
   type ProviderKeysAnswerView,
 } from "@luke/features/coding-agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { ACT, ACT_KIND } from "@luke/host/acts";
-import type { AgentNotices } from "@luke/host/agent-notices";
 import { Effect } from "effect";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
+import { ACT, ACT_KIND } from "../acts.js";
+import type { AgentNotices } from "../agent-notices.js";
+import { ActRefused, type ActRows, type ActSender } from "./router.js";
 
 /**
  * coding-agent-acts.ts -- the Tasks tab's coding-agent acts: the panel's asks of the host about a task's agents.
  *
- * The one check this process makes is who asked, as for every task act:
+ * The one check these rows make is who asked, as for every task act:
  * only a panel draws a task's agents, so every row refuses the takeover and
  * the hidden voice window. What the service answers comes back as the
  * panel's own answer; on its way it is noted by the notices
@@ -171,7 +171,7 @@ export interface CodingAgentActsDependencies {
   >;
 }
 
-type CodingAgentActKind =
+export type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_MODELS
   | typeof ACT_KIND.CODING_AGENTS_DEFAULT_READ
   | typeof ACT_KIND.CODING_AGENTS_DEFAULT_WRITE
