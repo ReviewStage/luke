@@ -54,6 +54,11 @@ import {
   inboxReplyRefusal,
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
+import {
+  PULL_REQUEST_ACTION,
+  type PullRequestActionRequest,
+  pullRequestActionRequestSchema,
+} from "@luke/features/pull-request-write-wire";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, type Redacted, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -67,6 +72,7 @@ import {
   namedOverviewPullRequest,
 } from "../github/github-people.js";
 import { githubReadOrRefusal } from "../github/github-refusal.js";
+import { pullRequestNodeId, setPullRequestDraft } from "../github/pull-request-writes.js";
 import {
   type PullRequestReadFailure,
   pullRequestChecks,
@@ -131,6 +137,11 @@ import {
   titleMayLand,
   transcriptPast,
 } from "./coder-host/transcript.js";
+import {
+  type MemberPullRequest,
+  memberPullRequestWrite,
+  writeAnswerOf,
+} from "./pull-request-write.js";
 
 /**
  * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
@@ -199,7 +210,13 @@ import {
  * asks for (`GET /api/agents/{id}/overview/pull-request`); its head's checks
  * one by one and its deployments (`GET /api/agents/{id}/overview/checks`); and its conversation
  * and where its reviewers stand (`GET /api/agents/{id}/overview/conversation`),
- * its words as GitHub renders them. An image those words name (`GET /api/agents/{id}/github-image`) is
+ * its words as GitHub renders them. A change to that pull request
+ * (`POST /api/agents/{id}/pull-request/action`), such as marking it ready for
+ * review, is made on GitHub as the member who asks, on their own GitHub
+ * sign-in and never the App's, through the one seam every such change takes
+ * (`pull-request-write.ts`), and answers how GitHub took it; the agent's kept
+ * published answer is let go, so the next read asks GitHub afresh. An image
+ * those words name (`GET /api/agents/{id}/github-image`) is
  * read on a token for the agent's repository too, an upload re-signed by its
  * asset's id (`github/github-images.ts`), and answered as bytes.
  * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
@@ -234,6 +251,8 @@ const AGENTS_PATH = {
   OVERVIEW_CHECKS: "/api/agents/overview-checks",
   /** GET reads the agent's pull request's conversation, as its overview draws it; the rewrite moves the path's agent id into the `id` query. */
   OVERVIEW_CONVERSATION: "/api/agents/overview-conversation",
+  /** POST makes one change to the agent's pull request as the asking member; the rewrite moves the path's agent id into the `id` query. */
+  PULL_REQUEST_ACTION: "/api/agents/pull-request-action",
   /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
   GITHUB_IMAGE: "/api/agents/github-image",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
@@ -296,6 +315,9 @@ const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
         (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
   2_048;
+
+/** A change to a pull request names the change and its few fields, so a body past this is no change. */
+const MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES = 4_096;
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
@@ -771,6 +793,21 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/**
+ * The instance's kept answers for the agent let go, every member's and on
+ * either side of its end, so the next ask on this instance reads GitHub
+ * afresh whoever asks. Note that another instance keeps its own for at most
+ * `CODER.PUBLISHED_TTL`, as it keeps one past a change made on GitHub itself.
+ */
+const forgetPublished = (published: PublishedCache, agentId: string) =>
+  Effect.flatMap(Cache.keys(published), (keys) =>
+    Effect.forEach(
+      [...keys].filter((key) => key.agentId === agentId),
+      (key) => Cache.invalidate(published, key),
+      { discard: true },
+    ),
+  );
+
 /** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
 const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -937,6 +974,49 @@ const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
     ),
   );
 });
+
+/** The write a change makes on the pull request, on the member's token. */
+function actionWrite(
+  request: PullRequestActionRequest,
+): (pullRequest: MemberPullRequest) => ReturnType<typeof setPullRequestDraft> {
+  return ({ token, repository, number }) =>
+    Effect.flatMap(pullRequestNodeId(token, repository, number), (id) =>
+      setPullRequestDraft(token, id, request.action === PULL_REQUEST_ACTION.CONVERT_TO_DRAFT),
+    );
+}
+
+/**
+ * POST makes one change to the pull request the agent's kept published
+ * answer names, as the asking member on their own GitHub sign-in
+ * (`pull-request-write.ts`), and answers how GitHub took it; not found
+ * where it names no pull request yet. Whatever GitHub answered, the kept
+ * answer is let go, so the reads after it ask GitHub afresh.
+ */
+const pullRequestActionEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestActionEndpoint")(
+  function* (
+    seams: CodingAgentsAppSeams,
+    published: PublishedCache,
+  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method !== HTTP_METHOD.POST) {
+      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+    }
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const { userId, agent } = yield* reachedAgent(seams, request);
+    const body = yield* readJsonBodyEffect(MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES);
+    const asked = readEither(pullRequestActionRequestSchema)(body);
+    if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    const { pullRequest } = yield* keptPublished(published, userId, agent);
+    if (pullRequest === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const written = yield* memberPullRequestWrite(
+      userId,
+      agent,
+      pullRequest.number,
+      actionWrite(asked.success),
+    ).pipe(Effect.ensuring(forgetPublished(published, agent.id)));
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, writeAnswerOf(written));
+  },
+);
 
 /**
  * GET reads one image the agent's pull request's overview names, by the
@@ -1244,6 +1324,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.OVERVIEW_CONVERSATION,
           hostedRefusing(overviewConversationEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.PULL_REQUEST_ACTION,
+          hostedRefusing(pullRequestActionEndpoint(seams, published)),
         ),
         HttpRouter.add(
           ANY_METHOD,

@@ -162,6 +162,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
   /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
+  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
