@@ -15,6 +15,7 @@ import {
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
@@ -62,6 +63,7 @@ import { useOpenPerson } from "../person-door";
 import { SpinnerRegion } from "../spinner";
 import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { useCapability } from "../use-app-state";
 import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 import { OneLine } from "./one-line";
@@ -601,8 +603,7 @@ function HeirChip({
 }): React.JSX.Element {
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
-  // Note that the chip stands in a container of its own, because the field's
-  // width, wide enough for a name, is its place's and not the chip's.
+  // Note that a container holds the chip wide enough for a name, because width is its place's.
   return (
     <>
       <div className="workspace-heir">
@@ -1561,6 +1562,7 @@ function ShownWorkspace({
 }): React.JSX.Element {
   const members = useMembersRead(workspace.id, workspace.memberCount);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
+  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   return (
     <>
       <SettingsSection>
@@ -1593,7 +1595,7 @@ function ShownWorkspace({
           <WorkspaceLinear workspace={workspace} />
         </SettingsSection>
       </div>
-      <MacRepositoriesGroup workspaceId={workspace.id} />
+      {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup
         workspace={workspace}
         members={members.read}

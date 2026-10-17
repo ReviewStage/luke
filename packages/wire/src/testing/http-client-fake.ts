@@ -83,3 +83,13 @@ export function fakeHttpClient(respond: FakeResponder): HttpClient.HttpClient {
 export function fakeHttpClientLayer(respond: FakeResponder): Layer.Layer<HttpClient.HttpClient> {
   return Layer.succeed(HttpClient.HttpClient, fakeHttpClient(respond));
 }
+
+/**
+ * A client that refuses every request. A suite hands it where production
+ * reads the tag but its fakes answer every call, so nothing it runs sends; a
+ * request that did reach this is a test composing a client it meant to fake,
+ * and this is what makes that a failure rather than a call onto the network.
+ */
+export const noNetwork: Layer.Layer<HttpClient.HttpClient> = fakeHttpClientLayer(() => {
+  throw new Error("this test reaches no network");
+});

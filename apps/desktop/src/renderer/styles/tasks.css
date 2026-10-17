@@ -638,30 +638,30 @@
 }
 
 /* A task item as TipTap draws it: its box in a label and its words in a block
-   of their own after it, which would stand a line under a bullet. Laid side by
-   side, the box takes the bullet's place in the read view's size and green
-   (`markdown.css`), and the words their line beside it. */
+   of their own after it. The label stands in the bullet's gutter exactly where
+   the read view stands its box (`markdown.css`), in its size and accent, so
+   the words keep their place as the section opens to be edited. */
 .plan-document-text li[data-checked] {
-  display: flex;
+  position: relative;
   list-style: none;
 }
 
 .plan-document-text li[data-checked] > label {
-  flex: none;
-  margin: 0 0.45em 0 -1.45em;
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
 }
 
 .plan-document-text li[data-checked] > label > input {
+  display: block;
   width: 0.95em;
   height: 0.95em;
   margin: 0;
-  vertical-align: -0.1em;
-  accent-color: var(--state-complete);
+  font: inherit;
+  accent-color: var(--luke-color-accent);
 }
 
 .plan-document-text li[data-checked] > div {
-  flex: 1;
-  min-width: 0;
   margin-top: 0;
 }
 
@@ -3204,6 +3204,19 @@ button.draft-fork-quote:hover {
    words are empty, dimmed with the editor while the box is held. */
 .agent-composer-field {
   position: relative;
+}
+
+/* Note that the editor keeps its spaces as typed, as TipTap's own base rules
+   would were they let in (`composer-editor.ts`'s `injectCSS`), so the space a
+   chosen chip is followed by stands at the end of a line rather than
+   collapsing, and the caret is drawn after it, not against the chip. */
+.composer-editor {
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.composer-editor [contenteditable="false"] {
+  white-space: normal;
 }
 
 .agent-composer-input p {

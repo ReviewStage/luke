@@ -40,7 +40,7 @@ const RUN = {
 } as const;
 
 function store(): AppStateStore {
-  return new AppStateStore(initialAppState(RUN, true), Context.empty());
+  return new AppStateStore(initialAppState(RUN, true, []), Context.empty());
 }
 
 /**
@@ -183,7 +183,7 @@ it("recording is what the host permitted less what an account's end stood down",
 });
 
 it("the voice and call windows are sent the document, and answered their first read of it, without the planning turns' work or the plan's planning conversation, and the rest of the plan as held", () => {
-  const held = initialAppState(RUN, true);
+  const held = initialAppState(RUN, true, []);
   const tasks = {
     ...held.tasks,
     activeTaskId: "plan-1",
