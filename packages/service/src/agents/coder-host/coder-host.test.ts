@@ -5,6 +5,7 @@ import { fillChildTitle } from "@luke/database/models/child-titles";
 import {
   type CodingAgentBriefText,
   createCodingAgent,
+  delegationsOf,
   fillCodingAgentTitle,
   latestTurnsOf,
   readCodingAgent,
@@ -19,6 +20,7 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { STARTING_GRACE_MILLIS } from "@luke/features/coding-agent-status";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { agentTranscriptLiveRowsSchema } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -61,7 +63,13 @@ import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
-import { CURSOR_START, transcriptNow, transcriptPast } from "./transcript.js";
+import {
+  CURSOR_START,
+  titleMayLand,
+  titleWindowEdge,
+  transcriptNow,
+  transcriptPast,
+} from "./transcript.js";
 import { transcriptLiveStatements } from "./transcript-live.js";
 
 /**
@@ -424,6 +432,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         let cursor = CURSOR_START;
         let read = yield* now(cursor);
         let rows = yield* liveRowsOf(target, parent);
+        // Before its first turn the agent is starting, which only the clock ends: the read says when.
+        assert.equal(read.page.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(read.holds, true);
+        assert.equal(
+          read.wakeIn,
+          agent.createdAt.getTime() + STARTING_GRACE_MILLIS + 1 - (yield* Clock.currentTimeMillis),
+        );
         let said = 0;
         for (const event of codingTurn("turn_0", "turn.completed")) {
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
@@ -453,6 +468,21 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(said > 2, "the turn said something more than once");
         assert.equal(read.page.status, CODING_AGENT_STATUS.COMPLETED);
 
+        // Ended and untitled, the read holds on the title, until its window closes with the clock.
+        const ended = (yield* latestTurnsOf(userId, [parent])).get(parent)?.settledAt;
+        assert.ok(ended);
+        const awaiting = yield* transcriptNow(
+          target,
+          CODER_TOOL_SET,
+          cursor,
+          agent,
+          agent,
+          titleMayLand(target),
+          titleWindowEdge(target),
+        ).pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.equal(awaiting.holds, true);
+        assert.equal(awaiting.wakeIn, ended.getTime() + 20_001 - (yield* Clock.currentTimeMillis));
+
         // A title landing is heard on the agent's own transcript.
         assert.equal(yield* fillCodingAgentTitle(userId, agent.id, "Teammate invitations"), true);
         const titled = yield* liveRowsOf(target, parent);
@@ -473,6 +503,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         yield* writeDelegation(child, workerCall, { model: agent.model, effort: agent.effort });
         const delegated = yield* liveRowsOf(worker, parent);
         assert.notEqual(delegated, opened);
+        // An untitled worker's read waits on its title until the window opened at its start closes.
+        const [recorded] = yield* delegationsOf(target);
+        assert.equal(recorded?.childConversationId, child);
+        assert.equal(
+          yield* titleWindowEdge(target, child),
+          (recorded?.createdAt.getTime() ?? 0) + 20_001,
+        );
         const ownBefore = yield* liveRowsOf(target, parent);
         assert.equal(yield* fillChildTitle(target, child, "Invite expiry"), true);
         assert.notEqual(yield* liveRowsOf(worker, parent), delegated);

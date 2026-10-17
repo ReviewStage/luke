@@ -438,6 +438,10 @@
     },
     "holds": {
       "type": "boolean"
+    },
+    "wakeIn": {
+      "type": "number",
+      "minimum": 0
     }
   },
   "required": [
