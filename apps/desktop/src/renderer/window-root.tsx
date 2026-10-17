@@ -28,9 +28,10 @@ import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead } from "./use-app-state";
 
 /**
- * Installs the window's bridge and platform, starts its tracing, and draws `surface` into
- * its root once the window's document has been read. A window whose document
- * cannot be read mounts nothing: a fallback would protect nothing.
+ * Installs the window's bridge and platform, starts its tracing, and draws
+ * `surface` into its root once the window's document has been read. A window
+ * whose document cannot be read mounts nothing: a fallback would protect
+ * nothing.
  */
 export function mountWindow(surface: ReactNode): void {
   // The desktop's bridge is the one the preload exposed as `window.luke`, and
