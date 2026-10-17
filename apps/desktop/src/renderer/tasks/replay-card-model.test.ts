@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import {
   firstMessageText,
+  REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
   type Replay,
+  type ReplayStep,
   START_NOTE_HEADING,
   toolStep,
 } from "@luke/features/agent-replay";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
@@ -238,6 +241,8 @@ test("a line's step is drawn as a sent message under its sender, and the agent's
     {
       kind: STEP_VIEW.LINE,
       sender: "Luke",
+      sentBy: undefined,
+      own: false,
       words: "Use seven days.",
     },
   );
@@ -339,4 +344,23 @@ test("the note's own files go with the note and the brief's stay with the brief,
     messageFileChips(opening.note).map((each) => each.name),
     ["notes.txt", "new-design.png"],
   );
+});
+
+test("a line whose marker names its sender is named as a transcript's line is: a member by their account, the developer as the reader's own", () => {
+  const view = (sender: NonNullable<ReplayStep["sender"]>, summary: string) =>
+    stepView({ kind: REPLAY_STEP_KIND.LINE, summary, words: "Go.", sender });
+  const member = view({ kind: REPLAY_SENDER.MEMBER, memberId: "user-charles" }, "Charles Pan: Go.");
+  assert.deepEqual(member.kind === STEP_VIEW.LINE && member.sentBy, {
+    kind: CODING_AGENT_SENDER.MEMBER,
+    userId: "user-charles",
+    name: "Charles Pan",
+  });
+  const agent = view({ kind: REPLAY_SENDER.AGENT }, "Fix the tile: Go.");
+  assert.deepEqual(agent.kind === STEP_VIEW.LINE && agent.sentBy, {
+    name: "Fix the tile",
+    agent: true,
+  });
+  const own = view({ kind: REPLAY_SENDER.DEVELOPER }, "The developer: Go.");
+  assert.equal(own.kind === STEP_VIEW.LINE && own.own, true);
+  assert.equal(own.kind === STEP_VIEW.LINE ? own.sentBy : null, undefined);
 });

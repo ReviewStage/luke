@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { firstMessageText, REPLAY_STEP_KIND, type Replay } from "@luke/features/agent-replay";
+import {
+  firstMessageText,
+  REPLAY_SENDER,
+  REPLAY_STEP_KIND,
+  type Replay,
+} from "@luke/features/agent-replay";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
@@ -389,4 +394,44 @@ test("a replay holding Luke's summary of the oldest steps opens on one folded ro
   assert.ok(row.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING);
   press(row.querySelector("summary"));
   assert.match(row.textContent ?? "", /Read the invite code and its tests\./u);
+});
+
+test("a replayed line is named under its sender as a transcript names one: Luke, an automation, and GitHub by their own marks, the developer as the reader, and a line from before senders were marked by its name", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const line = (summary: string, sender?: NonNullable<Replay["steps"][number]["sender"]>) => ({
+    kind: REPLAY_STEP_KIND.LINE,
+    summary,
+    words: "Go.",
+    ...(sender === undefined ? undefined : { sender }),
+  });
+  const steps: Replay["steps"] = [
+    line("Luke: Go.", { kind: REPLAY_SENDER.LUKE }),
+    line("Nightly: deploy: Go.", { kind: REPLAY_SENDER.AUTOMATION }),
+    line("octocat: Go.", { kind: REPLAY_SENDER.GITHUB }),
+    line("The developer: Go.", { kind: REPLAY_SENDER.DEVELOPER }),
+    line("Charles Pan: Go."),
+  ];
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay({ steps, totalSteps: steps.length }), undefined),
+  );
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+  const senders = [...container.querySelectorAll("[data-replay-step] .message-sender")].map(
+    (sender) => {
+      const ref = sender.querySelector<HTMLElement>(".actor-ref");
+      const name = ref?.querySelector(".actor-ref-name")?.textContent ?? sender.textContent;
+      return [ref?.dataset.kind ?? "", name ?? ""];
+    },
+  );
+  assert.deepEqual(senders, [
+    [ACTOR_KIND.LUKE, "Luke"],
+    [ACTOR_KIND.AUTOMATION, "Nightly: deploy"],
+    [ACTOR_KIND.GITHUB, "octocat"],
+    ["", "You"],
+    ["", "Charles Pan"],
+  ]);
 });

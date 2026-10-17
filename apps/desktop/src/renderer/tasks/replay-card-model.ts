@@ -1,13 +1,19 @@
 import {
   firstMessageParts,
   type NoteFiles,
+  REPLAY_SENDER,
   REPLAY_STEP_KIND,
   REPLAY_TOOL_STATE,
   type Replay,
   type ReplayStep,
   type ReplayToolState,
 } from "@luke/features/agent-replay";
-import type { CodingAgentMessage, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_SENDER,
+  type CodingAgentMessage,
+  type CodingAgentSender,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
@@ -80,7 +86,16 @@ export const STEP_VIEW = {
 } as const;
 
 export type StepView =
-  | { readonly kind: typeof STEP_VIEW.LINE; readonly sender: string; readonly words: string }
+  | {
+      readonly kind: typeof STEP_VIEW.LINE;
+      /** Who sent it by name, as its summary says, which a step written before its marker named its sender is drawn under. */
+      readonly sender: string;
+      /** Who sent it as a transcript's line names its sender, where its marker said; none for the developer's own and a step written before. */
+      readonly sentBy: CodingAgentSender | undefined;
+      /** Whether the developer sent it, drawn as the reader's own. */
+      readonly own: boolean;
+      readonly words: string;
+    }
   | { readonly kind: typeof STEP_VIEW.SAID; readonly words: string }
   | {
       readonly kind: typeof STEP_VIEW.CALL;
@@ -377,14 +392,49 @@ function callView(step: ReplayStep): StepView {
 }
 
 /**
+ * A line's sender as a transcript's line names one (`lineSender`), from the
+ * kind its marker names and the name its summary gives: a member by their
+ * account, Luke, an automation, GitHub's login, or another agent; none for
+ * the developer's own line and for a step whose marker names no sender.
+ */
+function sentByOf(step: ReplayStep, name: string): CodingAgentSender | undefined {
+  const sent = step.sender;
+  switch (sent?.kind) {
+    case undefined:
+    case REPLAY_SENDER.DEVELOPER:
+      return undefined;
+    case REPLAY_SENDER.MEMBER:
+      return sent.memberId === undefined
+        ? { kind: CODING_AGENT_SENDER.MEMBER, name }
+        : { kind: CODING_AGENT_SENDER.MEMBER, userId: sent.memberId, name };
+    case REPLAY_SENDER.LUKE:
+      return { kind: CODING_AGENT_SENDER.LUKE, name };
+    case REPLAY_SENDER.AUTOMATION:
+      return { kind: CODING_AGENT_SENDER.AUTOMATION, name };
+    case REPLAY_SENDER.GITHUB:
+      return { kind: CODING_AGENT_SENDER.GITHUB, name };
+    case REPLAY_SENDER.AGENT:
+      return { name, agent: true };
+  }
+}
+
+/**
  * What a step is drawn as in the card, as a transcript draws the same:
  * a line as a sent message under whoever sent it, the agent's words as its
  * words, and a call as a call's row opening onto its input and its result.
  */
 export function stepView(step: ReplayStep): StepView {
   switch (step.kind) {
-    case REPLAY_STEP_KIND.LINE:
-      return { kind: STEP_VIEW.LINE, sender: stepLine(step).who, words: step.words };
+    case REPLAY_STEP_KIND.LINE: {
+      const sender = stepLine(step).who;
+      return {
+        kind: STEP_VIEW.LINE,
+        sender,
+        sentBy: sentByOf(step, sender),
+        own: step.sender?.kind === REPLAY_SENDER.DEVELOPER,
+        words: step.words,
+      };
+    }
     case REPLAY_STEP_KIND.SAID:
       return { kind: STEP_VIEW.SAID, words: step.words };
     case REPLAY_STEP_KIND.TOOL:

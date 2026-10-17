@@ -12,7 +12,8 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader } from "../ai-elements/task";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { usePerson } from "../member-directory";
+import { useMemberDirectory, usePerson } from "../member-directory";
+import { lineSender } from "./coding-agent-model";
 import { linkChip } from "./mention-chip";
 import { useMentionDoors } from "./plan-mentions";
 import {
@@ -21,6 +22,7 @@ import {
   replayLede,
   replayVerb,
   STEP_VIEW,
+  type StepView,
   stepView,
   summaryLine,
 } from "./replay-card-model";
@@ -44,6 +46,9 @@ import { useOpenPlace } from "./use-open-link";
  * was forked at, or its tab for a continuation, whose log keeps to its end.
  * The model is `replay-card-model.ts`.
  */
+
+/** What a line the reader sent is named by. */
+const OWN_WORD = "You";
 
 /** What the foot's way to the source's whole transcript says. */
 const FULL_TRANSCRIPT_WORDS = "Open the full transcript";
@@ -173,6 +178,25 @@ function usePublished(agentId: string, read: ReplayPlace["readPublished"]): Publ
 }
 
 /**
+ * Who sent a replayed line, as a transcript names a line's sender: a
+ * member by their face and name, Luke, an automation, GitHub's login, or
+ * another agent by their own marks, and the reader's own as "You"; by its
+ * name alone where its step's marker named no sender.
+ */
+function LineSender({
+  view,
+}: {
+  view: Extract<StepView, { kind: typeof STEP_VIEW.LINE }>;
+}): React.JSX.Element {
+  const { members, former, readerId } = useMemberDirectory();
+  const actor =
+    view.sentBy === undefined ? undefined : lineSender(view.sentBy, readerId, members, former);
+  if (actor !== undefined) return <ActorRef actor={actor} />;
+  // A member's line the reader sent is theirs, as the developer's own is.
+  return <>{view.own || view.sentBy !== undefined ? OWN_WORD : view.sender}</>;
+}
+
+/**
  * One step, drawn as a transcript draws the same: a line as a sent
  * message, its sender under it; the agent's words as its words; and a
  * call as a call's row, folded onto its input and its result, which run
@@ -188,7 +212,9 @@ function StepRow({ step }: { step: ReplayStep }): React.JSX.Element {
             <TranscriptWords text={view.words} />
           </MessageContent>
           <div className="message-meta">
-            <span className="message-sender">{view.sender}</span>
+            <span className="message-sender">
+              <LineSender view={view} />
+            </span>
           </div>
         </Message>
       );
