@@ -13,7 +13,7 @@ import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import type { UnparsedWireValue } from "@luke/wire";
-import { channels } from "#shared/bridge";
+import { channels } from "./bridge.js";
 
 /** The panel's page as the relay reaches it: its own `webContents`, and nothing wider. */
 export interface AvatarPage {

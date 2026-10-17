@@ -21,11 +21,11 @@ import {
   SETTINGS_VIEW,
   type SettingsView,
 } from "@luke/settings/settings-views";
+import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
 import { CloseIcon, SearchIcon } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useRef } from "react";
-import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import { appPlatform } from "./app-platform";
 import { drawnVisibly, focusSeek } from "./focus-seek";

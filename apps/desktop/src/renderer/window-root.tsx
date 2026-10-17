@@ -11,11 +11,11 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import type { AppBridge } from "@luke/host/bridge";
 import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import type { AppBridge } from "#shared/bridge";
 import {
   eventWithoutAccessTokens,
   transactionWithoutAccessTokens,

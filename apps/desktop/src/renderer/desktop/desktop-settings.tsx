@@ -11,11 +11,11 @@ import {
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import { BackIcon, SettingsPage, useMenu } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { appPlatform } from "../app-platform";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
