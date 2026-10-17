@@ -11,7 +11,18 @@ import {
   settleAutomationRun,
 } from "@luke/database/models/automation-store";
 import {
+  answerAsk,
+  ensureMember,
+  ensurePlanChannel,
+  findOrMakeDm,
+  postAsk,
+  postMessage,
+  roster,
+  unreadFor,
+} from "@luke/database/models/chat-store";
+import {
   archiveCodingAgent,
+  lineSendersOf,
   readCodingAgent,
   readCodingAgentByKey,
   renameCodingAgent,
@@ -20,13 +31,13 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, sentLineId } from "@luke/database/models/ids";
-import { sentLineStands } from "@luke/database/models/message-reads";
+import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { openTaskConversation, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
-import { user } from "@luke/database/schemas/auth";
+import { member, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { conversations } from "@luke/database/schemas/storage";
@@ -52,6 +63,13 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
+  CHAT_ASK,
+  CHAT_BLOCK,
+  CHAT_REPLY,
+  MEMBER_KIND,
+  mentionedHandles,
+} from "@luke/features/chat-wire";
+import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -62,6 +80,8 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPageAnswerSchema,
+  codingAgentPullRequestAnswerSchema,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ANSWER_LEAD,
@@ -78,11 +98,12 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   Clock,
   DateTime,
@@ -107,6 +128,8 @@ import {
   BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   sessionKey,
   TURN_ORIGIN,
@@ -126,6 +149,8 @@ import {
   type InstallationFixture,
   openGithubUser,
   type RepositoryScript,
+  type SentToGitHub,
+  standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
@@ -138,7 +163,9 @@ import {
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
 import { CODER } from "./coder-host/bounds.js";
+import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
 
 /**
@@ -159,6 +186,12 @@ const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
+/** The overview's three reads, each its own route. */
+const AGENT_OVERVIEW = [
+  "/api/agents/overview-pull-request",
+  "/api/agents/overview-checks",
+  "/api/agents/overview-conversation",
+] as const;
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const TASK = "/api/plans/plan";
 /** The account's plans, served by the plans group, each naming its agents in brief. */
@@ -477,11 +510,13 @@ const openTask = (
     readonly github?: RepositoryScript;
     /** Whether the deployment holds the Anthropic key workers' titles are generated on. */
     readonly titles?: boolean;
+    /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
+    readonly otherToken?: string | null;
   } = {},
 ) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
-    const other = yield* openGithubUser();
+    const other = yield* otherAccount(options.otherToken);
     const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
@@ -501,6 +536,89 @@ const openTask = (
     const { ask, fetch } = yield* standing(bearers, github, eve, options.titles ?? false);
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
+
+/** An account beside the owner: signed in with GitHub on the token given, the standing row's when unsaid, or with no GitHub sign-in at all. */
+const otherAccount = (token: string | null | undefined) =>
+  Effect.gen(function* () {
+    if (token === undefined) return yield* openGithubUser();
+    if (token !== null) {
+      return yield* openGithubUser({
+        ...standingGithubRow(yield* Clock.currentTimeMillis),
+        accessToken: token,
+      });
+    }
+    const db = yield* Database;
+    const userId = `user-${randomUUID()}`;
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    return userId;
+  });
+
+/** The pull request an agent published from its branch, as GitHub holds it. */
+const PUBLISHED = { branch: "luke/teammate-invitations", number: 12, headSha: "c0ffee1" } as const;
+
+/** The repository answering the published pull request's reads, its overview's among them: no checks, no comments, no reviews. */
+/** The same, the pull request a draft while `draft` says it is. */
+const publishedPullRequestDrafted =
+  (draft: () => boolean): RepositoryScript =>
+  (sent) => {
+    const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+    const pull = `${repository}/pulls/${PUBLISHED.number}`;
+    const commit = `${repository}/commits/${PUBLISHED.headSha}`;
+    // The overview's checks name the head by the ref GitHub keeps on the pull request.
+    const head = `${repository}/commits/refs%2Fpull%2F${PUBLISHED.number}%2Fhead`;
+    switch (new URL(sent.url).pathname) {
+      case `${repository}/pulls`:
+        return Response.json([{ number: PUBLISHED.number }]);
+      case pull:
+        return Response.json({
+          number: PUBLISHED.number,
+          title: "Expire teammate invitations",
+          html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
+          state: "open",
+          draft: draft(),
+          merged: false,
+          merged_at: null,
+          additions: 4,
+          deletions: 1,
+          changed_files: 1,
+          body: "Invitations expire.",
+          body_html: "<p>Invitations expire.</p>",
+          base: { ref: "main" },
+          head: { ref: PUBLISHED.branch, sha: PUBLISHED.headSha },
+          created_at: "2026-10-15T09:00:00Z",
+          mergeable_state: "clean",
+          user: null,
+          requested_reviewers: [],
+        });
+      case `${commit}/check-runs`:
+      case `${head}/check-runs`:
+        return Response.json({ check_runs: [] });
+      case `${commit}/status`:
+      case `${head}/status`:
+        return Response.json({ statuses: [] });
+      case `${repository}/issues/${PUBLISHED.number}/comments`:
+      case `${pull}/reviews`:
+        return Response.json([]);
+      default:
+        return undefined;
+    }
+  };
+
+const publishedPullRequest = publishedPullRequestDrafted(() => false);
+
+/** What GitHub was asked on the way to a repository token: the installation read, its listing and the token minted for it, and the repository's own token. */
+function reachRequests(sent: readonly SentToGitHub[], installationId: number) {
+  const app = `https://api.github.com/app/installations/${installationId}`;
+  const mints = sent.filter((one) => one.url === `${app}/access_tokens`);
+  const forRepository = (one: SentToGitHub) => "repositories" in JSON.parse(one.body);
+  return {
+    installationReads: sent.filter((one) => one.url === app).length,
+    listings: sent.filter((one) => new URL(one.url).pathname === "/installation/repositories")
+      .length,
+    listingMints: mints.filter((one) => !forRepository(one)).length,
+    repositoryMints: mints.filter(forRepository).length,
+  };
+}
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
   it.effect(
@@ -1014,6 +1132,525 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "an agent's pull request overview, its three reads asked at once and then again, reaches the repository through its installation once and mints one token for it, and a read past the token's hour mints afresh",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, installation, github, ask } = yield* openTask({
+          github: publishedPullRequest,
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+        yield* updateCodingAgentBranch(owner, agent.id, PUBLISHED.branch);
+        // Note that the Start reached the repository itself, so the reads begin past every kept answer.
+        yield* TestClock.adjust(Duration.hours(2));
+        const asked = github.sent.length;
+        const overview = () =>
+          Effect.all(
+            AGENT_OVERVIEW.map((path) => ask(request(path, owner, { id: agent.id }))),
+            { concurrency: "unbounded" },
+          );
+
+        const cold = yield* overview();
+        const warm = yield* overview();
+
+        for (const read of cold) {
+          assert.equal(read.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(read.body));
+        }
+        assert.deepEqual(warm, cold);
+        assert.deepEqual(reachRequests(github.sent.slice(asked), installation.id), {
+          installationReads: 1,
+          listings: 1,
+          listingMints: 1,
+          repositoryMints: 1,
+        });
+
+        const later = github.sent.length;
+        yield* TestClock.adjust(Duration.hours(1));
+        assert.deepEqual(yield* overview(), cold);
+        assert.equal(reachRequests(github.sent.slice(later), installation.id).repositoryMints, 1);
+      }),
+  );
+});
+
+const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
+const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+
+/** The GraphQL id GitHub gives the published pull request. */
+const PULL_REQUEST_NODE_ID = "PR_kwDOfixture12";
+
+/** One GraphQL call as GitHub saw it: the bearer it came under, and its document's words. */
+interface GraphqlCall {
+  readonly authorization: string | null;
+  readonly query: string;
+  readonly variables: Readonly<Record<string, string | number>>;
+}
+
+/**
+ * The repository answering the published pull request's reads as
+ * `publishedPullRequest` does, and GitHub's GraphQL endpoint answering each
+ * call as `answer` says, every call written down: by default the pull
+ * request's id for its read and an empty answer for any mutation.
+ */
+function graphqlAnswering(
+  calls: GraphqlCall[],
+  answer: (call: GraphqlCall) => Response = (call) =>
+    Response.json({
+      data: call.query.includes("mutation")
+        ? {}
+        : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+    }),
+  repository: RepositoryScript = publishedPullRequest,
+): RepositoryScript {
+  return (sent) => {
+    if (new URL(sent.url).pathname !== "/graphql") return repository(sent);
+    const { query, variables } = JSON.parse(sent.body);
+    const call = { authorization: sent.headers.get("authorization"), query, variables };
+    calls.push(call);
+    return answer(call);
+  };
+}
+
+/** A change to the agent's pull request as the bearer given. */
+function actionAs(bearer: string, agentId: string, action: string): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, {
+    method: "POST",
+    id: agentId,
+    body: { action },
+  });
+}
+
+/** A review submitted on the agent's pull request as the bearer given. */
+function reviewAs(
+  bearer: string,
+  agentId: string,
+  review: { readonly event: string; readonly body: string },
+): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, {
+    method: "POST",
+    id: agentId,
+    body: { action: "submit-review", ...review },
+  });
+}
+
+/**
+ * GitHub answering a review's calls: the pull request's id, the pending
+ * reviews given for its read of them, and each mutation as `mutation`
+ * says, an empty answer by default.
+ */
+function reviewsAnswering(
+  pending: readonly { readonly id: string; readonly viewerDidAuthor: boolean }[],
+  mutation: (call: GraphqlCall) => Response = () => Response.json({ data: {} }),
+): (call: GraphqlCall) => Response {
+  return (call) => {
+    if (call.query.includes("mutation")) return mutation(call);
+    if (call.query.includes("reviews(states: PENDING")) {
+      return Response.json({ data: { node: { reviews: { nodes: pending } } } });
+    }
+    return Response.json({ data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } } });
+  };
+}
+
+/** The review mutations GitHub was sent, each as which (a new review, or a pending one submitted) and its variables. */
+function reviewMutations(calls: readonly GraphqlCall[]) {
+  return calls
+    .filter((call) => call.query.includes("mutation"))
+    .map((call) => [
+      call.query.includes("submitPullRequestReview") ? "submit" : "add",
+      call.variables,
+    ]);
+}
+
+/** A change to one of the pull request's review threads as the bearer given. */
+function threadActionAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
+}
+
+/** GitHub answering a thread's calls: the pull request's id, every thread named as one of the pull request given, and an empty answer to each mutation. */
+function threadsAnswering(threadPullRequestId: string): (call: GraphqlCall) => Response {
+  return (call) => {
+    if (call.query.includes("mutation")) return Response.json({ data: {} });
+    if (call.query.includes("PullRequestReviewThread")) {
+      return Response.json({ data: { node: { pullRequest: { id: threadPullRequestId } } } });
+    }
+    return Response.json({ data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } } });
+  };
+}
+
+/** The GitHub mutation a document makes, by the name its first field spells. */
+function mutationName(query: string): string {
+  return /\{\s*(\w+)\(/u.exec(query)?.[1] ?? "";
+}
+
+it.layer(getTestDB())("changing an agent's pull request", (it) => {
+  /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
+  const published = (options: {
+    readonly answer?: (call: GraphqlCall) => Response;
+    readonly repository?: RepositoryScript;
+    readonly otherToken?: string | null;
+    readonly otherJoins?: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const calls: GraphqlCall[] = [];
+      const opened = yield* openTask({
+        github: graphqlAnswering(calls, options.answer, options.repository),
+        ...(options.otherToken === undefined ? undefined : { otherToken: options.otherToken }),
+      });
+      if (options.otherJoins ?? true) yield* joinWorkspace(opened.task.workspaceId, opened.other);
+      const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
+      return { ...opened, agent, calls };
+    });
+
+  it.effect(
+    "a teammate marks the owner's agent's draft ready for review and turns it back into a draft, each on the teammate's own GitHub token and never the App's",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: "ghu_teammate" });
+
+        const ready = yield* ask(actionAs(other, agent.id, "ready-for-review"));
+        const draft = yield* ask(actionAs(other, agent.id, "convert-to-draft"));
+
+        assert.deepEqual(ready, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(draft, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.ok(calls.length > 0);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+        const mutations = calls.filter((call) => call.query.includes("mutation"));
+        assert.deepEqual(
+          mutations.map((call) => [
+            call.query.includes("markPullRequestReadyForReview")
+              ? "ready"
+              : call.query.includes("convertPullRequestToDraft")
+                ? "draft"
+                : "other",
+            call.variables.id,
+          ]),
+          [
+            ["ready", PULL_REQUEST_NODE_ID],
+            ["draft", PULL_REQUEST_NODE_ID],
+          ],
+        );
+        assert.deepEqual(calls[0]?.variables, {
+          owner: RELAY.owner,
+          name: RELAY.name,
+          number: PUBLISHED.number,
+        });
+      }),
+  );
+
+  it.effect(
+    "a member with no GitHub sign-in is asked to sign in with GitHub, and nothing is sent to GitHub as anyone else",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: null });
+
+        const answered = yield* ask(actionAs(other, agent.id, "ready-for-review"));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "sign-in-required" },
+        });
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "a token GitHub refuses asks the member to sign in with GitHub again, and nothing is tried on the App's token",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_revoked",
+          answer: () => Response.json({ message: "Bad credentials" }, { status: 401 }),
+        });
+
+        const answered = yield* ask(actionAs(other, agent.id, "convert-to-draft"));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "sign-in-required" },
+        });
+        assert.ok(calls.length > 0);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_revoked"));
+      }),
+  );
+
+  it.effect(
+    "a change GitHub refuses is answered in GitHub's own words, whether as GraphQL errors or a refusal status",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, ask } = yield* published({
+          answer: (call) =>
+            !call.query.includes("mutation")
+              ? Response.json({
+                  data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+                })
+              : call.query.includes("convertPullRequestToDraft")
+                ? Response.json(
+                    { message: "Resource not accessible by integration" },
+                    { status: 403 },
+                  )
+                : Response.json({
+                    data: null,
+                    errors: [{ type: "FORBIDDEN", message: "Pull request is not a draft." }],
+                  }),
+        });
+
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "ready-for-review")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Pull request is not a draft." },
+        });
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "convert-to-draft")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Resource not accessible by integration" },
+        });
+      }),
+  );
+
+  it.effect(
+    "a teammate who read the pull request a moment before another member marked it ready reads it ready at once, not from what was kept",
+    () =>
+      Effect.gen(function* () {
+        let draft = true;
+        const { owner, other, agent, ask } = yield* published({
+          repository: publishedPullRequestDrafted(() => draft),
+          answer: (call) => {
+            if (call.query.includes("markPullRequestReadyForReview")) draft = false;
+            return Response.json({
+              data: call.query.includes("mutation")
+                ? {}
+                : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+            });
+          },
+        });
+        const stateAs = (bearer: string) =>
+          Effect.map(
+            ask(request(AGENT_PULL_REQUEST, bearer, { id: agent.id })),
+            (answered) =>
+              readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .pullRequest?.state,
+          );
+        assert.equal(yield* stateAs(owner), PULL_REQUEST_STATE.DRAFT);
+
+        yield* ask(actionAs(other, agent.id, "ready-for-review"));
+
+        assert.equal(yield* stateAs(owner), PULL_REQUEST_STATE.OPEN);
+      }),
+  );
+
+  it.effect(
+    "a pull request GitHub answers as none, with no word of why, is refused in words saying so",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: () => Response.json({ data: { repository: { pullRequest: null } } }),
+        });
+
+        assert.deepEqual(yield* ask(actionAs(other, agent.id, "ready-for-review")), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words: "Could not resolve to a pull request your GitHub account can see.",
+          },
+        });
+        assert.ok(calls.every((call) => !call.query.includes("mutation")));
+      }),
+  );
+
+  it.effect(
+    "a review is made and submitted at once where the member holds no pending review, on their own token, and GitHub's refusal of it is answered in its words",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: reviewsAnswering([], (call) =>
+            call.variables.event === "APPROVE"
+              ? Response.json({
+                  data: null,
+                  errors: [{ message: "Review Can not approve your own pull request" }],
+                })
+              : Response.json({ data: {} }),
+          ),
+        });
+
+        const commented = yield* ask(
+          reviewAs(other, agent.id, { event: "comment", body: "Looks close; one question." }),
+        );
+        const approved = yield* ask(reviewAs(other, agent.id, { event: "approve", body: "" }));
+
+        assert.deepEqual(commented, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(approved, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "Review Can not approve your own pull request" },
+        });
+        assert.deepEqual(reviewMutations(calls), [
+          [
+            "add",
+            {
+              id: PULL_REQUEST_NODE_ID,
+              event: "COMMENT",
+              body: "Looks close; one question.",
+            },
+          ],
+          ["add", { id: PULL_REQUEST_NODE_ID, event: "APPROVE" }],
+        ]);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "the member's own pending review is the one submitted, keeping its words where the press sends none, and nobody else's is touched",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: reviewsAnswering([
+            { id: "PRR_someone_else", viewerDidAuthor: false },
+            { id: "PRR_member_pending", viewerDidAuthor: true },
+          ]),
+        });
+
+        const changes = yield* ask(
+          reviewAs(other, agent.id, { event: "request-changes", body: "Please split this." }),
+        );
+        const kept = yield* ask(reviewAs(other, agent.id, { event: "comment", body: "  " }));
+
+        assert.deepEqual(changes, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(kept, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(reviewMutations(calls), [
+          [
+            "submit",
+            { id: "PRR_member_pending", event: "REQUEST_CHANGES", body: "Please split this." },
+          ],
+          ["submit", { id: "PRR_member_pending", event: "COMMENT" }],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a review naming no event GitHub knows, or longer than GitHub takes, never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, calls, ask } = yield* published({ answer: reviewsAnswering([]) });
+
+        const unnamed = yield* ask(
+          request(AGENT_PULL_REQUEST_ACTION, owner, {
+            method: "POST",
+            id: agent.id,
+            body: { action: "submit-review", event: "dismiss", body: "" },
+          }),
+        );
+        const long = yield* ask(
+          reviewAs(owner, agent.id, {
+            event: "comment",
+            body: "x".repeat(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS + 1),
+          }),
+        );
+
+        for (const answered of [unnamed, long]) {
+          assert.deepEqual(
+            answered,
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "a member replies on a review thread of the pull request, resolves it, and opens it again, each on their own token",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: threadsAnswering(PULL_REQUEST_NODE_ID),
+        });
+
+        const answers = [
+          yield* ask(
+            threadActionAs(other, agent.id, {
+              action: "reply-to-thread",
+              threadId: "PRRT_flag",
+              body: "Renamed in the next push.",
+            }),
+          ),
+          yield* ask(
+            threadActionAs(other, agent.id, { action: "resolve-thread", threadId: "PRRT_flag" }),
+          ),
+          yield* ask(
+            threadActionAs(other, agent.id, { action: "unresolve-thread", threadId: "PRRT_flag" }),
+          ),
+        ];
+
+        for (const answered of answers) {
+          assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        }
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables]),
+          [
+            [
+              "addPullRequestReviewThreadReply",
+              { id: "PRRT_flag", body: "Renamed in the next push." },
+            ],
+            ["resolveReviewThread", { id: "PRRT_flag" }],
+            ["unresolveReviewThread", { id: "PRRT_flag" }],
+          ],
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a thread of another pull request is refused in words saying so and never changed, and a blank reply never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: threadsAnswering("PR_kwDOsomeOtherPull"),
+        });
+
+        const elsewhere = yield* ask(
+          threadActionAs(other, agent.id, { action: "resolve-thread", threadId: "PRRT_elsewhere" }),
+        );
+        const blank = yield* ask(
+          threadActionAs(other, agent.id, {
+            action: "reply-to-thread",
+            threadId: "PRRT_flag",
+            body: " \n ",
+          }),
+        );
+
+        assert.deepEqual(elsewhere, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words: "Could not resolve to a review thread on this pull request.",
+          },
+        });
+        assert.deepEqual(
+          blank,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.ok(calls.every((call) => !call.query.includes("mutation")));
+      }),
+  );
+
+  it.effect(
+    "an account outside the agent's workspace is answered as if the agent were none, and a change the wire does not name is refused, neither reaching GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, agent, calls, ask } = yield* published({ otherJoins: false });
+
+        assert.deepEqual(
+          yield* ask(actionAs(other, agent.id, "ready-for-review")),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(actionAs(owner, agent.id, "merge-it-all")),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(calls, []);
       }),
   );
 });
@@ -2450,5 +3087,393 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         const teammate = yield* fetch(at(other, agentPicture.id));
         assert.equal(teammate.status, HOSTED_HTTP_STATUS.OK, "a member of the agent's workspace");
       }),
+  );
+});
+
+it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) => {
+  /**
+   * The owner's plan with two agents on it, each session claimed so a notice
+   * reaches it, their chat members and the owner's, the plan's channel, and
+   * the door a post goes through, as the owner posts.
+   */
+  const openChat = (eve = fakeEve(), secondByTeammate = false) =>
+    Effect.gen(function* () {
+      const opened = yield* openTask({ eve });
+      const workspace = opened.task.workspaceId;
+      if (secondByTeammate) yield* joinWorkspace(workspace, opened.other);
+      const agents = [];
+      for (const at of [0, 1]) {
+        const starter = at === 1 && secondByTeammate ? opened.other : opened.owner;
+        const started = yield* startedAgent(starter, opened.task.id, opened.ask);
+        const sessionId = eve.opened[at]?.sessionId ?? "";
+        assert.equal(
+          yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
+          true,
+        );
+        const member = Option.getOrThrow(
+          yield* ensureMember(opened.owner, workspace, {
+            kind: MEMBER_KIND.AGENT,
+            agentId: started.agent.id,
+          }),
+        );
+        agents.push({ ...started, sessionId, member });
+      }
+      const [first, second] = agents;
+      assert.ok(first && second);
+      const person = Option.getOrThrow(
+        yield* ensureMember(opened.owner, workspace, {
+          kind: MEMBER_KIND.HUMAN,
+          userId: opened.owner,
+        }),
+      );
+      const channel = Option.getOrThrow(yield* ensurePlanChannel(opened.owner, opened.task.id));
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      const telling: ChatTelling = {
+        eveFor: (starter) => eve.eve(`Bearer ${starter}`),
+        writer: Effect.succeed(writer),
+        userId: opened.owner,
+        organizationId: workspace,
+        doors: HELD_DOORS,
+      };
+      /** A post by the member given, its mentions read off its words, through the door. */
+      const post = (
+        author: { readonly id: string },
+        text: string,
+        to: { readonly channelId: string } | { readonly replyTo: number } = {
+          channelId: channel.id,
+        },
+        clientKey: string = randomUUID(),
+      ) =>
+        postChat(telling, {
+          authorMemberId: author.id,
+          to,
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+          mentions: mentionedHandles(text),
+          clientKey,
+        }).pipe(Effect.provide(opened.github.layer));
+      /** The user rows of an agent's conversation, as the store keeps them. */
+      const rowsOf = (target: { readonly userId: string; readonly conversationId: string }) =>
+        Effect.map(
+          listMessagesPast(target.userId, target.conversationId, CODER_TOOL_SET, CURSOR_START, 50),
+          (page) =>
+            (page.read.ok ? page.read.value : []).filter(
+              (record) => record.message.role === MESSAGE_ROLE.USER,
+            ),
+        );
+      return { ...opened, workspace, first, second, person, channel, telling, post, rowsOf };
+    });
+
+  it.effect(
+    "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(
+            chat.owner,
+            chat.workspace,
+            chat.first.member.id,
+            chat.second.member.id,
+          ),
+        );
+        const key = randomUUID();
+        const sent = yield* chat.post(
+          chat.first.member,
+          "The invite table is mine.",
+          { channelId: dm.id },
+          key,
+        );
+        assert.deepEqual(sent.receipt, { told: ["agent-2"], held: [], left: [], unresolved: [] });
+        assert.deepEqual(
+          eve.sent.map((each) => each.sessionId),
+          [chat.second.sessionId],
+        );
+        // The notice is the only line the second agent's conversation holds: no turn of its has run.
+        const [notice] = yield* chat.rowsOf(chat.second.target);
+        assert.ok(notice?.message.role === MESSAGE_ROLE.USER);
+        assert.deepEqual(notice.message.metadata, {
+          author: MESSAGE_AUTHOR.AGENT,
+          channel: MESSAGE_CHANNEL.CHAT,
+          chat_seq: sent.message.seq,
+          from: "agent-1",
+        });
+        assert.deepEqual(
+          (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
+          { kind: MESSAGE_SENDER.AGENT, name: "agent-1" },
+        );
+        const again = yield* chat.post(
+          chat.first.member,
+          "The invite table is mine.",
+          { channelId: dm.id },
+          key,
+        );
+        assert.equal(again.repeated, true);
+        assert.equal(eve.sent.length, 1);
+
+        const held = yield* chat.post(chat.first.member, "And the emails.", { channelId: dm.id });
+        assert.deepEqual(held.receipt.held, ["agent-2"]);
+        assert.equal(eve.sent.length, 1);
+        yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+        const told = yield* chat.post(chat.first.member, "Done now.", { channelId: dm.id });
+        assert.deepEqual(told.receipt.told, ["agent-2"]);
+        assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a plain post steers nobody, a mention steers the agent it names, and a planner, a person, and a handle naming no one are told no agent's way",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const plain = yield* chat.post(chat.first.member, "Starting on the emails.");
+        assert.deepEqual(plain.receipt, { told: [], held: [], left: [], unresolved: [] });
+        assert.equal(eve.sent.length, 0);
+
+        const mentioned = yield* chat.post(
+          chat.first.member,
+          `@agent-2 take the table; @luke and @${chat.person.handle} FYI; @nobody`,
+        );
+        assert.deepEqual(mentioned.receipt, {
+          told: ["agent-2"],
+          held: ["luke", chat.person.handle],
+          left: [],
+          unresolved: ["nobody"],
+        });
+        assert.deepEqual(
+          eve.sent.map((each) => each.sessionId),
+          [chat.second.sessionId],
+        );
+      }),
+  );
+
+  it.effect(
+    "a thread reply tells the root's author and the earlier repliers, never its own author",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const root = yield* chat.post(chat.first.member, "Who owns the invite table?");
+        const reply = yield* chat.post(chat.person, "agent-2 does.", { replyTo: root.message.seq });
+        assert.deepEqual(reply.receipt.told, ["agent-1"]);
+        const answer = yield* chat.post(chat.second.member, "Confirmed.", {
+          replyTo: root.message.seq,
+        });
+        assert.deepEqual(
+          [answer.receipt.told, answer.receipt.held],
+          [[], ["agent-1", chat.person.handle]],
+        );
+        assert.deepEqual(
+          eve.sent.map((each) => each.sessionId),
+          [chat.first.sessionId],
+        );
+      }),
+  );
+
+  it.effect(
+    "an archived agent is said to have left and steered nothing, and is told again once brought back; one whose session eve no longer runs is stamped as having left for good",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        yield* archiveCodingAgent(chat.owner, chat.second.agent.id, true);
+        const archived = yield* chat.post(chat.first.member, "@agent-2 still there?");
+        assert.deepEqual(archived.receipt.left, ["agent-2"]);
+        assert.equal(eve.sent.length, 0);
+        yield* archiveCodingAgent(chat.owner, chat.second.agent.id, false);
+        const back = yield* chat.post(chat.first.member, "@agent-2 welcome back.");
+        assert.deepEqual(back.receipt.told, ["agent-2"]);
+        assert.equal(eve.sent.length, 1);
+        assert.deepEqual(
+          (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent whose session eve no longer runs is stamped as having left, and posts nothing more",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED });
+        const chat = yield* openChat(eve);
+        const toSecond = yield* chat.post(chat.person, "@agent-2 are you?");
+        assert.deepEqual(toSecond.receipt.left, ["agent-2"]);
+        const left = (yield* roster(chat.owner, chat.workspace)).filter(
+          (row) => row.leftAt !== null,
+        );
+        assert.deepEqual(
+          left.map((row) => row.handle),
+          ["agent-2"],
+        );
+        const silenced = yield* chat.post(chat.second.member, "Still here.").pipe(Effect.result);
+        assert.ok(Result.isFailure(silenced));
+      }),
+  );
+
+  it.effect(
+    "a DM tells its other member alone, a mention in it naming no one else, so its words reach no one who may not read them",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+        );
+        const sent = yield* chat.post(chat.first.member, "@agent-2 is slow, between us.", {
+          channelId: dm.id,
+        });
+        assert.deepEqual(sent.receipt, {
+          told: [],
+          held: [chat.person.handle],
+          left: [],
+          unresolved: [],
+        });
+        assert.equal(eve.sent.length, 0);
+      }),
+  );
+
+  it.effect(
+    "a post sent again under its key finishes a telling the first send never made, and steers no one twice",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const key = randomUUID();
+        // The first send landed and was never told, as a send that failed after its write leaves it.
+        yield* postMessage(chat.owner, chat.workspace, {
+          authorMemberId: chat.first.member.id,
+          to: { channelId: chat.channel.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "@agent-2 the table is mine." }],
+          mentions: ["agent-2"],
+          clientKey: key,
+        });
+        const retried = yield* chat.post(
+          chat.first.member,
+          "@agent-2 the table is mine.",
+          { channelId: chat.channel.id },
+          key,
+        );
+        assert.deepEqual([retried.repeated, retried.receipt.told], [true, ["agent-2"]]);
+        const again = yield* chat.post(
+          chat.first.member,
+          "@agent-2 the table is mine.",
+          { channelId: chat.channel.id },
+          key,
+        );
+        assert.deepEqual(again.receipt.held, ["agent-2"]);
+        assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect("an ask posted again under its key is told again with what it now asks", () =>
+    Effect.gen(function* () {
+      const eve = fakeEve();
+      const chat = yield* openChat(eve);
+      const asked = (text: string) =>
+        Effect.gen(function* () {
+          const posted = Result.getOrThrow(
+            yield* postAsk(chat.owner, chat.workspace, {
+              authorMemberId: chat.first.member.id,
+              to: { channelId: chat.channel.id },
+              blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+              mentions: ["agent-2"],
+              clientKey: randomUUID(),
+              key: "table-owner",
+              ask: { response: { type: CHAT_ASK.TEXT } },
+            }),
+          );
+          return yield* tellMessage(chat.telling, posted.message, posted.unresolved).pipe(
+            Effect.provide(chat.github.layer),
+          );
+        });
+      assert.deepEqual((yield* asked("@agent-2 who owns the table?")).told, ["agent-2"]);
+      yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+      assert.deepEqual((yield* asked("@agent-2 who owns the table, now?")).told, ["agent-2"]);
+      assert.deepEqual(
+        eve.sent.map((each) => String(each.message.message).includes("now?")),
+        [false, true],
+      );
+    }),
+  );
+
+  it.effect(
+    "a notice to an agent a teammate started is minted for that teammate, whose principal its turn runs under, whoever posted",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve, true);
+        const told = yield* chat.post(chat.first.member, "@agent-2 the table is mine.");
+        assert.deepEqual(told.receipt.told, ["agent-2"]);
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId]),
+          [[`Bearer ${chat.other}`, chat.second.sessionId]],
+        );
+        const back = yield* chat.post(chat.second.member, "@agent-1 noted.");
+        assert.deepEqual(back.receipt.told, ["agent-1"]);
+        assert.deepEqual(eve.sent[1]?.authorization, `Bearer ${chat.owner}`);
+      }),
+  );
+
+  it.effect(
+    "an agent whose starter left the workspace is away: said to have left, steered nothing, stamped nothing, and told again once its starter is back",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve, true);
+        const db = yield* Database;
+        yield* db
+          .delete(member)
+          .where(and(eq(member.organizationId, chat.workspace), eq(member.userId, chat.other)));
+        const away = yield* chat.post(chat.person, "@agent-2 please carry on.");
+        assert.deepEqual(away.receipt.left, ["agent-2"]);
+        assert.equal(eve.sent.length, 0);
+        assert.deepEqual(
+          (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
+          [],
+        );
+
+        yield* joinWorkspace(chat.workspace, chat.other);
+        const back = yield* chat.post(chat.person, "@agent-2 welcome back.");
+        assert.deepEqual(back.receipt.told, ["agent-2"]);
+        assert.deepEqual(
+          eve.sent.map((each) => each.authorization),
+          [`Bearer ${chat.other}`],
+        );
+      }),
+  );
+
+  it.effect("an ask only answered since it was told steers no one again", () =>
+    Effect.gen(function* () {
+      const eve = fakeEve();
+      const chat = yield* openChat(eve);
+      const posted = Result.getOrThrow(
+        yield* postAsk(chat.owner, chat.workspace, {
+          authorMemberId: chat.first.member.id,
+          to: { channelId: chat.channel.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "@agent-2 who owns the table?" }],
+          mentions: ["agent-2"],
+          clientKey: randomUUID(),
+          key: "table-owner",
+          ask: { response: { type: CHAT_ASK.TEXT } },
+        }),
+      );
+      const tell = (message: typeof posted.message) =>
+        tellMessage(chat.telling, message, []).pipe(Effect.provide(chat.github.layer));
+      yield* tell(posted.message);
+      yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+      const answered = Result.getOrThrow(
+        yield* answerAsk(chat.owner, chat.workspace, {
+          answererMemberId: chat.person.id,
+          seq: posted.message.seq,
+          revision: 1,
+          reply: { reply: CHAT_REPLY.ANSWERED, note: "agent-1 does." },
+          clientKey: randomUUID(),
+        }),
+      );
+      yield* tell(answered.ask);
+      assert.equal(eve.sent.length, 1);
+    }),
   );
 });

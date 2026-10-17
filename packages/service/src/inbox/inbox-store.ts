@@ -13,7 +13,7 @@ import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
-import { task } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/task";
 import type {
   AccountInboxAutomation,
   AccountInboxEntry,
@@ -127,6 +127,10 @@ const INBOX_COLUMNS = {
   response: inboxItem.response,
   needsReply: inboxItem.needsReply,
   status: inboxItem.status,
+  startedBy: inboxItem.userId,
+  startedByName: sql<
+    string | null
+  >`(select "name" from ${user} where ${user.id} = ${inboxItem.userId})`,
   answer: inboxItem.answer,
   answerKey: inboxItem.answerKey,
   answeredBy: inboxItem.answeredBy,
@@ -150,6 +154,8 @@ const InboxRowSchema = Schema.Struct({
   response: inboxResponseSchema,
   needsReply: Schema.Boolean,
   status: Schema.Literals(Object.values(INBOX_STATUS)),
+  startedBy: Schema.String,
+  startedByName: Schema.NullOr(Schema.String),
   answer: Schema.NullOr(inboxReplySchema),
   answerKey: Schema.NullOr(Schema.String),
   answeredBy: Schema.NullOr(Schema.String),
@@ -175,6 +181,9 @@ function storedItem(row: InboxRow): StoredInboxItem {
       response: row.response,
       needsReply: row.needsReply,
       status: row.status,
+      ...(row.startedByName === null
+        ? undefined
+        : { startedBy: { userId: row.startedBy, name: row.startedByName } }),
       ...(row.answer === null ? undefined : { answer: row.answer }),
       ...(row.answeredBy === null || row.answeredByName === null
         ? undefined

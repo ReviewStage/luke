@@ -1,5 +1,6 @@
 {
   "name": "@luke/web",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "description": "Luke landing page",
@@ -51,6 +52,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@electric-sql/pglite": "0.5.8",
+    "@sentry/esbuild-plugin": "5.4.0",
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",
     "@types/react": "19.2.18",

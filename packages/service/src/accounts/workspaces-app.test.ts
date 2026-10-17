@@ -11,7 +11,7 @@ import {
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
-import { task } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/task";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
 import {

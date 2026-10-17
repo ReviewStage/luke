@@ -71,7 +71,7 @@ function ViewLink({
   );
 }
 
-/** One example under its heading. */
+/** One example under its heading, as the page draws it. */
 function ExampleFrame({ example }: { example: Example }): React.JSX.Element {
   return (
     <main className="catalog-example">

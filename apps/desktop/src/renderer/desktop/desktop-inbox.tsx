@@ -234,7 +234,11 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     ...taskEntries,
     ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
   ];
-  const filter = { grouping: choices.grouping, waitingOnly: choices.waitingOnly };
+  const filter = {
+    grouping: choices.grouping,
+    waitingOnly: choices.waitingOnly,
+    readerId: tasks.me,
+  };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
   const list = inboxList(entries, { ...filter, chosen: undefined });
   const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
@@ -345,7 +349,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                 shown: tasks.shown,
                 needsYou: choices,
                 view: { choices, folds },
-                waiting: anyNeedsYou(entries),
+                waiting: anyNeedsYou(entries, tasks.me),
               }}
               models={named.models}
               readerId={tasks.me}
