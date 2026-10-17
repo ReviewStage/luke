@@ -47,7 +47,23 @@ export function ProviderButton({
   );
 }
 
-export function SignInChoices({ client }: { readonly client: SocialSignIn }): React.JSX.Element {
+/** What a page says when a sign-in could not start. */
+export const SIGN_IN_FAILURE = "Sign-in could not start. Try again.";
+
+/** Where a page's sign-in choices stand, and the press that opens one. */
+interface SocialSignInState {
+  /** The provider whose sign-in is opening, if one is. */
+  readonly pending: SocialProvider | undefined;
+  /** Whether the last sign-in could not start. */
+  readonly failed: boolean;
+  readonly begin: (provider: SocialProvider) => void;
+}
+
+/**
+ * A page's sign-in choices. A sign-in returns the browser to this address
+ * once Better Auth has a session, and one opens at a time.
+ */
+export function useSocialSignIn(client: SocialSignIn): SocialSignInState {
   const [pending, setPending] = useState<SocialProvider>();
   const [failed, setFailed] = useState(false);
   const begin = async (provider: SocialProvider) => {
@@ -62,21 +78,42 @@ export function SignInChoices({ client }: { readonly client: SocialSignIn }): Re
     setPending(undefined);
     setFailed(true);
   };
+  return { pending, failed, begin: (provider) => void begin(provider) };
+}
+
+/** A button for every provider, one after another, for a container that lays them out. */
+export function ProviderChoices({
+  pending,
+  onPress,
+}: {
+  pending: SocialProvider | undefined;
+  onPress: (provider: SocialProvider) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      {Object.values(SOCIAL_PROVIDER).map((provider) => (
+        <ProviderButton
+          key={provider}
+          provider={provider}
+          pending={pending}
+          onPress={() => onPress(provider)}
+        />
+      ))}
+    </>
+  );
+}
+
+/** The choices and their failure on a page still drawn on the old card, which lays them out itself. */
+export function SignInChoices({ client }: { readonly client: SocialSignIn }): React.JSX.Element {
+  const { pending, failed, begin } = useSocialSignIn(client);
   return (
     <>
       <div className="mt-8 mb-4 grid gap-3">
-        {Object.values(SOCIAL_PROVIDER).map((provider) => (
-          <ProviderButton
-            key={provider}
-            provider={provider}
-            pending={pending}
-            onPress={() => void begin(provider)}
-          />
-        ))}
+        <ProviderChoices pending={pending} onPress={begin} />
       </div>
       {failed ? (
         <p className="m-0 text-attention" role="alert">
-          Sign-in could not start. Try again.
+          {SIGN_IN_FAILURE}
         </p>
       ) : null}
     </>
