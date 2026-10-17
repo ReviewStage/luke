@@ -570,6 +570,22 @@ export function ActionMenu({
     onClose(true);
     action.onSelect();
   };
+  // Note that a submenu standing open draws its entry as this render's groups
+  // hold it, because its owner may draw them again while it stands, as a
+  // list read again moves what is checked.
+  const submenuNow =
+    submenu === undefined
+      ? undefined
+      : {
+          ...submenu,
+          entry:
+            groups
+              .flat()
+              .find(
+                (entry): entry is MenuSubmenu =>
+                  "items" in entry && entry.label === submenu.entry.label,
+              ) ?? submenu.entry,
+        };
   // Resting on another of the menu's own items closes the submenu, as a
   // system menu's does; resting on the submenu's items keeps it. Note that
   // the submenu is read as it stands now rather than as this render drew it,
@@ -635,7 +651,7 @@ export function ActionMenu({
         : createPortal(
             <Submenu
               key={submenu.entry.label}
-              open={submenu}
+              open={submenuNow ?? submenu}
               layer={layerOf(opener)}
               surface={submenuElement}
               leaving={leaving}

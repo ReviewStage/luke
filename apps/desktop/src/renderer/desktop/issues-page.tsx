@@ -115,14 +115,18 @@ function ListPage({
   focused,
   layout,
   onLayout,
+  onFocus,
   onCompose,
   onComposeIn,
 }: {
   plans: TasksControl;
   issues: ReturnType<typeof useIssues>;
+  /** The issue whose card or row takes the keyboard as it is drawn. */
   focused: string | undefined;
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
+  /** Hands the keyboard to an issue's card or row wherever it is drawn next. */
+  onFocus: (issueId: string) => void;
   /** Opens the new issue's card; none while no workspace is listed to file one in. */
   onCompose: (() => void) | undefined;
   /** Opens the card with a board column's status chosen; none while no workspace is listed. */
@@ -139,8 +143,13 @@ function ListPage({
   useBoardKeys(root, plans.shown && onBoard);
   const open = (issue: Issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
   const said = useChangeSaid();
-  const change = (issue: Issue, asked: IssueChange) =>
-    said(asked, issues.change({ issueId: issue.id, change: asked }));
+  // Note that the card a change was picked from keeps the keyboard where the
+  // answer moves it, because its new column or group draws it anew, and the
+  // menu handed it the keyboard as it closed.
+  const change = (issue: Issue, asked: IssueChange) => {
+    if (asked.archived === undefined) onFocus(issue.id);
+    return said(asked, issues.change({ issueId: issue.id, change: asked }));
+  };
   const workspaceName = workspace?.name ?? "";
   return (
     <section ref={setRoot} className="automations-view" aria-label="Issues">
@@ -402,6 +411,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
             setLayout(chosen);
             writeKept(LAYOUT_KEY, storedLayout, chosen);
           }}
+          onFocus={setCameFrom}
           onCompose={onCompose}
           onComposeIn={onComposeIn}
         />

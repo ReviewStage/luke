@@ -1238,3 +1238,21 @@ test("a change from a card's menu the service refused leaves the card where it s
   assert.deepEqual(groups(page), [["Backlog1", ["ACME-1 Issue 1"]]]);
   assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
 });
+
+test("a card moved by a status picked from its menu keeps the keyboard in its new column", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+
+  const card = cardOf(page, issue(1).id);
+  act(() => card.focus());
+  act(() => {
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Status", "Done");
+  await settle();
+
+  const holding = document.activeElement?.closest<HTMLElement>("[data-issue-id]");
+  assert.equal(holding?.dataset.issueId, issue(1).id);
+  assert.equal(holding?.closest<HTMLElement>("[data-issue-column]")?.dataset.issueColumn, "done");
+});
