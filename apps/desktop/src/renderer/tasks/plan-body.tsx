@@ -772,13 +772,8 @@ export function PlanBody({
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
   const followedJumps = useRef(jumps);
-  /** The plan as last drawn, which a tick waiting on the one before it reads as it goes. */
-  const shown = useRef(task);
-  shown.current = task;
-  /** The tick out, and the text the last saved tick was sent from and the text it saved, which the next goes on from until the plan comes back. */
-  const ticks = useRef<{ flight: Promise<boolean>; last?: { from: string; to: string } }>({
-    flight: Promise.resolve(true),
-  });
+  /** Whether a task item's tick is out, while which another press does nothing. */
+  const ticking = useRef(false);
 
   useEffect(() => {
     const element = scroller.current;
@@ -867,29 +862,22 @@ export function PlanBody({
     if (onEdit === undefined || unit === undefined || unit.text !== views[section]?.words) {
       return undefined;
     }
-    // Note that ticks go one at a time, each from the text the last saved, so
-    // two quick presses send two changes, and a door that keeps one text
-    // (the plan template's) is never asked from a text it has not kept yet.
-    const tick = (at: number): Promise<boolean> => {
-      const now = shown.current;
-      if (now.id !== task.id) return Promise.resolve(false);
-      const { last } = ticks.current;
-      const body = now.document.body;
-      const base = last !== undefined && last.from === body ? last.to : body;
-      const value = toggledTask(base, unit.from + at);
-      if (value === undefined) return Promise.resolve(false);
-      return onEdit({ document: { base, value } }).then(
-        (answer) => {
-          if ("saved" in answer) ticks.current.last = { from: body, to: value };
-          return "saved" in answer;
-        },
-        () => false,
-      );
-    };
+    // Note that one tick is out at a time, from the plan as drawn, so a door
+    // that keeps one text (the plan template's) is never asked from another;
+    // a press while one is out, or before the saved plan comes back, does nothing.
     return (at) => {
-      const flight = ticks.current.flight.then(() => tick(at));
-      ticks.current.flight = flight;
-      return flight;
+      const base = task.document.body;
+      const value = ticking.current ? undefined : toggledTask(base, unit.from + at);
+      if (value === undefined) return Promise.resolve(false);
+      ticking.current = true;
+      return onEdit({ document: { base, value } })
+        .then(
+          (answer) => "saved" in answer,
+          () => false,
+        )
+        .finally(() => {
+          ticking.current = false;
+        });
     };
   };
   // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.

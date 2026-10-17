@@ -221,7 +221,7 @@ test("a press on a diagram's Show code shows its code and opens no editor", asyn
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
-test("a press on a task's checkbox ticks or clears that one item in the saved text, a second press before the plan comes back goes on from the first, and no editor opens", async () => {
+test("a press on a task's checkbox ticks or clears that one item in the saved text, goes back where the save is refused, and opens no editor", async () => {
   const body = [
     "## Goal",
     "Invite a *teammate*.",
@@ -234,9 +234,7 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
     "> 1. [ ] Quoted",
     "",
   ].join("\n");
-  const written = body.replace("  - [ ] Write", "  - [x] Write");
   const { container, sent, render } = mount([
-    { saved: true },
     { saved: true },
     { conflict: { current: body } },
     { saved: true },
@@ -258,8 +256,7 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
   const [, nested, ticked, quoted] = boxes;
   assert.ok(nested && ticked && quoted, "every box is drawn");
 
-  // Note that the door answers without the plan coming back, as a save still out stands.
-  for (const box of [nested, nested, ticked, quoted]) {
+  for (const box of [nested, ticked, quoted]) {
     act(() => box.click());
     await settle();
   }
@@ -267,33 +264,24 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
   assert.deepEqual(
     sent.map((request) => request.document),
     [
-      { base: body, value: written },
-      { base: written, value: body },
+      { base: body, value: body.replace("  - [ ] Write", "  - [x] Write") },
       { base: body, value: body.replace("* [X] Pick", "* [ ] Pick") },
       { base: body, value: body.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
-  assert.equal(nested.checked, false, "the second press cleared it again");
+  assert.equal(nested.checked, true, "a saved tick stands");
   assert.equal(ticked.checked, true, "a tick the save refused goes back");
-  assert.equal(quoted.checked, true, "a saved tick stands");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
-test("ticks go one at a time, each sent once the one before it has landed, and a box is named by its item's words or its picture's", async () => {
+test("a press while a tick is out sends nothing and goes back, and a box is named by its item's words or its picture's", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] ![Upload screenshot](shot.png)\n";
-  const both = "## Steps\n- [x] One\n- [x] ![Upload screenshot](shot.png)\n";
   const first = Promise.withResolvers<TasksEditAnswer>();
-  const sent: { base: string; value: string; landed: number }[] = [];
-  let landed = 0;
+  const sent: PlanEditRequest[] = [];
   const door = (request: PlanEditRequest): Promise<TasksEditAnswer> => {
-    sent.push({ ...request.document, landed });
-    const answer =
-      sent.length === 1 ? first.promise : Promise.resolve<TasksEditAnswer>({ saved: true });
-    return answer.then((answered) => {
-      landed += 1;
-      return answered;
-    });
+    sent.push(request);
+    return first.promise;
   };
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
@@ -307,15 +295,17 @@ test("ticks go one at a time, each sent once the one before it has landed, and a
   act(() => {
     for (const box of boxes) box.click();
   });
-  await settle();
-  assert.equal(sent.length, 1, "the second tick waits on the first");
   first.resolve({ saved: true });
   await settle();
 
-  assert.deepEqual(sent, [
-    { base: body, value: body.replace("[ ] One", "[x] One"), landed: 0 },
-    { base: body.replace("[ ] One", "[x] One"), value: both, landed: 1 },
-  ]);
+  assert.deepEqual(
+    sent.map((request) => request.document),
+    [{ base: body, value: body.replace("[ ] One", "[x] One") }],
+  );
+  assert.deepEqual(
+    boxes.map((box) => box.checked),
+    [true, false],
+  );
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
