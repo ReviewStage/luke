@@ -249,7 +249,7 @@
 /* The chip is the field chip (`@luke/ui`'s `Chip`), a row button's face at
    a form's type, so a picker and the buttons beside it read as one set of
    controls; only its width, the column a settings row's pop-ups share, is
-   the picker's own. The class is the repository and server chips', which
+   the picker's own. The class is the repository, agent, and model chips', which
    still draw a picker's face of their own. */
 .settings-picker-chip,
 .settings-picker > .luke-chip {

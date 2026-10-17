@@ -66,6 +66,7 @@ import {
   AnchoredPopover,
   BUTTON_VARIANT,
   Button,
+  ChipName,
   ConfirmDialog,
   EllipsisIcon,
   IconButton,
@@ -354,16 +355,16 @@ function ServersRow({
 }): React.JSX.Element {
   if (!mine) {
     return (
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>MCP servers</strong>
-          <small>
-            {disabled.length === 0
-              ? "All of its creator's connected servers."
-              : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`}
-          </small>
-        </span>
-      </div>
+      <SettingsRow
+        label="MCP servers"
+        description={
+          disabled.length === 0
+            ? "All of its creator's connected servers."
+            : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`
+        }
+      >
+        {() => null}
+      </SettingsRow>
     );
   }
   return <OwnServersRow disabled={disabled} onSwitch={onSwitch} />;
@@ -396,40 +397,41 @@ function OwnServersRow({
   const off = connected.filter((provider) => disabled.includes(provider));
   const shown = on.slice(0, SERVERS_CHIP_MARKS);
   return (
-    <div className="settings-row">
-      <span className="settings-copy">
-        <strong>MCP servers</strong>
-        <small>
-          {connected.length === 0
-            ? "None connected yet."
-            : off.length === 0
-              ? "Every connected server is on."
-              : `${namesSaid(off)} off.`}
-        </small>
-      </span>
-      <AgentServersButton
-        servers={{
-          disabled,
-          onSwitch,
-          onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
-        }}
-        statuses={statuses}
-        face={
-          on.length === 0 ? (
-            <span className="chip-name">None</span>
-          ) : (
-            <span className="automation-servers">
-              {shown.map((provider) => (
-                <ProviderMark key={provider} provider={provider} />
-              ))}
-              {on.length > shown.length ? (
-                <span className="chip-name">{`+${on.length - shown.length}`}</span>
-              ) : null}
-            </span>
-          )
-        }
-      />
-    </div>
+    <SettingsRow
+      label="MCP servers"
+      description={
+        connected.length === 0
+          ? "None connected yet."
+          : off.length === 0
+            ? "Every connected server is on."
+            : `${namesSaid(off)} off.`
+      }
+    >
+      {() => (
+        <AgentServersButton
+          servers={{
+            disabled,
+            onSwitch,
+            onOpenSettings: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
+          }}
+          statuses={statuses}
+          face={
+            on.length === 0 ? (
+              <ChipName>None</ChipName>
+            ) : (
+              <span className="automation-servers">
+                {shown.map((provider) => (
+                  <ProviderMark key={provider} provider={provider} />
+                ))}
+                {on.length > shown.length ? (
+                  <ChipName>{`+${on.length - shown.length}`}</ChipName>
+                ) : null}
+              </span>
+            )
+          }
+        />
+      )}
+    </SettingsRow>
   );
 }
 
