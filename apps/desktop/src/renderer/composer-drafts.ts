@@ -80,6 +80,8 @@ const draftPlaceSchema = Schema.Union([
     itemId: Schema.String,
     /** The item's revision the answer was written against; the agent changing the item starts its card afresh. */
     revision: Schema.Number,
+    /** Set where the draft is a message on a settled item's thread rather than the answer to an open one, so neither is ever taken for the other. */
+    thread: Schema.optionalKey(Schema.Literal(true)),
   }),
 ]);
 

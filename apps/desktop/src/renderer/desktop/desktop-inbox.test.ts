@@ -2990,3 +2990,40 @@ test("a thread read cut to its latest messages says the earlier ones are in the 
   act(() => earlier.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
+
+test("an answer left unsent on an item a teammate answers meanwhile is let go rather than becoming a message, and a message being written on a settled item outlasts the reads after it", async () => {
+  let deliver: (outcome: ReadOutcome) => void = () => undefined;
+  heldRead = () =>
+    new Promise((resolve) => {
+      deliver = resolve;
+    });
+  const { page } = mount();
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(readTitle(page), "Alert at 80%?");
+  typeInComposer(pane, "Use 90%");
+  await settle();
+
+  const answered: InboxItem = {
+    ...THRESHOLD,
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: TEAMMATE,
+    answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+    settledAt: 3_500,
+    updatedAt: 3_500,
+  };
+  act(() =>
+    deliver({ status: ACT_OUTCOME_STATUS.DONE, value: { items: [answered, RETRY], cursor: "2" } }),
+  );
+  await settle();
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Message Alerts…");
+  assert.equal(composerEditor(pane).textContent, "", "the unsent answer is not a message");
+
+  typeInComposer(pane, "Thanks, Charles.");
+  await settle();
+  act(() =>
+    deliver({ status: ACT_OUTCOME_STATUS.DONE, value: { items: [answered, RETRY], cursor: "3" } }),
+  );
+  await settle();
+  assert.equal(composerEditor(pane).textContent, "Thanks, Charles.");
+});

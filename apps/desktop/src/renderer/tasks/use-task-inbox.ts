@@ -21,7 +21,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DRAFT_PLACE, useDraftWriter, useInboxDrafts } from "../composer-drafts";
+import { DRAFT_PLACE, type InboxPlace, useDraftWriter, useInboxDrafts } from "../composer-drafts";
 import { messageFailureWords } from "./coding-agent-model";
 import {
   EMPTY_INBOX_DRAFT,
@@ -206,6 +206,31 @@ function imagesNamed(
 ): ReadonlyMap<string, InboxImage> {
   if ([...images.keys()].every((attachmentId) => named.has(attachmentId))) return images;
   return new Map([...images].filter(([attachmentId]) => named.has(attachmentId)));
+}
+
+/**
+ * Where an item's card keeps its draft: the answer while the item is open,
+ * and a message on its thread once it is settled, apart, so an answer left
+ * unsent when another member settles the item never becomes a message.
+ */
+function draftPlace(item: InboxItem, planId: string | null): InboxPlace {
+  const place: InboxPlace = {
+    kind: DRAFT_PLACE.INBOX,
+    planId,
+    agentId: item.agentId,
+    itemId: item.id,
+    revision: item.revision,
+  };
+  return item.status === INBOX_STATUS.OPEN ? place : { ...place, thread: true };
+}
+
+/** Whether a kept draft is the one the item's card reads as it now stands. */
+function draftOfItem(place: InboxPlace, item: InboxItem): boolean {
+  return (
+    place.itemId === item.id &&
+    place.revision === item.revision &&
+    (place.thread === true) === (item.status !== INBOX_STATUS.OPEN)
+  );
 }
 
 /** The items with one replaced by the service's newer word on it. */
@@ -454,18 +479,16 @@ export function useTaskInbox(input: {
     });
   }, []);
 
-  // A read lets go of the drafts of the items it covers that it no longer holds at the revision
-  // they were written against: a plan's, or, for an agent with no plan, that agent's alone. Note
-  // that a settled item keeps its draft, because its box writes a message on its thread.
+  // A read lets go of the drafts of the items it covers that it no longer holds as they were
+  // written for: a plan's, or, for an agent with no plan, that agent's alone. Note that a settled
+  // item keeps its thread's draft, and an answer left unsent on an item settled since is let go.
   const { drop } = writer;
   useEffect(() => {
     if (!held.read || (ownPlan === undefined && readAgent === undefined)) return;
     const stale = drafts.filter(
       (kept) =>
         (ownPlan !== undefined || kept.place.agentId === readAgent) &&
-        !held.items.some(
-          (item) => item.id === kept.place.itemId && item.revision === kept.place.revision,
-        ),
+        !held.items.some((item) => draftOfItem(kept.place, item)),
     );
     if (stale.length === 0) return;
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
@@ -474,9 +497,7 @@ export function useTaskInbox(input: {
   const board = useMemo(() => inboxBoard(held.items), [held.items]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
-      const kept = drafts.find(
-        (each) => each.place.itemId === item.id && each.place.revision === item.revision,
-      );
+      const kept = drafts.find((each) => draftOfItem(each.place, item));
       return kept === undefined
         ? EMPTY_INBOX_DRAFT
         : {
@@ -490,22 +511,13 @@ export function useTaskInbox(input: {
   );
   const onDraft = useCallback(
     (item: InboxItem, draft: InboxDraft) =>
-      writer.update(
-        {
-          kind: DRAFT_PLACE.INBOX,
-          planId: draftsOn,
-          agentId: item.agentId,
-          itemId: item.id,
-          revision: item.revision,
-        },
-        (was) => ({
-          ...was,
-          text: draft.note,
-          choices: draft.choices,
-          values: draft.values,
-          attachments: draft.attachments,
-        }),
-      ),
+      writer.update(draftPlace(item, draftsOn), (was) => ({
+        ...was,
+        text: draft.note,
+        choices: draft.choices,
+        values: draft.values,
+        attachments: draft.attachments,
+      })),
     [writer, draftsOn],
   );
 
@@ -514,16 +526,10 @@ export function useTaskInbox(input: {
       item: InboxItem,
       next: (was: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
     ) =>
-      writer.update(
-        {
-          kind: DRAFT_PLACE.INBOX,
-          planId: draftsOn,
-          agentId: item.agentId,
-          itemId: item.id,
-          revision: item.revision,
-        },
-        (was) => ({ ...was, attachments: next(was.attachments) }),
-      ),
+      writer.update(draftPlace(item, draftsOn), (was) => ({
+        ...was,
+        attachments: next(was.attachments),
+      })),
     [writer, draftsOn],
   );
 
