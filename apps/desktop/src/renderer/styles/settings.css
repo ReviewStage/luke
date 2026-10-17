@@ -328,7 +328,10 @@
   height: 12px;
 }
 
-.link-icon {
+/* The small glyph that rides a link's words. Note that a shared button's glyph
+   is left to the button, because this unlayered rule would otherwise shrink
+   the button's icon below the control contract's size. */
+.link-icon:where(:not(.luke-button-face > *)) {
   width: 9px;
   height: 9px;
   margin-left: 3px;
@@ -362,13 +365,6 @@
 .settings-input:disabled {
   color: var(--text-tertiary);
   cursor: not-allowed;
-}
-
-.settings-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
 }
 
 /* A row's words that say something failed, in the failure's red over the
