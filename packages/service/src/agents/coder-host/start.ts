@@ -15,6 +15,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+import { storeWriter } from "@luke/database/models/writer";
 import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
@@ -29,6 +30,7 @@ import {
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentStartFrom,
@@ -41,7 +43,9 @@ import type { Task } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../../github/github-app.js";
+import { GitHubApp } from "../../github/github-app.js";
+import { githubReachOrRefusal } from "../../github/github-refusal.js";
+import { readBranchHead } from "../../github/repository-file.js";
 import { workspaceRepository } from "../../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
@@ -51,9 +55,11 @@ import {
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
-  acceptedModelChoice,
   ModelCatalog,
-  type ModelChoiceRefused,
+  ModelChoiceRefused,
+  type OfferedModel,
+  offeredToAccount,
+  validateModelChoice,
 } from "../../providers/model-catalog.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
@@ -77,6 +83,8 @@ import {
   type SummaryModelOf,
   summarizeSteps,
 } from "./replay-summary.js";
+import { cancelledTurn } from "./stop.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * start.ts -- an agent started on a task, or in a workspace with no task: the one path a Start takes, from the Start button, from Luke's voice, or from an automation's run.
@@ -112,7 +120,16 @@ import {
  * never becomes the account's default, and an agent started from an
  * automation's run is no run of that automation. Its mentions and servers
  * are read from the source's brief and the note, as a fresh start's would
- * be, and never from the replay.
+ * be, and never from the replay. A continue is named after its source,
+ * `<title> (continued)`, where the ask names no title and the source has
+ * one, and once eve has taken it the source is stopped as a Stop stops it,
+ * since the work goes on in the new agent; a fork leaves its source
+ * running, and a source that could not be stopped is logged, never the
+ * Start's failure.
+ * An ask that names a branch has its agent's checkout cloned at that branch
+ * rather than the default one, which the agent's row keeps; the branch is
+ * read on GitHub through the same installation before anything is made, so
+ * one the repository does not hold is refused here rather than at the clone.
  * The MCP servers the words mention are handed to the agent's first turn
  * whatever its switches say, but an automation's run is handed only those
  * its automation's own prompt mentions, never those of the webhook body or
@@ -218,6 +235,8 @@ export type StartAsk = StartPlace & {
   readonly summaryModel?: SummaryModelOf | undefined;
   /** The words the first turn's MCP servers are read from where they are not all the agent is handed: an automation's own prompt, never a webhook body or a GitHub event's words beside it; the prompt and the note otherwise, a source's brief standing for the prompt and its replay never read. */
   readonly serverWords?: string | undefined;
+  /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
+  readonly branch?: string | undefined;
 };
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -229,13 +248,46 @@ export interface CodingAgentStart {
 /** What a Start reaches: the store, the catalog, GitHub through the App on the developer's standing, and the network to eve. */
 export type StartServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
+/** What an account may start an agent on: the models the catalog offers it, and the choice a Start naming none runs on. */
+export interface AccountModelChoices {
+  readonly offered: readonly OfferedModel[];
+  /** The account's stored default, or Luke's where it stored none; it may have since left the catalog. */
+  readonly defaultChoice: ModelChoice;
+}
+
+/**
+ * The models an account may start an agent on, the catalog as the account
+ * is offered it (`offeredToAccount`), so a fast version withheld from it,
+ * its key's organization never granted fast mode, is not among them, and
+ * the account's default choice beside them. This is the one source a Start
+ * is checked against and the agent tools list the choices from, so the two
+ * never disagree. A catalog or a store that could not be read is an outage.
+ */
+export const accountModelChoices = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+): Effect.fn.Return<AccountModelChoices, HostedRefusal, DatabaseServices | ModelCatalog> {
+  const stored = (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent;
+  const fastAccess = yield* hostedStoreOrUnavailable(anthropicFastAccess(userId));
+  const catalog = yield* ModelCatalog;
+  const read = yield* catalog.read.pipe(
+    Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
+      Effect.logWarning(
+        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
+      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
+    ),
+  );
+  return {
+    offered: offeredToAccount(read, fastAccess),
+    defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE,
+  };
+});
+
 /**
  * The choice an agent runs on: the one named where one is, the account's
- * default otherwise, either checked against the catalog as the account is
- * offered it, so a fast version withheld from it, its key's organization
- * never granted fast mode, is refused here
- * rather than at the agent's first step. A catalog that
- * could not be read is an outage; a choice it refuses is its own refusal.
+ * default otherwise, either checked against the models the account is
+ * offered (`accountModelChoices`), so a fast version withheld from it is
+ * refused here rather than at the agent's first step. A catalog that could
+ * not be read is an outage; a choice it refuses is its own refusal.
  */
 export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -245,17 +297,9 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal | ModelChoiceRefused,
   DatabaseServices | ModelCatalog
 > {
-  const choice =
-    named ??
-    (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent ??
-    CODING_AGENT_DEFAULT_CHOICE;
-  const fastAccess = yield* hostedStoreOrUnavailable(anthropicFastAccess(userId));
-  return yield* acceptedModelChoice(choice, fastAccess).pipe(
-    Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
-      Effect.logWarning(
-        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
-      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
-    ),
+  const { offered, defaultChoice } = yield* accountModelChoices(userId);
+  return yield* Effect.fromResult(validateModelChoice(offered, named ?? defaultChoice)).pipe(
+    Effect.mapError((reason) => new ModelChoiceRefused({ reason, offered })),
   );
 });
 
@@ -275,6 +319,26 @@ interface ReplayFitter {
   readonly prompt: string | undefined;
   readonly fit: (firstMessageWords: string) => Effect.Effect<FittedReplay, never, DatabaseServices>;
 }
+
+/**
+ * The branch named for the agent's checkout, confirmed on GitHub through
+ * the workspace's installation, or refused: as not found where GitHub names
+ * no commit for it, and as GitHub unanswered where it could not be asked.
+ */
+const confirmedBranch = Effect.fnUntraced(function* (
+  workspaceId: string,
+  repository: string,
+  branch: string,
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+  const app = yield* GitHubApp;
+  const reached = yield* githubReachOrRefusal(app.repositoryReadToken(workspaceId, repository));
+  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  const { repository: confirmed, token } = reached.value;
+  const head = yield* readBranchHead(token, confirmed, branch).pipe(
+    Effect.mapError(() => HOSTED_REFUSAL.GITHUB_UNANSWERED),
+  );
+  if (head === undefined) return yield* Effect.fail(HOSTED_REFUSAL.BRANCH_NOT_FOUND);
+});
 
 /** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one; in a workspace, the prompt. */
 const landingOf = Effect.fnUntraced(function* (
@@ -400,6 +464,47 @@ function wordsOf(prompt: string | undefined, note: string | undefined): string |
   return words.length === 0 ? undefined : words.join("\n\n");
 }
 
+/** What a continue's title adds to its source's. */
+const CONTINUED_SUFFIX = " (continued)";
+
+/** That suffix, however many times a chain of continues stacked it on a title written by hand. */
+const CONTINUED_SUFFIXES = /(?: \(continued\))+$/u;
+
+/**
+ * A continue's title from its source's: the source's, with any suffix a
+ * continue already gave it taken off and cut to fit, and the suffix after
+ * it; none where the source has no title, so the model names the continue.
+ */
+function continuedTitle(source: string | null): string | undefined {
+  const base = (source ?? "").replace(CONTINUED_SUFFIXES, "").trim();
+  if (base === "") return undefined;
+  const room = CODING_AGENT_BOUNDS.MAX_TITLE_CHARS - CONTINUED_SUFFIX.length;
+  let kept = "";
+  // Note that the title is cut by code point, so a cut never leaves half of a character.
+  for (const char of base) {
+    if (kept.length + char.length > room) break;
+    kept += char;
+  }
+  return `${kept.trimEnd()}${CONTINUED_SUFFIX}`;
+}
+
+/**
+ * The source of a continue stopped as a Stop stops it, over the eve the
+ * Start reached: a turn it still runs cancelled and stamped, and nothing
+ * where it runs none or a Stop already stands on it. Its sandbox is
+ * stopped by its own turn's end, as a Stop leaves it. A source that could
+ * not be stopped is logged, since the new agent stands either way.
+ */
+const stoppedSource = (
+  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  source: CodingAgent,
+) =>
+  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
+    Effect.catch((refusal) =>
+      Effect.logWarning(`the agent a continue took over from was not stopped: ${refusal.error}`),
+    ),
+  );
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
@@ -432,6 +537,14 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         ]);
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
+  // Note that a retry whose agent already stands is not asked of GitHub again, because the
+  // branch may be gone since and the agent its Start made is still the answer.
+  if (ask.branch !== undefined) {
+    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    if (Option.isNone(made)) {
+      yield* confirmedBranch(landing.workspaceId, landing.repository, ask.branch);
+    }
+  }
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note
   // alone; never the replay of another agent, whose words name what it read, not what to hand on.
@@ -462,18 +575,22 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
             workspaceId: landing.workspaceId,
           }),
         );
+  // A continue is named after its source where the ask names nothing; a fork is named as it starts.
+  const continued = from !== undefined && from.told.messageId === undefined;
+  const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
-      title: ask.title,
+      title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
+      startBranch: ask.branch,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
       // The servers those words mention are its first turn's, whatever the switches say.
       mentionedServers:
@@ -517,6 +634,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
+  // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
+  if (continued) yield* stoppedSource(eve, from.source);
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
   const chatOn = yield* chatEnabledFor(userId).pipe(
     Effect.tapError(logStoreFailure),

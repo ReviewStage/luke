@@ -308,14 +308,20 @@ type UserMessageWriteResult = Result.Result<
  * What sent a line to a coding agent, as its row keeps it: the member by
  * their account, Luke, an automation by its name as it stands at the send,
  * GitHub by the login of who caused what it tells of, or another coding
- * agent by its name as it stands at the send.
+ * agent by its name as it stands at the send, and by its id and the model
+ * it runs on then where the send knows them, as a chat notice may not.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
-  | { readonly kind: typeof MESSAGE_SENDER.AGENT; readonly name: string };
+  | {
+      readonly kind: typeof MESSAGE_SENDER.AGENT;
+      readonly agentId?: string | undefined;
+      readonly name: string;
+      readonly model?: string | undefined;
+    };
 
 /** The name a line's row keeps beside its sender's kind: an automation's or an agent's, or the GitHub login; none for any other. */
 function senderNameOf(sender: LineSender | undefined): string | null {
@@ -612,6 +618,8 @@ const MessageInsertSchema = Schema.Struct({
   sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
   senderUserId: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
+  senderModel: Schema.NullOr(Schema.String),
+  senderAgentId: Schema.NullOr(Schema.String),
 });
 
 const lockConversation = SqlSchema.findOneOption({
@@ -759,6 +767,8 @@ const insertMessageRow = SqlSchema.findOneOption({
           sender: row.sender,
           senderUserId: row.senderUserId,
           senderName: row.senderName,
+          senderModel: row.senderModel,
+          senderAgentId: row.senderAgentId,
         })
         .returning({ id: messages.id }),
     ),
@@ -1234,6 +1244,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: nullable(row.sender?.kind),
     senderUserId: row.sender?.kind === MESSAGE_SENDER.MEMBER ? row.sender.userId : null,
     senderName: senderNameOf(row.sender),
+    senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.model ?? null) : null,
+    senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? (row.sender.agentId ?? null) : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq };

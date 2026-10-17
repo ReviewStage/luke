@@ -64,6 +64,7 @@ import {
   CODING_AGENT_TOOL_REFUSAL,
   runArchiveAgent,
   runListAgents,
+  runListModels,
   runListTasks,
   runMessageAgent,
   runReadAgent,
@@ -92,7 +93,7 @@ import {
   readAsAgent,
   resolveAsAgent,
 } from "./chat.js";
-import { HELD_DOORS } from "./chat-notify.js";
+import { CHAT_DOORS } from "./chat-notify.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -269,7 +270,7 @@ export interface CoderHost extends HostAdmission {
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
-   * checkout stood detached. A read or write that fails is logged and
+   * checkout stood detached or on the branch the agent was started on. A read or write that fails is logged and
    * nothing is written, so the caller's stop of the sandbox follows either
    * way.
    */
@@ -427,7 +428,8 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.ARCHIVE_AGENT
     | typeof CODER_TOOL.UNARCHIVE_AGENT
     | typeof CODER_TOOL.READ_PAGE
-    | typeof CODER_TOOL.LIST_TASKS;
+    | typeof CODER_TOOL.LIST_TASKS
+    | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
 }
@@ -442,6 +444,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.READ_PAGE]: runReadPage,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
+  [CODER_TOOL.LIST_MODELS]: runListModels,
 } as const;
 
 /** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
@@ -491,9 +494,13 @@ function describeFailure(failure: CheckoutFailure): string {
   return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
 }
 
-/** Whether the agent is asked for its title as this event is relayed: the developer's words received, so a long first turn is named as it starts, and a turn's end, which reads the answer too. */
+/** Whether the agent is asked for its title as this event is relayed: the developer's words received, so a long first turn is named as it starts, and a turn's end, which reads the answer too, a failed one's among them, so an agent whose first turn fails is still named. */
 function asksTitle(event: MessageStreamEvent): boolean {
-  return event.type === "message.received" || event.type === "turn.completed";
+  return (
+    event.type === "message.received" ||
+    event.type === "turn.completed" ||
+    event.type === "turn.failed"
+  );
 }
 
 /** The host over the deployment's seams. */
@@ -564,7 +571,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             { kind: MENTION_KIND.TASK, taskId: agent.taskId },
             { workspace, repository: null },
           );
-    const text = coderInstructions(agent.repository, brief, ciReadable, taskLink, coAuthor, chatOn);
+    const text = coderInstructions(
+      agent.repository,
+      brief,
+      ciReadable,
+      taskLink,
+      coAuthor,
+      chatOn,
+      agent.startBranch,
+    );
     return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn };
   };
 
@@ -728,7 +743,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const agent = yield* agentOrRefused(admitted);
         const branch = yield* checkoutBranch(sandbox);
-        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, branch);
+        // Note that the branch the agent was started on is another's, such as a stacked pull
+        // request's, so standing on it is recorded as no branch of its own: no pull request
+        // and no GitHub delivery on that branch is taken for this agent's.
+        const own = branch === agent.startBranch ? null : branch;
+        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, own);
       }).pipe(
         Effect.catch((failure) =>
           Effect.logWarning(
@@ -861,7 +880,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           secret === undefined || origin === undefined
             ? EVE_UNREACHED
             : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
-        const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
+        const telling = { eveFor, writer: seams.writer(), doors: CHAT_DOORS };
         const { clientKey, postsInTurn, sandbox } = call;
         return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
           clientKey,

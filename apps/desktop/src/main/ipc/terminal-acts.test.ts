@@ -10,12 +10,12 @@ import {
   type TerminalPortTicket,
 } from "@luke/features/terminal-acts";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
+import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Deferred, Effect, Fiber } from "effect";
 import type { WebContents } from "electron";
-import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import {
   type MainTerminalPort,
   type TerminalActsDependencies,
@@ -42,7 +42,7 @@ const SHELL = { id: SHELL_ID, title: "zsh", command: "zsh", cwd: "/workspace", r
 const ATTACH = { agentId: AGENT_ID, terminalId: SHELL_ID, cols: 120, rows: 32 };
 
 // SAFETY: the rows read a sender by identity alone; one inert object is one window.
-const panelOf = (): ActSender => ({
+const panelOf = (): ActSender<WebContents> => ({
   sender: {} as WebContents,
   panel: true,
   voice: false,
@@ -142,7 +142,7 @@ function fixture(
     },
   });
   // SAFETY: the router dispatches only the terminal kinds these tests send.
-  const router = createActRouter(rows as ActRows);
+  const router = createActRouter(rows as ActRows<WebContents>);
   return {
     router,
     asked,
@@ -208,7 +208,7 @@ it.effect(
 it.effect("only a panel is answered", () =>
   Effect.gen(function* () {
     const { router, asked, opened } = fixture();
-    const voice: ActSender = { ...panelOf(), panel: false, voice: true };
+    const voice: ActSender<WebContents> = { ...panelOf(), panel: false, voice: true };
 
     const listed = yield* router.performAct(
       { kind: ACT_KIND.TERMINAL_LIST, payload: { agentId: AGENT_ID } },

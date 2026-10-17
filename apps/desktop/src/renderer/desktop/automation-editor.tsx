@@ -62,6 +62,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   AnchoredPopover,
   BUTTON_VARIANT,
@@ -72,6 +73,7 @@ import {
   IconButton,
   POPOVER_ALIGN,
   ProviderMark,
+  SETTINGS_SECTION_FRAME,
   SettingsRow,
   SettingsSection,
   SidePanelIcon,
@@ -92,7 +94,6 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
@@ -103,7 +104,6 @@ import { useIntegrationStatuses } from "../integration-statuses";
 import { useOpenSettings } from "../open-settings";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
-import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
 import { Spinner } from "../spinner";
 import { AgentModelChip } from "../tasks/agent-model-chip";
@@ -494,11 +494,12 @@ function ScheduleRows({
       />
       {schedule.kind === SCHEDULE_KIND.CUSTOM ? (
         <SettingsRow label="Cron">
-          {() => (
+          {(control) => (
             <span className="automation-field">
               <TextField
                 ref={cron}
                 label="Cron"
+                describedBy={control["aria-describedby"]}
                 font={TEXT_FIELD_FONT.MONO}
                 spellCheck={false}
                 value={schedule.cron}
@@ -510,7 +511,7 @@ function ScheduleRows({
         </SettingsRow>
       ) : (
         <SettingsRow label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}>
-          {() => (
+          {(control) => (
             <>
               {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
                 <Picker
@@ -540,6 +541,7 @@ function ScheduleRows({
                     ref={time}
                     type={TEXT_FIELD_TYPE.TIME}
                     label="Time"
+                    describedBy={control["aria-describedby"]}
                     value={clockValue(schedule.hour, schedule.minute)}
                     onEscape={() => time.current?.blur()}
                     onChange={(text) => {
@@ -866,11 +868,12 @@ function CodeReviewGroup({
         label="Rules file"
         description="Read from the base branch, beside AGENTS.md and CLAUDE.md."
       >
-        {() => (
+        {(control) => (
           <span className="automation-field">
             <TextField
               ref={rulesFile}
               label="Rules file"
+              describedBy={control["aria-describedby"]}
               font={TEXT_FIELD_FONT.MONO}
               spellCheck={false}
               value={settings.rulesFile}
@@ -1446,7 +1449,7 @@ function EditorForm({
           onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
         />
       )}
-      <SettingsGroup title="Prompt" framed={false}>
+      <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
         <TextArea
           ref={prompt}
           label="Prompt"
@@ -1457,7 +1460,7 @@ function EditorForm({
           onChange={(text) => onDraft({ prompt: text })}
         />
         <Problem problem={problems[DRAFT_FIELD.PROMPT]} />
-      </SettingsGroup>
+      </SettingsSection>
       <RunsGroup
         draft={draft}
         mine={automation === undefined || automation.mine === true}

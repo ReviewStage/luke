@@ -235,6 +235,11 @@
   position: relative;
 }
 
+/* A plan's task item the developer can tick from the drawn plan says so. */
+.plan-unit li.task-list-item input[type="checkbox"]:enabled {
+  cursor: pointer;
+}
+
 /* A section's heading wraps short of the row at its end, so the byline and
    the ⋯ never stand over its words, however long it runs. The room is kept
    whether or not they are shown, and in the editor too, so no heading
@@ -638,30 +643,30 @@
 }
 
 /* A task item as TipTap draws it: its box in a label and its words in a block
-   of their own after it, which would stand a line under a bullet. Laid side by
-   side, the box takes the bullet's place in the read view's size and green
-   (`markdown.css`), and the words their line beside it. */
+   of their own after it. The label stands in the bullet's gutter exactly where
+   the read view stands its box (`markdown.css`), in its size and accent, so
+   the words keep their place as the section opens to be edited. */
 .plan-document-text li[data-checked] {
-  display: flex;
+  position: relative;
   list-style: none;
 }
 
 .plan-document-text li[data-checked] > label {
-  flex: none;
-  margin: 0 0.45em 0 -1.45em;
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
 }
 
 .plan-document-text li[data-checked] > label > input {
+  display: block;
   width: 0.95em;
   height: 0.95em;
   margin: 0;
-  vertical-align: -0.1em;
-  accent-color: var(--state-complete);
+  font: inherit;
+  accent-color: var(--luke-color-accent);
 }
 
 .plan-document-text li[data-checked] > div {
-  flex: 1;
-  min-width: 0;
   margin-top: 0;
 }
 
@@ -2996,6 +3001,30 @@ button.pull-request-check:hover {
   color: var(--text-secondary);
 }
 
+/* A box closed for good (`agent-composer.tsx`) wears the held look a box
+   sending does, faded, so the note and Continue under it read as the way
+   on. Note that it still takes a press, because its controls are disabled
+   one by one and its branch and changes chips still open what they name. */
+.agent-composer[data-closed] > form {
+  opacity: 0.6;
+}
+
+/* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
+   and files faded, as words that did not go, and the quiet mark under
+   them in the danger red a failure note speaks in. */
+.agent-undelivered {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 12.5px;
+}
+
+.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
+  opacity: 0.6;
+}
+
 /* A finished turn's line (`working-time.tsx`) breaks between how long it
    worked and when it ended, never inside either. */
 [data-worked] > :is([data-worked-length], time) {
@@ -3059,6 +3088,7 @@ button.pull-request-check:hover {
 
 .draft-fork-quote {
   min-width: 0;
+  background: none;
   overflow: hidden;
   color: var(--text-primary);
   text-overflow: ellipsis;
@@ -3077,6 +3107,7 @@ button.draft-fork-quote:hover {
   height: 20px;
   margin-left: auto;
   border-radius: 4px;
+  background: none;
   color: var(--text-tertiary);
 }
 
@@ -3204,6 +3235,19 @@ button.draft-fork-quote:hover {
    words are empty, dimmed with the editor while the box is held. */
 .agent-composer-field {
   position: relative;
+}
+
+/* Note that the editor keeps its spaces as typed, as TipTap's own base rules
+   would were they let in (`composer-editor.ts`'s `injectCSS`), so the space a
+   chosen chip is followed by stands at the end of a line rather than
+   collapsing, and the caret is drawn after it, not against the chip. */
+.composer-editor {
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.composer-editor [contenteditable="false"] {
+  white-space: normal;
 }
 
 .agent-composer-input p {
