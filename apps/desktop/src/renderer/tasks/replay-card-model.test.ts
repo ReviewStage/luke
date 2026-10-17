@@ -133,6 +133,15 @@ test("a line sent to the source is named by whoever its summary says sent it, an
     { who: "Agent", line: "Read: invite.ts" },
     { who: "Agent", line: "Done: for now." },
   ]);
+  // A sender whose name holds the separator keeps all of it.
+  assert.deepEqual(
+    stepLine({
+      kind: REPLAY_STEP_KIND.LINE,
+      summary: "Nightly: deploy: Run tests: all of them",
+      words: "Run tests: all of them",
+    }),
+    { who: "Nightly: deploy", line: "Run tests: all of them" },
+  );
   // A summary that names no sender is the developer's.
   assert.deepEqual(stepLine({ kind: REPLAY_STEP_KIND.LINE, summary: "Go", words: "Go" }), {
     who: "Developer",

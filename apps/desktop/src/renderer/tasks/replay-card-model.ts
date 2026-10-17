@@ -128,20 +128,43 @@ export function replayLede(source: string): string {
 }
 
 /**
+ * Where a line's summary parts its sender from its words: the first
+ * separator after which the summary reads as the start of the line's own
+ * words on one line, so a sender whose name holds the separator (an
+ * automation's "Nightly: deploy") keeps it; the first separator where none
+ * does, and none where the summary holds no separator.
+ */
+function lineSplit(step: ReplayStep): number {
+  const words = step.words.replace(/\s+/gu, " ").trim();
+  let first = -1;
+  for (let at = step.summary.indexOf(SPEAKER_SEPARATOR); at >= 0; ) {
+    if (first < 0) first = at;
+    const tail = step.summary.slice(at + SPEAKER_SEPARATOR.length).replace(/…$/u, "");
+    if (words.startsWith(tail)) return at;
+    at = step.summary.indexOf(SPEAKER_SEPARATOR, at + 1);
+  }
+  return first;
+}
+
+/**
  * A step's row: a line under whoever sent it, as its summary names them
  * (a member, Luke, an automation, GitHub, another agent), and the agent's
  * words and calls under the agent, the words without the summary's own
  * "Said" since the row names the agent.
  */
 export function stepLine(step: ReplayStep): StepLine {
-  const split = step.summary.indexOf(SPEAKER_SEPARATOR);
-  const head = split < 0 ? undefined : step.summary.slice(0, split);
-  const tail = split < 0 ? step.summary : step.summary.slice(split + SPEAKER_SEPARATOR.length);
   switch (step.kind) {
-    case REPLAY_STEP_KIND.LINE:
-      return head === undefined ? { who: SENDER_WORD, line: tail } : { who: head, line: tail };
-    case REPLAY_STEP_KIND.SAID:
-      return { who: AGENT_WORD, line: head === SAID_WORD ? tail : step.summary };
+    case REPLAY_STEP_KIND.LINE: {
+      const split = lineSplit(step);
+      if (split < 0) return { who: SENDER_WORD, line: step.summary };
+      const line = step.summary.slice(split + SPEAKER_SEPARATOR.length);
+      return { who: step.summary.slice(0, split), line };
+    }
+    case REPLAY_STEP_KIND.SAID: {
+      const lead = `${SAID_WORD}${SPEAKER_SEPARATOR}`;
+      const said = step.summary.startsWith(lead);
+      return { who: AGENT_WORD, line: said ? step.summary.slice(lead.length) : step.summary };
+    }
     case REPLAY_STEP_KIND.TOOL:
       return { who: AGENT_WORD, line: step.summary };
   }
