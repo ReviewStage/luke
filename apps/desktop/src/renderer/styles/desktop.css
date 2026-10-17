@@ -1403,7 +1403,7 @@ ul.actor-stack {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
   color: var(--luke-color-text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* A row's first line: the plan's name, cut short where it must, and how long
@@ -2774,10 +2774,12 @@ ul.actor-stack {
   color: var(--text-tertiary);
 }
 
-/* Each a line naming an actor (`.actor-line`), whose spaces it keeps; a
-   name too long for the menu is cut short. It clips past the ring an
-   actor's hover fill bleeds by, so the ring is drawn whole. */
+/* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
+   wrapping between its words and names rather than cutting a name short.
+   It clips past the ring an actor's hover fill bleeds by, so the ring is
+   drawn whole. */
 .task-menu-note {
+  flex-wrap: wrap;
   margin: 0;
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
@@ -3156,11 +3158,10 @@ ul.actor-stack {
   text-underline-offset: 0.2em;
 }
 
-/* The "Edited by" line, over the document and in the plan's menu, wraps
-   between its words and names rather than cutting a name short, so no name
-   is ever cut to nothing beside the words around it. */
-.plan-edit-note,
-.task-menu-note {
+/* The "Edited by" line over the document wraps between its words and names
+   rather than cutting a name short, so no name is ever cut to nothing beside
+   the words around it. */
+.plan-edit-note {
   flex-wrap: wrap;
 }
 

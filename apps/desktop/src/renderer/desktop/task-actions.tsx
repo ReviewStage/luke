@@ -9,6 +9,7 @@ import {
   type DialogQuestion,
   EllipsisIcon,
   ExternalIcon,
+  IconButton,
   PinIcon,
   ProviderMark,
   TrashIcon,
@@ -414,15 +415,12 @@ export function TaskActions({
     <>
       {button ? (
         <Tooltip label="Task actions">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Task actions"
+          <IconButton
+            icon={<EllipsisIcon />}
+            label="Task actions"
             disabled={deletion.busy}
             {...actions.trigger()}
-          >
-            <EllipsisIcon />
-          </button>
+          />
         </Tooltip>
       ) : null}
       {actions.menu}
