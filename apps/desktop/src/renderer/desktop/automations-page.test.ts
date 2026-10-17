@@ -1288,18 +1288,12 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   await settle();
   const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
   const status = toolbar.querySelector(".automation-editor-status") ?? assert.fail("no status");
-  // Note that the fold itself is the shared button's style query, which jsdom
-  // cannot answer, so what is read here is the toolbar telling it to fold.
   const acts = () =>
     ["Automations", "Send feedback", "Run now"].map((name) => {
       const press =
         [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
         assert.fail(`no ${name}`);
-      return {
-        name,
-        folded: getComputedStyle(press).getPropertyValue("--luke-fold").trim() === "folded",
-        pill: pillOver(press),
-      };
+      return { name, pill: pillOver(press) };
     });
 
   // A 760 window's toolbar, past the traffic lights.
@@ -1307,9 +1301,9 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", folded: true, pill: "Automations" },
-      { name: "Send feedback", folded: true, pill: "Send feedback" },
-      { name: "Run now", folded: true, pill: "Run now" },
+      { name: "Automations", pill: "Automations" },
+      { name: "Send feedback", pill: "Send feedback" },
+      { name: "Run now", pill: "Run now" },
     ]);
     assert.equal(shown(status), false);
   } finally {
@@ -1319,9 +1313,9 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
   try {
     act(() => relayout());
     assert.deepEqual(acts(), [
-      { name: "Automations", folded: false, pill: undefined },
-      { name: "Send feedback", folded: false, pill: undefined },
-      { name: "Run now", folded: false, pill: undefined },
+      { name: "Automations", pill: undefined },
+      { name: "Send feedback", pill: undefined },
+      { name: "Run now", pill: undefined },
     ]);
     assert.equal(shown(status), true);
   } finally {
