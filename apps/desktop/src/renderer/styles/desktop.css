@@ -5347,7 +5347,7 @@ button.integration-tool-head:hover,
    traffic lights their room or not as the sidebar folds, so the window's
    width says nothing of the room the crumbs have. Too narrow for every
    act's words beside a readable name, the acts fold to their glyphs, each
-   named by its pill (`folding-button.tsx`), and the draft's state goes,
+   named by its pill (`folding-button.tsx`, folded by `--luke-fold`), and the draft's state goes,
    since Save, pressable or not, says it already; the crumb back folds to
    its glyph alike, so the name it leads to keeps the room. */
 .automation-toolbar {
@@ -5360,13 +5360,12 @@ button.integration-tool-head:hover,
 }
 
 @container automation-toolbar (max-width: 879px) {
-  .automation-toolbar :is(.toolbar-button-words, .automation-editor-status) {
-    display: none;
+  .automation-toolbar > * {
+    --luke-fold: folded;
   }
 
-  .automation-toolbar .toolbar-button:has(> .toolbar-button-words) {
-    width: var(--control-height);
-    padding: 0;
+  .automation-toolbar .automation-editor-status {
+    display: none;
   }
 }
 

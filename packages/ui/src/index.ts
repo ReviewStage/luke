@@ -12,6 +12,7 @@ export * from "./components/detail-page/detail-page.js";
 export * from "./components/dialog/dialog.js";
 export * from "./components/empty-state/empty-state.js";
 export * from "./components/error-state/error-state.js";
+export * from "./components/folding-button/folding-button.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/form-section/form-section.js";
 export * from "./components/hover-card/hover-card.js";
