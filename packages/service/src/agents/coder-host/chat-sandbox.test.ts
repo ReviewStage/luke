@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
+import { INBOX_BLOCK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { stampedEveEvent } from "../../testing/eve-events.js";
@@ -33,6 +34,29 @@ test("a chat post opens the sandbox only where it carries a picture, which is re
       requested(CODER_TOOL.POST_CHAT, {
         text: "A link.",
         blocks: [{ type: CHAT_BLOCK.LINK, url: "https://github.com", label: "GitHub" }],
+      }),
+    ),
+    false,
+  );
+});
+
+test("an inbox post opens the sandbox only where an image block names a picture, which is read from a file there", () => {
+  const post = (blocks: WireRecord[]) => ({
+    key: "landing",
+    title: "Does the landing page read right?",
+    blocks,
+    response: { type: INBOX_RESPONSE.APPROVAL },
+  });
+  const picture = { type: INBOX_BLOCK.IMAGE, path: "shots/landing.png", alt: "The landing page" };
+  const words = { type: INBOX_BLOCK.MARKDOWN, text: "The hero reads **Plan by voice**." };
+  assert.equal(opensSandbox(requested(CODER_TOOL.POST_TO_INBOX, post([words, picture]))), true);
+  assert.equal(opensSandbox(requested(CODER_TOOL.POST_TO_INBOX, post([words]))), false);
+  assert.equal(
+    opensSandbox(
+      requested(CODER_TOOL.POST_TO_INBOX, {
+        key: "landing",
+        title: "Ship it?",
+        response: { type: INBOX_RESPONSE.APPROVAL },
       }),
     ),
     false,
