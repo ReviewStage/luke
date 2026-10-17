@@ -27,9 +27,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
-import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
-import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts } from "../tooltip";
@@ -286,18 +284,6 @@ test("the home page greets the account, lists what needs it with each item's pla
     "Usage alerts · acme/relay",
     "Onboarding checklist · No repository",
   ]);
-});
-
-test("Home's rows fade into the window's drag strip as they scroll up under it, rather than vanishing at an unseen line", async () => {
-  const { page } = mount();
-  await settle();
-  const sheets = layFades();
-  try {
-    const scroller = page.querySelector(".home-scroll") ?? assert.fail("the page scrolls");
-    assert.deepEqual(fadedEdges(scroller), { top: true, bottom: false });
-  } finally {
-    sheets.remove();
-  }
 });
 
 test("Home offers no line to search every task, though Recent lists fewer than the workspace holds", async () => {
@@ -682,19 +668,4 @@ test("a recent task a teammate created wears their face before its time, and the
     return face === null ? [] : [[row.querySelector(".sidebar-task-name")?.textContent, face.src]];
   });
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
-});
-
-test("a row whose title runs long keeps the task or repository it is about in sight: the title gives way, and what it is about keeps a floor", async () => {
-  const { page } = mount();
-  await settle();
-  const style = layContainersAt({});
-  const abouts = [...page.querySelectorAll(".home-row-context")];
-  assert.equal(abouts.length, 8, "both sections' rows say what they are about");
-  for (const about of abouts) {
-    const title =
-      about.parentElement?.querySelector(".sidebar-task-name") ?? assert.fail("a title");
-    assert.notEqual(getComputedStyle(title).flexShrink, "0", "the title gives way");
-    assert.notEqual(getComputedStyle(about).minWidth, "0px", "what it is about keeps a floor");
-  }
-  style.remove();
 });

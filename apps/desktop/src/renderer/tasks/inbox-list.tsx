@@ -1,16 +1,24 @@
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { DocumentIcon } from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+import {
+  ACTOR_KIND,
+  ACTOR_STATE,
+  type Actor,
+  actorName,
+  memberActor,
+  personActor,
+} from "@luke/ui/actor-model";
 import {
   ArrowDownNarrowWideIcon,
   FactoryIcon,
   InboxIcon,
   SlidersHorizontalIcon,
+  UsersIcon,
 } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
-import { ActorMark, AutomationCard, automationActor } from "../actor-ref";
+import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
@@ -25,18 +33,24 @@ import {
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { EmptyState } from "../empty-state";
+import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
 import { INBOX_COLUMNS, type InboxColumnsShown } from "./inbox-columns";
 import {
   holderKey,
+  holderName,
   INBOX_GROUPING,
   INBOX_HOLDER,
   type InboxGrouping,
   type InboxHolder,
   type InboxListed,
   type InboxListView,
+  type InboxPersonGroup,
+  type InboxStarter,
   NEEDS_YOU,
+  needsReader,
+  readersItem,
 } from "./inbox-model";
 import { RelativeTime } from "./relative-time";
 import { useMinute } from "./task-time";
@@ -53,13 +67,18 @@ import { cardTitle } from "./tool-call-model";
  * clock tile, which hangs its card. An item is a sidebar row: the tile of
  * the agent that posted it (`actor-ref.tsx`), as the plan's summary or
  * main's read of an agent with no plan names the agent, its title, and how
- * long ago it last changed; a press chooses it, for the pane beside the
+ * long ago it last changed, and before its time the face of the teammate
+ * whose agent asks it, as the sidebar marks a teammate's task, the reader's
+ * own wearing none; a press chooses it, for the pane beside the
  * list to show. The tile hangs the agent's tab's card while the pointer
  * rests on it (`agent-ref.tsx`), and leaves the press to its row, whose
- * pane opens the agent. An item that needs the developer's answer reads as a mail app's
+ * pane opens the agent. An item that needs the developer's answer, an open
+ * one their own agent asks (`needsReader`), reads as a mail app's
  * unread mail does, a blue dot past its time beside its title in the
  * weight every unread row and tab reads in, in either grouping and
- * filtered or not; an answered one is settled, in the body's weight with
+ * filtered or not; a teammate's open item waits on the teammate, in the
+ * body's weight with a hollow dot in the blue's place, and any member may
+ * still answer it; an answered one is settled, in the body's weight with
  * no dot. Only an item waiting on the developer wears the dot: a plan or a
  * tab with something unseen on it is unread, not waiting, and wears the
  * weight alone. A folded plan
@@ -70,8 +89,11 @@ import { cardTitle } from "./tool-call-model";
  * Inbox's own wearing the rows' blue dot while anything needs the
  * developer, filtered out or not, its pressed fill alone saying the filter
  * is on and its tooltip what a press does; and one whose menu says
- * how the list groups its items, by plan or newest first, the choice
- * checked; both are kept across launches. Where Needs you leaves out every
+ * how the list groups its items, by plan, by person, or newest first, the
+ * choice checked; both are kept across launches. Grouped by person, each
+ * person's items stand under their face, the reader's own first as You, and
+ * a row names its plan where it wears no face, since the header says whose
+ * it is. Where Needs you leaves out every
  * item listed, the list says so in the Inbox's empty state, with Show all to
  * turn the filter off, as a mail app's empty unread view does; the item the
  * pane shows keeps its place there, though no row. A task's own Inbox lists one
@@ -94,6 +116,11 @@ const NEEDS_YOU_PRESS = {
   ONLY: "Show only what needs you",
   ALL: "Show all",
 } as const;
+
+/** What a teammate's open item's hollow dot says: it waits on them, not the reader. */
+function waitingOn(starter: Actor): string {
+  return `Waiting on ${actorName(starter, { sentence: true })}`;
+}
 
 /** The tile of an agent the window names nothing of. */
 const UNNAMED_AGENT = {
@@ -176,9 +203,11 @@ export function ItemMark({
 
 /**
  * One item as a sidebar row: the agent's mark, the title, and how long ago it
- * changed; one that needs the developer in the unread weight with a dot past
- * its time. The home page's Needs you names the item's plan after its title,
- * in `context`, since its rows stand under no plan's header. Its right-click offers
+ * changed, a teammate's face before the time where the item is theirs and
+ * `face` allows it; one that needs the developer in the unread weight with a
+ * dot past its time, and a teammate's open one a hollow dot. The home page's
+ * Needs you names the item's plan after its title, in `context`, since its
+ * rows stand under no plan's header, as a person's group does. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under.
  */
@@ -189,20 +218,29 @@ export function InboxItemRow({
   models,
   readerId,
   context,
+  face = true,
   onChoose,
 }: {
   listed: InboxListed;
   chosen: boolean;
   now: number;
   models: readonly CatalogModel[] | undefined;
-  /** The signed-in account's id, whose own agents' cards name no starter. */
+  /** The signed-in account's id, whose own agents' cards and rows name no starter, and whose own open items alone need them. */
   readerId: string | undefined;
   context?: string;
+  /** Whether a teammate's item wears their face, which a person's group header says instead. */
+  face?: boolean;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const { holder, item } = listed;
   const title = cardTitle(item.title);
-  const needsYou = item.status === INBOX_STATUS.OPEN;
+  const directory = useMemberDirectory();
+  const reader = directory.readerId ?? readerId;
+  const needsYou = needsReader(item, reader);
+  const starter = readersItem(item, reader)
+    ? undefined
+    : personActor(item.startedBy, directory.members, reader, directory.former);
+  const waitsOnTeammate = starter !== undefined && item.status === INBOX_STATUS.OPEN;
   const menu = useActionMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
@@ -232,15 +270,27 @@ export function InboxItemRow({
             </span>
             <span className="sidebar-task-name">{title}</span>
             {context === undefined ? null : <span className="home-row-context">{context}</span>}
-            <RelativeTime
-              className="sidebar-task-time"
-              at={item.updatedAt}
-              now={now}
-              hint={false}
-            />
+            {starter === undefined || !face ? (
+              <RelativeTime
+                className="sidebar-task-time"
+                at={item.updatedAt}
+                now={now}
+                hint={false}
+              />
+            ) : (
+              // Note that the face stands in the time's own box, as a sidebar row's does, so it sits beside the time rather than the title.
+              <span className="sidebar-task-time">
+                <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
+                <RelativeTime at={item.updatedAt} now={now} hint={false} />
+              </span>
+            )}
             {needsYou ? (
               <span className="inbox-row-dot">
                 <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+              </span>
+            ) : waitsOnTeammate ? (
+              <span className="inbox-row-dot" data-hollow="true">
+                <span className="visually-hidden">{waitingOn(starter)}</span>
               </span>
             ) : null}
           </span>
@@ -307,6 +357,46 @@ function HolderHeader({
   );
 }
 
+/**
+ * A person's group header: their face and name, the reader's own as You, a
+ * member who left on the quiet outline, as the sidebar's group by creator
+ * heads its groups. A press folds the group, as every group header's does.
+ */
+function PersonHeader({
+  starter,
+  readerId,
+  folded,
+  count,
+  onToggle,
+}: {
+  starter: InboxStarter | undefined;
+  readerId: string | undefined;
+  folded: boolean;
+  count: number;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const { members, former, readerId: known } = useMemberDirectory();
+  const reader = known ?? readerId;
+  const you = members?.find((each) => each.userId === reader);
+  const actor: Actor =
+    starter !== undefined
+      ? personActor(starter, members, reader, former)
+      : you !== undefined
+        ? memberActor(you, reader)
+        : { kind: ACTOR_KIND.PERSON, userId: reader ?? "", name: "", you: true };
+  return (
+    <SidebarGroupHeader
+      glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
+      name={actorName(actor)}
+      folded={folded}
+      count={count}
+      noun={NEEDS_YOU.COUNT}
+      steady
+      onToggle={onToggle}
+    />
+  );
+}
+
 /** The head's button that drops the menu of how the list groups its items, the choice checked. */
 function ViewOptions({
   shown,
@@ -324,6 +414,12 @@ function ViewOptions({
       icon: <DocumentIcon />,
       checked: grouping === INBOX_GROUPING.TASK,
       onSelect: () => onGrouping(INBOX_GROUPING.TASK),
+    },
+    {
+      label: "Group by person",
+      icon: <UsersIcon />,
+      checked: grouping === INBOX_GROUPING.PERSON,
+      onSelect: () => onGrouping(INBOX_GROUPING.PERSON),
     },
     {
       label: "Newest first",
@@ -494,7 +590,7 @@ function useRowFocusKept(): RowFocus {
   };
 }
 
-/** The list: its head where it has one, then each plan's group of rows, or every row in one run, or a line where nothing is listed. */
+/** The list: its head where it has one, then each plan's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
   chosen,
@@ -530,7 +626,7 @@ export function InboxList({
     label: "Resize inbox list",
     onResize,
   });
-  const row = (listed: InboxListed) => (
+  const row = (listed: InboxListed, byPerson = false) => (
     <InboxItemRow
       key={listed.item.id}
       listed={listed}
@@ -538,9 +634,30 @@ export function InboxList({
       now={now}
       models={models}
       readerId={readerId}
+      face={!byPerson}
+      {...(byPerson ? { context: holderName(listed.holder) } : undefined)}
       onChoose={onChoose}
     />
   );
+  const needingYou = (items: readonly InboxItem[]) =>
+    items.filter((item) => needsReader(item, view.readerId)).length;
+  const personSection = ({ key, starter, items }: InboxPersonGroup) => {
+    const folded = head.view?.folds.folded(key) ?? false;
+    return (
+      <div key={key} className="sidebar-repository">
+        <PersonHeader
+          starter={starter}
+          readerId={readerId}
+          folded={folded}
+          count={needingYou(items.map(({ item }) => item))}
+          onToggle={() => head.view?.folds.toggle(key)}
+        />
+        {folded ? null : (
+          <ul className="sidebar-tasks">{items.map((listed) => row(listed, true))}</ul>
+        )}
+      </div>
+    );
+  };
   return (
     <nav
       ref={rowFocus.ref}
@@ -554,7 +671,9 @@ export function InboxList({
       <ListHead head={head} />
       <div className="inbox-tasks-scroll scroll-fade-top">
         {view.grouping === INBOX_GROUPING.NEWEST ? (
-          <ul className="sidebar-tasks">{view.items.map(row)}</ul>
+          <ul className="sidebar-tasks">{view.items.map((listed) => row(listed))}</ul>
+        ) : view.grouping === INBOX_GROUPING.PERSON ? (
+          view.groups.map(personSection)
         ) : (
           view.groups.map(({ holder, items }) => {
             const key = holderKey(holder);
@@ -564,7 +683,7 @@ export function InboxList({
                 <HolderHeader
                   holder={holder}
                   folded={folded}
-                  count={items.filter(({ status }) => status === INBOX_STATUS.OPEN).length}
+                  count={needingYou(items)}
                   onToggle={() => head.view?.folds.toggle(key)}
                 />
                 {folded ? null : (

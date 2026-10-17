@@ -7,12 +7,10 @@
   // print one into a cached log nor bake one into a cached hash. The desktop
   // build's Sentry token and DSN stay with `pnpm package`, which turbo never runs.
   "envMode": "strict",
-  // Files outside every workspace that every workspace reads. The changelog
-  // and the privacy notice, which only the web app imports, are inputs of its
-  // tasks alone (apps/web/turbo.json), so a release's changelog misses no
-  // other workspace's cache. The brand artwork the web app and the desktop
-  // build read is @luke/brand's, which `transit` tracks.
-  "globalDependencies": [".nvmrc", "tsconfig.base.json"],
+  // Files outside every workspace that a workspace reads: the web app imports
+  // the changelog and the privacy notice. The brand artwork the web app and
+  // the desktop build read is @luke/brand's, which `transit` tracks.
+  "globalDependencies": [".nvmrc", "tsconfig.base.json", "CHANGELOG.md", "PRIVACY.md"],
   "tasks": {
     // A task with no script anywhere, whose hash is its workspace's files and
     // the transit hashes of the workspaces it depends on. A task that depends
@@ -40,13 +38,28 @@
       "dependsOn": ["^transit"],
       "outputs": []
     },
-    // @luke/service's suite in two vitest shards, one per CI runner.
+    // @luke/service's suite in three vitest shards, one per CI runner.
     "test:vitest:1": {
       "dependsOn": ["^transit"],
       "outputs": []
     },
     "test:vitest:2": {
       "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    "test:vitest:3": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    // Web's store tests against the real Postgres CI's postgres job stands.
+    // The database URL is hashed, not passed through, because without it the
+    // same files run on PGlite: a pass there must never replay as a pass on
+    // Postgres. CI's URL names a throwaway local server and carries no secret.
+    // The runner starts vitest from the root, so the root config is an input.
+    "test:store": {
+      "dependsOn": ["^transit"],
+      "env": ["LUKE_STORE_TEST_DATABASE_URL"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/vitest.config.ts"],
       "outputs": []
     },
     "build": {

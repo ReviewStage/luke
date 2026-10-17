@@ -61,7 +61,12 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { APP_SHORTCUTS, type KeyedCommand, shortcutAria } from "#shared/shortcuts";
+import {
+  APP_SHORTCUTS,
+  type KeyedCommand,
+  type ShortcutChord,
+  shortcutAria,
+} from "#shared/shortcuts";
 import { rendererRuntime } from "./renderer-runtime";
 import { Shortcut } from "./shortcut";
 import { useDisclosure } from "./use-disclosure";
@@ -240,7 +245,7 @@ function TooltipPill({
   id,
   shown,
   label,
-  command,
+  chord,
   card,
   cardBeside,
   leaving,
@@ -252,7 +257,7 @@ function TooltipPill({
   id: string;
   shown: Shown;
   label: string;
-  command: KeyedCommand | undefined;
+  chord: ShortcutChord | undefined;
   card: ReactNode;
   cardBeside: boolean;
   /** How it is on its way out, while it is: inert, and fading or already hidden. */
@@ -331,7 +336,7 @@ function TooltipPill({
       }
     >
       {carded ? card : label}
-      {command === undefined || carded ? null : <Shortcut chord={APP_SHORTCUTS[command].chord} />}
+      {chord === undefined || carded ? null : <Shortcut chord={chord} />}
     </div>,
     document.body,
   );
@@ -339,7 +344,9 @@ function TooltipPill({
 
 /**
  * Wraps one control, which must take the handlers it is handed. `command`
- * adds its chord to the pill and to the control's `aria-keyshortcuts`. The
+ * adds its chord to the pill and to the control's `aria-keyshortcuts`, and
+ * `chord` does the same for a key the control's own surface answers rather
+ * than the window, as the picture viewer's bare = and − do. The
  * pill describes the control only where its label is not already the
  * control's own name, so a reader is not told the same word twice. With no
  * label it raises no pill, so a control whose hint comes and goes keeps its
@@ -356,6 +363,7 @@ function TooltipPill({
 export function Tooltip({
   label,
   command,
+  chord: ownChord,
   card,
   cardBeside = false,
   cardRegion,
@@ -363,12 +371,14 @@ export function Tooltip({
 }: {
   label: string | undefined;
   command?: KeyedCommand;
+  chord?: ShortcutChord | undefined;
   card?: ReactNode;
   cardBeside?: boolean;
   cardRegion?: RefObject<HTMLElement | null>;
   children: ReactElement<AnchorProps>;
 }): React.JSX.Element {
   const id = useId();
+  const chord = command === undefined ? ownChord : APP_SHORTCUTS[command].chord;
   const [shown, setShown, latest] = useStateWithRef<Shown | undefined>(undefined);
   const carded = card !== undefined;
   // The row a card counts as its control, where it names one; a pill has none.
@@ -534,9 +544,7 @@ export function Tooltip({
   const own = children.props;
   const anchor = cloneElement(children, {
     ...(shown?.describes && label !== undefined ? { "aria-describedby": id } : undefined),
-    ...(command === undefined
-      ? undefined
-      : { "aria-keyshortcuts": shortcutAria(APP_SHORTCUTS[command].chord) }),
+    ...(chord === undefined ? undefined : { "aria-keyshortcuts": shortcutAria(chord) }),
     onPointerEnter: (event) => {
       own.onPointerEnter?.(event);
       // A touch has no hover to rest, so it shows nothing.
@@ -571,7 +579,7 @@ export function Tooltip({
           id={id}
           shown={drawn.shown}
           label={drawn.label}
-          command={command}
+          chord={chord}
           card={card}
           cardBeside={cardBeside}
           leaving={pill.leaving ? (seen ? PILL_LEAVING.SEEN : PILL_LEAVING.UNSEEN) : undefined}

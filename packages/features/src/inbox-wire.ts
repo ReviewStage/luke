@@ -490,6 +490,13 @@ export const inboxItemSchema = EffectSchema.Struct({
   response: inboxReadResponseSchema,
   needsReply: EffectSchema.Boolean,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
+  /**
+   * The member who started the agent that posted the item, whose question it
+   * is, as the account's read names it (`account-inbox-wire.ts`); absent from
+   * a service before it, which the desktop reads as the reader's own, as it
+   * read every item before.
+   */
+  startedBy: EffectSchema.optionalKey(memberRefSchema),
   /** The developer's answer, on an answered item. */
   answer: EffectSchema.optionalKey(inboxReplySchema),
   /**
