@@ -117,3 +117,27 @@ test("a window made too short for three toasts sets the oldest aside, without di
   ]);
   assert.ok(standing().includes("Retry the webhook finished"), "the toast set aside comes back");
 });
+
+test("a toast with an action carries a Dismiss button the keyboard reaches, and its press or Escape from it sends the toast away", () => {
+  mount(WINDOW.TALL);
+  act(() => show?.(persisting("Retry the webhook finished")));
+  act(() => show?.(persisting("Nightly upgrade couldn't start")));
+  const dismissButtons = () =>
+    [...document.querySelectorAll<HTMLButtonElement>(".toast:not([data-leaving]) button")].filter(
+      (button) => button.getAttribute("aria-label") === "Dismiss",
+    );
+
+  const [first, second] = dismissButtons();
+  assert.ok(first && second);
+  act(() => first.click());
+  const afterPress = standing();
+  act(() => second.focus());
+  const focused = document.activeElement === second;
+  act(() => {
+    second.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  assert.deepEqual(afterPress, ["Nightly upgrade couldn't start"]);
+  assert.ok(focused, "the Dismiss button takes focus");
+  assert.deepEqual(standing(), []);
+});

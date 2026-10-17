@@ -2,13 +2,13 @@
  * call-commands.ts -- the standing call's mute chords, answering wherever the panel stands.
  */
 
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   callInProgress,
   VOICE_COMMAND,
   type VoiceCommand,
   type VoiceView,
 } from "@luke/voice/voice-view";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 
 /**

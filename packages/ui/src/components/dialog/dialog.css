@@ -35,6 +35,21 @@
     animation:
       luke-dialog-fade var(--duration-quick, 0s) var(--motion-exit, ease-out),
       luke-dialog-rise var(--duration-fast, 0s) var(--spring-fast, ease-out);
+    transition: box-shadow var(--duration-hover) ease;
+  }
+
+  /* A note being written wraps, so its card stands wider, its parts a
+     little further apart. */
+  .luke-dialog[data-size="wide"] {
+    width: min(var(--luke-dialog-wide-width), 100%);
+    gap: var(--luke-space-12);
+  }
+
+  /* A drag the dimmed window would take rings the card that will take it. */
+  .luke-dialog[data-dropping="true"] {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--luke-color-accent) 70%, transparent),
+      0 24px 64px var(--luke-color-shadow-deep);
   }
 
   .luke-dialog:focus {

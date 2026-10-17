@@ -10,6 +10,7 @@ import {
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import { unparsedWire, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { noNetwork } from "@luke/wire/testing";
 import { Effect, Result } from "effect";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 
@@ -91,7 +92,7 @@ function subject(
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-    });
+    }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
@@ -179,7 +180,11 @@ it.effect(
         Result.isSuccess(read) && "webhookSecret" in read.success
           ? (read.success.webhookSecret ?? "")
           : "";
-      assert.ok(secret.length >= 40, "a secret of 32 random bytes is answered");
+      assert.match(
+        secret,
+        /^[A-Za-z0-9_-]{43}$/,
+        "a secret of 32 random bytes is answered as unpadded base64url",
+      );
       assert.deepEqual(made, { automation: SUMMARY, webhookSecret: secret });
       assert.deepEqual(asked, [
         [

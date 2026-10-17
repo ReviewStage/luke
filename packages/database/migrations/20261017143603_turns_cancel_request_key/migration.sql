@@ -1,0 +1,1 @@
+ALTER TABLE "turns" ADD COLUMN IF NOT EXISTS "cancel_request_key" text;

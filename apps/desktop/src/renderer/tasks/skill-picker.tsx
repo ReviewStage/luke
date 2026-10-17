@@ -1,3 +1,4 @@
+import { ALIGN, GAP, Stack, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import {
   holdsSlashWord,
   matchingSkills,
@@ -112,9 +113,15 @@ function MenuNote({ read }: { read: SkillsRead | undefined }): React.JSX.Element
     return <p className="task-compose-menu-note">{SKILL_MENU_NOTE.NO_MATCH}</p>;
   }
   return (
-    <div className="task-compose-menu-note skill-menu-none">
-      <span>{SKILL_MENU_NOTE.NONE}</span>
-      <span className="skill-menu-hint">{SKILL_MENU_NOTE.NONE_HINT}</span>
+    <div className="task-compose-menu-note">
+      <Stack gap={GAP.TIGHT} align={ALIGN.CENTER}>
+        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+          {SKILL_MENU_NOTE.NONE}
+        </Text>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          {SKILL_MENU_NOTE.NONE_HINT}
+        </Text>
+      </Stack>
     </div>
   );
 }

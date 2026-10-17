@@ -5,11 +5,11 @@ import {
   type MacRepository,
   type MacTerminalPortOutbound,
 } from "@luke/features/mac-terminal-wire";
+import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Deferred, Effect, Fiber } from "effect";
 import type { WebContents } from "electron";
-import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { macTerminalActRows } from "./mac-terminal-acts";
 
 /**
@@ -35,7 +35,7 @@ const OPEN = {
 const SET: MacRepository = { repository: "acme/app", command: "pnpm dev" };
 
 // SAFETY: the rows read a sender by identity alone; one inert object is one window.
-const panelOf = (): ActSender => ({
+const panelOf = (): ActSender<WebContents> => ({
   sender: {} as WebContents,
   panel: true,
   voice: false,
@@ -113,7 +113,7 @@ function fixture(
     },
   });
   // SAFETY: the router dispatches only the kinds these tests send.
-  const router = createActRouter(rows as ActRows);
+  const router = createActRouter(rows as ActRows<WebContents>);
   return { router, opened, started, pageGone: (sender: WebContents) => gone.get(sender)?.() };
 }
 
@@ -213,7 +213,7 @@ it.effect("a closed tab and a gone page close their terminals; only a panel is a
     pageGone(panel.sender);
     assert.equal(started[1]?.closed, true);
 
-    const voice: ActSender = { ...panelOf(), panel: false, voice: true };
+    const voice: ActSender<WebContents> = { ...panelOf(), panel: false, voice: true };
     const refused = yield* router.performAct(
       { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN },
       voice,

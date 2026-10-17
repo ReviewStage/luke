@@ -37,10 +37,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   QUIET_COMPOSER,
@@ -202,69 +204,66 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   standing = "acme/relay";
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        told.push(request);
-        return Promise.resolve(
-          request.kind === ACT_KIND.INTEGRATIONS_STATUS
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      told.push(request);
+      return Promise.resolve(
+        request.kind === ACT_KIND.INTEGRATIONS_STATUS
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                integrations: LINEAR_CONNECTED,
+              },
+            }
+          : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
-                  integrations: LINEAR_CONNECTED,
+                  tools: [
+                    { name: "list_issues", description: "List the team's issues." },
+                    { name: "get_issue", description: "Read one issue." },
+                    { name: "list/issues", description: "A name no mention can carry." },
+                    {
+                      name: "list\ud800",
+                      description: "A name that is no string of characters.",
+                    },
+                    { name: "..", description: "A name an address resolves away." },
+                  ],
                 },
               }
-            : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
-              ? {
-                  status: ACT_OUTCOME_STATUS.DONE,
-                  value: {
-                    tools: [
-                      { name: "list_issues", description: "List the team's issues." },
-                      { name: "get_issue", description: "Read one issue." },
-                      { name: "list/issues", description: "A name no mention can carry." },
-                      {
-                        name: "list\ud800",
-                        description: "A name that is no string of characters.",
-                      },
-                      { name: "..", description: "A name an address resolves away." },
-                    ],
-                  },
-                }
-              : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-                ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-                : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+            : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+              ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+              : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+                ? {
+                    status: ACT_OUTCOME_STATUS.DONE,
+                    value: {
+                      agents: workspaceAnswer(request.payload),
+                    },
+                  }
+                : request.kind === ACT_KIND.TASKS_TREE
                   ? {
                       status: ACT_OUTCOME_STATUS.DONE,
                       value: {
-                        agents: workspaceAnswer(request.payload),
+                        folder: {
+                          path: "",
+                          repository: standing,
+                          branch: "main",
+                          entries: TREES.get(standing) ?? [],
+                          truncated: false,
+                        },
                       },
                     }
-                  : request.kind === ACT_KIND.TASKS_TREE
-                    ? {
-                        status: ACT_OUTCOME_STATUS.DONE,
-                        value: {
-                          folder: {
-                            path: "",
-                            repository: standing,
-                            branch: "main",
-                            entries: TREES.get(standing) ?? [],
-                            truncated: false,
-                          },
-                        },
-                      }
-                    : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-        );
-      },
-      recordSurfaceEvent: ignore,
+                  : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      );
     },
   });
 });
@@ -943,19 +942,16 @@ test("a section's address pasted whole into the box on a plan's page is drawn as
 });
 
 test("a page's address pasted in the app's own scheme is called by the name the window holds, an agent's it holds none for by its kind, and a file of the plan's repository pastes as words", async () => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      onAppState: () => () => undefined,
-      requestAppState: () =>
-        Promise.resolve(
-          stateWith(
-            {},
-            { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
-          ),
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    onAppState: () => () => undefined,
+    requestAppState: () =>
+      Promise.resolve(
+        stateWith(
+          {},
+          { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
         ),
-    },
+      ),
   });
   const { container, sent } = await box(planPage([]));
   const page = encodeMention({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id }, PLACE);
@@ -994,10 +990,7 @@ async function wideBox() {
 
 /** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
 function crumb(container: HTMLElement): string | undefined {
-  return (
-    container.querySelector(".mention-menu-crumb .agent-servers-page-title")?.textContent ??
-    undefined
-  );
+  return container.querySelector(".mention-menu-crumb-title")?.textContent ?? undefined;
 }
 
 /** The keys the list's foot names. */
@@ -1070,6 +1063,28 @@ test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words w
   assert.equal(narrowedCrumb, "Files and folders");
   assert.deepEqual(narrowed, [["Files and folders", ["apps/", "README.md"]]]);
   assert.equal(backspace.defaultPrevented, true);
+  assert.equal(composerEditor(container).textContent, "See @");
+  assert.equal(crumb(container), undefined);
+  assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");
+});
+
+test("pressing the crumb's back arrow widens the list again and keeps the caret in the composer", async () => {
+  const { container } = await wideBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+  highlightRow(container, "Mention from", "Files and folders");
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  const back = container.querySelector<HTMLButtonElement>('button[aria-label="All kinds"]');
+  assert.ok(back !== null, "the narrowed list's crumb offers the way back");
+  const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  back.dispatchEvent(press);
+  act(() => back.click());
+  await settle();
+
+  assert.equal(press.defaultPrevented, true);
+  assert.equal(back.tabIndex, -1);
   assert.equal(composerEditor(container).textContent, "See @");
   assert.equal(crumb(container), undefined);
   assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");

@@ -11,7 +11,10 @@ import { Tooltip } from "../tooltip";
  * open and right while it is folded, then the group's name and whatever
  * the group says after it, a repository's pin. Folded, it counts what the
  * group holds after its name, shown with the chevron and read as "n tasks",
- * so a header at rest says nothing but its name. A steady count, the
+ * so a header at rest says nothing but its name. A group with no glyph,
+ * a section of the account's own made without an icon, draws its name
+ * alone, with no cell held for a glyph or the chevron, so nothing stands
+ * empty before it. A steady count, the
  * Inbox's of what needs the developer, stands at rest too, as a mail app's
  * folder counts its unread mail, and is left out at none.
  *
@@ -50,7 +53,7 @@ function FoldedCount({
   return (
     <span className="sidebar-repository-count" data-steady={steady ? "true" : undefined}>
       {count}
-      <span className="visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
+      <span className="luke-visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
     </span>
   );
 }
@@ -71,6 +74,7 @@ export function SidebarGroupHeader({
   onContextMenu,
   onToggle,
 }: {
+  /** The group's glyph, or nothing, for a header that draws its name alone. */
   glyph: ReactNode;
   name: string;
   folded: boolean;
@@ -107,10 +111,12 @@ export function SidebarGroupHeader({
           aria-expanded={!folded}
           onClick={onToggle}
         >
-          <span className="sidebar-repository-glyph">
-            {glyph}
-            <ChevronRightIcon />
-          </span>
+          {glyph === undefined || glyph === null ? null : (
+            <span className="sidebar-repository-glyph">
+              {glyph}
+              <ChevronRightIcon />
+            </span>
+          )}
           <span className="sidebar-repository-name">{name}</span>
           {trailing}
           {counted ? <FoldedCount count={count} noun={noun} steady={steady} /> : null}
