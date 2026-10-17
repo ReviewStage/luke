@@ -5,12 +5,10 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import type { ExperimentChoices } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import type { AppSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -84,39 +82,6 @@ export function handState(
       ...window.luke,
       onAppState: () => () => undefined,
       requestAppState: () => Promise.resolve(snapshot),
-    },
-  });
-}
-
-/**
- * Hands the window main's document with its settings as given, and answers
- * each settings write as main does: stored, then the document delivered
- * again to every listener, so a surface draws the setting it wrote and the
- * next surface drawn reads it. Any other act is refused. The write itself is
- * answered as refused, which a writer that only waits for the document
- * reads as nothing.
- */
-export function handSettings(settings: Partial<AppSettingsView> = {}): void {
-  let view: AppSettingsView = Object.assign(settingsView(), settings);
-  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
-  const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      requestAppState: () => Promise.resolve(snapshot()),
-      onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.SETTING_UPDATE) {
-          view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
-          const next = snapshot();
-          for (const listener of listeners) listener(next);
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
     },
   });
 }

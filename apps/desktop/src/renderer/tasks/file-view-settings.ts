@@ -12,12 +12,17 @@
  * type, size, line height, and ligatures, and whether review comments on
  * their lines stand minimized. Until the first document arrives each stands
  * at its default. A change is written through the one settings write
- * (`useAct`'s `updateSetting`) and drawn when the document comes back.
+ * (`useAct`'s `updateSetting`), whose answer a control reads to say a
+ * refusal, as a Settings row does; while it is out the setting is drawn as
+ * written, so a second press before the document comes back reads the
+ * first rather than undoing nothing, as the zoom keys step from the size
+ * they last asked for.
  */
 
 import { APP_SETTING_DEFAULTS, type AppSettingField, type AppSettingValue } from "@luke/settings";
 import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
-import { useCallback, useMemo } from "react";
+import type { ActionResult } from "@luke/wire";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 
@@ -78,26 +83,69 @@ function settingsOf(view: AppSettingsView | undefined): FileViewSettings {
   };
 }
 
-/** The settings code and diffs are drawn by, and the door that writes one for every window. */
+/** The settings code and diffs are drawn by, and the door that writes one for every window, answering the write's own answer. */
 export interface FileViewSettingsControl {
   readonly settings: FileViewSettings;
   readonly change: <Field extends FileViewField>(
     field: Field,
     value: AppSettingValue<Field>,
-  ) => void;
+  ) => Promise<ActionResult>;
+}
+
+/**
+ * The writes still out, by field, as this window drew them: one run for
+ * every File tab, diff, and menu in the window, so a press in one is drawn
+ * at once in all of them and read by the next press anywhere.
+ */
+let pending: Partial<FileViewSettings> = {};
+const pendingListeners = new Set<() => void>();
+
+function subscribePending(listener: () => void): () => void {
+  pendingListeners.add(listener);
+  return () => pendingListeners.delete(listener);
+}
+
+function pendingNow(): Partial<FileViewSettings> {
+  return pending;
+}
+
+/** Sets the writes still out, telling every reader. */
+function setPending(next: Partial<FileViewSettings>): void {
+  pending = next;
+  for (const listener of pendingListeners) listener();
+}
+
+/** The writes still out, without the one given. */
+function without(
+  writes: Partial<FileViewSettings>,
+  field: FileViewField,
+): Partial<FileViewSettings> {
+  const next = { ...writes };
+  delete next[field];
+  return next;
 }
 
 export function useFileViewSettings(): FileViewSettingsControl {
   const stored = useAppState()?.settings;
   const { updateSetting } = useAct();
+  const out = useSyncExternalStore(subscribePending, pendingNow);
   const settings = useMemo(
-    () => settingsOf(stored === undefined ? undefined : appSettingsView(stored)),
-    [stored],
+    () => ({
+      ...settingsOf(stored === undefined ? undefined : appSettingsView(stored)),
+      ...out,
+    }),
+    [stored, out],
   );
   const change = useCallback(
     <Field extends FileViewField>(field: Field, value: AppSettingValue<Field>) => {
-      // Note that a refused write leaves the setting as the document holds it, which is what stays drawn.
-      updateSetting(field, value).catch(() => undefined);
+      setPending({ ...pending, [field]: value });
+      // The write is drawn as written until it is answered, then as the document holds it.
+      const settle = () => {
+        if (pending[field] === value) setPending(without(pending, field));
+      };
+      const write = updateSetting(field, value);
+      write.then(settle, settle);
+      return write;
     },
     [updateSetting],
   );

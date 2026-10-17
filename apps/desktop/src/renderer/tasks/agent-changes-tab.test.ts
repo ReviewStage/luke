@@ -6,12 +6,17 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+import { appSettingsWire, settingsView } from "@luke/settings/testing";
+import type { AppSettingsView } from "@luke/settings/wire";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { handSettings } from "#testing/app-state";
+import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -26,7 +31,7 @@ import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
  * view; a diff too narrow to split is drawn unified, Split view dimmed, the
  * choice kept for a wider one. The settings are the app's own, read off the
  * document main hands the window and written back through it
- * (`#testing/app-state`'s `handSettings`). The bundle, a script of its own the panel loads, is
+ * (`handSettings`). The bundle, a script of its own the panel loads, is
  * stood in for at its global, which records what it was handed. Synthetic
  * files only.
  */
@@ -76,6 +81,45 @@ const control = codingAgentsControl({
       },
     }),
 });
+
+/**
+ * Hands the window main's document with its settings as given, and answers
+ * each settings write as main does: stored, then the document delivered
+ * again to every listener, so a surface draws the setting it wrote and the
+ * next surface drawn reads it, the write answered as accepted. Any other act
+ * is refused.
+ */
+function handSettings(settings: Partial<AppSettingsView> = {}): void {
+  let view: AppSettingsView = Object.assign(settingsView(), settings);
+  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
+  const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      requestAppState: () => Promise.resolve(snapshot()),
+      onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      act: (request: Act) => {
+        if (request.kind !== ACT_KIND.SETTING_UPDATE) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.REFUSED,
+            reason: "Not in this test.",
+          });
+        }
+        view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
+        const next = snapshot();
+        for (const listener of listeners) listener(next);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: next.settings },
+        });
+      },
+    },
+  });
+}
 
 /** What the stand-in bundle was handed, mount first, each draw after it. */
 let drawn: DiffViewProps[] = [];
@@ -269,4 +313,15 @@ test("a diff too narrow to split is drawn unified with Split view dimmed and its
   boxWidth = 900;
   act(() => relayout());
   assert.equal(lastDrawn().look.layout, "split");
+});
+
+test("a setting is drawn as written while its write is out, so a press reads the one before it", async () => {
+  await drawTab();
+
+  const item = menuItem("Highlight changed words");
+  act(() => item.click());
+
+  assert.equal(lastDrawn().look.inlineDiff, "none", "drawn before the document comes back");
+  await flush();
+  assert.equal(lastDrawn().look.inlineDiff, "none");
 });
