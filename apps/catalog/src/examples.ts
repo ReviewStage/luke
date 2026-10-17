@@ -11,6 +11,7 @@ import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
+import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
@@ -57,6 +58,7 @@ export const EXAMPLES: readonly Example[] = [
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
+  ERROR_STATES_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   FORM_SECTION_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,

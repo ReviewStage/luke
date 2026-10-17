@@ -1,0 +1,36 @@
+/* error-state.css -- a failure's sentence in the danger text colour and its
+   Retry: a line, Retry beside the words, among rows; a centred column,
+   Retry under the words, alone in a region. */
+
+@layer components {
+  /* Retry keeps the words' line and goes onto the next, whole, where the
+     line has no room for it. */
+  .luke-error-state {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--luke-space-4) var(--luke-space-8);
+    margin: 0;
+    color: var(--luke-color-danger-text);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* Among the rows, Retry is drawn back by its own inset, so its glyph
+     stands a gap after the words, or under their first letter where it
+     wraps. */
+  .luke-error-state[data-placement="inline"] > .luke-button {
+    margin-inline-start: calc(-1 * var(--luke-control-inset));
+  }
+
+  /* Alone in a region, the words and Retry stand centred, Retry under the
+     words as an empty place's way on stands under its line, in the body's
+     type. */
+  .luke-error-state[data-placement="centred"] {
+    flex-direction: column;
+    gap: var(--luke-space-12);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    text-align: center;
+  }
+}

@@ -14,7 +14,7 @@ import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remed
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon } from "@luke/ui";
+import { DocumentIcon, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
@@ -35,7 +35,6 @@ import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
 import { useMemberDirectory, usePerson } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
@@ -1263,7 +1262,7 @@ function AgentTranscriptView({
             </p>
           )}
           {footer}
-          {failed ? <ReadFailure line={TRANSCRIPT_FAILED_LINE} onRetry={onRetry} /> : null}
+          {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
@@ -1272,11 +1271,9 @@ function AgentTranscriptView({
   return (
     <ConversationEmptyState>
       {failed ? (
-        <ReadFailure
-          line={TRANSCRIPT_FAILED_LINE}
-          onRetry={onRetry}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {TRANSCRIPT_FAILED_LINE}
+        </ErrorState>
       ) : reading && ended === undefined ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
