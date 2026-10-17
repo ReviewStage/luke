@@ -1,4 +1,11 @@
-import { BUTTON_VARIANT, Button, SettingsRow, type SettingsRowControl, Switch } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  SettingsRow,
+  type SettingsRowControl,
+  SettingsSection,
+  Switch,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -26,7 +33,7 @@ function HeldSwitch({ label, control }: { label: string; control: SettingsRowCon
 
 function Rows(): React.JSX.Element {
   return (
-    <>
+    <SettingsSection>
       <SettingsRow label="Launch at login" description="Luke opens with the Mac, in the menu bar.">
         {(control) => <HeldSwitch label="Launch at login" control={control} />}
       </SettingsRow>
@@ -50,7 +57,7 @@ function Rows(): React.JSX.Element {
           </Button>
         )}
       </SettingsRow>
-    </>
+    </SettingsSection>
   );
 }
 
